@@ -1,0 +1,603 @@
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Enum Start ---
+ * -------------------------------------------------------------
+ */
+
+enum UserType {
+  ADMIN
+  CUSTOMER
+  VENDOR
+  EVENT_PLANNER
+  PROVIDER
+  EDITOR
+  CLIENT
+}
+
+enum ADMIN_APPROVE_STATUS {
+  PENDING
+  APPROVED
+  NOT_APPLICABLE
+  SUSPENDED
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  PENDING
+}
+
+enum WorkingType {
+  DAY
+  HOUR
+}
+
+enum OperatedBy {
+  REMOTE
+  ON_SITE
+  HYBRID
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum SubscriptionBillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Enum End ---
+ * -------------------------------------------------------------
+ */
+
+model Account {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  type                String?
+  provider            String?
+  provider_account_id String?
+  refresh_token       String?
+  access_token        String?
+  expires_at          DateTime?
+  token_type          String?
+  scope               String?
+  id_token            String?
+  session_state       String?
+
+  @@unique([provider, provider_account_id])
+  @@map("accounts")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- user profile part start ---
+ * -------------------------------------------------------------
+ */
+
+model User {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  first_name   String? @db.VarChar(255)
+  last_name    String? @db.VarChar(255)
+  name         String? @db.VarChar(255)
+  avatar       String?
+  location     String? @db.VarChar(255)
+  phone_number String?
+  email        String? @unique
+  password     String? @db.VarChar(255)
+  birthday     String?
+
+  about_me String?
+  address  String?
+  type     UserType? @default(CUSTOMER)
+  language String?   @db.VarChar(100)
+
+  // billing info  
+  billing_id        String?
+  // stripe connect account 
+  stripe_connect_id String?
+  //user balance
+  balance           Decimal?  @default(0.0) @db.Decimal(10, 2)
+  // email verification
+  email_verified_at DateTime?
+  // subscription 
+
+  //----------------------------------------
+  bio           String?   @db.Text
+  domain        String?   @unique
+  username      String?   @unique
+  country       String?
+  state         String?
+  city          String?
+  zip_code      String?
+  gender        String?
+  date_of_birth DateTime? @db.Date
+  approved_at   DateTime?
+  availability  String?
+
+  is_two_factor_enabled Int?      @default(0)
+  two_factor_secret     String?
+  accounts              Account[]
+
+  // --- Vendor Profile ---
+  vendorProfile VendorProfile? @relation("UserToVendorProfile")
+
+  // --- Conversation & Messaging ---
+  participants Participant[] @relation("participantUser")
+  sentMessages Message[]     @relation("messageSender")
+
+  // --- Notifications ---
+  receivedNotifications Notification[] @relation("notificationReceiver")
+  sentNotifications     Notification[] @relation("notificationSender")
+
+  user_payment_methods UserPaymentMethod[]
+  ucodes               Ucode[]
+  role_users           RoleUser[]
+  payment_transactions PaymentTransaction[]
+
+  @@map("users")
+}
+
+model VendorProfile {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String @unique
+  user    User   @relation("UserToVendorProfile", fields: [user_id], references: [id], onDelete: Cascade)
+
+  subscription_active Boolean              @default(false)
+  // license
+  license_photo       String[]
+  license_status      ADMIN_APPROVE_STATUS @default(PENDING)
+  approved_at         DateTime?
+
+  // business info
+  business_name           String?                  @db.VarChar(255)
+  about_me                String?                  @db.Text
+  address                 String?
+  vendorSubscriptionPlans VendorSubscriptionPlan[]
+
+  @@map("vendor_profiles")
+}
+
+model Ucode {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  status     Int?     @default(1) @db.SmallInt
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  token       String?
+  email       String?
+  expired_at  DateTime?
+  verified_at DateTime?
+
+  @@map("ucodes")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- user profile part end ---
+ * -------------------------------------------------------------
+ */
+/**
+ * ------------------------------------------------------------
+ * --- Subscription part start ---
+ * -------------------------------------------------------------
+ */
+
+model Subscriptionlist {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  name String
+
+  billing_cycle           SubscriptionBillingCycle?
+  status                  SubscriptionStatus?
+  vendorSubscriptionPlans VendorSubscriptionPlan[]
+
+  @@map("subscriptions")
+}
+
+model VendorSubscriptionPlan {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  vendor_id String
+  vendor    VendorProfile @relation(fields: [vendor_id], references: [id], onDelete: Cascade)
+
+  subscription_id String
+  subscription    Subscriptionlist @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+
+  start_date DateTime?
+  end_date   DateTime?
+
+  payment_status SubscriptionPaymentStatus?
+
+  @@map("vendor_subscriptions")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Subscription part end---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- service part start ---
+ * -------------------------------------------------------------
+ */
+
+model Service {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  name         String      @db.VarChar(255)
+  operated_by  OperatedBy
+  working_type WorkingType
+  commission   Decimal     @default(0.0) @db.Decimal(5, 2)
+
+  // Relationships  ক্যাটেগরি সম্পর্ক
+  category_id String
+  category    ServiceCategory @relation("ServiceCategoryRelation", fields: [category_id], references: [id])
+
+  // Many-to-Many relationship with serviceToSubCategory
+  sub_categories ServiceToSubCategory[] @relation("ServiceWithManyToMany")
+
+  @@map("services")
+}
+
+model ServiceCategory {
+  id         String   @id @default(cuid())
+  name       String   @unique @db.VarChar(255)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relationships with  service
+  services       Service[]            @relation("ServiceCategoryRelation")
+  // Many-to-Many relationship with sub-categories
+  sub_categories ServiceSubCategory[] @relation("ServiceCategoryToSubCategory")
+
+  @@map("service_categories")
+}
+
+model ServiceSubCategory {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  name String @db.VarChar(255)
+
+  // Parent Category link
+  category_id String
+  category    ServiceCategory @relation("ServiceCategoryToSubCategory", fields: [category_id], references: [id], onDelete: Cascade)
+
+  // Many-to-Many join table link
+  services ServiceToSubCategory[] @relation("Subcatagoryto-ServiceToSubCategory")
+
+  @@unique([name, category_id])
+  @@map("service_sub_categories")
+}
+
+// between Service and ServiceSubCategory
+model ServiceToSubCategory {
+  service_id      String
+  sub_category_id String
+
+  service      Service            @relation("ServiceWithManyToMany", fields: [service_id], references: [id], onDelete: Cascade)
+  sub_category ServiceSubCategory @relation("Subcatagoryto-ServiceToSubCategory", fields: [sub_category_id], references: [id], onDelete: Cascade)
+
+  @@id([service_id, sub_category_id])
+  @@map("service_to_sub_categories")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- service part end ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Chating Part Start ---
+ * -------------------------------------------------------------
+ */
+
+model Conversation {
+  id           String        @id @default(cuid())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  messages     Message[]
+  participants Participant[]
+}
+
+model Participant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("participantUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  role     String?  @default("participant")
+  joinedAt DateTime @default(now())
+
+  lastReadAt DateTime?
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  text      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  status MessageStatus @default(PENDING)
+
+  senderId String
+  sender   User   @relation("messageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  attachments String[] @db.Text
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Chating Part End ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Notification Part Start ---
+ * -------------------------------------------------------------
+ */
+
+model NotificationEvent {
+  id            String         @id @default(uuid())
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @default(now()) @updatedAt
+  deleted_at    DateTime?
+  status        Int?           @default(1) @db.SmallInt
+  type          String?
+  text          String?
+  notifications Notification[]
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
+  deleted_at DateTime?
+  read_at    DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  sender_id String?
+  sender    User?   @relation("notificationSender", fields: [sender_id], references: [id])
+
+  receiver_id String?
+  receiver    User?   @relation("notificationReceiver", fields: [receiver_id], references: [id])
+
+  notification_event_id String?
+  notification_event    NotificationEvent? @relation(fields: [notification_event_id], references: [id])
+
+  entity_id String?
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Notification Part End ---
+ * -------------------------------------------------------------
+ */
+/**
+ * ------------------------------------------------------------
+ * --- Role and Permission Schema start ---
+ * -------------------------------------------------------------
+ */
+
+model Role {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status Int?    @default(1) @db.SmallInt
+  title  String?
+  name   String?
+
+  permission_roles PermissionRole[]
+  role_users       RoleUser[]
+  permissions      Permission[]     @relation("PermissionToRole")
+
+  @@map("roles")
+}
+
+model Permission {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status     Int?    @default(1) @db.SmallInt
+  title      String?
+  action     String?
+  subject    String?
+  conditions String?
+  fields     String?
+
+  permission_roles PermissionRole[]
+  roles            Role[]           @relation("PermissionToRole")
+
+  @@map("permissions")
+}
+
+model PermissionRole {
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  permission_id String
+  permission    Permission @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  role_id String
+  role    Role   @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@id([permission_id, role_id])
+  @@map("permission_roles")
+}
+
+model RoleUser {
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  role_id String
+  role    Role   @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([role_id, user_id])
+  @@map("role_users")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Role and Permission Schema end ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Payment Schema start ---
+ * -------------------------------------------------------------
+ */
+
+model UserPaymentMethod {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  payment_method_id String?
+  checkout_id       String?
+
+  @@map("user_payment_methods")
+}
+
+model PaymentTransaction {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  store_id String?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  order_id         String?
+  type             String?  @default("order")
+  withdraw_via     String?  @default("wallet")
+  provider         String?
+  reference_number String?
+  status           String?  @default("pending")
+  raw_status       String?
+  amount           Decimal?
+  currency         String?
+  paid_amount      Decimal?
+  paid_currency    String?
+
+  @@map("payment_transactions")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Payment Schema end ---
+ * -------------------------------------------------------------
+ */
+/**
+ * ------------------------------------------------------------
+ * --- Others Schema start ---
+ * -------------------------------------------------------------
+ */
+
+model Faq {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status     Int?    @default(1) @db.SmallInt
+  sort_order Int?    @default(0)
+  question   String?
+  answer     String?
+
+  @@map("faqs")
+}
+
+model Contact {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  first_name   String?
+  last_name    String?
+  email        String?
+  phone_number String?
+  message      String?
+
+  @@map("contacts")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Others Schema end ---
+ * -------------------------------------------------------------
+ */
