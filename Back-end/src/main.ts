@@ -22,8 +22,23 @@ async function bootstrap() {
  
   app.useWebSocketAdapter(new IoAdapter(app));
   app.setGlobalPrefix('api');
-  app.enableCors();
-  app.use(helmet());
+  app.enableCors({
+    origin: process.env.CLIENT_APP_URL || 'http://localhost:3000',
+    credentials: true,
+  });
+  app.use(
+    helmet({
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+        },
+      },
+    }),
+  );
  
 
   app.useStaticAssets(join(__dirname, "..", "..", "public"), {
@@ -35,7 +50,7 @@ async function bootstrap() {
     new ValidationPipe({
       transform: true,
       whitelist: true,
-      forbidNonWhitelisted: false,
+      forbidNonWhitelisted: true,
       transformOptions: {
         enableImplicitConversion: true,
       },

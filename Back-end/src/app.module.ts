@@ -1,7 +1,7 @@
 // external imports
 import { MiddlewareConsumer, Module } from '@nestjs/common';
-// import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-// import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { RedisModule } from '@nestjs-modules/ioredis';
@@ -22,6 +22,11 @@ import { ChatModule } from './modules/chat/chat.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { PrometheusModule } from './prometheus/prometheus.module';
 import { RepositoryModule } from './common/repository/repository.module';
+import { VendorModule } from './modules/vendor/vendor.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { BookingModule } from './modules/booking/booking.module';
+import { ReviewModule } from './modules/review/review.module';
+import { EventPlannerModule } from './modules/event-planner/event-planner.module';
 
 
 @Module({
@@ -50,24 +55,23 @@ import { RepositoryModule } from './common/repository/repository.module';
         port: +appConfig().redis.port,
       },
     }),
-    // disabling throttling for dev
-    // ThrottlerModule.forRoot([
-    //   {
-    //     name: 'short',
-    //     ttl: 1000,
-    //     limit: 3,
-    //   },
-    //   {
-    //     name: 'medium',
-    //     ttl: 10000,
-    //     limit: 20,
-    //   },
-    //   {
-    //     name: 'long',
-    //     ttl: 60000,
-    //     limit: 100,
-    //   },
-    // ]),
+    ThrottlerModule.forRoot([
+      {
+        name: 'short',
+        ttl: 1000,
+        limit: 10,
+      },
+      {
+        name: 'medium',
+        ttl: 10000,
+        limit: 50,
+      },
+      {
+        name: 'long',
+        ttl: 60000,
+        limit: 200,
+      },
+    ]),
     // General modules
     PrismaModule,
     RepositoryModule,
@@ -79,18 +83,18 @@ import { RepositoryModule } from './common/repository/repository.module';
     ChatModule,
     PaymentModule,
     PrometheusModule,
+    VendorModule,
+    MarketplaceModule,
+    BookingModule,
+    ReviewModule,
+    EventPlannerModule,
   ],
   controllers: [AppController],
   providers: [
-    // disabling throttling for dev
-    // {
-    //   provide: APP_GUARD,
-    //   useClass: ThrottlerGuard,
-    // },
-    // disbling throttling for dev {
-    //   provide: APP_GUARD,
-    //   useClass: ThrottlerBehindProxyGuard,
-    // },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     AppService,
   ],
 })
