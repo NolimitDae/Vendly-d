@@ -1,12 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MailService } from './mail.service';
+import { getQueueToken } from '@nestjs/bullmq';
+import { MailerService } from '@nestjs-modules/mailer';
 
 describe('MailService', () => {
   let service: MailService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [MailService],
+      providers: [
+        MailService,
+        {
+          provide: getQueueToken('mail-queue'),
+          useValue: {
+            add: jest.fn(),
+          },
+        },
+        {
+          provide: MailerService,
+          useValue: {
+            sendMail: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     service = module.get<MailService>(MailService);
