@@ -44,4 +44,7 @@ export const BookingService = {
 
   cancel: async (id: string, reason?: string) =>
     Fetch.patch(`/bookings/${id}/cancel`, { reason }, authHeaders()),
+
+  createCheckout: async (id: string) =>
+    Fetch.post(`/bookings/${id}/checkout`, {}, authHeaders()),
 };

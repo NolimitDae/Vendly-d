@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { BookingService } from "@/service/booking/booking.service";
 import { ReviewService } from "@/service/review/review.service";
 import Image from "next/image";
@@ -12,6 +13,7 @@ import {
   XCircle,
   Loader2,
   Star,
+  CreditCard,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -38,15 +40,26 @@ interface Booking {
 }
 
 export default function CustomerBookingsPage() {
+  const searchParams = useSearchParams();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, last_page: 1 });
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
   const [reviewModal, setReviewModal] = useState<{ bookingId: string } | null>(null);
 
-  const fetchBookings = async () => {
+  useEffect(() => {
+    const payment = searchParams.get("payment");
+    if (payment === "success") {
+      toast.success("Payment successful! Your booking is confirmed.");
+    } else if (payment === "cancelled") {
+      toast.info("Payment cancelled. You can pay from your bookings page.");
+    }
+  }, []);
+
+  const fetchBookings = useCallback(async () => {
     setLoading(true);
     try {
       const res = await BookingService.getMyAsCustomer({
@@ -62,9 +75,25 @@ export default function CustomerBookingsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, statusFilter]);
 
-  useEffect(() => { fetchBookings(); }, [page, statusFilter]);
+  useEffect(() => { fetchBookings(); }, [fetchBookings]);
+
+  const handlePayNow = async (id: string) => {
+    setPayingId(id);
+    try {
+      const res = await BookingService.createCheckout(id);
+      if (res.data?.success && res.data.data?.checkout_url) {
+        window.location.href = res.data.data.checkout_url;
+      } else {
+        toast.error(res.data?.message || "Failed to open payment");
+        setPayingId(null);
+      }
+    } catch {
+      toast.error("Payment initiation failed");
+      setPayingId(null);
+    }
+  };
 
   const handleCancel = async (id: string) => {
     if (!confirm("Cancel this booking?")) return;
@@ -172,7 +201,21 @@ export default function CustomerBookingsPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2 mt-4">
+                    <div className="flex gap-2 mt-4 flex-wrap">
+                      {booking.status === "PENDING" && (
+                        <button
+                          onClick={() => handlePayNow(booking.id)}
+                          disabled={payingId === booking.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 transition disabled:opacity-60"
+                        >
+                          {payingId === booking.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CreditCard className="w-3.5 h-3.5" />
+                          )}
+                          Pay Now
+                        </button>
+                      )}
                       {["PENDING", "CONFIRMED"].includes(booking.status) && (
                         <button
                           onClick={() => handleCancel(booking.id)}

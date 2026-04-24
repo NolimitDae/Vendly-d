@@ -484,6 +484,40 @@ export class StripePayment {
   }
   // end ACH
 
+  static async createCheckoutSessionForBooking({
+    amount,
+    currency,
+    bookingId,
+    listingTitle,
+    successUrl,
+    cancelUrl,
+  }: {
+    amount: number;
+    currency: string;
+    bookingId: string;
+    listingTitle: string;
+    successUrl: string;
+    cancelUrl: string;
+  }): Promise<stripe.Checkout.Session> {
+    return Stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency,
+            product_data: { name: listingTitle },
+            unit_amount: Math.round(amount * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: { booking_id: bookingId },
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
+  }
+
   static handleWebhook(rawBody: string, sig: string | string[]): stripe.Event {
     const event = Stripe.webhooks.constructEvent(
       rawBody,

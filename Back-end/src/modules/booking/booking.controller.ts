@@ -90,4 +90,9 @@ export class BookingController {
   ) {
     return this.service.cancel(id, user.id, dto);
   }
+
+  @Post(':id/checkout')
+  createCheckout(@GetUser() user: any, @Param('id') id: string) {
+    return this.service.createCheckoutSession(id, user.id);
+  }
 }

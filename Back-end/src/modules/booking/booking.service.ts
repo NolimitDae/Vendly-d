@@ -9,6 +9,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
+import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 
@@ -207,6 +208,38 @@ export class BookingService {
       throw new ForbiddenException('Access denied');
 
     return { success: true, data: this.formatBooking(booking) };
+  }
+
+  async createCheckoutSession(bookingId: string, customerId: string) {
+    const booking = await this.getBookingOrFail(bookingId);
+
+    if (booking.customer_id !== customerId)
+      throw new ForbiddenException('Access denied');
+    if (booking.status !== BookingStatus.PENDING)
+      throw new BadRequestException('Only pending bookings can be paid');
+    if (!booking.amount || Number(booking.amount) <= 0)
+      throw new BadRequestException('Booking has no payable amount');
+
+    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    const successUrl = `${clientUrl}/bookings?payment=success&booking_id=${bookingId}`;
+    const cancelUrl = `${clientUrl}/bookings?payment=cancelled&booking_id=${bookingId}`;
+
+    const session = await StripePayment.createCheckoutSessionForBooking({
+      amount: Number(booking.amount),
+      currency: booking.currency ?? 'usd',
+      bookingId: booking.id,
+      listingTitle: booking.listing?.title ?? 'Service Booking',
+      successUrl,
+      cancelUrl,
+    });
+
+    // store the session ID so the webhook can reconcile
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { payment_transaction_id: session.id },
+    });
+
+    return { success: true, data: { checkout_url: session.url } };
   }
 
   // Admin: get all bookings
