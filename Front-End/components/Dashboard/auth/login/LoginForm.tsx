@@ -12,6 +12,10 @@ import AppleIconBlack from "@/icons/AppleIconBlack";
 import GoogleIcon from "@/icons/GoogleIcon";
 import GenericButton from "../GenericButton";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { AuthService } from "@/service/auth/auth.service";
+import { CookieHelper } from "@/helper/cookie.helper";
+import { toast } from "react-toastify";
 
 type FormValues = {
   email: string;
@@ -20,6 +24,7 @@ type FormValues = {
 
 const LoginForm = () => {
   const [showPassword, setShowPassword] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
   const {
@@ -30,14 +35,41 @@ const LoginForm = () => {
     mode: "onChange",
   });
 
-  const onSubmit = (data: FormValues) => {
-    console.log("Form Data:", data);
+  const onSubmit = async (data: FormValues) => {
+    setLoading(true);
+    try {
+      const res = await AuthService.login(data);
+      if (res.data?.success) {
+        const token = res.data.authorization?.access_token;
+        const userType = res.data.data?.type;
+        if (token) {
+          CookieHelper.set({ key: "token", value: token });
+        }
+        toast.success("Welcome back!");
+        if (userType === "ADMIN") {
+          router.push("/dashboard");
+        } else if (userType === "VENDOR") {
+          router.push("/vendor/listings");
+        } else if (userType === "EVENT_PLANNER") {
+          router.push("/event-planner/profile");
+        } else {
+          router.push("/marketplace");
+        }
+      } else {
+        toast.error(res.data?.message || "Invalid credentials");
+      }
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.message || "Login failed. Check your credentials.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <div className="space-y-4">
-        
         {/* Email */}
         <ReusableInput
           label="Email"
@@ -64,9 +96,7 @@ const LoginForm = () => {
           className="rounded-2xl"
           placeholder="•••••••••"
           showPassword={showPassword}
-          togglePasswordVisibility={() =>
-            setShowPassword((prev) => !prev)
-          }
+          togglePasswordVisibility={() => setShowPassword((prev) => !prev)}
           {...register("password", {
             required: "Password is required",
             minLength: {
@@ -77,22 +107,22 @@ const LoginForm = () => {
           error={errors.password?.message}
         />
 
-        {/* Remember */}
+        {/* Remember + Forgot */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Checkbox />
-            <span className="text-xs text-descriptionColor">
-              Remember me
-            </span>
+            <span className="text-xs text-descriptionColor">Remember me</span>
           </div>
-
-          <span className="text-sm bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent cursor-pointer">
+          <Link
+            href="/forget-password"
+            className="text-sm bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent cursor-pointer"
+          >
             Forgot your password?
-          </span>
+          </Link>
         </div>
       </div>
 
-      {/* Submit Button */}
+      {/* Submit */}
       <GenericButton
         type="submit"
         variant="primary"
@@ -100,13 +130,22 @@ const LoginForm = () => {
         rounded="2xl"
         fullWidth
         height="lg"
-        disabled={!isValid}
-        onClick={()=> router.push("/dashboard")}
+        disabled={!isValid || loading}
       >
-        Log in
+        {loading ? "Logging in…" : "Log in"}
       </GenericButton>
 
-      {/* Social Login stays unchanged */}
+      <p className="text-center text-sm text-descriptionColor">
+        Don&apos;t have an account?{" "}
+        <Link
+          href="/register"
+          className="bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent font-medium"
+        >
+          Sign up
+        </Link>
+      </p>
+
+      {/* Social login */}
       <div className="space-y-4">
         <div className="flex justify-center items-center gap-2">
           <HorizontalLineIcon />
@@ -121,7 +160,6 @@ const LoginForm = () => {
             <GoogleIcon />
             Google
           </CustomButton>
-
           <CustomButton className="flex-1 flex items-center justify-center gap-2 w-full border border-borderColor rounded-2xl py-2 px-3 h-12">
             <AppleIconBlack />
             Apple
