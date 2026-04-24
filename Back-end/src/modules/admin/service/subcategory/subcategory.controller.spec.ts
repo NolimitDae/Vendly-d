@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SubcategoryController } from './subcategory.controller';
 import { SubcategoryService } from './subcategory.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/common/guard/role/roles.guard';
 
 describe('SubcategoryController', () => {
   let controller: SubcategoryController;
@@ -10,13 +11,23 @@ describe('SubcategoryController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SubcategoryController],
       providers: [
-        SubcategoryService,
         {
-          provide: PrismaService,
-          useValue: {},
+          provide: SubcategoryService,
+          useValue: {
+            create: jest.fn(),
+            findAll: jest.fn(),
+            findOne: jest.fn(),
+            update: jest.fn(),
+            remove: jest.fn(),
+          },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<SubcategoryController>(SubcategoryController);
   });
