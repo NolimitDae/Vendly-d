@@ -320,6 +320,8 @@ export class AuthService {
 
       if (updateUserDto.address) data.address = updateUserDto.address;
 
+      if (updateUserDto.about_me !== undefined) data.bio = updateUserDto.about_me;
+
       if (image) {
         // delete old image from storage
         const oldImage = await this.prisma.user.findFirst({
@@ -346,10 +348,16 @@ export class AuthService {
       if (user) {
         await this.prisma.user.update({
           where: { id: userId },
-          data: {
-            ...data,
-          },
+          data: { ...data },
         });
+
+        if (updateUserDto.business_name !== undefined) {
+          await this.prisma.vendorProfile.upsert({
+            where: { user_id: userId },
+            create: { user_id: userId, business_name: updateUserDto.business_name, license_photo: [] },
+            update: { business_name: updateUserDto.business_name },
+          });
+        }
 
         return {
           success: true,

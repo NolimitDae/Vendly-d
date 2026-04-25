@@ -1,8 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import StatCards from "./StateCards";
-import DashboardUserTable from "./DashboardUserTable";
-import WarningIcon from "@/icons/WarningIcon";
 import VendorsIcon from "@/icons/VendorsIcon";
 import EventPlannersIcon from "@/icons/EventPlannersIcon";
 import MenWithDollarIcon from "@/icons/MenWithDollarIcon";
@@ -12,34 +11,75 @@ import TodaysBooking from "./todays-booking/TodaysBooking";
 import NewSubscription from "./new-subscription/NewSubscription";
 import QuickActions from "./quick-actions/QuickActions";
 import WarningComponent from "./common/WarningComponent";
+import { AdminService } from "@/service/admin/admin.service";
 
 function DashboardPage() {
+  const [stats, setStats] = useState({
+    vendors: 0,
+    eventPlanners: 0,
+    bookings: 0,
+    revenue: 0,
+  });
+
+  useEffect(() => {
+    Promise.allSettled([
+      AdminService.getVendors({ limit: 1 }),
+      AdminService.getEventPlanners({ limit: 1 }),
+      AdminService.getBookings({ limit: 1 }),
+      AdminService.getTransactions(),
+    ]).then(([vendorsRes, epRes, bookingsRes, txRes]) => {
+      const vendors =
+        vendorsRes.status === "fulfilled"
+          ? (vendorsRes.value.data?.meta?.total ?? 0)
+          : 0;
+      const eventPlanners =
+        epRes.status === "fulfilled"
+          ? (epRes.value.data?.meta?.total ?? epRes.value.data?.data?.length ?? 0)
+          : 0;
+      const bookings =
+        bookingsRes.status === "fulfilled"
+          ? (bookingsRes.value.data?.meta?.total ?? 0)
+          : 0;
+      const txData =
+        txRes.status === "fulfilled"
+          ? (Array.isArray(txRes.value.data) ? txRes.value.data : txRes.value.data?.data ?? [])
+          : [];
+      const revenue = txData.reduce(
+        (sum: number, tx: any) => sum + Number(tx.amount ?? 0),
+        0,
+      );
+
+      setStats({ vendors, eventPlanners, bookings, revenue });
+    });
+  }, []);
+
   const statCards = [
     {
       title: "Total Vendors",
-      value: 195,
-      percentage: "0.1%",
+      value: stats.vendors,
+      percentage: "",
       icon: <VendorsIcon />,
     },
     {
-      title: "   Event Planners",
-      value: 7,
-      percentage: "0.8%",
+      title: "Event Planners",
+      value: stats.eventPlanners,
+      percentage: "",
       icon: <EventPlannersIcon />,
     },
     {
-      title: "Total Customers",
-      value: 18,
-      percentage: "1.5%",
+      title: "Total Bookings",
+      value: stats.bookings,
+      percentage: "",
       icon: <MenWithDollarIcon />,
     },
     {
       title: "Total Revenue",
-      value: 635,
-      percentage: "72.6%",
+      value: `$${stats.revenue.toLocaleString()}`,
+      percentage: "",
       icon: <DollarIcon />,
     },
   ];
+
   return (
     <div className="flex flex-col justify-between h-full">
       <div className="space-y-5">
@@ -52,7 +92,6 @@ function DashboardPage() {
           </p>
         </div>
 
-        {/* warning */}
         <WarningComponent />
 
         <StatCards statCards={statCards} />

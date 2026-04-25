@@ -183,15 +183,37 @@ export default function Navbar() {
                     <LayoutDashboard className="w-4 h-4" />
                     Dashboard
                   </Link>
-                  {(user.type === "VENDOR" || user.type === "EVENT_PLANNER") && (
-                    <Link
-                      href="/vendor/bookings"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-                    >
-                      <BookOpen className="w-4 h-4" />
-                      My Bookings
-                    </Link>
+                  {user.type === "VENDOR" && (
+                    <>
+                      <Link
+                        href="/vendor/profile"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <LayoutDashboard className="w-4 h-4" />
+                        My Profile
+                      </Link>
+                      <Link
+                        href="/vendor/bookings"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        My Bookings
+                      </Link>
+                    </>
+                  )}
+                  {user.type === "EVENT_PLANNER" && (
+                    <>
+                      <Link
+                        href="/event-planner/profile"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <LayoutDashboard className="w-4 h-4" />
+                        My Profile
+                      </Link>
+                    </>
                   )}
                   {user.type === "CLIENT" && (
                     <Link
@@ -327,6 +349,26 @@ export default function Navbar() {
                   <LayoutDashboard className="w-4 h-4" />
                   Dashboard
                 </Link>
+                {user.type === "VENDOR" && (
+                  <Link
+                    href="/vendor/profile"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    My Profile
+                  </Link>
+                )}
+                {user.type === "EVENT_PLANNER" && (
+                  <Link
+                    href="/event-planner/profile"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    My Profile
+                  </Link>
+                )}
                 <Link
                   href={user.type === "CLIENT" ? "/bookings" : "/vendor/bookings"}
                   onClick={() => setMenuOpen(false)}

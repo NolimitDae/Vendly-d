@@ -122,7 +122,69 @@ export class UserService {
   }
 
 
-  // approval or reject license 
+  async getVendors(query: { page?: number; limit?: number; status?: string }) {
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
+    const skip = (page - 1) * limit;
+
+    const where: any = { type: 'VENDOR' };
+    if (query.status) {
+      where.vendorProfile = { license_status: query.status };
+    }
+
+    const [total, users] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          avatar: true,
+          created_at: true,
+          vendorProfile: {
+            select: {
+              business_name: true,
+              address: true,
+              license_status: true,
+              about_me: true,
+            },
+          },
+          _count: {
+            select: { vendorListings: true, vendorBookings: true },
+          },
+        },
+      }),
+    ]);
+
+    const data = users.map((u) => ({
+      id: u.id,
+      name: u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+      email: u.email,
+      avatar: u.avatar
+        ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${u.avatar}`)
+        : null,
+      created_at: u.created_at,
+      business_name: u.vendorProfile?.business_name ?? null,
+      address: u.vendorProfile?.address ?? null,
+      license_status: u.vendorProfile?.license_status ?? null,
+      total_listings: u._count.vendorListings,
+      total_bookings: u._count.vendorBookings,
+    }));
+
+    return {
+      success: true,
+      data,
+      meta: { total, page, limit, last_page: Math.ceil(total / limit) },
+    };
+  }
+
+  // approval or reject license
   async approveLicense(
     approveLicenseDto: ApproveLicenseDto,
     userId: string

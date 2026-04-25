@@ -28,6 +28,20 @@ export const AuthService = {
 
   me: async () => Fetch.get("/auth/me", authHeaders()),
 
+  updateProfile: async (formData: FormData) =>
+    Fetch.patch("/auth/update", formData, {
+      headers: {
+        Authorization: `Bearer ${CookieHelper.get({ key: "token" })}`,
+      },
+    }),
+
+  addLicense: async (formData: FormData) =>
+    Fetch.post("/auth/add-license", formData, {
+      headers: {
+        Authorization: `Bearer ${CookieHelper.get({ key: "token" })}`,
+      },
+    }),
+
   logout: async () => Fetch.post("/auth/logout", {}, authHeaders()),
 
   verifyEmail: async (data: { email: string; token: string }) =>
