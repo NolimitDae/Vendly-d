@@ -41,7 +41,7 @@ const LoginForm = () => {
       const res = await AuthService.login(data);
       if (res.data?.success) {
         const token = res.data.authorization?.access_token;
-        const userType = res.data.data?.type;
+        const userType = res.data.type;
         if (token) {
           CookieHelper.set({ key: "token", value: token });
         }

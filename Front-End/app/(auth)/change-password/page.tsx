@@ -1,3 +1,5 @@
+"use client";
+
 import DashboardContainer from "@/components/Dashboard/DashboardContainer";
 import AuthRightSection from "../../../components/Dashboard/auth/AuthRightSection";
 import BackIcon from "../../../components/Dashboard/auth/BackIcon";

@@ -9,7 +9,7 @@ jest.mock('@/service/auth/auth.service', () => ({
       data: {
         success: true,
         authorization: { access_token: 'mock-token' },
-        data: { type: 'CLIENT' },
+        type: 'CLIENT',
       },
     }),
   },

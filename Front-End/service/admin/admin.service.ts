@@ -8,6 +8,23 @@ const authHeaders = () => ({
 });
 
 export const AdminService = {
+  // Listings (all vendor listings, admin view)
+  getListings: async (params?: { page?: number; limit?: number; status?: string; search?: string }) => {
+    const q = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
+    return Fetch.get(`/admin/listings?${q.toString()}`, authHeaders());
+  },
+
+  updateListingStatus: async (id: string, status: string) =>
+    Fetch.patch(
+      `/admin/listings/${id}/status`,
+      { status },
+      { headers: { ...authHeaders().headers, "Content-Type": "application/json" } },
+    ),
+
+  removeListing: async (id: string) =>
+    Fetch.delete(`/admin/listings/${id}`, authHeaders()),
+
   // Vendors
   getVendors: async (params?: { page?: number; limit?: number; status?: string }) => {
     const q = new URLSearchParams();

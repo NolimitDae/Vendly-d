@@ -64,6 +64,12 @@ export const navItems: NavItem[] = [
     ],
   },
   {
+    icon: ServicesIcon,
+    label: "Listings",
+    href: "/dashboard/listings",
+    type: "admin",
+  },
+  {
     icon: BookingIcon,
     label: "Bookings",
     href: "/dashboard/bookings",
