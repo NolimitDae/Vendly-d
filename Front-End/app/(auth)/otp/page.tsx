@@ -1,9 +1,33 @@
+"use client";
+
+import { useSearchParams, useRouter } from "next/navigation";
 import DashboardContainer from "@/components/Dashboard/DashboardContainer";
 import BackIcon from "../../../components/Dashboard/auth/BackIcon";
 import AuthRightSection from "../../../components/Dashboard/auth/AuthRightSection";
 import OtpForm from "../../../components/Dashboard/auth/otp/OtpForm";
+import { AuthService } from "@/service/auth/auth.service";
 
 const OTPPage = () => {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const email = searchParams.get("email") ?? "";
+  const purpose = searchParams.get("purpose") ?? "verify";
+
+  const handleComplete = async (otp: string) => {
+    if (purpose === "verify") {
+      const res = await AuthService.verifyEmail({ email, token: otp });
+      if (!res.data?.success) {
+        throw new Error(res.data?.message || "Verification failed");
+      }
+      router.push("/login");
+    } else {
+      // reset flow — carry OTP to change-password page
+      router.push(
+        `/change-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(otp)}`,
+      );
+    }
+  };
+
   return (
     <DashboardContainer className="flex flex-col lg:flex-row min-h-screen">
       {/* LEFT SECTION */}
@@ -17,14 +41,14 @@ const OTPPage = () => {
                 Enter OTP
               </h2>
               <p className="text-descriptionColor text-base leading-[160%]">
-                We have share a code of your registered email address
-                robert.fox@example.com
+                We have sent a code to your registered email address
+                {email ? ` ${email}` : ""}.
               </p>
             </div>
           </div>
 
           {/* Form */}
-          <OtpForm />
+          <OtpForm onComplete={handleComplete} />
         </div>
       </div>
 

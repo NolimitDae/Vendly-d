@@ -1,24 +1,59 @@
 "use client";
 
-import CustomButton from "@/components/reusable/CustomButton";
 import ReusableInput from "@/components/reusable/InputFiled/ReusableInput";
-import EmailIcon from "@/icons/EmailIcon";
 import LockIcon from "@/icons/LockIcon";
-import React from "react";
+import React, { useState } from "react";
 import { GenericButton } from "../GenericButton";
 import CircleTickIcon from "@/icons/CircleTickIcon";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AuthService } from "@/service/auth/auth.service";
+import { toast } from "react-toastify";
 
 const ChangePassForm = () => {
-  const [showPassword, setShowPassword] = React.useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
-const router = useRouter();
-  const togglePasswordVisibility = () => {
-    setShowPassword((prev) => !prev);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const email = searchParams.get("email") ?? "";
+  const token = searchParams.get("token") ?? "";
+
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const hasMinLength = password.length >= 8;
+  const hasNumber = /\d/.test(password);
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasSpecial = /[!@#$%^&*]/.test(password);
+
+  const strengthCount = [hasMinLength, hasNumber, hasUppercase, hasSpecial].filter(Boolean).length;
+  const strengthLabel = ["", "Weak", "Fair", "Good", "Strong"][strengthCount];
+
+  const handleSubmit = async () => {
+    if (!password || password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    if (!hasMinLength) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await AuthService.resetPassword({ email, token, password });
+      if (res.data?.success) {
+        toast.success("Password updated successfully!");
+        router.push("/confirmationPass");
+      } else {
+        toast.error(res.data?.message || "Failed to reset password");
+      }
+    } catch {
+      toast.error("Failed to reset password. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
-  const toggleConfirmPasswordVisibility = () => {
-    setShowConfirmPassword((prev) => !prev);
-  };
+
   return (
     <div className="space-y-8">
       <div className="space-y-3">
@@ -29,33 +64,46 @@ const router = useRouter();
           className="rounded-2xl"
           placeholder="•••••••••"
           showPassword={showPassword}
-          togglePasswordVisibility={togglePasswordVisibility}
+          togglePasswordVisibility={() => setShowPassword((p) => !p)}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
-        {/* password strength checker */}
+        {/* password strength indicator */}
         <div className="flex items-center gap-2">
-          <div className="w-1/4 h-1 rounded-lg gradient-bg" />
-          <div className="w-1/4 h-1 rounded-lg gradient-bg" />
-          <div className="w-1/4 h-1 rounded-lg gradient-bg" />
-          <div className="w-1/4 h-1 rounded-lg gradient-bg" />
-          <span className="text-xs leading-[160%] font-medium bg-linear-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent">
-            Good
-          </span>
+          {[1, 2, 3, 4].map((level) => (
+            <div
+              key={level}
+              className={`w-1/4 h-1 rounded-lg transition-colors ${
+                strengthCount >= level ? "gradient-bg" : "bg-gray-200 dark:bg-gray-600"
+              }`}
+            />
+          ))}
+          {strengthLabel && (
+            <span className="text-xs leading-[160%] font-medium bg-linear-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent">
+              {strengthLabel}
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-y-3">
           <div className="flex items-center gap-2">
-            <CircleTickIcon color="#795FF4" /> <p className="text-xs leading-[160%] font-medium text-grayColor1">8 characters minimum</p>
+            <CircleTickIcon color={hasMinLength ? "#795FF4" : undefined} />
+            <p className="text-xs leading-[160%] font-medium text-grayColor1">8 characters minimum</p>
           </div>
           <div className="flex items-center gap-2">
-            <CircleTickIcon color="#795FF4" /> <p className="text-xs leading-[160%] font-medium text-grayColor1">numbers (0-9)</p>
+            <CircleTickIcon color={hasNumber ? "#795FF4" : undefined} />
+            <p className="text-xs leading-[160%] font-medium text-grayColor1">numbers (0-9)</p>
           </div>
           <div className="flex items-center gap-2">
-            <CircleTickIcon color="#795FF4" /> <p className="text-xs leading-[160%] font-medium text-grayColor1">uppercase letters (A-Z)</p>
+            <CircleTickIcon color={hasUppercase ? "#795FF4" : undefined} />
+            <p className="text-xs leading-[160%] font-medium text-grayColor1">uppercase letters (A-Z)</p>
           </div>
           <div className="flex items-center gap-2">
-            <CircleTickIcon /> <p className="text-xs leading-[160%] font-medium text-grayColor1">special characters (!@#$%^&*)</p>
+            <CircleTickIcon color={hasSpecial ? "#795FF4" : undefined} />
+            <p className="text-xs leading-[160%] font-medium text-grayColor1">special characters (!@#$%^&*)</p>
           </div>
         </div>
+
         <ReusableInput
           label="Confirm new Password"
           type={showConfirmPassword ? "text" : "password"}
@@ -63,7 +111,9 @@ const router = useRouter();
           className="rounded-2xl"
           placeholder="Re enter your new password"
           showPassword={showConfirmPassword}
-          togglePasswordVisibility={toggleConfirmPasswordVisibility}
+          togglePasswordVisibility={() => setShowConfirmPassword((p) => !p)}
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
         />
       </div>
 
@@ -72,26 +122,25 @@ const router = useRouter();
           variant="primary"
           size="md"
           rounded="2xl"
-          onClick={() => router.push("/dashboard")}
+          onClick={handleSubmit}
+          disabled={loading}
           fullWidth
           height="lg"
         >
-          Set Password
+          {loading ? "Saving…" : "Set Password"}
         </GenericButton>
 
         <GenericButton
           variant="outline"
           size="md"
           rounded="2xl"
-          onClick={() => console.log("Saved")}
+          onClick={() => router.push("/login")}
           fullWidth
           height="lg"
         >
           Back to sign in
         </GenericButton>
       </div>
-
-      {/* Social Login */}
     </div>
   );
 };
