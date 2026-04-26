@@ -89,4 +89,20 @@ export const AdminService = {
       { status },
       { headers: { ...authHeaders().headers, "Content-Type": "application/json" } },
     ),
+
+  // Revenue analytics
+  getRevenueByMonth: async (year?: number) => {
+    const q = year ? `?year=${year}` : "";
+    return Fetch.get(`/admin/payment-transaction/revenue-by-month${q}`, authHeaders());
+  },
+
+  // Platform settings
+  getSettings: async () => Fetch.get("/admin/settings", authHeaders()),
+
+  updateSettings: async (settings: Record<string, string>) =>
+    Fetch.patch(
+      "/admin/settings",
+      settings,
+      { headers: { ...authHeaders().headers, "Content-Type": "application/json" } },
+    ),
 };

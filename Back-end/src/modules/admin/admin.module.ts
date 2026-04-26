@@ -6,6 +6,7 @@ import { UserModule } from './user/user.module';
 import { NotificationModule } from './notification/notification.module';
 import { ServiceModule } from './service/service.module';
 import { AdminBookingModule } from './booking/admin-booking.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AdminBookingModule } from './booking/admin-booking.module';
     NotificationModule,
     ServiceModule,
     AdminBookingModule,
+    SettingsModule,
   ],
 })
 export class AdminModule {}

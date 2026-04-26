@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Param, Delete, Query, UseGuards, Req } from '@nestjs/common';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { ApiBearerAuth, ApiExcludeController, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RolesGuard } from '../../../common/guard/role/roles.guard';
@@ -16,6 +16,11 @@ export class PaymentTransactionController {
   constructor(
     private readonly paymentTransactionService: PaymentTransactionService,
   ) {}
+
+  @Get('revenue-by-month')
+  async revenueByMonth(@Query('year') year?: string) {
+    return this.paymentTransactionService.getRevenueByMonth(year ? Number(year) : undefined);
+  }
 
   @ApiOperation({ summary: 'Get all packages' })
   @Get()

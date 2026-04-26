@@ -99,6 +99,32 @@ export class PaymentTransactionService {
     }
   }
 
+  async getRevenueByMonth(year?: number) {
+    const targetYear = year ?? new Date().getFullYear();
+    const start = new Date(targetYear, 0, 1);
+    const end = new Date(targetYear + 1, 0, 1);
+
+    const transactions = await this.prisma.paymentTransaction.findMany({
+      where: {
+        status: 'paid',
+        created_at: { gte: start, lt: end },
+        deleted_at: null,
+      },
+      select: { created_at: true, amount: true },
+    });
+
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const totals = Array(12).fill(0);
+    for (const tx of transactions) {
+      totals[tx.created_at.getMonth()] += Number(tx.amount ?? 0);
+    }
+
+    return {
+      success: true,
+      data: months.map((name, i) => ({ name, amount: Math.round(totals[i]) })),
+    };
+  }
+
   async remove(id: string, user_id?: string) {
     try {
       const userDetails = await this.userRepository.getUserDetails(user_id);

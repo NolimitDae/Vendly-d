@@ -35,6 +35,7 @@ export class UserService {
         first_name: true,
         last_name: true,
         name: true,
+        type: true,
         created_at: true,
         vendorProfile: {
           select: {
@@ -55,6 +56,7 @@ export class UserService {
     return pendingUsers.map((user) => ({
       id: user.id,
       email: user.email,
+      type: user.type,
       name:
         user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
       business_name: user.vendorProfile?.business_name,

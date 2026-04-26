@@ -20,6 +20,7 @@ function DashboardPage() {
     bookings: 0,
     revenue: 0,
   });
+  const [pending, setPending] = useState({ vendor: 0, ep: 0 });
 
   useEffect(() => {
     Promise.allSettled([
@@ -27,7 +28,8 @@ function DashboardPage() {
       AdminService.getEventPlanners({ limit: 1 }),
       AdminService.getBookings({ limit: 1 }),
       AdminService.getTransactions(),
-    ]).then(([vendorsRes, epRes, bookingsRes, txRes]) => {
+      AdminService.getPendingLicense(),
+    ]).then(([vendorsRes, epRes, bookingsRes, txRes, pendingRes]) => {
       const vendors =
         vendorsRes.status === "fulfilled"
           ? (vendorsRes.value.data?.meta?.total ?? 0)
@@ -50,6 +52,15 @@ function DashboardPage() {
       );
 
       setStats({ vendors, eventPlanners, bookings, revenue });
+
+      if (pendingRes.status === "fulfilled") {
+        const list: any[] = Array.isArray(pendingRes.value.data)
+          ? pendingRes.value.data
+          : (pendingRes.value.data?.data ?? []);
+        const vendorCount = list.filter((u: any) => u.type === "VENDOR").length;
+        const epCount = list.filter((u: any) => u.type === "EVENT_PLANNER").length;
+        setPending({ vendor: vendorCount, ep: epCount });
+      }
     });
   }, []);
 
@@ -92,7 +103,7 @@ function DashboardPage() {
           </p>
         </div>
 
-        <WarningComponent />
+        <WarningComponent vendorPending={pending.vendor} epPending={pending.ep} />
 
         <StatCards statCards={statCards} />
       </div>
@@ -103,12 +114,12 @@ function DashboardPage() {
         </div>
         <div className="flex flex-col space-y-5">
           <TodaysBooking />
-          <NewSubscription />
+          <NewSubscription vendorPending={pending.vendor} epPending={pending.ep} />
         </div>
       </div>
 
       <div className="mt-5">
-        <QuickActions />
+        <QuickActions vendorPending={pending.vendor} epPending={pending.ep} />
       </div>
     </div>
   );
