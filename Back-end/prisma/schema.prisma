@@ -648,9 +648,6 @@ model VendorListing {
   bookings Booking[]
   reviews  Review[]
 
-  @@index([vendor_id])
-  @@index([category_id])
-  @@index([status])
   @@map("vendor_listings")
 }
 
@@ -697,11 +694,6 @@ model Booking {
 
   review Review?
 
-  @@index([customer_id])
-  @@index([vendor_id])
-  @@index([listing_id])
-  @@index([status])
-  @@index([created_at])
   @@map("bookings")
 }
 
