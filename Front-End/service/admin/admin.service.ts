@@ -8,6 +8,19 @@ const authHeaders = () => ({
 });
 
 export const AdminService = {
+  // Categories
+  getCategories: async () => Fetch.get("/category", authHeaders()),
+
+  createCategory: async (name: string) =>
+    Fetch.post(
+      "/category",
+      { name },
+      { headers: { ...authHeaders().headers, "Content-Type": "application/json" } },
+    ),
+
+  deleteCategory: async (id: string) =>
+    Fetch.delete(`/category/${id}`, authHeaders()),
+
   // Listings (all vendor listings, admin view)
   getListings: async (params?: { page?: number; limit?: number; status?: string; search?: string }) => {
     const q = new URLSearchParams();
