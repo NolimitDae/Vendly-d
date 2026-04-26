@@ -236,16 +236,6 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
-      {/* <div className=" md:hidden px-4">
-        <SearchInput
-          onSearch={searchLocally}
-          onSelect={(c) => console.log(c.label)}
-          placeholder="Search"
-          debounceMs={0}
-          minChars={1}
-        />
-      </div> */}
-
       {isCreateServiceModalOpen && (
         <CreateServiceModal closeModal={closeCreateServiceModal} />
       )}

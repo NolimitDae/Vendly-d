@@ -29,7 +29,7 @@ export const navItems: NavItem[] = [
   {
     icon: VendorsIcon,
     label: "Vendors",
-    href: "/vendors",
+    href: "/dashboard/vendors",
     type: "admin",
     children: [
       {
@@ -48,7 +48,7 @@ export const navItems: NavItem[] = [
   {
     icon: EventPlannersIcon,
     label: "Event Planners",
-    href: "/event-planners",
+    href: "/dashboard/event-planners",
     type: "admin",
     children: [
       {
