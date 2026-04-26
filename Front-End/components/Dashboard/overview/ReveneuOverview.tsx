@@ -40,7 +40,7 @@ const ReveneuOverview = () => {
             options={yearOptions}
             placeholder={year}
             className="border-0 shadow-none text-blackColor font-xs"
-            onChange={(e) => setYear(e.target.value)}
+            onValueChange={(val) => setYear(val)}
           />
         </div>
       </div>

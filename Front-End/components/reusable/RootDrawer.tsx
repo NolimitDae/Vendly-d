@@ -1,4 +1,3 @@
-import CloseIcon from "@/public/icon/arrow-right-01.svg";
 import Image from "next/image";
 import { Drawer, DrawerContent } from "../ui/drawer";
 function RootDrawer({
@@ -21,7 +20,7 @@ function RootDrawer({
               className="group hover:scale-105 transition-all duration-200 bg-white rounded-full cursor-pointer w-12 h-12 flex justify-center shadow-2xl items-center absolute top-1/2 transform -translate-y-1/2 left-4 md:-left-12 lg:-left-16 z-50"
             >
               <Image
-                src={CloseIcon}
+                src="/icon/arrow-right-01.svg"
                 alt="Close"
                 width={20}
                 height={20}

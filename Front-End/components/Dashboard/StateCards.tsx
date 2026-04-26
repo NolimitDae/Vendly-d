@@ -6,7 +6,7 @@ import GrowIcon from "@/icons/GrowIcon";
 
 interface StatCardProps {
   title: string;
-  value: number;
+  value: string | number;
   percentage?: string;
   icon?: React.ReactNode;
 }
