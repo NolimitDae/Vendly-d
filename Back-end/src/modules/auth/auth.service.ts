@@ -187,8 +187,12 @@ export class AuthService {
       const payload = { email: email, sub: userId, type: user?.type };
 
 
-      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+      const accessToken = this.jwtService.sign(payload, {
+        expiresIn: (process.env.JWT_ACCESS_EXPIRY ?? '1h') as any,
+      });
+      const refreshToken = this.jwtService.sign(payload, {
+        expiresIn: (process.env.JWT_REFRESH_EXPIRY ?? '7d') as any,
+      });
 
       // store refreshToken
       await this.redis.set(

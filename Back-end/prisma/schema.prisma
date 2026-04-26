@@ -428,6 +428,9 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   attachments String[] @db.Text
+
+  @@index([conversationId])
+  @@index([senderId])
 }
 
 /**
@@ -471,6 +474,10 @@ model Notification {
   notification_event    NotificationEvent? @relation(fields: [notification_event_id], references: [id])
 
   entity_id String?
+
+  @@index([receiver_id])
+  @@index([sender_id])
+  @@index([read_at])
 }
 
 /**
@@ -641,6 +648,9 @@ model VendorListing {
   bookings Booking[]
   reviews  Review[]
 
+  @@index([vendor_id])
+  @@index([category_id])
+  @@index([status])
   @@map("vendor_listings")
 }
 
@@ -687,6 +697,11 @@ model Booking {
 
   review Review?
 
+  @@index([customer_id])
+  @@index([vendor_id])
+  @@index([listing_id])
+  @@index([status])
+  @@index([created_at])
   @@map("bookings")
 }
 
