@@ -3,9 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useDebounce } from "@/hooks";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
+import { SavedListingsService } from "@/service/savedListings/savedListings.service";
+import { CookieHelper } from "@/helper/cookie.helper";
 import Link from "next/link";
 import Image from "next/image";
-import { Star, Search, SlidersHorizontal, MapPin } from "lucide-react";
+import { Star, Search, SlidersHorizontal, MapPin, Heart } from "lucide-react";
+import { toast } from "react-toastify";
+import { cn } from "@/lib/utils";
 
 interface Listing {
   id: string;
@@ -38,6 +42,8 @@ export default function MarketplacePage() {
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, last_page: 1 });
   const [showFilters, setShowFilters] = useState(false);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const isLoggedIn = !!CookieHelper.get({ key: "token" });
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -64,15 +70,55 @@ export default function MarketplacePage() {
     }
   }, [debouncedSearch, categoryId, minPrice, maxPrice, sort, page]);
 
-  useEffect(() => {
-    fetchListings();
-  }, [fetchListings]);
+  useEffect(() => { fetchListings(); }, [fetchListings]);
 
   useEffect(() => {
     MarketplaceService.getCategories().then((res) => {
       if (res.data?.success) setCategories(res.data.data);
     });
   }, []);
+
+  // Load saved IDs once for logged-in users
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    SavedListingsService.getSavedIds()
+      .then((res) => {
+        if (res.data?.success && Array.isArray(res.data.data)) {
+          setSavedIds(new Set(res.data.data));
+        }
+      })
+      .catch(() => {});
+  }, [isLoggedIn]);
+
+  const toggleSave = async (e: React.MouseEvent, listingId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isLoggedIn) { toast.info("Log in to save listings"); return; }
+    const wasSaved = savedIds.has(listingId);
+    // Optimistic update
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      wasSaved ? next.delete(listingId) : next.add(listingId);
+      return next;
+    });
+    try {
+      if (wasSaved) {
+        await SavedListingsService.remove(listingId);
+        toast.success("Removed from saved listings");
+      } else {
+        await SavedListingsService.save(listingId);
+        toast.success("Saved to your favourites");
+      }
+    } catch {
+      // Revert on error
+      setSavedIds((prev) => {
+        const next = new Set(prev);
+        wasSaved ? next.add(listingId) : next.delete(listingId);
+        return next;
+      });
+      toast.error("Failed to update saved listings");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
@@ -176,7 +222,12 @@ export default function MarketplacePage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {listings.map((listing) => (
-              <ListingCard key={listing.id} listing={listing} />
+              <ListingCard
+                key={listing.id}
+                listing={listing}
+                isSaved={savedIds.has(listing.id)}
+                onToggleSave={(e) => toggleSave(e, listing.id)}
+              />
             ))}
           </div>
         )}
@@ -204,7 +255,15 @@ export default function MarketplacePage() {
   );
 }
 
-function ListingCard({ listing }: { listing: Listing }) {
+function ListingCard({
+  listing,
+  isSaved,
+  onToggleSave,
+}: {
+  listing: Listing;
+  isSaved: boolean;
+  onToggleSave: (e: React.MouseEvent) => void;
+}) {
   const coverImage = listing.images?.[0];
 
   return (
@@ -228,6 +287,19 @@ function ListingCard({ listing }: { listing: Listing }) {
               {listing.category.name}
             </span>
           )}
+          {/* Heart button */}
+          <button
+            onClick={onToggleSave}
+            aria-label={isSaved ? "Remove from saved" : "Save listing"}
+            className={cn(
+              "absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition shadow",
+              isSaved
+                ? "bg-red-500 text-white"
+                : "bg-white/90 dark:bg-gray-900/80 text-gray-400 hover:text-red-500",
+            )}
+          >
+            <Heart className={cn("w-4 h-4", isSaved && "fill-current")} />
+          </button>
         </div>
         <div className="p-4">
           <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-1 group-hover:text-primary transition">

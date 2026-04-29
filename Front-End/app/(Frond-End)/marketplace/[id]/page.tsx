@@ -13,10 +13,14 @@ import {
   CheckCircle,
   ChevronLeft,
   MessageCircle,
+  Heart,
 } from "lucide-react";
 import BookingModal from "@/components/marketplace/BookingModal";
 import ReviewList from "@/components/marketplace/ReviewList";
 import { CookieHelper } from "@/helper/cookie.helper";
+import { SavedListingsService } from "@/service/savedListings/savedListings.service";
+import { toast } from "react-toastify";
+import { cn } from "@/lib/utils";
 
 interface Listing {
   id: string;
@@ -50,6 +54,8 @@ export default function ListingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [showBooking, setShowBooking] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savingToggle, setSavingToggle] = useState(false);
   const isLoggedIn = !!CookieHelper.get({ key: "token" });
 
   useEffect(() => {
@@ -60,6 +66,38 @@ export default function ListingDetailPage() {
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !id) return;
+    SavedListingsService.getSavedIds()
+      .then((res) => {
+        if (res.data?.success && Array.isArray(res.data.data)) {
+          setIsSaved(res.data.data.includes(id));
+        }
+      })
+      .catch(() => {});
+  }, [id, isLoggedIn]);
+
+  const toggleSave = async () => {
+    if (!isLoggedIn) { toast.info("Log in to save listings"); return; }
+    setSavingToggle(true);
+    const wasSaved = isSaved;
+    setIsSaved(!wasSaved);
+    try {
+      if (wasSaved) {
+        await SavedListingsService.remove(id);
+        toast.success("Removed from saved listings");
+      } else {
+        await SavedListingsService.save(id);
+        toast.success("Saved to your favourites");
+      }
+    } catch {
+      setIsSaved(wasSaved);
+      toast.error("Failed to update saved listings");
+    } finally {
+      setSavingToggle(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -141,7 +179,22 @@ export default function ListingDetailPage() {
                 )}
               </div>
 
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{listing.title}</h1>
+              <div className="flex items-start justify-between gap-3">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{listing.title}</h1>
+                <button
+                  onClick={toggleSave}
+                  disabled={savingToggle}
+                  aria-label={isSaved ? "Remove from saved" : "Save listing"}
+                  className={cn(
+                    "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition border",
+                    isSaved
+                      ? "bg-red-500 border-red-500 text-white"
+                      : "border-gray-200 dark:border-gray-700 text-gray-400 hover:border-red-400 hover:text-red-500",
+                  )}
+                >
+                  <Heart className={cn("w-5 h-5", isSaved && "fill-current")} />
+                </button>
+              </div>
 
               <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-gray-500">
                 {listing.avg_rating && (

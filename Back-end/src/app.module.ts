@@ -27,6 +27,7 @@ import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { BookingModule } from './modules/booking/booking.module';
 import { ReviewModule } from './modules/review/review.module';
 import { EventPlannerModule } from './modules/event-planner/event-planner.module';
+import { SavedListingsModule } from './modules/saved-listings/saved-listings.module';
 
 
 @Module({
@@ -88,6 +89,7 @@ import { EventPlannerModule } from './modules/event-planner/event-planner.module
     BookingModule,
     ReviewModule,
     EventPlannerModule,
+    SavedListingsModule,
   ],
   controllers: [AppController],
   providers: [

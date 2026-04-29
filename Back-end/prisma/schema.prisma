@@ -206,6 +206,9 @@ model User {
   writtenReviews  Review[] @relation("ReviewAuthor")
   receivedReviews Review[] @relation("ReviewVendor")
 
+  // Saved listings (favourites)
+  savedListings SavedListing[] @relation("UserSavedListings")
+
   // Event planner profile
   eventPlannerProfile EventPlannerProfile? @relation("UserToEventPlannerProfile")
 
@@ -645,8 +648,9 @@ model VendorListing {
   sub_category_id String?
   sub_category   ServiceSubCategory? @relation(fields: [sub_category_id], references: [id])
 
-  bookings Booking[]
-  reviews  Review[]
+  bookings  Booking[]
+  reviews   Review[]
+  savedBy   SavedListing[] @relation("ListingSavedBy")
 
   @@map("vendor_listings")
 }
@@ -654,6 +658,32 @@ model VendorListing {
 /**
  * ------------------------------------------------------------
  * --- Vendor Listing Schema end ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Saved Listings (Favourites) ---
+ * -------------------------------------------------------------
+ */
+
+model SavedListing {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  user_id String
+  user    User   @relation("UserSavedListings", fields: [user_id], references: [id], onDelete: Cascade)
+
+  listing_id String
+  listing    VendorListing @relation("ListingSavedBy", fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, listing_id])
+  @@map("saved_listings")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Saved Listings end ---
  * -------------------------------------------------------------
  */
 
