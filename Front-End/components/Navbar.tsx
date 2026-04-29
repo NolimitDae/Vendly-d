@@ -5,13 +5,18 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
-import { LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark } from "lucide-react";
+import { LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
 import { ThemeToggle } from "@/components/landing-page/theme/ThemeToggle";
 import { CookieHelper } from "@/helper/cookie.helper";
 import { AuthService } from "@/service/auth/auth.service";
+import { useNotifications } from "@/hooks/useNotifications";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+dayjs.extend(relativeTime);
 
 const homeItems = [
   { en: "Home", href: "/", hash: "home" },
@@ -50,6 +55,8 @@ export default function Navbar() {
   const [hash, setHash] = useState("");
   const [user, setUser] = useState<UserInfo | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const { notifications, unread, markAsRead, markAllAsRead } = useNotifications();
 
   useEffect(() => {
     const update = () =>
@@ -162,6 +169,102 @@ export default function Navbar() {
           <ThemeToggle />
 
           {user ? (
+            <>
+            {/* Notification bell */}
+            <div className="relative">
+              <button
+                onClick={() => { setBellOpen((o) => !o); setUserMenuOpen(false); }}
+                className="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-300"
+                aria-label="Notifications"
+              >
+                <Bell className="w-5 h-5" />
+                {unread > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
+              </button>
+
+              {bellOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                    <span className="font-semibold text-sm text-gray-900 dark:text-white">
+                      Notifications
+                    </span>
+                    {unread > 0 && (
+                      <button
+                        onClick={() => markAllAsRead()}
+                        className="flex items-center gap-1 text-xs text-primary hover:opacity-80 transition font-medium"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List */}
+                  <div className="max-h-80 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-700">
+                    {notifications.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-gray-400">
+                        <Bell className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                        No notifications yet
+                      </div>
+                    ) : (
+                      notifications.slice(0, 10).map((n) => (
+                        <button
+                          key={n.id}
+                          onClick={() => { if (!n.read_at) markAsRead(n.id); }}
+                          className={cn(
+                            "w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-start gap-3",
+                            !n.read_at && "bg-primary/5 dark:bg-primary/10",
+                          )}
+                        >
+                          {/* Sender avatar */}
+                          {n.sender?.avatar ? (
+                            <Image
+                              src={n.sender.avatar}
+                              alt={n.sender.name}
+                              width={32}
+                              height={32}
+                              className="rounded-full w-8 h-8 object-cover flex-shrink-0 mt-0.5"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
+                              {n.sender?.name?.[0]?.toUpperCase() ?? "?"}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-700 dark:text-gray-300 leading-snug line-clamp-2">
+                              {n.notification_event?.text ?? "New notification"}
+                            </p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              {dayjs(n.created_at).fromNow()}
+                            </p>
+                          </div>
+                          {!n.read_at && (
+                            <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1.5" />
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-2.5 text-center">
+                    <Link
+                      href="/notifications"
+                      onClick={() => setBellOpen(false)}
+                      className="text-xs font-medium text-primary hover:opacity-80 transition"
+                    >
+                      View all notifications
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen((o) => !o)}
@@ -246,6 +349,7 @@ export default function Navbar() {
                 </div>
               )}
             </div>
+            </>
           ) : (
             <>
               <Link
@@ -397,6 +501,19 @@ export default function Navbar() {
                     Saved Listings
                   </Link>
                 )}
+                <Link
+                  href="/notifications"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <Bell className="w-4 h-4" />
+                  Notifications
+                  {unread > 0 && (
+                    <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
+                </Link>
                 <button
                   onClick={() => { handleLogout(); setMenuOpen(false); }}
                   className="w-full flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
