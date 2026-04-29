@@ -107,6 +107,12 @@ export const navItems: NavItem[] = [
     href: "/vendor/earnings",
     type: "vendor",
   },
+  {
+    icon: WalletIcon,
+    label: "Subscription",
+    href: "/vendor/subscription",
+    type: "vendor",
+  },
 ];
 
 export const otherItems = [

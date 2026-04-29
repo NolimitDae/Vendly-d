@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import { VendorListingService } from "@/service/vendor/vendor-listing.service";
 import { toast } from "react-toastify";
-import { Upload, X, Loader2, ArrowLeft } from "lucide-react";
+import { Upload, X, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { SubscriptionService } from "@/service/subscription/subscription.service";
 
 interface Category {
   id: string;
@@ -19,6 +20,8 @@ export default function NewListingPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [planGateChecked, setPlanGateChecked] = useState(false);
+  const [planBlocked, setPlanBlocked] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState<File[]>([]);
@@ -35,6 +38,33 @@ export default function NewListingPage() {
     sub_category_id: "",
     tags: "",
   });
+
+  useEffect(() => {
+    // Subscription gate — check before allowing listing creation
+    SubscriptionService.getCurrentPlan()
+      .then((res) => {
+        if (res.data?.success && res.data.data) {
+          const d = res.data.data;
+          const status =
+            d.vendorPlan?.payment_status ??
+            d.vendorSubscriptionPlan?.payment_status ??
+            d.subscription?.status ??
+            null;
+          const active = status === "PAID" || status === "ACTIVE";
+          if (!active) {
+            setPlanBlocked(true);
+          }
+        }
+        // If success=false but not a hard 403, don't block (endpoint may not exist yet)
+      })
+      .catch((err: any) => {
+        if (err?.response?.status === 403) {
+          router.replace("/vendor/subscription?reason=no-plan");
+        }
+        // 404 or network error → endpoint not yet deployed, fail open
+      })
+      .finally(() => setPlanGateChecked(true));
+  }, [router]);
 
   useEffect(() => {
     MarketplaceService.getCategories().then((res) => {
@@ -89,6 +119,37 @@ export default function NewListingPage() {
 
   const set = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  // Show gate block once we know they don't have an active plan
+  if (planGateChecked && planBlocked) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-16 px-4 flex items-start justify-center">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-7 h-7 text-amber-600 dark:text-amber-400" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Subscription Required</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            You need an active subscription plan to create listings. Start with a free 14-day trial — no credit card required.
+          </p>
+          <div className="flex flex-col gap-2 pt-2">
+            <Link
+              href="/vendor/subscription?reason=no-plan"
+              className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm hover:bg-primary/90 transition"
+            >
+              View Subscription Plans
+            </Link>
+            <Link
+              href="/vendor/listings"
+              className="w-full py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+            >
+              Back to Listings
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
