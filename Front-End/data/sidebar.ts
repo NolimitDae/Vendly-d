@@ -17,7 +17,7 @@ interface NavItem {
   icon: any;
   label: string;
   href: string;
-  type?: "client" | "admin" | "candidate";
+  type?: "client" | "admin" | "candidate" | "vendor";
   children?: NavItem[];
 }
 
@@ -100,6 +100,12 @@ export const navItems: NavItem[] = [
     label: "Wallet",
     href: "/wallet",
     type: "admin",
+  },
+  {
+    icon: TransactionsIcon,
+    label: "Earnings",
+    href: "/vendor/earnings",
+    type: "vendor",
   },
 ];
 

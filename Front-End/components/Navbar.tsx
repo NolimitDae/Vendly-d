@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
-import { LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet } from "lucide-react";
+import { LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
@@ -304,6 +304,14 @@ export default function Navbar() {
                         <BookOpen className="w-4 h-4" />
                         My Bookings
                       </Link>
+                      <Link
+                        href="/vendor/earnings"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <TrendingUp className="w-4 h-4" />
+                        Earnings
+                      </Link>
                     </>
                   )}
                   {user.type === "EVENT_PLANNER" && (
@@ -482,14 +490,24 @@ export default function Navbar() {
                   Dashboard
                 </Link>
                 {user.type === "VENDOR" && (
-                  <Link
-                    href="/vendor/profile"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                  >
-                    <LayoutDashboard className="w-4 h-4" />
-                    My Profile
-                  </Link>
+                  <>
+                    <Link
+                      href="/vendor/profile"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <LayoutDashboard className="w-4 h-4" />
+                      My Profile
+                    </Link>
+                    <Link
+                      href="/vendor/earnings"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                      Earnings
+                    </Link>
+                  </>
                 )}
                 {user.type === "EVENT_PLANNER" && (
                   <Link
