@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
-import { LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check } from "lucide-react";
+import { LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
@@ -338,6 +338,14 @@ export default function Navbar() {
                       </Link>
                     </>
                   )}
+                  <Link
+                    href="/chat"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Messages
+                  </Link>
                   <hr className="my-1 border-gray-100 dark:border-gray-700" />
                   <button
                     onClick={handleLogout}
@@ -501,6 +509,14 @@ export default function Navbar() {
                     Saved Listings
                   </Link>
                 )}
+                <Link
+                  href="/chat"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Messages
+                </Link>
                 <Link
                   href="/notifications"
                   onClick={() => setMenuOpen(false)}

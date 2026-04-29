@@ -10,6 +10,7 @@ import {
   LogoutIcon,
 } from "@/icons";
 import PendingApprovalIcon from "@/icons/PendingApprovalIcon";
+import MessageIcon from "@/icons/MessageIcon";
 
 interface NavItem {
   icon: any;
@@ -85,6 +86,12 @@ export const navItems: NavItem[] = [
     icon: ServicesIcon,
     label: "Services",
     href: "/dashboard/services",
+    type: "admin",
+  },
+  {
+    icon: MessageIcon,
+    label: "Messages",
+    href: "/chat",
     type: "admin",
   },
 ];
