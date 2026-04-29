@@ -11,6 +11,7 @@ import {
 } from "@/icons";
 import PendingApprovalIcon from "@/icons/PendingApprovalIcon";
 import MessageIcon from "@/icons/MessageIcon";
+import WalletIcon from "@/icons/WalletIcon";
 
 interface NavItem {
   icon: any;
@@ -92,6 +93,12 @@ export const navItems: NavItem[] = [
     icon: MessageIcon,
     label: "Messages",
     href: "/chat",
+    type: "admin",
+  },
+  {
+    icon: WalletIcon,
+    label: "Wallet",
+    href: "/wallet",
     type: "admin",
   },
 ];
