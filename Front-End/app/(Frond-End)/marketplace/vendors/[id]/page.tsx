@@ -6,6 +6,7 @@ import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Star, MapPin, Package, Loader2 } from "lucide-react";
+import ReviewList from "@/components/marketplace/ReviewList";
 
 interface VendorProfile {
   id: string;
@@ -155,7 +156,7 @@ export default function VendorProfilePage() {
         </div>
 
         {/* Listings */}
-        <div>
+        <div className="mb-8">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Services</h2>
 
           {!vendor.listings?.length ? (
@@ -201,6 +202,11 @@ export default function VendorProfilePage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Reviews */}
+        <div className="mt-8">
+          <ReviewList vendorId={id} />
         </div>
       </div>
     </div>

@@ -75,7 +75,7 @@ export class ReviewService {
 
     const where = { listing_id: listingId, deleted_at: null };
 
-    const [total, reviews, agg] = await Promise.all([
+    const [total, reviews, agg, dist] = await Promise.all([
       this.prisma.review.count({ where }),
       this.prisma.review.findMany({
         where,
@@ -85,6 +85,7 @@ export class ReviewService {
         include: this.reviewIncludes(),
       }),
       this.prisma.review.aggregate({ where, _avg: { rating: true } }),
+      this.prisma.review.groupBy({ by: ['rating'], where, _count: { rating: true } }),
     ]);
 
     return {
@@ -96,6 +97,7 @@ export class ReviewService {
         limit,
         last_page: Math.ceil(total / limit),
         avg_rating: agg._avg.rating,
+        distribution: this.ratingDistribution(dist),
       },
     };
   }
@@ -110,7 +112,7 @@ export class ReviewService {
 
     const where = { vendor_id: vendorId, deleted_at: null };
 
-    const [total, reviews, agg] = await Promise.all([
+    const [total, reviews, agg, dist] = await Promise.all([
       this.prisma.review.count({ where }),
       this.prisma.review.findMany({
         where,
@@ -120,6 +122,7 @@ export class ReviewService {
         include: this.reviewIncludes(),
       }),
       this.prisma.review.aggregate({ where, _avg: { rating: true } }),
+      this.prisma.review.groupBy({ by: ['rating'], where, _count: { rating: true } }),
     ]);
 
     return {
@@ -131,8 +134,21 @@ export class ReviewService {
         limit,
         last_page: Math.ceil(total / limit),
         avg_rating: agg._avg.rating,
+        distribution: this.ratingDistribution(dist),
       },
     };
+  }
+
+  private ratingDistribution(
+    dist: { rating: number; _count: { rating: number } }[],
+  ): Record<number, number> {
+    return [1, 2, 3, 4, 5].reduce(
+      (acc, r) => {
+        acc[r] = dist.find((d) => d.rating === r)?._count.rating ?? 0;
+        return acc;
+      },
+      {} as Record<number, number>,
+    );
   }
 
   private reviewIncludes() {
