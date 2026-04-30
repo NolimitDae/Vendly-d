@@ -970,5 +970,17 @@ export class AuthService {
       };
     }
   }
+  async get2FAStatus(userId: string) {
+    try {
+      const user = await this.prisma.user.findFirst({
+        where: { id: userId },
+        select: { is_two_factor_enabled: true },
+      });
+      if (!user) return { success: false, message: 'User not found' };
+      return { success: true, data: { enabled: !!user.is_two_factor_enabled } };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
   // --------- end 2FA ---------
 }

@@ -21,7 +21,7 @@ export const AuthService = {
       headers: { "Content-Type": "application/json" },
     }),
 
-  login: async (data: { email: string; password: string }) =>
+  login: async (data: { email: string; password: string; token?: string }) =>
     Fetch.post("/auth/login", data, {
       headers: { "Content-Type": "application/json" },
     }),

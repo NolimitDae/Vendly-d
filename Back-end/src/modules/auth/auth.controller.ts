@@ -814,6 +814,18 @@ export class AuthController {
   // -------end change email address------
 
   // --------- 2FA ---------
+  @ApiOperation({ summary: 'Get 2FA status', description: 'Returns whether 2FA is enabled for the current user.' })
+  @UseGuards(JwtAuthGuard)
+  @Get('2fa-status')
+  async get2FAStatus(@Req() req: Request) {
+    try {
+      const user_id = req.user.userId;
+      return await this.authService.get2FAStatus(user_id);
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   @ApiOperation({
     summary: 'Generate 2FA secret',
     description:
