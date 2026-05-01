@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,7 +11,7 @@ import {
   CreateEventDto,
   CreateEventTaskDto,
 } from './dto/create-event.dto';
-import { UpdateEventDto, UpdateTaskDto } from './dto/update-event.dto';
+import { UpdateBudgetItemDto, UpdateEventDto, UpdateTaskDto } from './dto/update-event.dto';
 
 @Injectable()
 export class EventsService {
@@ -92,7 +93,26 @@ export class EventsService {
   }
 
   async update(id: string, plannerId: string, dto: UpdateEventDto) {
-    await this.getEventOrFail(id, plannerId);
+    const event = await this.getEventOrFail(id, plannerId);
+
+    if (event.status === EventStatus.CANCELLED) {
+      throw new BadRequestException('Cancelled events cannot be modified');
+    }
+
+    if (dto.status) {
+      const valid: Partial<Record<EventStatus, EventStatus[]>> = {
+        [EventStatus.PLANNING]: [EventStatus.CONFIRMED, EventStatus.IN_PROGRESS, EventStatus.CANCELLED],
+        [EventStatus.CONFIRMED]: [EventStatus.IN_PROGRESS, EventStatus.CANCELLED],
+        [EventStatus.IN_PROGRESS]: [EventStatus.COMPLETED, EventStatus.CANCELLED],
+        [EventStatus.COMPLETED]: [EventStatus.CANCELLED],
+      };
+      const allowed = valid[event.status] ?? [];
+      if (!allowed.includes(dto.status)) {
+        throw new BadRequestException(
+          `Cannot transition from ${event.status} to ${dto.status}`,
+        );
+      }
+    }
 
     const updated = await this.prisma.event.update({
       where: { id },
@@ -214,6 +234,56 @@ export class EventsService {
     });
 
     return { success: true, data: updated };
+  }
+
+  async updateBudgetItem(
+    eventId: string,
+    itemId: string,
+    plannerId: string,
+    dto: UpdateBudgetItemDto,
+  ) {
+    await this.getEventOrFail(eventId, plannerId);
+
+    const item = await this.prisma.budgetItem.findFirst({
+      where: { id: itemId, event_id: eventId },
+    });
+    if (!item) throw new NotFoundException('Budget item not found');
+
+    const updated = await this.prisma.budgetItem.update({
+      where: { id: itemId },
+      data: {
+        ...(dto.category !== undefined && { category: dto.category }),
+        ...(dto.allocated !== undefined && { allocated: dto.allocated }),
+        ...(dto.spent !== undefined && { spent: dto.spent }),
+        ...(dto.note !== undefined && { note: dto.note }),
+      },
+    });
+
+    return { success: true, data: updated };
+  }
+
+  async deleteBudgetItem(eventId: string, itemId: string, plannerId: string) {
+    await this.getEventOrFail(eventId, plannerId);
+
+    const item = await this.prisma.budgetItem.findFirst({
+      where: { id: itemId, event_id: eventId },
+    });
+    if (!item) throw new NotFoundException('Budget item not found');
+
+    await this.prisma.budgetItem.delete({ where: { id: itemId } });
+    return { success: true };
+  }
+
+  async deleteTask(eventId: string, taskId: string, plannerId: string) {
+    await this.getEventOrFail(eventId, plannerId);
+
+    const task = await this.prisma.eventTask.findFirst({
+      where: { id: taskId, event_id: eventId },
+    });
+    if (!task) throw new NotFoundException('Task not found');
+
+    await this.prisma.eventTask.delete({ where: { id: taskId } });
+    return { success: true };
   }
 
   private async getEventOrFail(id: string, plannerId: string) {

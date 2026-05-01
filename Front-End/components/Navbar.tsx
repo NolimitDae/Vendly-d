@@ -325,6 +325,14 @@ export default function Navbar() {
                   {user.type === "EVENT_PLANNER" && (
                     <>
                       <Link
+                        href="/event-planner/events"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <Calendar className="w-4 h-4" />
+                        My Events
+                      </Link>
+                      <Link
                         href="/event-planner/profile"
                         onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"

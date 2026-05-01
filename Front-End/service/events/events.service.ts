@@ -72,4 +72,16 @@ export const EventsService = {
     taskId: string,
     data: { completed?: boolean; title?: string; due_date?: string },
   ) => Fetch.patch(`/events/${eventId}/tasks/${taskId}`, data, jsonHeaders()),
+
+  deleteTask: async (eventId: string, taskId: string) =>
+    Fetch.delete(`/events/${eventId}/tasks/${taskId}`, authHeaders()),
+
+  updateBudgetItem: async (
+    eventId: string,
+    itemId: string,
+    data: { category?: string; allocated?: number; spent?: number; note?: string },
+  ) => Fetch.patch(`/events/${eventId}/budget/${itemId}`, data, jsonHeaders()),
+
+  deleteBudgetItem: async (eventId: string, itemId: string) =>
+    Fetch.delete(`/events/${eventId}/budget/${itemId}`, authHeaders()),
 };

@@ -57,6 +57,30 @@ export class UpdateEventDto {
   notes?: string;
 }
 
+export class UpdateBudgetItemDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  allocated?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  spent?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 export class UpdateTaskDto {
   @ApiPropertyOptional()
   @IsOptional()

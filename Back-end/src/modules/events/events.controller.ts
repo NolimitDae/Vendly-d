@@ -20,7 +20,7 @@ import {
   CreateEventTaskDto,
   LinkBookingDto,
 } from './dto/create-event.dto';
-import { UpdateEventDto, UpdateTaskDto } from './dto/update-event.dto';
+import { UpdateBudgetItemDto, UpdateEventDto, UpdateTaskDto } from './dto/update-event.dto';
 
 @ApiTags('events')
 @ApiBearerAuth('event-planner-token')
@@ -103,5 +103,33 @@ export class EventsController {
     @Body() dto: UpdateTaskDto,
   ) {
     return this.service.updateTask(id, taskId, user.id, dto);
+  }
+
+  @Delete(':id/tasks/:taskId')
+  deleteTask(
+    @GetUser() user: any,
+    @Param('id') id: string,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.service.deleteTask(id, taskId, user.id);
+  }
+
+  @Patch(':id/budget/:itemId')
+  updateBudgetItem(
+    @GetUser() user: any,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateBudgetItemDto,
+  ) {
+    return this.service.updateBudgetItem(id, itemId, user.id, dto);
+  }
+
+  @Delete(':id/budget/:itemId')
+  deleteBudgetItem(
+    @GetUser() user: any,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.service.deleteBudgetItem(id, itemId, user.id);
   }
 }

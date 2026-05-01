@@ -26,6 +26,11 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('health')
+  health() {
+    return { status: 'ok', timestamp: new Date().toISOString() };
+  }
+
   @Get('test-chunk-stream')
   async chunkStream(@Res() res: Response) {
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');

@@ -35,8 +35,8 @@ interface EventTask {
 interface BudgetItem {
   id: string;
   category: string;
-  allocated_amount: number;
-  spent_amount: number;
+  allocated: number;
+  spent: number;
   note?: string;
 }
 
@@ -226,8 +226,8 @@ export default function EventDetailPage() {
             ? {
                 ...prev,
                 items: [...prev.items, newItem],
-                total_allocated: prev.total_allocated + newItem.allocated_amount,
-                remaining: prev.remaining - newItem.allocated_amount,
+                total_allocated: prev.total_allocated + newItem.allocated,
+                remaining: prev.remaining - newItem.allocated,
               }
             : prev,
         );
@@ -608,18 +608,18 @@ export default function EventDetailPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">
-                          ${Number(item.allocated_amount).toLocaleString()}
+                          ${Number(item.allocated).toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span
                             className={cn(
                               "font-medium",
-                              item.spent_amount > item.allocated_amount
+                              item.spent > item.allocated
                                 ? "text-red-600 dark:text-red-400"
                                 : "text-gray-700 dark:text-gray-300",
                             )}
                           >
-                            ${Number(item.spent_amount).toLocaleString()}
+                            ${Number(item.spent).toLocaleString()}
                           </span>
                         </td>
                       </tr>

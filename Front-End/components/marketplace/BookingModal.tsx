@@ -105,11 +105,12 @@ export default function BookingModal({ listing, onClose, onBookingCreated }: Pro
         {step === "details" ? (
           <form onSubmit={handleRequestBooking} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <label htmlFor="scheduled-at" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 <Calendar className="w-4 h-4 inline mr-1" />
                 Preferred Date & Time (optional)
               </label>
               <input
+                id="scheduled-at"
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
