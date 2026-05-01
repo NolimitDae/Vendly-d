@@ -3,6 +3,7 @@ import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../constants/colors';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 import AuthScreens from './AuthScreens';
 import CustomerTabs from './CustomerTabs';
@@ -11,6 +12,7 @@ import EventPlannerTabs from './EventPlannerTabs';
 
 export default function RootNavigator() {
   const { user, loading } = useAuth();
+  usePushNotifications();
 
   if (loading) {
     return (

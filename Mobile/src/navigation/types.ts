@@ -32,6 +32,7 @@ export type CustomerHomeStackParams = {
 export type CustomerBookingsStackParams = {
   CustomerBookings: undefined;
   BookingDetail: { bookingId: string };
+  Payment: { bookingId: string; amount: number; currency: string };
 };
 
 export type CustomerProfileStackParams = {
@@ -91,6 +92,7 @@ export type EventDetailProps = NativeStackScreenProps<EventPlannerStackParams, '
 export type CustomerHomeProps = NativeStackScreenProps<CustomerHomeStackParams, 'CustomerHome'>;
 export type CustomerBookingsProps = NativeStackScreenProps<CustomerBookingsStackParams, 'CustomerBookings'>;
 export type BookingDetailProps = NativeStackScreenProps<CustomerBookingsStackParams, 'BookingDetail'>;
+export type PaymentProps = NativeStackScreenProps<CustomerBookingsStackParams, 'Payment'>;
 
 export type VendorDashboardProps = NativeStackScreenProps<VendorDashboardStackParams, 'VendorDashboard'>;
 export type VendorListingsProps = NativeStackScreenProps<VendorListingsStackParams, 'VendorListings'>;

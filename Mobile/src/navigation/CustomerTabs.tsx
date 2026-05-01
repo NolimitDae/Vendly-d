@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
+import PaymentScreen from '../screens/customer/PaymentScreen';
 import type { CustomerTabParams } from './types';
 
 const Tab = createBottomTabNavigator<CustomerTabParams>();
@@ -46,6 +47,11 @@ function BookingsStack() {
         name="CustomerBookings"
         options={{ title: 'My Bookings' }}
         children={() => <Placeholder label="My Bookings" />}
+      />
+      <Stack.Screen
+        name="Payment"
+        component={PaymentScreen}
+        options={{ title: 'Secure Payment' }}
       />
     </Stack.Navigator>
   );
