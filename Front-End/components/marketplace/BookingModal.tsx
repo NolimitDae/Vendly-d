@@ -14,11 +14,12 @@ interface Props {
     vendor?: { id: string; name: string };
   };
   onClose: () => void;
+  onBookingCreated?: (bookingId: string) => void;
 }
 
 type Step = "details" | "pay";
 
-export default function BookingModal({ listing, onClose }: Props) {
+export default function BookingModal({ listing, onClose, onBookingCreated }: Props) {
   const [step, setStep] = useState<Step>("details");
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [scheduledAt, setScheduledAt] = useState("");
@@ -39,7 +40,9 @@ export default function BookingModal({ listing, onClose }: Props) {
       });
 
       if (res.data?.success) {
-        setBookingId(res.data.data.id);
+        const newBookingId: string = res.data.data.id;
+        setBookingId(newBookingId);
+        onBookingCreated?.(newBookingId);
         setStep("pay");
       } else {
         toast.error(res.data?.message || "Something went wrong");

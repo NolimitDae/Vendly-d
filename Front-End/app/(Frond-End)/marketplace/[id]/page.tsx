@@ -14,11 +14,16 @@ import {
   ChevronLeft,
   MessageCircle,
   Heart,
+  CalendarPlus,
+  X,
+  Loader2,
 } from "lucide-react";
 import BookingModal from "@/components/marketplace/BookingModal";
 import ReviewList from "@/components/marketplace/ReviewList";
 import { CookieHelper } from "@/helper/cookie.helper";
 import { SavedListingsService } from "@/service/savedListings/savedListings.service";
+import { AuthService } from "@/service/auth/auth.service";
+import { EventsService } from "@/service/events/events.service";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 
@@ -43,8 +48,15 @@ interface Listing {
     created_at: string;
     vendorProfile?: { business_name?: string; about_me?: string; license_status?: string };
   };
-  reviews?: any[];
+  reviews?: unknown[];
   _count?: { reviews: number; bookings: number };
+}
+
+interface EventOption {
+  id: string;
+  name: string;
+  date?: string;
+  status: string;
 }
 
 export default function ListingDetailPage() {
@@ -57,6 +69,15 @@ export default function ListingDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [savingToggle, setSavingToggle] = useState(false);
   const isLoggedIn = !!CookieHelper.get({ key: "token" });
+
+  // Event planner state
+  const [userType, setUserType] = useState<string | null>(null);
+  const [events, setEvents] = useState<EventOption[]>([]);
+  const [showAddToEvent, setShowAddToEvent] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [linkingBooking, setLinkingBooking] = useState(false);
+  const [pendingBookingId, setPendingBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -77,6 +98,66 @@ export default function ListingDetailPage() {
       })
       .catch(() => {});
   }, [id, isLoggedIn]);
+
+  // Load user type once
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    AuthService.me()
+      .then((res) => {
+        if (res.data?.success) setUserType(res.data.data.type);
+      })
+      .catch(() => {});
+  }, [isLoggedIn]);
+
+  // Fetch events when EP opens the modal
+  const openAddToEventModal = async () => {
+    setShowAddToEvent(true);
+    if (events.length > 0) return;
+    setLoadingEvents(true);
+    try {
+      const res = await EventsService.list({ limit: 50 });
+      if (res.data?.success) {
+        const active = (res.data.data as EventOption[]).filter(
+          (e) => !["COMPLETED", "CANCELLED"].includes(e.status),
+        );
+        setEvents(active);
+        if (active.length > 0) setSelectedEventId(active[0].id);
+      }
+    } catch {
+      toast.error("Failed to load events");
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  // After booking is created, link it to the selected event
+  const handleBookingCreated = async (bookingId: string) => {
+    if (!selectedEventId) return;
+    setPendingBookingId(bookingId);
+  };
+
+  // Triggered when BookingModal closes with a pending link
+  const handleBookingModalClose = async () => {
+    setShowBooking(false);
+    if (pendingBookingId && selectedEventId) {
+      setLinkingBooking(true);
+      try {
+        const res = await EventsService.linkBooking(selectedEventId, pendingBookingId);
+        if (res.data?.success) {
+          toast.success("Vendor added to your event!");
+        } else {
+          toast.error(res.data?.message || "Booking created but failed to link to event");
+        }
+      } catch {
+        toast.error("Booking created but failed to link to event");
+      } finally {
+        setLinkingBooking(false);
+        setPendingBookingId(null);
+        setSelectedEventId("");
+        setShowAddToEvent(false);
+      }
+    }
+  };
 
   const toggleSave = async () => {
     if (!isLoggedIn) { toast.info("Log in to save listings"); return; }
@@ -117,6 +198,8 @@ export default function ListingDetailPage() {
       </div>
     );
   }
+
+  const isEventPlanner = isLoggedIn && userType === "EVENT_PLANNER";
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
@@ -266,12 +349,29 @@ export default function ListingDetailPage() {
               </div>
 
               {isLoggedIn ? (
-                <button
-                  onClick={() => setShowBooking(true)}
-                  className="w-full mt-5 bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary/90 transition"
-                >
-                  Book Now
-                </button>
+                <div className="mt-5 space-y-2">
+                  <button
+                    onClick={() => setShowBooking(true)}
+                    className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary/90 transition"
+                  >
+                    Book Now
+                  </button>
+
+                  {isEventPlanner && (
+                    <button
+                      onClick={openAddToEventModal}
+                      disabled={linkingBooking}
+                      className="w-full flex items-center justify-center gap-2 border-2 border-primary text-primary py-3 rounded-xl font-semibold hover:bg-primary/5 transition disabled:opacity-60"
+                    >
+                      {linkingBooking ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CalendarPlus className="w-4 h-4" />
+                      )}
+                      {linkingBooking ? "Linking…" : "Add to Event"}
+                    </button>
+                  )}
+                </div>
               ) : (
                 <Link
                   href="/login"
@@ -331,11 +431,88 @@ export default function ListingDetailPage() {
         </div>
       </div>
 
+      {/* Booking modal */}
       {showBooking && listing && (
         <BookingModal
           listing={listing}
-          onClose={() => setShowBooking(false)}
+          onClose={pendingBookingId ? handleBookingModalClose : () => setShowBooking(false)}
+          onBookingCreated={selectedEventId ? handleBookingCreated : undefined}
         />
+      )}
+
+      {/* Add to Event modal */}
+      {showAddToEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <CalendarPlus className="w-4 h-4 text-primary" />
+                Add to Event
+              </h3>
+              <button
+                onClick={() => { setShowAddToEvent(false); setSelectedEventId(""); }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Select an event, then book {listing.title} — it will be linked automatically.
+            </p>
+
+            {loadingEvents ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : events.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-sm text-gray-400 mb-3">No active events found.</p>
+                <Link
+                  href="/event-planner/events/new"
+                  className="text-sm text-primary hover:underline"
+                >
+                  Create your first event →
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Select Event
+                  </label>
+                  <select
+                    value={selectedEventId}
+                    onChange={(e) => setSelectedEventId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    {events.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowAddToEvent(false); setSelectedEventId(""); }}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!selectedEventId}
+                    onClick={() => { setShowAddToEvent(false); setShowBooking(true); }}
+                    className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
+                  >
+                    Continue to Book
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

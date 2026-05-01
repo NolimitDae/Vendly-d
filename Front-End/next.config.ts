@@ -28,9 +28,10 @@ const nextConfig: NextConfig = {
       // Backend local storage (development)
       { protocol: "http", hostname: "localhost" },
       { protocol: "http", hostname: "127.0.0.1" },
-      // Production storage — add your S3/MinIO/CDN hostname here:
-      // { protocol: "https", hostname: "your-bucket.s3.amazonaws.com" },
-      // { protocol: "https", hostname: "cdn.your-domain.com" },
+      // Production storage (S3 / CloudFront / custom CDN)
+      { protocol: "https", hostname: "*.amazonaws.com" },
+      { protocol: "https", hostname: "*.cloudfront.net" },
+      { protocol: "https", hostname: "*.s3.amazonaws.com" },
     ],
   },
 };

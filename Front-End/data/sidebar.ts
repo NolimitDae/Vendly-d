@@ -17,7 +17,7 @@ interface NavItem {
   icon: any;
   label: string;
   href: string;
-  type?: "client" | "admin" | "candidate" | "vendor";
+  type?: "client" | "admin" | "candidate" | "vendor" | "event_planner";
   children?: NavItem[];
 }
 
@@ -112,6 +112,24 @@ export const navItems: NavItem[] = [
     label: "Subscription",
     href: "/vendor/subscription",
     type: "vendor",
+  },
+  {
+    icon: OverviewIcon,
+    label: "Dashboard",
+    href: "/event-planner/dashboard",
+    type: "event_planner",
+  },
+  {
+    icon: EventPlannersIcon,
+    label: "My Events",
+    href: "/event-planner/events",
+    type: "event_planner",
+  },
+  {
+    icon: BookingIcon,
+    label: "My Profile",
+    href: "/event-planner/profile",
+    type: "event_planner",
   },
 ];
 
