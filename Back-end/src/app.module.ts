@@ -28,6 +28,7 @@ import { BookingModule } from './modules/booking/booking.module';
 import { ReviewModule } from './modules/review/review.module';
 import { EventPlannerModule } from './modules/event-planner/event-planner.module';
 import { SavedListingsModule } from './modules/saved-listings/saved-listings.module';
+import { EventsModule } from './modules/events/events.module';
 
 
 @Module({
@@ -90,6 +91,7 @@ import { SavedListingsModule } from './modules/saved-listings/saved-listings.mod
     ReviewModule,
     EventPlannerModule,
     SavedListingsModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [
