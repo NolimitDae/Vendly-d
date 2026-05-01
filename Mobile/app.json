@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Vendly",
+    "slug": "vendly-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#7B2FF7"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vendly.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#7B2FF7"
+      },
+      "package": "com.vendly.mobile"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}
