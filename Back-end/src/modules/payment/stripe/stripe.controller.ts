@@ -6,6 +6,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { Stripe } from 'stripe';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { BookingStatus } from 'prisma/generated/client';
+import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 
 @ApiExcludeController()
 @Controller('payment/stripe')
@@ -16,6 +17,7 @@ export class StripeController {
     private readonly stripeService: StripeService,
     private transactionRepository: TransactionRepository,
     private readonly prisma: PrismaService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   @Post('webhook')
@@ -33,6 +35,14 @@ export class StripeController {
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as Stripe.Checkout.Session;
+
+          // Handle subscription checkout
+          if (session.mode === 'subscription') {
+            await this.subscriptionsService.handleWebhookEvent(event);
+            break;
+          }
+
+          // Handle booking payment
           const bookingId = session.metadata?.booking_id;
           if (bookingId && session.payment_status === 'paid') {
             await this.prisma.booking.updateMany({
@@ -40,6 +50,19 @@ export class StripeController {
               data: { status: BookingStatus.CONFIRMED },
             });
           }
+          break;
+        }
+
+        case 'customer.subscription.updated':
+        case 'invoice.payment_succeeded': {
+          await this.subscriptionsService.handleWebhookEvent(event);
+          break;
+        }
+
+        case 'customer.subscription.deleted': {
+          const subscription = event.data.object as Stripe.Subscription;
+          this.logger.log(`Stripe subscription deleted: ${subscription.id}`);
+          await this.subscriptionsService.handleWebhookEvent(event);
           break;
         }
 
