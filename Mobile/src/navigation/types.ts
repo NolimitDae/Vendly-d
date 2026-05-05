@@ -39,6 +39,11 @@ export type CustomerProfileStackParams = {
   CustomerProfile: undefined;
 };
 
+export type CustomerMessagesStackParams = {
+  ChatList: undefined;
+  ChatDetail: { conversationId: string; participantName: string };
+};
+
 export type CustomerTabParams = {
   HomeTab: undefined;
   BookingsTab: undefined;
@@ -65,6 +70,11 @@ export type VendorBookingsStackParams = {
 
 export type VendorProfileStackParams = {
   VendorProfile: undefined;
+};
+
+export type VendorMessagesStackParams = {
+  ChatList: undefined;
+  ChatDetail: { conversationId: string; participantName: string };
 };
 
 export type VendorTabParams = {
@@ -97,3 +107,6 @@ export type PaymentProps = NativeStackScreenProps<CustomerBookingsStackParams, '
 export type VendorDashboardProps = NativeStackScreenProps<VendorDashboardStackParams, 'VendorDashboard'>;
 export type VendorListingsProps = NativeStackScreenProps<VendorListingsStackParams, 'VendorListings'>;
 export type VendorBookingsProps = NativeStackScreenProps<VendorBookingsStackParams, 'VendorBookings'>;
+
+export type ChatListProps = NativeStackScreenProps<CustomerMessagesStackParams, 'ChatList'>;
+export type ChatDetailProps = NativeStackScreenProps<CustomerMessagesStackParams, 'ChatDetail'>;

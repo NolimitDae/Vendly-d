@@ -4,10 +4,31 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
-import type { VendorTabParams } from './types';
+
+import VendorDashboard from '../screens/vendor/Dashboard';
+import VendorListings from '../screens/vendor/Listings';
+import ListingForm from '../screens/vendor/ListingForm';
+import VendorBookings from '../screens/vendor/Bookings';
+import VendorBookingDetail from '../screens/vendor/BookingDetail';
+import VendorProfile from '../screens/vendor/Profile';
+import ChatList from '../screens/customer/ChatList';
+import ChatDetail from '../screens/customer/ChatDetail';
+
+import type {
+  VendorTabParams,
+  VendorDashboardStackParams,
+  VendorListingsStackParams,
+  VendorBookingsStackParams,
+  VendorProfileStackParams,
+  VendorMessagesStackParams,
+} from './types';
 
 const Tab = createBottomTabNavigator<VendorTabParams>();
-const Stack = createNativeStackNavigator();
+const DashStack = createNativeStackNavigator<VendorDashboardStackParams>();
+const ListStack = createNativeStackNavigator<VendorListingsStackParams>();
+const BookStack = createNativeStackNavigator<VendorBookingsStackParams>();
+const ProfileStack = createNativeStackNavigator<VendorProfileStackParams>();
+const MsgStack = createNativeStackNavigator<VendorMessagesStackParams>();
 
 const HEADER = {
   headerStyle: { backgroundColor: COLORS.primary },
@@ -15,63 +36,46 @@ const HEADER = {
   headerTitleStyle: { fontWeight: '700' as const },
 };
 
-function Placeholder({ label }: { label: string }) {
+function DashboardNavigator() {
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name="construct-outline" size={40} color={COLORS.gray[300]} />
-      <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: COLORS.gray[500] }}>
-        {label}
-      </Text>
-      <Text style={{ marginTop: 4, fontSize: 13, color: COLORS.gray[400] }}>Coming soon</Text>
-    </View>
+    <DashStack.Navigator screenOptions={HEADER}>
+      <DashStack.Screen name="VendorDashboard" component={VendorDashboard} options={{ title: 'Dashboard' }} />
+    </DashStack.Navigator>
   );
 }
 
-function DashboardStack() {
+function ListingsNavigator() {
   return (
-    <Stack.Navigator screenOptions={HEADER}>
-      <Stack.Screen
-        name="VendorDashboard"
-        options={{ title: 'Dashboard' }}
-        children={() => <Placeholder label="Vendor Dashboard" />}
-      />
-    </Stack.Navigator>
+    <ListStack.Navigator screenOptions={HEADER}>
+      <ListStack.Screen name="VendorListings" component={VendorListings} options={{ title: 'My Listings' }} />
+      <ListStack.Screen name="ListingForm" component={ListingForm} options={{ title: 'Listing' }} />
+    </ListStack.Navigator>
   );
 }
 
-function ListingsStack() {
+function BookingsNavigator() {
   return (
-    <Stack.Navigator screenOptions={HEADER}>
-      <Stack.Screen
-        name="VendorListings"
-        options={{ title: 'My Listings' }}
-        children={() => <Placeholder label="My Listings" />}
-      />
-    </Stack.Navigator>
+    <BookStack.Navigator screenOptions={HEADER}>
+      <BookStack.Screen name="VendorBookings" component={VendorBookings} options={{ title: 'Bookings' }} />
+      <BookStack.Screen name="VendorBookingDetail" component={VendorBookingDetail} options={{ title: 'Booking Details' }} />
+    </BookStack.Navigator>
   );
 }
 
-function BookingsStack() {
+function MessagesNavigator() {
   return (
-    <Stack.Navigator screenOptions={HEADER}>
-      <Stack.Screen
-        name="VendorBookings"
-        options={{ title: 'Bookings' }}
-        children={() => <Placeholder label="Bookings" />}
-      />
-    </Stack.Navigator>
+    <MsgStack.Navigator screenOptions={HEADER}>
+      <MsgStack.Screen name="ChatList" component={ChatList} options={{ title: 'Messages' }} />
+      <MsgStack.Screen name="ChatDetail" component={ChatDetail} options={{ title: 'Chat' }} />
+    </MsgStack.Navigator>
   );
 }
 
-function ProfileStack() {
+function ProfileNavigator() {
   return (
-    <Stack.Navigator screenOptions={HEADER}>
-      <Stack.Screen
-        name="VendorProfile"
-        options={{ title: 'My Profile' }}
-        children={() => <Placeholder label="My Profile" />}
-      />
-    </Stack.Navigator>
+    <ProfileStack.Navigator screenOptions={HEADER}>
+      <ProfileStack.Screen name="VendorProfile" component={VendorProfile} options={{ title: 'My Profile' }} />
+    </ProfileStack.Navigator>
   );
 }
 
@@ -102,15 +106,11 @@ export default function VendorTabs() {
         ),
       })}
     >
-      <Tab.Screen name="DashboardTab" component={DashboardStack} options={{ title: 'Dashboard' }} />
-      <Tab.Screen name="ListingsTab" component={ListingsStack} options={{ title: 'Listings' }} />
-      <Tab.Screen name="BookingsTab" component={BookingsStack} options={{ title: 'Bookings' }} />
-      <Tab.Screen
-        name="MessagesTab"
-        options={{ title: 'Messages' }}
-        children={() => <Placeholder label="Messages" />}
-      />
-      <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: 'Profile' }} />
+      <Tab.Screen name="DashboardTab" component={DashboardNavigator} options={{ title: 'Dashboard' }} />
+      <Tab.Screen name="ListingsTab" component={ListingsNavigator} options={{ title: 'Listings' }} />
+      <Tab.Screen name="BookingsTab" component={BookingsNavigator} options={{ title: 'Bookings' }} />
+      <Tab.Screen name="MessagesTab" component={MessagesNavigator} options={{ title: 'Messages' }} />
+      <Tab.Screen name="ProfileTab" component={ProfileNavigator} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
 }

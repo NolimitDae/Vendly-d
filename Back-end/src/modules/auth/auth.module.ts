@@ -28,7 +28,7 @@ import { FacebookStrategy } from './strategies/facebook.strategy';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy, GoogleStrategy],
+  providers: [AuthService, LocalStrategy, JwtStrategy, GoogleStrategy, FacebookStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}
