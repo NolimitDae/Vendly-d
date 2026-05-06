@@ -78,7 +78,7 @@ describe('ConversationService', () => {
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Conversation already exists');
-      expect(result.conversation.id).toBe('conv-1');
+      expect((result.conversation as any).id).toBe('conv-1');
     });
 
     it('should create a new conversation when none exists', async () => {
