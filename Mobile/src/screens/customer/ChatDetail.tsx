@@ -14,6 +14,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { ChatService, Message } from '../../services/chat.service';
+import { SocketService } from '../../services/socket.service';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ChatDetail() {
@@ -30,14 +31,11 @@ export default function ChatDetail() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMessages = useCallback(async () => {
     try {
       const res = await ChatService.getMessages(conversationId);
-      if (res.data?.success) {
-        setMessages(res.data.data);
-      }
+      if (res.data?.success) setMessages(res.data.data);
     } catch {
       // silent
     } finally {
@@ -48,11 +46,28 @@ export default function ChatDetail() {
   useEffect(() => {
     navigation.setOptions({ title: participantName });
     fetchMessages();
-    pollRef.current = setInterval(fetchMessages, 5000);
+
+    let messageHandler: (data: any) => void;
+
+    (async () => {
+      await SocketService.joinRoom(conversationId);
+
+      messageHandler = (data: any) => {
+        const incoming: Message = data?.data ?? data;
+        if (!incoming?.id) return;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === incoming.id)) return prev;
+          return [incoming, ...prev];
+        });
+      };
+
+      await SocketService.onMessage(messageHandler);
+    })();
+
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      SocketService.offMessage(messageHandler);
     };
-  }, [fetchMessages, navigation, participantName]);
+  }, [conversationId, fetchMessages, navigation, participantName]);
 
   const handleSend = async () => {
     const content = text.trim();
@@ -62,7 +77,10 @@ export default function ChatDetail() {
     try {
       const res = await ChatService.sendMessage({ conversation_id: conversationId, content });
       if (res.data?.success) {
-        setMessages((prev) => [res.data.data, ...prev]);
+        const sent = res.data.data;
+        setMessages((prev) =>
+          prev.some((m) => m.id === sent.id) ? prev : [sent, ...prev],
+        );
       }
     } catch {
       setText(content);

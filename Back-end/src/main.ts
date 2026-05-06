@@ -7,8 +7,8 @@ import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { join } from 'path';
 // internal imports
-import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
+import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 import { CustomExceptionFilter } from './common/exception/custom-exception.filter';
 import { TanvirStorage } from './common/lib/Disk/TanvirStorage';
 import appConfig from './config/app.config';
@@ -21,7 +21,9 @@ async function bootstrap() {
     rawBody: true,
   });
 
-  app.useWebSocketAdapter(new IoAdapter(app));
+  const redisIoAdapter = new RedisIoAdapter(app);
+  await redisIoAdapter.connectToRedis();
+  app.useWebSocketAdapter(redisIoAdapter);
   app.setGlobalPrefix('api');
 
   // Body size limits
