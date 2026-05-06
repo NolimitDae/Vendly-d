@@ -1,4 +1,5 @@
 import React from 'react';
+import { View, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,21 +11,28 @@ import CreateEvent from '../screens/eventplanner/CreateEvent';
 import EventDetail from '../screens/eventplanner/EventDetail';
 import Discover from '../screens/eventplanner/Discover';
 import EPProfile from '../screens/eventplanner/Profile';
-import { View, Text } from 'react-native';
-import type { EventPlannerStackParams } from './types';
+import ChatList from '../screens/customer/ChatList';
+import ChatDetail from '../screens/customer/ChatDetail';
 
+import type {
+  EventPlannerStackParams,
+  CustomerMessagesStackParams,
+  EPTabParams,
+} from './types';
+
+const Tab = createBottomTabNavigator<EPTabParams>();
 const Stack = createNativeStackNavigator<EventPlannerStackParams>();
-const Tab = createBottomTabNavigator();
+const MsgStack = createNativeStackNavigator<CustomerMessagesStackParams>();
+
+const HEADER = {
+  headerStyle: { backgroundColor: COLORS.primary },
+  headerTintColor: COLORS.white,
+  headerTitleStyle: { fontWeight: '700' as const },
+};
 
 function EventsStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: COLORS.primary },
-        headerTintColor: COLORS.white,
-        headerTitleStyle: { fontWeight: '700' },
-      }}
-    >
+    <Stack.Navigator screenOptions={HEADER}>
       <Stack.Screen name="EPHome" component={EPHome} options={{ title: 'Dashboard' }} />
       <Stack.Screen name="MyEvents" component={MyEvents} options={{ title: 'My Events' }} />
       <Stack.Screen name="CreateEvent" component={CreateEvent} options={{ title: 'New Event' }} />
@@ -39,36 +47,37 @@ function EventsStack() {
 
 function DiscoverStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: COLORS.primary },
-        headerTintColor: COLORS.white,
-        headerTitleStyle: { fontWeight: '700' },
-      }}
-    >
+    <Stack.Navigator screenOptions={HEADER}>
       <Stack.Screen name="Discover" component={Discover} options={{ title: 'Find Vendors' }} />
     </Stack.Navigator>
   );
 }
 
+function MessagesStack() {
+  return (
+    <MsgStack.Navigator screenOptions={HEADER}>
+      <MsgStack.Screen name="ChatList" component={ChatList} options={{ title: 'Messages' }} />
+      <MsgStack.Screen name="ChatDetail" component={ChatDetail} options={{ title: 'Chat' }} />
+    </MsgStack.Navigator>
+  );
+}
+
 function ProfileStack() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: COLORS.primary },
-        headerTintColor: COLORS.white,
-        headerTitleStyle: { fontWeight: '700' },
-      }}
-    >
+    <Stack.Navigator screenOptions={HEADER}>
       <Stack.Screen name="EPProfile" component={EPProfile} options={{ title: 'My Profile' }} />
     </Stack.Navigator>
   );
 }
 
-function Placeholder({ label }: { label: string }) {
+function NotificationsScreen() {
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: COLORS.gray[500], fontSize: 16 }}>{label} coming soon</Text>
+      <Ionicons name="notifications-outline" size={48} color={COLORS.gray[300]} />
+      <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: COLORS.gray[500] }}>
+        Notifications
+      </Text>
+      <Text style={{ marginTop: 4, fontSize: 13, color: COLORS.gray[400] }}>Coming soon</Text>
     </View>
   );
 }
@@ -101,16 +110,8 @@ export default function EventPlannerTabs() {
     >
       <Tab.Screen name="EventsTab" component={EventsStack} options={{ title: 'Events' }} />
       <Tab.Screen name="DiscoverTab" component={DiscoverStack} options={{ title: 'Discover' }} />
-      <Tab.Screen
-        name="MessagesTab"
-        options={{ title: 'Messages' }}
-        children={() => <Placeholder label="Messages" />}
-      />
-      <Tab.Screen
-        name="NotificationsTab"
-        options={{ title: 'Alerts' }}
-        children={() => <Placeholder label="Notifications" />}
-      />
+      <Tab.Screen name="MessagesTab" component={MessagesStack} options={{ title: 'Messages' }} />
+      <Tab.Screen name="NotificationsTab" component={NotificationsScreen} options={{ title: 'Alerts' }} />
       <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
