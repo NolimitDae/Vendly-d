@@ -45,7 +45,7 @@ const makeMessage = (overrides = {}) => ({
 });
 
 const mockPrisma = {
-  participant: { findFirst: jest.fn() },
+  participant: { findFirst: jest.fn(), update: jest.fn() },
   conversation: {
     findUnique: jest.fn(),
     update: jest.fn(),
@@ -56,6 +56,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
     count: jest.fn(),
     updateMany: jest.fn(),
+    delete: jest.fn(),
   },
   $transaction: jest.fn(),
 };
@@ -188,7 +189,6 @@ describe('MessageService', () => {
       const msg = makeMessage();
       mockPrisma.message.findUnique.mockResolvedValue(msg);
       mockPrisma.$transaction.mockImplementation(async (fn) => fn(mockPrisma));
-      mockPrisma.message.delete = jest.fn();
 
       const result = await service.deleteMessage('user-1', 'msg-1');
 
@@ -245,8 +245,6 @@ describe('MessageService', () => {
       const participant = { id: 'part-1', userId: 'user-1', lastReadAt: new Date(0) };
       mockPrisma.participant.findFirst.mockResolvedValue(participant);
       mockPrisma.$transaction.mockImplementation(async (fn) => fn(mockPrisma));
-      mockPrisma.message.updateMany = jest.fn();
-      mockPrisma.participant.update = jest.fn();
 
       const result = await service.readMessages('user-1', 'conv-1');
 
