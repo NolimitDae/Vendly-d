@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,12 @@ import {
   Alert,
   Modal,
   TextInput,
+  Image,
+  FlatList,
+  Dimensions,
 } from 'react-native';
+
+const { width: SCREEN_W } = Dimensions.get('window');
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
@@ -45,6 +50,7 @@ export default function ListingDetail() {
 
   const [listing, setListing] = useState<ListingDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeImage, setActiveImage] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
   const [message, setMessage] = useState('');
@@ -110,10 +116,35 @@ export default function ListingDetail() {
   return (
     <View style={s.root}>
       <ScrollView contentContainerStyle={s.scrollContent}>
-        {/* Image placeholder */}
-        <View style={s.imagePlaceholder}>
-          <Ionicons name="image-outline" size={60} color={COLORS.gray[400]} />
-        </View>
+        {/* Image gallery */}
+        {listing.images && listing.images.length > 0 ? (
+          <View>
+            <FlatList
+              data={listing.images}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(_, i) => String(i)}
+              onMomentumScrollEnd={(e) =>
+                setActiveImage(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))
+              }
+              renderItem={({ item }) => (
+                <Image source={{ uri: item }} style={s.galleryImage} resizeMode="cover" />
+              )}
+            />
+            {listing.images.length > 1 && (
+              <View style={s.dotRow}>
+                {listing.images.map((_, i) => (
+                  <View key={i} style={[s.dot, i === activeImage && s.dotActive]} />
+                ))}
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={s.imagePlaceholder}>
+            <Ionicons name="image-outline" size={60} color={COLORS.gray[400]} />
+          </View>
+        )}
 
         <View style={s.content}>
           {/* Title & category */}
@@ -234,8 +265,12 @@ const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { fontSize: 16, color: COLORS.gray[500] },
   scrollContent: { paddingBottom: 100 },
+  galleryImage: { width: SCREEN_W, height: 260 },
+  dotRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 8, backgroundColor: COLORS.white },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.gray[300] },
+  dotActive: { backgroundColor: COLORS.primary, width: 18 },
   imagePlaceholder: {
-    height: 220,
+    height: 260,
     backgroundColor: COLORS.gray[200],
     alignItems: 'center',
     justifyContent: 'center',

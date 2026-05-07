@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
+  Image,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { api } from '../../services/api';
@@ -20,6 +22,7 @@ interface User {
   name: string;
   email: string;
   type: string;
+  avatar_url?: string;
   vendorProfile?: { business_name?: string; bio?: string };
 }
 
@@ -31,6 +34,8 @@ export default function VendorProfile() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [businessName, setBusinessName] = useState('');
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<{ uri: string; type: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -40,6 +45,7 @@ export default function VendorProfile() {
         setUser(u);
         setName(u.name ?? '');
         setBusinessName(u.vendorProfile?.business_name ?? '');
+        setAvatarUri(u.avatar_url ?? null);
       }
     } catch {
       Alert.alert('Error', 'Failed to load profile');
@@ -50,11 +56,46 @@ export default function VendorProfile() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const pickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setAvatarUri(asset.uri);
+      setAvatarFile({
+        uri: asset.uri,
+        type: asset.mimeType ?? 'image/jpeg',
+        name: asset.fileName ?? `avatar_${Date.now()}.jpg`,
+      });
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch('/auth/update', { name, business_name: businessName });
+      const token = await AsyncStorage.getItem('token');
+      if (avatarFile) {
+        const fd = new FormData();
+        fd.append('name', name);
+        fd.append('business_name', businessName);
+        fd.append('image', { uri: avatarFile.uri, type: avatarFile.type, name: avatarFile.name } as any);
+        await api.patch('/auth/update', fd, {
+          headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
+        });
+      } else {
+        await api.patch('/auth/update', { name, business_name: businessName });
+      }
       setEditing(false);
+      setAvatarFile(null);
       load();
     } catch {
       Alert.alert('Error', 'Failed to save profile');
@@ -78,26 +119,29 @@ export default function VendorProfile() {
   };
 
   if (loading) {
-    return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
+    return <View style={s.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
   }
 
-  const initials = (user?.name ?? 'V')
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = (user?.name ?? 'V').split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 
   return (
     <ScrollView style={s.root} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={s.header}>
-        <View style={s.avatar}>
-          <Text style={s.avatarText}>{initials}</Text>
-        </View>
+        <TouchableOpacity style={s.avatarWrap} onPress={editing ? pickAvatar : undefined}>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={s.avatarImg} />
+          ) : (
+            <View style={s.avatar}>
+              <Text style={s.avatarText}>{initials}</Text>
+            </View>
+          )}
+          {editing && (
+            <View style={s.cameraOverlay}>
+              <Ionicons name="camera" size={18} color={COLORS.white} />
+            </View>
+          )}
+        </TouchableOpacity>
+
         {!editing ? (
           <>
             <Text style={s.name}>{user?.name}</Text>
@@ -105,49 +149,26 @@ export default function VendorProfile() {
               <Text style={s.business}>{user.vendorProfile.business_name}</Text>
             ) : null}
             <Text style={s.email}>{user?.email}</Text>
-            <View style={s.badge}>
-              <Text style={s.badgeText}>Vendor</Text>
-            </View>
+            <View style={s.badge}><Text style={s.badgeText}>Vendor</Text></View>
           </>
-        ) : null}
+        ) : (
+          <Text style={s.tapHint}>Tap photo to change</Text>
+        )}
       </View>
 
       <View style={s.card}>
         {editing ? (
           <>
             <Text style={s.label}>Full Name</Text>
-            <TextInput
-              style={s.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              placeholderTextColor={COLORS.gray[400]}
-            />
+            <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor={COLORS.gray[400]} />
             <Text style={s.label}>Business Name</Text>
-            <TextInput
-              style={s.input}
-              value={businessName}
-              onChangeText={setBusinessName}
-              placeholder="Your business name"
-              placeholderTextColor={COLORS.gray[400]}
-            />
+            <TextInput style={s.input} value={businessName} onChangeText={setBusinessName} placeholder="Your business name" placeholderTextColor={COLORS.gray[400]} />
             <View style={s.row}>
-              <TouchableOpacity
-                style={[s.btn, { backgroundColor: COLORS.gray[200], flex: 1, marginRight: 8 }]}
-                onPress={() => setEditing(false)}
-              >
+              <TouchableOpacity style={[s.btn, { backgroundColor: COLORS.gray[200], flex: 1, marginRight: 8 }]} onPress={() => { setEditing(false); setAvatarFile(null); load(); }}>
                 <Text style={[s.btnText, { color: COLORS.gray[700] }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.btn, { flex: 1 }]}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color={COLORS.white} size="small" />
-                ) : (
-                  <Text style={s.btnText}>Save</Text>
-                )}
+              <TouchableOpacity style={[s.btn, { flex: 1 }]} onPress={handleSave} disabled={saving}>
+                {saving ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={s.btnText}>Save</Text>}
               </TouchableOpacity>
             </View>
           </>
@@ -171,8 +192,12 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.gray[50] },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { alignItems: 'center', paddingVertical: 32, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.gray[100] },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  avatarWrap: { marginBottom: 12, position: 'relative' },
+  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  avatarImg: { width: 80, height: 80, borderRadius: 40 },
   avatarText: { color: COLORS.white, fontSize: 28, fontWeight: '700' },
+  cameraOverlay: { position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: COLORS.white },
+  tapHint: { fontSize: 12, color: COLORS.gray[400], marginBottom: 4 },
   name: { fontSize: 22, fontWeight: '700', color: COLORS.gray[900] },
   business: { fontSize: 15, color: COLORS.gray[500], marginTop: 2 },
   email: { fontSize: 14, color: COLORS.gray[400], marginTop: 4 },
