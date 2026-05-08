@@ -36,8 +36,12 @@ export class CategoryService {
 
   // Get all categories
   async findAll() {
-    const categories = await this.prisma.serviceCategory.findMany(
-    );
+    const categories = await this.prisma.serviceCategory.findMany({
+      include: {
+        _count: { select: { vendor_listings: true, sub_categories: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
     return {
       success: true,
       message: 'Categories retrieved successfully',

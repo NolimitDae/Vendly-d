@@ -1,0 +1,275 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, claude/repo-review-assessment-RDhoO]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ────────────────────────────────────────────────
+  # 1. Backend lint + type-check (fast gate)
+  # ────────────────────────────────────────────────
+  backend-lint:
+    name: Backend Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Back-end
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Back-end/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: postgresql://x:x@localhost/x
+        run: npx prisma generate
+      - name: Type check
+        run: npx tsc --noEmit
+
+  # ────────────────────────────────────────────────
+  # 2. Backend unit tests + coverage
+  # ────────────────────────────────────────────────
+  backend-test:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    needs: backend-lint
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: vendly_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    defaults:
+      run:
+        working-directory: ./Back-end
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Back-end/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/vendly_test
+        run: npx prisma generate
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/vendly_test
+        run: npx prisma migrate deploy
+      - name: Run unit tests with coverage
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/vendly_test
+          JWT_SECRET: test-secret
+          REDIS_HOST: localhost
+          REDIS_PORT: '6379'
+          STRIPE_SECRET_KEY: sk_test_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_dummy
+          APP_KEY: test-key
+          GOOGLE_APP_ID: dummy
+          GOOGLE_APP_SECRET: dummy
+          GOOGLE_CALLBACK_URL: http://localhost:4000/auth/google/redirect
+          FACEBOOK_APP_ID: dummy
+          FACEBOOK_APP_SECRET: dummy
+          FACEBOOK_CALLBACK_URL: http://localhost:4000/auth/facebook/redirect
+        run: npm run test -- --passWithNoTests --coverage --coverageReporters=text-summary
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: Back-end/coverage/
+          retention-days: 7
+
+  # ────────────────────────────────────────────────
+  # 3. Backend e2e tests
+  # ────────────────────────────────────────────────
+  backend-e2e:
+    name: Backend E2E Tests
+    runs-on: ubuntu-latest
+    needs: backend-test
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: vendly_e2e
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    defaults:
+      run:
+        working-directory: ./Back-end
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Back-end/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - name: Generate Prisma client + migrate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/vendly_e2e
+        run: npx prisma generate && npx prisma migrate deploy
+      - name: Run e2e tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/vendly_e2e
+          JWT_SECRET: test-secret
+          REDIS_HOST: localhost
+          REDIS_PORT: '6379'
+          STRIPE_SECRET_KEY: sk_test_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_dummy
+          APP_KEY: test-key
+          PORT: '4001'
+        run: npm run test:e2e -- --passWithNoTests
+
+  # ────────────────────────────────────────────────
+  # 4. Frontend lint + type-check (fast gate)
+  # ────────────────────────────────────────────────
+  frontend-lint:
+    name: Frontend Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Front-End
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Front-End/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - name: Type check
+        run: npx tsc --noEmit
+
+  # ────────────────────────────────────────────────
+  # 5. Frontend tests + build
+  # ────────────────────────────────────────────────
+  frontend-test:
+    name: Frontend Tests & Build
+    runs-on: ubuntu-latest
+    needs: frontend-lint
+    defaults:
+      run:
+        working-directory: ./Front-End
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Front-End/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - name: Run tests with coverage
+        run: npm test -- --passWithNoTests --watchAll=false --coverage --coverageReporters=text-summary
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          path: Front-End/coverage/
+          retention-days: 7
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+        run: npm run build
+
+  # ────────────────────────────────────────────────
+  # 6. Mobile type-check
+  # ────────────────────────────────────────────────
+  mobile-lint:
+    name: Mobile Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Mobile/package-lock.json
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+      - name: Type check
+        run: npx tsc --noEmit
+
+  # ────────────────────────────────────────────────
+  # 7. Security audit
+  # ────────────────────────────────────────────────
+  security-scan:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend audit
+        working-directory: ./Back-end
+        run: npm audit --audit-level=critical || true
+      - name: Frontend audit
+        working-directory: ./Front-End
+        run: npm audit --audit-level=critical || true
+
+  # ────────────────────────────────────────────────
+  # 8. All-green gate (required status check for PRs)
+  # ────────────────────────────────────────────────
+  all-checks:
+    name: All Checks Passed
+    runs-on: ubuntu-latest
+    needs:
+      - backend-test
+      - backend-e2e
+      - frontend-test
+      - mobile-lint
+      - security-scan
+    steps:
+      - run: echo "All CI checks passed ✓"

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import GenericButton from "../auth/GenericButton";
 import { GenericInput, RadioGroup } from "../Input";
 import ModalWrapper from "../common/modal/ModalWrapper";
@@ -25,6 +25,9 @@ const bodyConfig = {
 } as const;
 
 const CreateServiceModal = ({ closeModal }: { closeModal: () => void }) => {
+  const [categories, setCategories] = useState<string[]>(["Portrait", "Bridal makeup"]);
+  const [subCategories, setSubCategories] = useState<string[]>(["Portrait", "Bridal makeup"]);
+
   return (
     <ModalWrapper isOpen={true} onClose={closeModal} size="xl">
       <ModalHeader
@@ -47,8 +50,8 @@ const CreateServiceModal = ({ closeModal }: { closeModal: () => void }) => {
           />
           <TagInput
             label="Category"
-            defaultValue={["Portrait", "Bridal makeup"]}
-            onChange={(val: any) => console.log(val)}
+            defaultValue={categories}
+            onChange={(val: any) => setCategories(val)}
             options={["Portrait", "Bridal makeup", "Wedding", "Fashion"]}
             size="sm"
             variant="outlined"
@@ -56,8 +59,8 @@ const CreateServiceModal = ({ closeModal }: { closeModal: () => void }) => {
 
           <TagInput
             label="Sub Category"
-            defaultValue={["Portrait", "Bridal makeup"]}
-            onChange={(val: any) => console.log(val)}
+            defaultValue={subCategories}
+            onChange={(val: any) => setSubCategories(val)}
             options={["Portrait", "Bridal makeup", "Wedding", "Fashion"]}
             size="sm"
             variant="outlined"

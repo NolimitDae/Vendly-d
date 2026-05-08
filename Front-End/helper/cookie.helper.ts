@@ -23,6 +23,8 @@ export class CookieHelper {
     nookies.set(context, key, value, {
       maxAge: expires,
       path: path,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
     });
   }
 

@@ -23,6 +23,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { memoryStorage } from 'multer';
 import { UserType } from 'prisma/generated/enums';
@@ -32,6 +33,25 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+
+const ALLOWED_IMAGE_MIMETYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_DOC_MIMETYPES = [...ALLOWED_IMAGE_MIMETYPES, 'application/pdf'];
+
+function imageFileFilter(_req: any, file: Express.Multer.File, cb: Function) {
+  if (ALLOWED_IMAGE_MIMETYPES.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new HttpException('Only JPEG, PNG, WebP, and GIF images are allowed', HttpStatus.BAD_REQUEST), false);
+  }
+}
+
+function docFileFilter(_req: any, file: Express.Multer.File, cb: Function) {
+  if (ALLOWED_DOC_MIMETYPES.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new HttpException('Only images and PDF files are allowed for documents', HttpStatus.BAD_REQUEST), false);
+  }
+}
 
 @ApiBearerAuth('admin-token')
 @ApiBearerAuth('customer-token')
@@ -65,6 +85,7 @@ export class AuthController {
   }
 
   // *register user
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('register')
   @ApiOperation({
     summary: 'Register a new user',
@@ -79,6 +100,7 @@ export class AuthController {
     FileInterceptor('image', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: imageFileFilter,
     }),
   )
   async create(
@@ -170,6 +192,7 @@ export class AuthController {
       },
     },
   })
+  @Throttle({ short: { limit: 10, ttl: 60000 } })
   @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(@Req() req: Request, @Res() res: Response) {
@@ -201,9 +224,10 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('add-license')
   @UseInterceptors(
-    FilesInterceptor('license',2, {
+    FilesInterceptor('license', 2, {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: docFileFilter,
     }),
   )
   async addLicense(
@@ -233,6 +257,7 @@ export class AuthController {
     FileInterceptor('image', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: imageFileFilter,
     }),
   )
   async updateUser(
@@ -272,6 +297,7 @@ export class AuthController {
       },
     },
   })
+  @Throttle({ short: { limit: 3, ttl: 60000 } })
   @Post('forgot-password')
   async forgotPassword(@Body() data: { email: string }) {
     try {
@@ -298,6 +324,7 @@ export class AuthController {
     type: VerifyEmailDto,
     description: 'Email and OTP token for verification',
   })
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('verify-email')
   async verifyEmail(@Body() data: VerifyEmailDto) {
     try {
@@ -342,6 +369,7 @@ export class AuthController {
       },
     },
   })
+  @Throttle({ short: { limit: 3, ttl: 60000 } })
   @Post('resend-verification-email')
   async resendVerificationEmail(@Body() data: { email: string }) {
     try {
@@ -396,6 +424,7 @@ export class AuthController {
     status: 400,
     description: 'Invalid token or email not found.',
   })
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('reset-password')
   async resetPassword(
     @Body() data: { email: string; token: string; password: string },
@@ -451,6 +480,7 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 200, description: 'Reset token resent to email.' })
+  @Throttle({ short: { limit: 3, ttl: 60000 } })
   @Post('resend-token')
   async resendToken(@Body() data: { email: string }) {
     try {
@@ -677,6 +707,18 @@ export class AuthController {
     };
   }
 
+  @Get('facebook')
+  @UseGuards(AuthGuard('facebook'))
+  async facebookLogin(): Promise<any> {
+    return HttpStatus.OK;
+  }
+
+  @Get('facebook/redirect')
+  @UseGuards(AuthGuard('facebook'))
+  async facebookLoginRedirect(@Req() req: Request): Promise<any> {
+    return { statusCode: HttpStatus.OK, data: req.user };
+  }
+
   // --------------change password---------
 
   // --------------end change password---------
@@ -784,6 +826,18 @@ export class AuthController {
   // -------end change email address------
 
   // --------- 2FA ---------
+  @ApiOperation({ summary: 'Get 2FA status', description: 'Returns whether 2FA is enabled for the current user.' })
+  @UseGuards(JwtAuthGuard)
+  @Get('2fa-status')
+  async get2FAStatus(@Req() req: Request) {
+    try {
+      const user_id = req.user.userId;
+      return await this.authService.get2FAStatus(user_id);
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   @ApiOperation({
     summary: 'Generate 2FA secret',
     description:

@@ -187,8 +187,12 @@ export class AuthService {
       const payload = { email: email, sub: userId, type: user?.type };
 
 
-      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+      const accessToken = this.jwtService.sign(payload, {
+        expiresIn: (process.env.JWT_ACCESS_EXPIRY ?? '1h') as any,
+      });
+      const refreshToken = this.jwtService.sign(payload, {
+        expiresIn: (process.env.JWT_REFRESH_EXPIRY ?? '7d') as any,
+      });
 
       // store refreshToken
       await this.redis.set(
@@ -320,6 +324,8 @@ export class AuthService {
 
       if (updateUserDto.address) data.address = updateUserDto.address;
 
+      if (updateUserDto.about_me !== undefined) data.bio = updateUserDto.about_me;
+
       if (image) {
         // delete old image from storage
         const oldImage = await this.prisma.user.findFirst({
@@ -346,10 +352,16 @@ export class AuthService {
       if (user) {
         await this.prisma.user.update({
           where: { id: userId },
-          data: {
-            ...data,
-          },
+          data: { ...data },
         });
+
+        if (updateUserDto.business_name !== undefined) {
+          await this.prisma.vendorProfile.upsert({
+            where: { user_id: userId },
+            create: { user_id: userId, business_name: updateUserDto.business_name, license_photo: [] },
+            update: { business_name: updateUserDto.business_name },
+          });
+        }
 
         return {
           success: true,
@@ -956,6 +968,18 @@ export class AuthService {
         success: false,
         message: error.message,
       };
+    }
+  }
+  async get2FAStatus(userId: string) {
+    try {
+      const user = await this.prisma.user.findFirst({
+        where: { id: userId },
+        select: { is_two_factor_enabled: true },
+      });
+      if (!user) return { success: false, message: 'User not found' };
+      return { success: true, data: { enabled: !!user.is_two_factor_enabled } };
+    } catch (error) {
+      return { success: false, message: error.message };
     }
   }
   // --------- end 2FA ---------

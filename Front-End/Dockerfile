@@ -1,26 +1,30 @@
-# Base image
-FROM node:20
+FROM node:20.19.0-alpine AS builder
 
-# Set working directory
 WORKDIR /usr/src/app
 
-# Copy package.json and lock file
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application code
 COPY . .
 
-# Copy the .env and .env.development files
-COPY .env ./
+# Build args for public env vars (injected at build time)
+ARG NEXT_PUBLIC_API_ENDPOINT
+ENV NEXT_PUBLIC_API_ENDPOINT=$NEXT_PUBLIC_API_ENDPOINT
 
-# Build the Next.js application
 RUN npm run build
 
-# Expose the port on which Next.js runs
+# ---- Production image ----
+FROM node:20.19.0-alpine AS runner
+
+WORKDIR /usr/src/app
+
+ENV NODE_ENV=production
+
+# Leverage Next.js standalone output
+COPY --from=builder /usr/src/app/.next/standalone ./
+COPY --from=builder /usr/src/app/.next/static ./.next/static
+COPY --from=builder /usr/src/app/public ./public
+
 EXPOSE 3000
 
-# Start the Next.js application
-CMD ["npm", "start"]
+CMD ["node", "server.js"]

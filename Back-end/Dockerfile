@@ -1,32 +1,29 @@
-# Base image
-FROM node:20
+FROM node:20.19.0-alpine AS builder
 
-# Create app directory
 WORKDIR /usr/src/app
 
-# A wildcard is used to ensure both package.json AND package-lock.json are copied
-COPY package*.json ./
-COPY yarn.lock ./
+COPY package*.json yarn.lock ./
+RUN yarn install --frozen-lockfile
 
-# Install app dependencies
-RUN yarn install
-
-# Bundle app source
 COPY . .
-
-# Copy the .env and .env.development files
-COPY .env ./
-
-# prisma generate
 RUN npx prisma generate
+RUN yarn build
 
-# Creates a "dist" folder with the production build
-# RUN yarn build
+# ---- Production image ----
+FROM node:20.19.0-alpine AS runner
 
-# Expose the port on which the app will run
+WORKDIR /usr/src/app
+
+ENV NODE_ENV=production
+
+COPY package*.json yarn.lock ./
+RUN yarn install --frozen-lockfile --production
+
+COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder /usr/src/app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /usr/src/app/prisma ./prisma
+COPY --from=builder /usr/src/app/public ./public
+
 EXPOSE 4000
 
-# Start the server using the production build
-# CMD ["yarn", "start:prod"]
-# Start the server in dev mode
-CMD ["yarn", "start:dev-swc"]
+CMD ["node", "dist/main"]

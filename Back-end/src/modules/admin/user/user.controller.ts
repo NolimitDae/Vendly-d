@@ -32,6 +32,15 @@ import { ApproveLicenseDto } from './dto/approve-license.dto';
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
+  @Get('vendors')
+  async getVendors(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+  ) {
+    return this.userService.getVendors({ page, limit, status });
+  }
+
 /*------------------------------------------------------
 |                     License Management               |
 -------------------------------------------------------*/

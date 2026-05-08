@@ -1,0 +1,27 @@
+export const COLORS = {
+  primary: '#7B2FF7',
+  primaryDark: '#5a20c4',
+  primaryLight: '#9b5ef9',
+  primaryBg: '#f3ecfe',
+  white: '#ffffff',
+  black: '#0a0a0a',
+  gray: {
+    50: '#f9fafb',
+    100: '#f3f4f6',
+    200: '#e5e7eb',
+    300: '#d1d5db',
+    400: '#9ca3af',
+    500: '#6b7280',
+    600: '#4b5563',
+    700: '#374151',
+    800: '#1f2937',
+    900: '#111827',
+  },
+  status: {
+    PLANNING: { bg: '#fefce8', text: '#a16207', border: '#fde047' },
+    CONFIRMED: { bg: '#eff6ff', text: '#1d4ed8', border: '#93c5fd' },
+    IN_PROGRESS: { bg: '#f3ecfe', text: '#7B2FF7', border: '#9b5ef9' },
+    COMPLETED: { bg: '#f0fdf4', text: '#15803d', border: '#86efac' },
+    CANCELLED: { bg: '#f9fafb', text: '#6b7280', border: '#e5e7eb' },
+  },
+} as const;

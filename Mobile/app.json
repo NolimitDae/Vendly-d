@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Vendly",
+    "slug": "vendly",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#7B2FF7"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vendly.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#7B2FF7"
+      },
+      "package": "com.vendly.mobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "versionCode": 8
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vendly needs access to your photos to upload listing images and profile pictures.",
+          "cameraPermission": "Vendly needs access to your camera to take photos for listings and your profile."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "490325e9-37a3-424d-9247-cad34e99e35e"
+      }
+    },
+    "owner": "nolimittechs-organization"
+  }
+}

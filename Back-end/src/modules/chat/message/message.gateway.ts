@@ -7,15 +7,13 @@ import {
   OnGatewayDisconnect,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
-import { OnModuleInit } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import * as path from 'path';
 import * as fs from 'fs';
 import appConfig from '../../../config/app.config';
-import { ChatRepository } from '../../../common/repository/chat/chat.repository';
 
-// Temporary enum until Prisma generates it
 enum MessageStatus {
   SENT = 'SENT',
   DELIVERED = 'DELIVERED',
@@ -24,26 +22,21 @@ enum MessageStatus {
 }
 
 @WebSocketGateway({
-  cors: {
-    origin: '*',
-  },
-  maxHttpBufferSize: 1e8, // 100MB
+  cors: { origin: '*' },
+  maxHttpBufferSize: 1e8,
 })
 export class MessageGateway
-  implements
-  OnGatewayInit,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
-  OnModuleInit {
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
+{
   @WebSocketServer()
   server: Server;
 
-  private recordings = new Map<string, fs.WriteStream>();
+  private readonly logger = new Logger(MessageGateway.name);
   private chunks = new Map<string, Buffer>();
-  private uploadsDir = path.join(
-    __dirname,
-    '../../../../public/storage/recordings',
-  );
+  private uploadsDir = path.join(__dirname, '../../../../public/storage/recordings');
+
+  public clients = new Map<string, string>();
+  private activeUsers = new Map<string, string>();
 
   constructor() {
     if (!fs.existsSync(this.uploadsDir)) {
@@ -51,138 +44,65 @@ export class MessageGateway
     }
   }
 
- 
-  public clients = new Map<string, string>(); 
-  private activeUsers = new Map<string, string>(); 
+  onModuleInit() {}
 
-  onModuleInit() { }
-
-  afterInit(server: Server) {
-    console.log('Websocket server started');
+  afterInit(_server: Server) {
+    this.logger.log('WebSocket server started');
   }
 
-  /*
-  async handleConnection(client: Socket, ...args: any[]) {
+  async handleConnection(client: Socket) {
     try {
-      const token = client.handshake.auth.token;
-      if (!token) {
-        client.disconnect();
-        return;
-      }
-
-      
-      const decoded: any = jwt.verify(token, appConfig().jwt.secret);
-
-      const { sub: userId } = decoded;
-
-      if (!userId) {
-        client.disconnect();
-        return;
-      }
-
-      this.clients.set(userId, client.id);
-      await ChatRepository.updateUserStatus(userId, 'online');
-      
-
-      this.server.emit('userStatusChange', {
-        user_id: userId,
-        status: 'online',
-      });
-
-      console.log(`User ${userId} connected`);
-
-    } catch (error) {
-      client.disconnect();
-      console.error('Error handling connection:', error);
-    }
-  }*/
-
-  async handleConnection(client: Socket, ...args: any[]) {
-  
-
-    try {
-   
       const authHeader = client.handshake.headers.authorization;
-      
       if (!authHeader) {
         client.disconnect();
         return;
       }
 
       const token = authHeader.split(' ')[1];
-
       if (!token) {
-        console.error('[DEBUG] Token not found after split. Disconnecting client.');
         client.disconnect();
         return;
       }
 
-      console.log('[DEBUG] Token extracted successfully. Verifying...');
-
-     
       const decoded: any = jwt.verify(token, appConfig().jwt.secret);
-
-      console.log('[DEBUG] JWT verification successful. Decoded payload:', decoded);
-
-     
       const { sub: userId } = decoded;
 
-      
       if (!userId) {
-        console.error('[DEBUG] Payload missing `sub` (userId). Disconnecting client.');
         client.disconnect();
         return;
       }
 
-      
       this.clients.set(userId, client.id);
-
       client.join(`user_${userId}`);
-
-      console.log(`User joined room: user_${userId}`);   
-
+      this.logger.log(`User ${userId} connected`);
     } catch (error) {
-      
-      console.error('Error handling connection:', error.message); 
+      this.logger.error(`Connection error: ${error.message}`);
       client.disconnect();
     }
-  }  
+  }
 
   async handleDisconnect(client: Socket) {
     const userId = [...this.clients.entries()].find(
       ([, socketId]) => socketId === client.id,
     )?.[0];
+
     if (userId) {
       this.clients.delete(userId);
-
       const username = [...this.activeUsers.entries()].find(
         ([, id]) => id === client.id,
       )?.[0];
-      if (username) {
-        this.activeUsers.delete(username);
-      }
+      if (username) this.activeUsers.delete(username);
 
-      // await ChatRepository.updateUserStatus(userId, 'offline');
-      // notify the user that the user is offline
-      this.server.emit('userStatusChange', {
-        user_id: userId,
-        status: 'offline',
-      });
-
-      console.log(`User ${userId} disconnected`);
+      this.server.emit('userStatusChange', { user_id: userId, status: 'offline' });
+      this.logger.log(`User ${userId} disconnected`);
     }
   }
 
-
-
   @SubscribeMessage('joinroom')
   handleRoomJoin(client: Socket, body: { room_id: string }) {
-    const room_id = body.room_id;
-    console.log('room connected', room_id); 
-    client.join(room_id); 
-    client.emit('joinedRoom', { room_id: room_id });
+    client.join(body.room_id);
+    client.emit('joinedRoom', { room_id: body.room_id });
   }
-
 
   @SubscribeMessage('sendMessage')
   async listenForMessages(
@@ -203,8 +123,6 @@ export class MessageGateway
     client: Socket,
     @MessageBody() body: { message_id: string; status: MessageStatus },
   ) {
-    // await ChatRepository.updateMessageStatus(body.message_id, body.status);
-    // notify the sender that the message has been sent
     this.server.emit('messageStatusUpdated', {
       message_id: body.message_id,
       status: body.status,
@@ -215,43 +133,25 @@ export class MessageGateway
   handleTyping(client: Socket, @MessageBody() body: { to: string; data: any }) {
     const recipientSocketId = this.clients.get(body.to);
     if (recipientSocketId) {
-      this.server.to(recipientSocketId).emit('userTyping', {
-        from: client.id,
-        data: body.data,
-      });
+      this.server.to(recipientSocketId).emit('userTyping', { from: client.id, data: body.data });
     }
   }
 
   @SubscribeMessage('stopTyping')
-  handleStopTyping(
-    client: Socket,
-    @MessageBody() body: { to: string; data: any },
-  ) {
+  handleStopTyping(client: Socket, @MessageBody() body: { to: string; data: any }) {
     const recipientSocketId = this.clients.get(body.to);
     if (recipientSocketId) {
-      this.server.to(recipientSocketId).emit('userStoppedTyping', {
-        from: client.id,
-        data: body.data,
-      });
+      this.server.to(recipientSocketId).emit('userStoppedTyping', { from: client.id, data: body.data });
     }
   }
 
-  // for calling
   @SubscribeMessage('join')
   handleJoin(client: Socket, { username }: { username: string }) {
     this.activeUsers.set(username, client.id);
-    console.log(`${username} joined`);
   }
 
   @SubscribeMessage('call')
-  handleCall(
-    client: Socket,
-    {
-      caller,
-      receiver,
-      offer,
-    }: { caller: string; receiver: string; offer: any },
-  ) {
+  handleCall(client: Socket, { caller, receiver, offer }: { caller: string; receiver: string; offer: any }) {
     const receiverSocketId = this.activeUsers.get(receiver);
     if (receiverSocketId) {
       this.server.to(receiverSocketId).emit('incomingCall', { caller, offer });
@@ -259,14 +159,7 @@ export class MessageGateway
   }
 
   @SubscribeMessage('answer')
-  handleAnswer(
-    client: Socket,
-    {
-      caller,
-      receiver,
-      answer,
-    }: { caller: string; receiver: string; answer: any },
-  ) {
+  handleAnswer(client: Socket, { caller, answer }: { caller: string; receiver: string; answer: any }) {
     const callerSocketId = this.activeUsers.get(caller);
     if (callerSocketId) {
       this.server.to(callerSocketId).emit('callAccepted', { answer });
@@ -274,10 +167,7 @@ export class MessageGateway
   }
 
   @SubscribeMessage('iceCandidate')
-  handleICECandidate(
-    client: Socket,
-    { receiver, candidate }: { receiver: string; candidate: any },
-  ) {
+  handleICECandidate(client: Socket, { receiver, candidate }: { receiver: string; candidate: any }) {
     const receiverSocketId = this.activeUsers.get(receiver);
     if (receiverSocketId) {
       this.server.to(receiverSocketId).emit('iceCandidate', { candidate });
@@ -292,70 +182,28 @@ export class MessageGateway
     }
   }
 
-  // recording
   @SubscribeMessage('recordingChunk')
   handleRecordingChunk(
     client: Socket,
-    @MessageBody()
-    payload: {
-      recordingId: string;
-      sequence: number;
-      chunk: Buffer | any;
-    },
+    @MessageBody() payload: { recordingId: string; sequence: number; chunk: Buffer | any },
   ) {
-    console.log('Received chunk', payload.sequence, payload.chunk.length);
     const { recordingId, chunk } = payload;
-    const filePath = path.join(this.uploadsDir, `${recordingId}.webm`);
-
-    if (!this.chunks.has(recordingId)) {
-      this.chunks.set(recordingId, Buffer.alloc(0));
-    }
-
-    this.chunks.set(
-      recordingId,
-      Buffer.concat([
-        this.chunks.get(recordingId),
-        Buffer.from(new Uint8Array(chunk)),
-      ]),
-    );
+    const existing = this.chunks.get(recordingId) ?? Buffer.alloc(0);
+    this.chunks.set(recordingId, Buffer.concat([existing, Buffer.from(new Uint8Array(chunk))]));
   }
 
   @SubscribeMessage('recordingEnded')
-  handleRecordingEnd(
-    client: Socket,
-    @MessageBody() payload: { recordingId: string },
-  ) {
+  handleRecordingEnd(client: Socket, @MessageBody() payload: { recordingId: string }) {
     const filePath = path.join(this.uploadsDir, `${payload.recordingId}.webm`);
-    const stream = fs.createWriteStream(filePath, { flags: 'a' });
-
-    console.log(`Started writing to file ${filePath}`);
     const buffer = this.chunks.get(payload.recordingId);
     if (buffer) {
-      stream.write(buffer);
+      fs.writeFileSync(filePath, buffer);
       this.chunks.delete(payload.recordingId);
     }
   }
+
+  // Emit booking notification to a specific user via their room
+  emitBookingEvent(userId: string, event: string, data: any) {
+    this.server.to(`user_${userId}`).emit(event, data);
+  }
 }
-
-
-
-
-/*
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-*/
-

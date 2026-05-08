@@ -56,9 +56,16 @@ const DataFilterBar = ({
         debounceMs={10}
         placeholder="Search Vendor"
         minChars={1}
-        onSelect={(item: any) =>
-          console.log(item.vendorName?.name || item.plannerName?.name)
-        }
+        onSelect={(item: any) => {
+          const name =
+            item.vendorName?.name ||
+            item.plannerName?.name ||
+            item?.info?.eventName ||
+            item.payerName ||
+            item.payeeName ||
+            "";
+          onSearch(name);
+        }}
         renderResult={(item: any) => (
           <div className="flex items-center gap-3 px-3 py-2.5 w-full">
             {(item.vendorName?.image ||

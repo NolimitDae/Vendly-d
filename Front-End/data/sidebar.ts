@@ -10,12 +10,14 @@ import {
   LogoutIcon,
 } from "@/icons";
 import PendingApprovalIcon from "@/icons/PendingApprovalIcon";
+import MessageIcon from "@/icons/MessageIcon";
+import WalletIcon from "@/icons/WalletIcon";
 
 interface NavItem {
   icon: any;
   label: string;
   href: string;
-  type?: "client" | "admin" | "candidate";
+  type?: "client" | "admin" | "candidate" | "vendor" | "event_planner";
   children?: NavItem[];
 }
 
@@ -29,7 +31,7 @@ export const navItems: NavItem[] = [
   {
     icon: VendorsIcon,
     label: "Vendors",
-    href: "/vendors",
+    href: "/dashboard/vendors",
     type: "admin",
     children: [
       {
@@ -48,7 +50,7 @@ export const navItems: NavItem[] = [
   {
     icon: EventPlannersIcon,
     label: "Event Planners",
-    href: "/event-planners",
+    href: "/dashboard/event-planners",
     type: "admin",
     children: [
       {
@@ -62,6 +64,12 @@ export const navItems: NavItem[] = [
         icon: PendingApprovalIcon,
       },
     ],
+  },
+  {
+    icon: ServicesIcon,
+    label: "Listings",
+    href: "/dashboard/listings",
+    type: "admin",
   },
   {
     icon: BookingIcon,
@@ -80,6 +88,48 @@ export const navItems: NavItem[] = [
     label: "Services",
     href: "/dashboard/services",
     type: "admin",
+  },
+  {
+    icon: MessageIcon,
+    label: "Messages",
+    href: "/chat",
+    type: "admin",
+  },
+  {
+    icon: WalletIcon,
+    label: "Wallet",
+    href: "/wallet",
+    type: "admin",
+  },
+  {
+    icon: TransactionsIcon,
+    label: "Earnings",
+    href: "/vendor/earnings",
+    type: "vendor",
+  },
+  {
+    icon: WalletIcon,
+    label: "Subscription",
+    href: "/vendor/subscription",
+    type: "vendor",
+  },
+  {
+    icon: OverviewIcon,
+    label: "Dashboard",
+    href: "/event-planner/dashboard",
+    type: "event_planner",
+  },
+  {
+    icon: EventPlannersIcon,
+    label: "My Events",
+    href: "/event-planner/events",
+    type: "event_planner",
+  },
+  {
+    icon: BookingIcon,
+    label: "My Profile",
+    href: "/event-planner/profile",
+    type: "event_planner",
   },
 ];
 

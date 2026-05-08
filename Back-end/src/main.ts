@@ -4,27 +4,55 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 import { join } from 'path';
 // internal imports
-import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
+import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 import { CustomExceptionFilter } from './common/exception/custom-exception.filter';
 import { TanvirStorage } from './common/lib/Disk/TanvirStorage';
 import appConfig from './config/app.config';
 import { PrismaExceptionFilter } from './common/exception/prisma-exception.filter';
+import { AllExceptionsFilter } from './common/exception/all-exceptions.filter';
 
 async function bootstrap() {
- 
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
 
- 
-  app.useWebSocketAdapter(new IoAdapter(app));
+  const redisIoAdapter = new RedisIoAdapter(app);
+  await redisIoAdapter.connectToRedis();
+  app.useWebSocketAdapter(redisIoAdapter);
   app.setGlobalPrefix('api');
-  app.enableCors();
-  app.use(helmet());
- 
+
+  // Body size limits
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
+
+  app.enableCors({
+    origin: process.env.CLIENT_APP_URL || 'http://localhost:3000',
+    credentials: true,
+    maxAge: 86400, // 24h preflight cache
+  });
+
+  app.use(
+    helmet({
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"], // inline styles needed by many UI libs
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'", 'https:', 'data:'],
+          objectSrc: ["'none'"],
+          upgradeInsecureRequests: [],
+        },
+      },
+    }),
+  );
 
   app.useStaticAssets(join(__dirname, "..", "..", "public"), {
     index: false,
@@ -35,16 +63,17 @@ async function bootstrap() {
     new ValidationPipe({
       transform: true,
       whitelist: true,
-      forbidNonWhitelisted: false,
+      forbidNonWhitelisted: true,
       transformOptions: {
         enableImplicitConversion: true,
       },
     }),
   );
-  
+
   app.useGlobalFilters(
+    new AllExceptionsFilter(),
     new CustomExceptionFilter(),
-    new PrismaExceptionFilter(),  
+    new PrismaExceptionFilter(),
   );
 
   // storage setup
@@ -104,7 +133,6 @@ async function bootstrap() {
       persistAuthorization: true,
     },
   });
- 
 
   await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
 }

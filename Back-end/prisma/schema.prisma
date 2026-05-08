@@ -68,6 +68,40 @@ enum SubscriptionPaymentStatus {
   REFUNDED
 }
 
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum EventType {
+  WEDDING
+  BIRTHDAY
+  CORPORATE
+  CONCERT
+  CONFERENCE
+  PRIVATE_PARTY
+  OTHER
+}
+
+enum EventStatus {
+  PLANNING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 /**
  * ------------------------------------------------------------
  * --- Enum End ---
@@ -167,6 +201,27 @@ model User {
   ucodes               Ucode[]
   role_users           RoleUser[]
   payment_transactions PaymentTransaction[]
+
+  // Vendor listings
+  vendorListings VendorListing[] @relation("VendorListingOwner")
+
+  // Bookings as customer
+  customerBookings Booking[] @relation("BookingCustomer")
+  // Bookings as vendor
+  vendorBookings Booking[] @relation("BookingVendor")
+
+  // Events as planner
+  plannedEvents Event[] @relation("EventPlannerEvents")
+
+  // Reviews
+  writtenReviews  Review[] @relation("ReviewAuthor")
+  receivedReviews Review[] @relation("ReviewVendor")
+
+  // Saved listings (favourites)
+  savedListings SavedListing[] @relation("UserSavedListings")
+
+  // Event planner profile
+  eventPlannerProfile EventPlannerProfile? @relation("UserToEventPlannerProfile")
 
   @@map("users")
 }
@@ -298,6 +353,8 @@ model ServiceCategory {
   services       Service[]            @relation("ServiceCategoryRelation")
   // Many-to-Many relationship with sub-categories
   sub_categories ServiceSubCategory[] @relation("ServiceCategoryToSubCategory")
+  // Vendor listings
+  vendor_listings VendorListing[]
 
   @@map("service_categories")
 }
@@ -315,6 +372,8 @@ model ServiceSubCategory {
 
   // Many-to-Many join table link
   services ServiceToSubCategory[] @relation("Subcatagoryto-ServiceToSubCategory")
+  // Vendor listings
+  vendor_listings VendorListing[]
 
   @@unique([name, category_id])
   @@map("service_sub_categories")
@@ -383,6 +442,9 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   attachments String[] @db.Text
+
+  @@index([conversationId])
+  @@index([senderId])
 }
 
 /**
@@ -426,6 +488,10 @@ model Notification {
   notification_event    NotificationEvent? @relation(fields: [notification_event_id], references: [id])
 
   entity_id String?
+
+  @@index([receiver_id])
+  @@index([sender_id])
+  @@index([read_at])
 }
 
 /**
@@ -561,6 +627,280 @@ model PaymentTransaction {
  * --- Payment Schema end ---
  * -------------------------------------------------------------
  */
+/**
+ * ------------------------------------------------------------
+ * --- Vendor Listing Schema start ---
+ * -------------------------------------------------------------
+ */
+
+model VendorListing {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  vendor_id String
+  vendor    User   @relation("VendorListingOwner", fields: [vendor_id], references: [id], onDelete: Cascade)
+
+  title       String        @db.VarChar(255)
+  description String        @db.Text
+  price       Decimal       @db.Decimal(10, 2)
+  price_unit  String        @default("fixed") @db.VarChar(50)
+  status      ListingStatus @default(DRAFT)
+
+  images        String[]
+  tags          String[]
+  location      String?   @db.VarChar(255)
+  availability  String?   @db.Text
+  delivery_time Int?
+
+  category_id    String?
+  category       ServiceCategory?    @relation(fields: [category_id], references: [id])
+  sub_category_id String?
+  sub_category   ServiceSubCategory? @relation(fields: [sub_category_id], references: [id])
+
+  bookings  Booking[]
+  reviews   Review[]
+  savedBy   SavedListing[] @relation("ListingSavedBy")
+
+  @@map("vendor_listings")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Vendor Listing Schema end ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Saved Listings (Favourites) ---
+ * -------------------------------------------------------------
+ */
+
+model SavedListing {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  user_id String
+  user    User   @relation("UserSavedListings", fields: [user_id], references: [id], onDelete: Cascade)
+
+  listing_id String
+  listing    VendorListing @relation("ListingSavedBy", fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, listing_id])
+  @@map("saved_listings")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Saved Listings end ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Booking Schema start ---
+ * -------------------------------------------------------------
+ */
+
+model Booking {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  customer_id String
+  customer    User   @relation("BookingCustomer", fields: [customer_id], references: [id], onDelete: Cascade)
+
+  vendor_id String
+  vendor    User   @relation("BookingVendor", fields: [vendor_id], references: [id], onDelete: Cascade)
+
+  listing_id String?
+  listing    VendorListing? @relation(fields: [listing_id], references: [id])
+
+  status        BookingStatus @default(PENDING)
+  scheduled_at  DateTime?
+  completed_at  DateTime?
+  cancelled_at  DateTime?
+
+  message        String?  @db.Text
+  reject_reason  String?  @db.Text
+  cancel_reason  String?  @db.Text
+
+  amount         Decimal? @db.Decimal(10, 2)
+  currency       String?  @default("usd")
+
+  payment_transaction_id String?
+
+  review        Review?
+  event_bookings EventBooking[]
+
+  @@map("bookings")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Booking Schema end ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Review Schema start ---
+ * -------------------------------------------------------------
+ */
+
+model Review {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  author_id String
+  author    User   @relation("ReviewAuthor", fields: [author_id], references: [id], onDelete: Cascade)
+
+  vendor_id String
+  vendor    User   @relation("ReviewVendor", fields: [vendor_id], references: [id], onDelete: Cascade)
+
+  listing_id String?
+  listing    VendorListing? @relation(fields: [listing_id], references: [id])
+
+  booking_id String  @unique
+  booking    Booking @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+
+  rating  Int     @db.SmallInt
+  comment String? @db.Text
+  reply   String? @db.Text
+
+  @@map("reviews")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Review Schema end ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Event (Event Planner managed events) Schema start ---
+ * -------------------------------------------------------------
+ */
+
+model Event {
+  id         String      @id @default(cuid())
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+
+  event_planner_id String
+  event_planner    User   @relation("EventPlannerEvents", fields: [event_planner_id], references: [id], onDelete: Cascade)
+
+  name         String      @db.VarChar(255)
+  type         EventType?
+  date         DateTime?
+  venue        String?     @db.VarChar(255)
+  guest_count  Int?
+  total_budget Decimal?    @db.Decimal(10, 2)
+  status       EventStatus @default(PLANNING)
+  notes        String?     @db.Text
+
+  bookings     EventBooking[]
+  budget_items BudgetItem[]
+  tasks        EventTask[]
+
+  @@map("events")
+}
+
+model EventBooking {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  event_id   String
+  event      Event   @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  booking_id String
+  booking    Booking @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+
+  @@unique([event_id, booking_id])
+  @@map("event_bookings")
+}
+
+model BudgetItem {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  event_id  String
+  event     Event   @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  category  String  @db.VarChar(100)
+  allocated Decimal @db.Decimal(10, 2)
+  spent     Decimal @default(0) @db.Decimal(10, 2)
+  note      String? @db.VarChar(255)
+
+  @@map("budget_items")
+}
+
+model EventTask {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  event_id  String
+  event     Event   @relation(fields: [event_id], references: [id], onDelete: Cascade)
+
+  title     String    @db.VarChar(255)
+  due_date  DateTime?
+  completed Boolean   @default(false)
+
+  @@map("event_tasks")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Event (Event Planner managed events) Schema end ---
+ * -------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------
+ * --- Event Planner Schema start ---
+ * -------------------------------------------------------------
+ */
+
+model EventPlannerProfile {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  user_id String @unique
+  user    User   @relation("UserToEventPlannerProfile", fields: [user_id], references: [id], onDelete: Cascade)
+
+  business_name String?  @db.VarChar(255)
+  bio           String?  @db.Text
+  website       String?  @db.VarChar(255)
+  instagram     String?  @db.VarChar(255)
+  portfolio     String[]
+  event_types   EventType[]
+
+  years_experience Int?
+  team_size        Int?
+
+  license_photo  String[]
+  license_status ADMIN_APPROVE_STATUS @default(PENDING)
+  approved_at    DateTime?
+
+  @@map("event_planner_profiles")
+}
+
+/**
+ * ------------------------------------------------------------
+ * --- Event Planner Schema end ---
+ * -------------------------------------------------------------
+ */
+
 /**
  * ------------------------------------------------------------
  * --- Others Schema start ---

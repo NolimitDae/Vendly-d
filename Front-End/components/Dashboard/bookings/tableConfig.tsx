@@ -13,6 +13,22 @@ const progressStatus: Record<string, string> = {
     Pending: "border-refundBorder bg-refundBg text-refundText py-1 px-3 rounded-full"
 }
 
+export const BOOKING_STATUS_OPTIONS = [
+  { label: "All", value: "" },
+  { label: "Pending", value: "PENDING" },
+  { label: "Confirmed", value: "CONFIRMED" },
+  { label: "In Progress", value: "IN_PROGRESS" },
+  { label: "Completed", value: "COMPLETED" },
+  { label: "Cancelled", value: "CANCELLED" },
+  { label: "Rejected", value: "REJECTED" },
+];
+
+export const BOOKING_PAYMENT_OPTIONS = [
+  { label: "All", value: "" },
+  { label: "Paid", value: "COMPLETED" },
+  { label: "Refunded", value: "CANCELLED" },
+];
+
 export const BOOKING_COLUMNS = [
     {
         accessor: "bookingId",

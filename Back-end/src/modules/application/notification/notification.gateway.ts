@@ -2,22 +2,21 @@ import {
   WebSocketGateway,
   SubscribeMessage,
   MessageBody,
+  ConnectedSocket,
   OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { OnModuleInit } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 import { NotificationService } from './notification.service';
-import { CreateNotificationDto } from './dto/create-notification.dto';
-import { UpdateNotificationDto } from './dto/update-notification.dto';
 import appConfig from '../../../config/app.config';
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: process.env.CLIENT_APP_URL || 'http://localhost:3000',
   },
 })
 export class NotificationGateway
@@ -30,10 +29,10 @@ export class NotificationGateway
   @WebSocketServer()
   server: Server;
 
+  private readonly logger = new Logger(NotificationGateway.name);
   private redisPubClient: Redis;
   private redisSubClient: Redis;
 
-  // Map to store connected clients
   private clients = new Map<string, string>(); // userId -> socketId
 
   constructor(private readonly notificationService: NotificationService) {}
@@ -52,83 +51,48 @@ export class NotificationGateway
     });
 
     this.redisSubClient.subscribe('notification', (err, message: string) => {
+      if (err) {
+        this.logger.error('Redis subscription error', err);
+        return;
+      }
       const data = JSON.parse(message);
       this.server.emit('receiveNotification', data);
     });
   }
 
-  afterInit(server: Server) {
-    console.log('Websocket server started');
+  afterInit(_server: Server) {
+    this.logger.log('WebSocket server initialised');
   }
 
-  async handleConnection(client: Socket, ...args: any[]) {
-    // console.log('new connection!', client.id);
-    const userId = client.handshake.query.userId as string; // User ID passed as query parameter
+  async handleConnection(client: Socket) {
+    const userId = client.handshake.query.userId as string;
     if (userId) {
       this.clients.set(userId, client.id);
-      console.log(`User ${userId} connected with socket ${client.id}`);
+      this.logger.debug(`User ${userId} connected`);
     }
   }
 
   handleDisconnect(client: Socket) {
-    // console.log('client disconnected!', client.id);
     const userId = [...this.clients.entries()].find(
       ([, socketId]) => socketId === client.id,
     )?.[0];
     if (userId) {
       this.clients.delete(userId);
-      console.log(`User ${userId} disconnected`);
+      this.logger.debug(`User ${userId} disconnected`);
     }
   }
-
-  // @SubscribeMessage('joinRoom')
-  // handleRoomJoin(client: Socket, room: string) {
-  //   client.join(room);
-  //   client.emit('joinedRoom', room);
-  // }
 
   @SubscribeMessage('sendNotification')
   async handleNotification(@MessageBody() data: any) {
-    console.log(`Received notification: ${JSON.stringify(data)}`);
-    // Broadcast notification to all clients
-    // this.server.emit('receiveNotification', data);
-
-    // Emit notification to specific client
     const targetSocketId = this.clients.get(data.userId);
     if (targetSocketId) {
       await this.redisPubClient.publish('notification', JSON.stringify(data));
-
-      // console.log(`Notification sent to user ${data.userId}`);
-    } else {
-      // console.log(`User ${data.userId} not connected`);
     }
   }
 
-  @SubscribeMessage('createNotification')
-  create(@MessageBody() createNotificationDto: CreateNotificationDto) {
-    return this.notificationService.create(createNotificationDto);
-  }
-
-  @SubscribeMessage('findAllNotification')
-  findAll() {
-    return this.notificationService.findAll();
-  }
-
-  @SubscribeMessage('findOneNotification')
-  findOne(@MessageBody() id: number) {
-    return this.notificationService.findOne(id);
-  }
-
-  @SubscribeMessage('updateNotification')
-  update(@MessageBody() updateNotificationDto: UpdateNotificationDto) {
-    return this.notificationService.update(
-      updateNotificationDto.id,
-      updateNotificationDto,
-    );
-  }
-
   @SubscribeMessage('removeNotification')
-  remove(@MessageBody() id: number) {
-    return this.notificationService.remove(id);
+  remove(@MessageBody() id: string, @ConnectedSocket() socket: Socket) {
+    const userId = socket.handshake.query.userId as string;
+    return this.notificationService.remove(id, userId);
   }
 }

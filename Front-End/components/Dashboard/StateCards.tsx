@@ -6,7 +6,7 @@ import GrowIcon from "@/icons/GrowIcon";
 
 interface StatCardProps {
   title: string;
-  value: number;
+  value: string | number;
   percentage?: string;
   icon?: React.ReactNode;
 }
@@ -63,7 +63,7 @@ export default function StatCards({
                   <div
                     className={`${isServices ? "mb-[.563rem]" : "mb-0"} text-blackColor text-xl font-semibold leading-[130%]`}
                   >
-                    195
+                    {card.value}
                   </div>
                   {section !== "services" && (
                     <div className="flex px-1.5 py-1   items-center gap-1 border-[0.5px] border-greenBorder bg-greenBg rounded-4xl">

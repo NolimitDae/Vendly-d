@@ -36,6 +36,11 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   address?: string;
 
   @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ example: 'A little about my business…' })
+  about_me?: string;
+
+  @IsOptional()
   @ApiPropertyOptional({
     type: 'string',
     format: 'binary',

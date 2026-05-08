@@ -21,3 +21,4 @@ export { default as FingerIcon } from "@/icons/FingerIcon";
 export { default as MacIcon } from "@/icons/MacIcon";
 export { default as ChangePassIcon } from "@/icons/ChangePassIcon";
 export { default as TrashTwo } from "@/icons/TrashTwo";
+export { default as WalletIcon } from "@/icons/WalletIcon";

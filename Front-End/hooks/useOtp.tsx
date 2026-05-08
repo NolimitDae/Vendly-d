@@ -115,7 +115,9 @@ const router = useRouter();
     try {
       await onComplete?.(otp.join(""));
       setStatus("success");
-      router.push("/dashboard");
+      if (!onComplete) {
+        router.push("/dashboard");
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Verification failed. Try again.";

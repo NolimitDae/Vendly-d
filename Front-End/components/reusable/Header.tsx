@@ -3,7 +3,7 @@
 import { Menu, PlusIcon, X } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,8 @@ import { useModal } from "@/hooks";
 import CreateServiceModal from "../Dashboard/services/CreateServiceModal";
 import { LogoutIcon } from "@/icons";
 import ProfileSettingModal from "../Dashboard/auth/profile/ProfileSettingModal";
+import { AuthService } from "@/service/auth/auth.service";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface HeaderProps {
   onNotificationClick?: () => void;
@@ -40,14 +42,34 @@ function searchNavigation(query: string) {
   );
 }
 
+interface AdminProfile {
+  name: string;
+  email: string;
+  avatar_url?: string;
+}
+
 const Header: React.FC<HeaderProps> = ({
   onMenuClick,
   sidebarOpen,
 }: HeaderProps) => {
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [admin, setAdmin] = useState<AdminProfile | null>(null);
+  const [adminLoading, setAdminLoading] = useState(true);
   const router = useRouter();
   const path = usePathname();
   const { heading, description } = useHeaderHeading({ path });
+  useEffect(() => {
+    AuthService.me()
+      .then((res) => {
+        if (res.data?.success) {
+          const { name, email, avatar_url } = res.data.data;
+          setAdmin({ name, email, avatar_url });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAdminLoading(false));
+  }, []);
+
   const isOverView = path === "/dashboard";
   const isServices = path === "/dashboard/services";
   const {
@@ -160,26 +182,44 @@ const Header: React.FC<HeaderProps> = ({
               <DropdownMenu open={isProfileDropdownOpen} onOpenChange={setIsProfileDropdownOpen}>
                 <DropdownMenuTrigger asChild>
                   <div className="flex gap-2 h-full items-center cursor-pointer md:bg-white rounded-lg md:px-3 md:py-2 md:border-[0.5px] border-borderColor">
-                    <div className=" w-9 h-9  rounded-full overflow-hidden">
-                      <Image
-                        src={"/vendly_profile.jpg"}
-                        alt="Admin Avatar"
-                        width={36}
-                        height={36}
-                        className="rounded-full w-full h-full"
-                      />
+                    <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
+                      {adminLoading ? (
+                        <Skeleton className="w-9 h-9 rounded-full" />
+                      ) : admin?.avatar_url ? (
+                        <Image
+                          src={admin.avatar_url}
+                          alt="Admin Avatar"
+                          width={36}
+                          height={36}
+                          className="rounded-full w-full h-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold">
+                          {admin?.name?.[0]?.toUpperCase() ?? "A"}
+                        </div>
+                      )}
                     </div>
 
                     <div className="hidden md:block">
-                      <h2 className="text-sm font-medium text-blackColor leading-[160%] ">
-                        David Smith
-                      </h2>
-                      <p className="text-descriptionColor leading-[160%] text-xs">
-                        davidsmith@gmail.com
-                      </p>
+                      {adminLoading ? (
+                        <div className="space-y-1">
+                          <Skeleton className="h-3.5 w-24 rounded" />
+                          <Skeleton className="h-3 w-32 rounded" />
+                        </div>
+                      ) : (
+                        <>
+                          <h2 className="text-sm font-medium text-blackColor leading-[160%]">
+                            {admin?.name ?? "Admin"}
+                          </h2>
+                          <p className="text-descriptionColor leading-[160%] text-xs">
+                            {admin?.email ?? ""}
+                          </p>
+                        </>
+                      )}
                     </div>
 
-                    <button className=" cursor-pointer">
+                    <button className="cursor-pointer">
                       <ChevronDownIcon purple />
                     </button>
                   </div>
@@ -187,22 +227,29 @@ const Header: React.FC<HeaderProps> = ({
 
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="p-3 py-2 bg-grayBg rounded-lg space-y-4">
-                    <div className=" flex items-center gap-2 ">
-                      <div className="w-9 h-9">
-                        <Image
-                          src="/vendly_profile.jpg"
-                          alt="profile"
-                          width={36}
-                          height={36}
-                          className="rounded-full w-full h-full"
-                        />
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 flex-shrink-0">
+                        {admin?.avatar_url ? (
+                          <Image
+                            src={admin.avatar_url}
+                            alt="profile"
+                            width={36}
+                            height={36}
+                            className="rounded-full w-full h-full object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold">
+                            {admin?.name?.[0]?.toUpperCase() ?? "A"}
+                          </div>
+                        )}
                       </div>
                       <div>
-                        <h2 className="text-sm font-medium text-blackColor leading-[160%] ">
-                          David Smith
+                        <h2 className="text-sm font-medium text-blackColor leading-[160%]">
+                          {admin?.name ?? "Admin"}
                         </h2>
                         <p className="text-descriptionColor leading-[160%] text-xs">
-                          davidsmith@gmail.com
+                          {admin?.email ?? ""}
                         </p>
                       </div>
                     </div>
@@ -236,16 +283,6 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
-      {/* <div className=" md:hidden px-4">
-        <SearchInput
-          onSearch={searchLocally}
-          onSelect={(c) => console.log(c.label)}
-          placeholder="Search"
-          debounceMs={0}
-          minChars={1}
-        />
-      </div> */}
-
       {isCreateServiceModalOpen && (
         <CreateServiceModal closeModal={closeCreateServiceModal} />
       )}
