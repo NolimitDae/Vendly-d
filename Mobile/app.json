@@ -23,7 +23,8 @@
       "package": "com.vendly.mobile",
       "permissions": [
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "versionCode": 2
     },
     "plugins": [
       [
