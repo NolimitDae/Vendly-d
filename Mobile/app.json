@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Vendly",
-    "slug": "vendly-mobile",
+    "slug": "vendly",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,10 +20,12 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#7B2FF7"
       },
-      "package": "com.vendly.mobile"
+      "package": "com.vendly.mobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
-      "@react-native-community/datetimepicker",
       [
         "expo-image-picker",
         {
@@ -31,6 +33,12 @@
           "cameraPermission": "Vendly needs access to your camera to take photos for listings and your profile."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "490325e9-37a3-424d-9247-cad34e99e35e"
+      }
+    },
+    "owner": "nolimittechs-organization"
   }
 }
