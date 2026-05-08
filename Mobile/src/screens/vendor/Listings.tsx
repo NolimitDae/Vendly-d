@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Alert,
   StyleSheet,
+  Image,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ interface Listing {
   price: number;
   price_unit: string;
   status: string;
+  images?: string[];
   _count: { bookings: number };
 }
 
@@ -101,6 +103,13 @@ export default function VendorListings() {
         onPress={() => nav.navigate('ListingForm', { listingId: item.id })}
         activeOpacity={0.85}
       >
+        {item.images && item.images.length > 0 ? (
+          <Image source={{ uri: item.images[0] }} style={s.cardCover} resizeMode="cover" />
+        ) : (
+          <View style={s.cardCoverPlaceholder}>
+            <Ionicons name="image-outline" size={28} color={COLORS.gray[300]} />
+          </View>
+        )}
         <View style={s.cardHeader}>
           <Text style={s.cardTitle} numberOfLines={2}>{item.title}</Text>
           <View style={[s.badge, isPublished ? s.badgePublished : s.badgeDraft]}>
@@ -233,6 +242,8 @@ const s = StyleSheet.create({
     paddingVertical: 8,
   },
   addBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 13 },
+  cardCover: { width: '100%', height: 100, borderTopLeftRadius: 14, borderTopRightRadius: 14 },
+  cardCoverPlaceholder: { width: '100%', height: 100, borderTopLeftRadius: 14, borderTopRightRadius: 14, backgroundColor: COLORS.gray[100], alignItems: 'center', justifyContent: 'center' },
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 16,

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   TextInput,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,9 +89,13 @@ export default function CustomerHome() {
       style={s.card}
       onPress={() => nav.navigate('ListingDetail', { listingId: item.id })}
     >
-      <View style={s.cardImage}>
-        <Ionicons name="image-outline" size={36} color={COLORS.gray[400]} />
-      </View>
+      {item.images && item.images.length > 0 ? (
+        <Image source={{ uri: item.images[0] }} style={s.cardImage} resizeMode="cover" />
+      ) : (
+        <View style={[s.cardImage, s.cardImagePlaceholder]}>
+          <Ionicons name="image-outline" size={36} color={COLORS.gray[400]} />
+        </View>
+      )}
       <View style={s.cardBody}>
         <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
         {item.vendor && (
@@ -233,6 +238,10 @@ const s = StyleSheet.create({
   cardImage: {
     height: 110,
     backgroundColor: COLORS.gray[100],
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  cardImagePlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
   },
