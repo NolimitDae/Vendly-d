@@ -39,5 +39,13 @@
     "@types/react": "~18.2.45",
     "tailwindcss": "3.3.2",
     "typescript": "~5.3.3"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "@react-native-community/datetimepicker",
+        "typescript"
+      ]
+    }
   }
 }
