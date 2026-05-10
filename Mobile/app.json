@@ -36,7 +36,15 @@
           "photosPermission": "Vendly needs access to your photos to upload listing images and profile pictures.",
           "cameraPermission": "Vendly needs access to your camera to take photos for listings and your profile."
         }
-      ]
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.vendly",
+          "enableGooglePay": false
+        }
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
