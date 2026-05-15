@@ -6,7 +6,7 @@ COPY package*.json yarn.lock ./
 RUN yarn install --frozen-lockfile
 
 COPY . .
-RUN npx prisma generate
+RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npx prisma generate
 RUN yarn build
 
 # ---- Production image ----
