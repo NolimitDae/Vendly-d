@@ -20,7 +20,6 @@ COPY package*.json yarn.lock ./
 RUN yarn install --frozen-lockfile --production
 
 COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /usr/src/app/prisma ./prisma
 RUN mkdir -p ./public
 
