@@ -371,7 +371,7 @@ export class SubscriptionsService {
 
         case 'invoice.payment_succeeded': {
           const invoice = event.data.object as stripe.Invoice;
-          const subscriptionId = invoice.subscription as string;
+          const subscriptionId = invoice.parent?.subscription_details?.subscription as string | undefined;
           if (!subscriptionId) break;
 
           // Find vendor plan linked to this subscription via Stripe sessions
