@@ -2,9 +2,14 @@ import 'react-native-gesture-handler'; // must be first
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StripeProvider } from '@stripe/stripe-react-native';
 import { AuthProvider } from './src/contexts/AuthContext';
 import RootNavigator from './src/navigation';
+
+// StripeProvider uses a native module unavailable in Expo Go — wrap conditionally
+let StripeProvider: React.ComponentType<any> = ({ children }: { children: React.ReactNode }) => <>{children}</>;
+try {
+  StripeProvider = require('@stripe/stripe-react-native').StripeProvider;
+} catch {}
 
 const STRIPE_PK = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
 
