@@ -183,12 +183,12 @@ export default function ConversationPage() {
   const opponentInitial = opponentName[0]?.toUpperCase() ?? "?";
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 88px)" }}>
+    <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
         <Link
           href="/chat"
-          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400"
+          className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
