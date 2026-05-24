@@ -21,6 +21,7 @@ RUN yarn install --frozen-lockfile --production
 
 COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/prisma ./prisma
+COPY --from=builder /usr/src/app/prisma.config.ts ./prisma.config.ts
 RUN mkdir -p ./public
 
 EXPOSE 4000
