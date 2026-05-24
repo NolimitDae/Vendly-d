@@ -13,8 +13,9 @@ export class RedisIoAdapter extends IoAdapter {
       host: cfg.host,
       port: +cfg.port,
       ...(cfg.password ? { password: cfg.password } : {}),
-      connectTimeout: 10000,
+      connectTimeout: 5000,
       maxRetriesPerRequest: 3,
+      retryStrategy: (times: number) => (times > 2 ? null : times * 500),
     };
 
     const pubClient = new Redis(redisOpts);

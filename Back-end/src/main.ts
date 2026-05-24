@@ -16,14 +16,16 @@ import { PrismaExceptionFilter } from './common/exception/prisma-exception.filte
 import { AllExceptionsFilter } from './common/exception/all-exceptions.filter';
 
 async function bootstrap() {
-
+  console.log('[Bootstrap] Creating NestJS application...');
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
 
+  console.log('[Bootstrap] Connecting Redis WebSocket adapter...');
   const redisIoAdapter = new RedisIoAdapter(app);
   await redisIoAdapter.connectToRedis();
   app.useWebSocketAdapter(redisIoAdapter);
+  console.log('[Bootstrap] Redis WebSocket adapter connected.');
   app.setGlobalPrefix('api');
 
   // Body size limits
