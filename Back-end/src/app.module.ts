@@ -43,12 +43,9 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
         host: appConfig().redis.host,
         password: appConfig().redis.password,
         port: +appConfig().redis.port,
+        connectTimeout: 10000,
+        maxRetriesPerRequest: null,
       },
-      // redis: {
-      //   host: appConfig().redis.host,
-      //   password: appConfig().redis.password,
-      //   port: +appConfig().redis.port,
-      // },
     }),
     RedisModule.forRoot({
       type: 'single',
@@ -56,6 +53,8 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
         host: appConfig().redis.host,
         password: appConfig().redis.password,
         port: +appConfig().redis.port,
+        connectTimeout: 10000,
+        maxRetriesPerRequest: 3,
       },
     }),
     ThrottlerModule.forRoot([
