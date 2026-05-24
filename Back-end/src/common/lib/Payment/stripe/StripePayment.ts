@@ -2,16 +2,17 @@ import stripe from 'stripe';
 import * as fs from 'fs';
 import appConfig from '../../../../config/app.config';
 import { Fetch } from '../../Fetch';
-import * as dotenv from 'dotenv';
-dotenv.config();
 
-const STRIPE_SECRET_KEY = appConfig().payment.stripe.secret_key;
+let _stripe: stripe | undefined;
 
-const Stripe = new stripe(STRIPE_SECRET_KEY, {
-  apiVersion: '2025-03-31.basil',
-});
-
-const STRIPE_WEBHOOK_SECRET = appConfig().payment.stripe.webhook_secret;
+function getStripe(): stripe {
+  if (!_stripe) {
+    _stripe = new stripe(appConfig().payment.stripe.secret_key, {
+      apiVersion: '2025-03-31.basil',
+    });
+  }
+  return _stripe;
+}
 
 export class StripePayment {
 
@@ -28,7 +29,7 @@ export class StripePayment {
     card: stripe.PaymentMethodCreateParams.Card;
     billing_details: stripe.PaymentMethodCreateParams.BillingDetails;
   }): Promise<stripe.PaymentMethod> {
-    const paymentMethod = await Stripe.paymentMethods.create({
+    const paymentMethod = await getStripe().paymentMethods.create({
       card: {
         number: card.number,
         exp_month: card.exp_month,
@@ -52,7 +53,7 @@ export class StripePayment {
     customer_id: string;
     metadata?: stripe.MetadataParam;
   }): Promise<stripe.PaymentIntent> {
-    return Stripe.paymentIntents.create({
+    return getStripe().paymentIntents.create({
       amount: amount * 100, // amount in cents
       currency: currency,
       customer: customer_id,
@@ -70,7 +71,7 @@ export class StripePayment {
     name: string;
     email: string;
   }): Promise<stripe.Customer> {
-    const customer = await Stripe.customers.create({
+    const customer = await getStripe().customers.create({
       name: name,
       email: email,
       metadata: {
@@ -95,7 +96,7 @@ export class StripePayment {
 
   // create connected account
   static async createConnectedAccount(email: string) {
-    const connectedAccount = await Stripe.accounts.create({
+    const connectedAccount = await getStripe().accounts.create({
       type: 'express',
       email: email,
       country: 'US', // change as per user's country
@@ -125,7 +126,7 @@ export class StripePayment {
 
   // Stripe Connect onboarding.
   static async createOnboardingAccountLink(account_id: string) {
-    const accountLink = await Stripe.accountLinks.create({
+    const accountLink = await getStripe().accountLinks.create({
       account: account_id,
       refresh_url: appConfig().app.url,
       return_url: appConfig().app.url,
@@ -141,7 +142,7 @@ export class StripePayment {
     amount: number,
     currency: string,
   ) {
-    const transfer = await Stripe.transfers.create({
+    const transfer = await getStripe().transfers.create({
       amount: amount * 100,
       currency: currency,
       destination: account_id,
@@ -166,7 +167,7 @@ export class StripePayment {
     customer_id: string;
     payment_method_id: string;
   }): Promise<stripe.PaymentMethod> {
-    const customer = await Stripe.paymentMethods.attach(payment_method_id, {
+    const customer = await getStripe().paymentMethods.attach(payment_method_id, {
       customer: customer_id,
     });
     return customer;
@@ -179,7 +180,7 @@ export class StripePayment {
     customer_id: string;
     payment_method_id: string;
   }): Promise<stripe.Customer> {
-    const customer = await Stripe.customers.update(customer_id, {
+    const customer = await getStripe().customers.update(customer_id, {
       invoice_settings: {
         default_payment_method: payment_method_id,
       },
@@ -196,7 +197,7 @@ export class StripePayment {
     name: string;
     email: string;
   }): Promise<stripe.Customer> {
-    const customer = await Stripe.customers.update(customer_id, {
+    const customer = await getStripe().customers.update(customer_id, {
       name: name,
       email: email,
     });
@@ -209,7 +210,7 @@ export class StripePayment {
    * @returns
    */
   static async getCustomerByID(id: string): Promise<stripe.Customer> {
-    const customer = await Stripe.customers.retrieve(id);
+    const customer = await getStripe().customers.retrieve(id);
     return customer as stripe.Customer;
   }
 
@@ -219,7 +220,7 @@ export class StripePayment {
    * @returns
    */
   static async createBillingSession(customer: string) {
-    const session = await Stripe.billingPortal.sessions.create({
+    const session = await getStripe().billingPortal.sessions.create({
       customer: customer,
       return_url: appConfig().app.url,
     });
@@ -239,7 +240,7 @@ export class StripePayment {
       }/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancel_url = `${appConfig().app.url}/failed`;
 
-    const session = await Stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: [
@@ -276,7 +277,7 @@ export class StripePayment {
       }/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancel_url = `${appConfig().app.url}/failed`;
 
-    const session = await Stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
       customer: customer,
@@ -310,7 +311,7 @@ export class StripePayment {
     currency: string;
     customer_details: stripe.Tax.CalculationCreateParams.CustomerDetails;
   }): Promise<stripe.Tax.Calculation> {
-    const taxCalculation = await Stripe.tax.calculations.create({
+    const taxCalculation = await getStripe().tax.calculations.create({
       currency: currency,
       customer_details: customer_details,
       line_items: [
@@ -328,7 +329,7 @@ export class StripePayment {
   static async createTaxTransaction(
     tax_calculation: string,
   ): Promise<stripe.Tax.Transaction> {
-    const taxTransaction = await Stripe.tax.transactions.createFromCalculation({
+    const taxTransaction = await getStripe().tax.transactions.createFromCalculation({
       calculation: tax_calculation,
       reference: 'tax_transaction',
     });
@@ -339,7 +340,7 @@ export class StripePayment {
   static async downloadInvoiceUrl(
     payment_intent_id: string,
   ): Promise<string | null> {
-    const invoice = await Stripe.invoices.retrieve(payment_intent_id);
+    const invoice = await getStripe().invoices.retrieve(payment_intent_id);
     // check if the invoice has  areceipt url
     if (invoice.hosted_invoice_url) {
       return invoice.hosted_invoice_url;
@@ -349,7 +350,7 @@ export class StripePayment {
 
   // download invoice using payment intent id
   static async downloadInvoiceFile(payment_intent_id: string) {
-    const invoice = await Stripe.invoices.retrieve(payment_intent_id);
+    const invoice = await getStripe().invoices.retrieve(payment_intent_id);
 
     if (invoice.hosted_invoice_url) {
       const response = await Fetch.get(invoice.hosted_invoice_url, {
@@ -365,7 +366,7 @@ export class StripePayment {
 
   // send invoice to email using payment intent id
   static async sendInvoiceToEmail(payment_intent_id: string) {
-    const invoice = await Stripe.invoices.sendInvoice(payment_intent_id);
+    const invoice = await getStripe().invoices.sendInvoice(payment_intent_id);
     return invoice;
   }
 
@@ -383,7 +384,7 @@ export class StripePayment {
     amount: number,
     currency: string,
   ) {
-    const payout = await Stripe.payouts.create(
+    const payout = await getStripe().payouts.create(
       {
         amount: amount * 100, // amount in cents
         currency: currency,
@@ -398,14 +399,14 @@ export class StripePayment {
 
   // check balance of account
   static async checkBalance(account_id: string) {
-    const balance = await Stripe.balance.retrieve({
+    const balance = await getStripe().balance.retrieve({
       stripeAccount: account_id,
     });
     return balance;
   }
 
   // static async createPayout(amount: number, currency: string) {
-  //   const payout = await Stripe.payouts.create({
+  //   const payout = await getStripe().payouts.create({
   //     amount: amount * 100,
   //     currency: currency,
   //   });
@@ -415,7 +416,7 @@ export class StripePayment {
 
   // ACH payment
   static async createToken() {
-    const token = await Stripe.tokens.create({
+    const token = await getStripe().tokens.create({
       bank_account: {
         country: 'US',
         currency: 'usd',
@@ -429,7 +430,7 @@ export class StripePayment {
   }
 
   static async createBankAccount(customerId: string, bankAccountToken: string) {
-    const bankAccount = await Stripe.customers.createSource(customerId, {
+    const bankAccount = await getStripe().customers.createSource(customerId, {
       source: bankAccountToken,
     });
     return bankAccount;
@@ -440,13 +441,13 @@ export class StripePayment {
     bankAccountId: string,
     amounts: [number, number],
   ) {
-    return Stripe.customers.verifySource(customerId, bankAccountId, {
+    return getStripe().customers.verifySource(customerId, bankAccountId, {
       amounts,
     });
   }
 
   static async createACHPaymentIntent(customerId: string, amount: number) {
-    return await Stripe.paymentIntents.create({
+    return await getStripe().paymentIntents.create({
       amount: amount * 100,
       currency: 'usd',
       customer: customerId,
@@ -457,7 +458,7 @@ export class StripePayment {
         },
       },
     });
-    // return await Stripe.checkout.sessions.create({
+    // return await getStripe().checkout.sessions.create({
     //   mode: 'payment',
     //   customer: customerId,
     //   payment_method_types: ['card', 'us_bank_account'],
@@ -499,7 +500,7 @@ export class StripePayment {
     successUrl: string;
     cancelUrl: string;
   }): Promise<stripe.Checkout.Session> {
-    return Stripe.checkout.sessions.create({
+    return getStripe().checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: [
@@ -519,10 +520,10 @@ export class StripePayment {
   }
 
   static handleWebhook(rawBody: string, sig: string | string[]): stripe.Event {
-    const event = Stripe.webhooks.constructEvent(
+    const event = getStripe().webhooks.constructEvent(
       rawBody,
       sig,
-      STRIPE_WEBHOOK_SECRET,
+      appConfig().payment.stripe.webhook_secret,
     );
     return event;
   }
