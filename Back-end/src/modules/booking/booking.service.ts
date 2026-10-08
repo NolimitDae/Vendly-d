@@ -63,7 +63,7 @@ export class BookingService {
     });
 
     // notify vendor via email
-    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
       to: listing.vendor.email,
       recipientName: listing.vendor.name,
@@ -94,7 +94,7 @@ export class BookingService {
       include: this.bookingIncludes(),
     });
 
-    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
       to: booking.customer.email,
       recipientName: booking.customer.name,
@@ -125,7 +125,7 @@ export class BookingService {
       include: this.bookingIncludes(),
     });
 
-    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
       to: booking.customer.email,
       recipientName: booking.customer.name,
@@ -173,7 +173,7 @@ export class BookingService {
       include: this.bookingIncludes(),
     });
 
-    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
       to: booking.customer.email,
       recipientName: booking.customer.name,
@@ -213,7 +213,7 @@ export class BookingService {
 
     // notify the other party
     const notifyUser = isCustomer ? booking.vendor : booking.customer;
-    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
       to: notifyUser.email,
       recipientName: notifyUser.name,
@@ -273,7 +273,7 @@ export class BookingService {
     if (!booking.amount || Number(booking.amount) <= 0)
       throw new BadRequestException('Booking has no payable amount');
 
-    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    const clientUrl = appConfig().app.client_app_url;
     const successUrl = `${clientUrl}/bookings?payment=success&booking_id=${bookingId}`;
     const cancelUrl = `${clientUrl}/bookings?payment=cancelled&booking_id=${bookingId}`;
 

@@ -3,6 +3,7 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import { DiskOption } from '../Option';
 import { IStorage } from './iStorage';
+import appConfig from '../../../../config/app.config';
 
 /**
  * LocalAdapter for local file storage
@@ -22,7 +23,7 @@ export class LocalAdapter implements IStorage {
   url(key: string): string {
     const publicUrl = this._config.connection.publicUrl.replace(/\/$/, '');
     const cleanKey = key.replace(/^\//, '');
-    return `${process.env.APP_URL}${publicUrl}/${cleanKey}`;
+    return `${appConfig().app.url ?? ''}${publicUrl}/${cleanKey}`;
   }
 
   /**

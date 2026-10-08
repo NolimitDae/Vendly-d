@@ -33,7 +33,7 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   app.enableCors({
-    origin: process.env.CLIENT_APP_URL || 'http://localhost:3000',
+    origin: appConfig().app.client_app_url,
     credentials: true,
     maxAge: 86400, // 24h preflight cache
   });

@@ -19,6 +19,8 @@ FROM node:20.19.0-alpine AS runner
 WORKDIR /usr/src/app
 
 ENV NODE_ENV=production
+# Docker sets HOSTNAME to the container id; Next's standalone server binds to it unless overridden
+ENV HOSTNAME=0.0.0.0
 
 # Leverage Next.js standalone output
 COPY --from=builder /usr/src/app/.next/standalone ./

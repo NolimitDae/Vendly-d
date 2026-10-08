@@ -16,7 +16,7 @@ import appConfig from '../../../config/app.config';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.CLIENT_APP_URL || 'http://localhost:3000',
+    origin: appConfig().app.client_app_url,
   },
 })
 export class NotificationGateway

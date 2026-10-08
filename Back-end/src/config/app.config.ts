@@ -1,3 +1,9 @@
+function normalizeUrl(value: string | undefined, fallback: string) {
+  let url = (value || fallback).trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  return url;
+}
+
 function redisConfig() {
   // Railway's Redis service exposes REDIS_URL and REDISHOST/REDISPORT/REDISPASSWORD
   const url = process.env.REDIS_URL ? new URL(process.env.REDIS_URL) : null;
@@ -18,8 +24,8 @@ export default () => ({
   app: {
     name: process.env.APP_NAME,
     key: process.env.APP_KEY,
-    url: process.env.APP_URL,
-    client_app_url: process.env.CLIENT_APP_URL,
+    url: process.env.APP_URL ? normalizeUrl(process.env.APP_URL, '') : undefined,
+    client_app_url: normalizeUrl(process.env.CLIENT_APP_URL, 'http://localhost:3000'),
     port: parseInt(process.env.PORT, 10) || 3000,
   },
 
