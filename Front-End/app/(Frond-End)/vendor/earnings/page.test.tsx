@@ -80,9 +80,6 @@ function setupMocks(overrides: { bookings?: any[]; account?: any } = {}) {
   (EarningsService.getBookings as jest.Mock).mockResolvedValue({
     data: { success: true, data: overrides.bookings ?? bookings },
   });
-  (EarningsService.getTransactions as jest.Mock).mockResolvedValue({
-    data: { success: true, data: [] },
-  });
   (EarningsService.getWithdrawHistory as jest.Mock).mockResolvedValue({
     data: { success: true, data: [] },
   });
@@ -106,7 +103,6 @@ describe('EarningsPage', () => {
   describe('loading state', () => {
     it('shows skeleton while loading', () => {
       (EarningsService.getBookings as jest.Mock).mockReturnValue(new Promise(() => {}));
-      (EarningsService.getTransactions as jest.Mock).mockReturnValue(new Promise(() => {}));
       (EarningsService.getAccountInfo as jest.Mock).mockReturnValue(new Promise(() => {}));
       render(<EarningsPage />);
       expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
