@@ -7,6 +7,7 @@ import {
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
+import { PushService } from 'src/modules/push/push.service';
 import { StringHelper } from 'src/common/helper/string.helper';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
@@ -19,7 +20,16 @@ export class BookingService {
   constructor(
     private prisma: PrismaService,
     private mailService: MailService,
+    private pushService: PushService,
   ) {}
+
+  private pushBooking(userId: string, bookingId: string, title: string, body: string) {
+    void this.pushService.sendToUser(userId, {
+      title,
+      body,
+      data: { type: 'booking', bookingId },
+    });
+  }
 
   async create(customerId: string, dto: CreateBookingDto) {
     const listing = await this.prisma.vendorListing.findFirst({
@@ -65,6 +75,7 @@ export class BookingService {
       amount: Number(booking.amount),
       ctaUrl: `${clientUrl}/vendor/bookings`,
     }).catch(() => null);
+    this.pushBooking(dto.vendor_id, booking.id, 'New booking request', `${customer.name} requested ${listing.title}`);
 
     return { success: true, data: this.formatBooking(booking) };
   }
@@ -95,6 +106,7 @@ export class BookingService {
       amount: Number(booking.amount),
       ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
+    this.pushBooking(booking.customer_id, bookingId, 'Booking confirmed', `${booking.listing?.title ?? 'Your booking'} was confirmed`);
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -124,6 +136,7 @@ export class BookingService {
       reason: dto.reason,
       ctaUrl: `${clientUrl}/marketplace`,
     }).catch(() => null);
+    this.pushBooking(booking.customer_id, bookingId, 'Booking declined', `${booking.listing?.title ?? 'Your booking'} was declined`);
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -141,6 +154,7 @@ export class BookingService {
       data: { status: BookingStatus.IN_PROGRESS },
       include: this.bookingIncludes(),
     });
+    this.pushBooking(booking.customer_id, bookingId, 'Work started', `The vendor has started on ${booking.listing?.title ?? 'your booking'}`);
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -169,6 +183,7 @@ export class BookingService {
       listingTitle: booking.listing?.title ?? 'Service',
       ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
+    this.pushBooking(booking.customer_id, bookingId, 'Service completed', `${booking.listing?.title ?? 'Your booking'} is complete — leave a review`);
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -209,6 +224,12 @@ export class BookingService {
       reason: dto.reason,
       ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
+    this.pushBooking(
+      isCustomer ? booking.vendor_id : booking.customer_id,
+      bookingId,
+      'Booking cancelled',
+      `${booking.listing?.title ?? 'A booking'} was cancelled by the ${isCustomer ? 'customer' : 'vendor'}`,
+    );
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -343,7 +364,7 @@ export class BookingService {
     bookingId: string,
     vendorId: string,
     files: Express.Multer.File[],
-    body: { title: string; message?: string; links?: string },
+    body: { title: string; message?: string; links?: string | string[] },
   ) {
     const booking = await this.getBookingOrFail(bookingId);
     if (booking.vendor_id !== vendorId) throw new ForbiddenException('Access denied');
@@ -356,9 +377,14 @@ export class BookingService {
     }
 
     let links: string[] = [];
-    if (body.links) {
+    if (Array.isArray(body.links)) {
+      links = body.links;
+    } else if (body.links) {
       try { links = JSON.parse(body.links); } catch { links = [body.links]; }
     }
+    if (!Array.isArray(links)) links = [];
+    // rendered as href / Linking.openURL on clients — block javascript: and other schemes
+    links = links.filter((l) => typeof l === 'string' && /^https?:\/\//i.test(l.trim())).map((l) => l.trim());
 
     const deliverable = await this.prisma.bookingDeliverable.create({
       data: {
@@ -370,6 +396,7 @@ export class BookingService {
         links,
       },
     });
+    this.pushBooking(booking.customer_id, bookingId, 'New deliverable', body.title);
 
     return {
       success: true,

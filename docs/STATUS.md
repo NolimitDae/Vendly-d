@@ -20,7 +20,7 @@ _Last updated: 2026-10-08 (Build Plan Phase 0 complete)_
 | **Stripe Connect (vendor payouts)** | Done | `src/modules/payment/withdraw/` | Create Express account, onboarding link, process withdrawal, balance check |
 | **Wallet / balance** | Done | `src/modules/payment/`, `Front-End/…/wallet/` | Deposit + withdrawal flow complete |
 | **In-app chat** | Done | `src/modules/chat/`, `Front-End/…/chat/` | Real-time Socket.IO; sidebar; typing indicators; WebRTC signalling |
-| **Push notifications (mobile)** | Done | `Mobile/src/hooks/usePushNotifications.ts`, `POST /auth/push-token` | Expo token saved to DB; `push_token` column added |
+| **Push notifications (mobile)** | Done | `Mobile/src/hooks/usePushNotifications.ts`, `Back-end/src/modules/push/` | Token saved via `POST /auth/push-token`; backend sends via Expo push API on booking events and deliverables; tapping opens the booking |
 | **In-app notifications** | Done | `src/modules/application/notification/` | Redis-backed WebSocket gateway; mark read/delete |
 | **Reviews & ratings** | Done | `src/modules/review/` | Post-COMPLETED; vendor reply; avg + distribution aggregates |
 | **Saved listings** | Done | `src/modules/saved-listings/` | Save/unsave; list with full data; list IDs for heart-state |
@@ -29,6 +29,6 @@ _Last updated: 2026-10-08 (Build Plan Phase 0 complete)_
 | **Contact us** | Done | `src/modules/application/contact/` | Rate-limited form |
 | **FAQ** | Done | `src/modules/application/faq/` | Admin CRUD; public read |
 | **Admin dashboard** | Done | `src/modules/admin/`, `Front-End/…/(admin)/` | Bookings, vendors, transactions, categories, settings |
-| **Mobile app (Expo)** | Partial | `Mobile/src/screens/` | Customer, vendor, event planner screens; push notifications wired; deep-link navigation placeholder |
+| **Mobile app (Expo)** | Done | `Mobile/src/screens/` | Customer, vendor, event planner screens; proofs, deliverables, unavailable dates; push deep-linking |
 | **Booking email templates** | Done | `src/mail/templates/booking-notification.ejs` | Branded HTML email for new booking, confirmed, rejected, completed, cancelled |
 | **Rental inventory (date blocking)** | Done | `ListingAvailability`, `GET/POST/DELETE /vendor/listings/:id/availability` | Structured unavailability ranges; customers read via marketplace endpoint |

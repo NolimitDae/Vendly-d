@@ -72,12 +72,12 @@ export default function BookingDetail() {
     try {
       const [bookingRes, proofsRes, delivRes] = await Promise.all([
         BookingService.getBooking(bookingId),
-        BookingService.getProofs(bookingId),
-        BookingService.getDeliverables(bookingId),
+        BookingService.getProofs(bookingId).catch(() => null),
+        BookingService.getDeliverables(bookingId).catch(() => null),
       ]);
       if (bookingRes.data?.success) setBooking(bookingRes.data.data);
-      if (proofsRes.data?.success) setProofs(proofsRes.data.data ?? []);
-      if (delivRes.data?.success) setDeliverables(delivRes.data.data ?? []);
+      if (proofsRes?.data?.success) setProofs(proofsRes.data.data ?? []);
+      if (delivRes?.data?.success) setDeliverables(delivRes.data.data ?? []);
     } catch {
       Alert.alert('Error', 'Failed to load booking');
     } finally {

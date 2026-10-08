@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../constants/colors';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { navigationRef } from './navigationRef';
 
 import AuthScreens from './AuthScreens';
 import CustomerTabs from './CustomerTabs';
@@ -12,7 +13,7 @@ import EventPlannerTabs from './EventPlannerTabs';
 
 export default function RootNavigator() {
   const { user, loading } = useAuth();
-  usePushNotifications();
+  usePushNotifications(user?.type);
 
   if (loading) {
     return (
@@ -24,7 +25,7 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {!user ? (
         <AuthScreens />
       ) : user.type === 'CUSTOMER' ? (

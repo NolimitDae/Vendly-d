@@ -61,10 +61,10 @@ export default function ListingDetail() {
     try {
       const [listingRes, datesRes] = await Promise.all([
         api.get(`/marketplace/listings/${listingId}`),
-        api.get(`/marketplace/listings/${listingId}/availability`),
+        api.get(`/marketplace/listings/${listingId}/availability`).catch(() => null),
       ]);
       if (listingRes.data?.success) setListing(listingRes.data.data);
-      if (datesRes.data?.success) setBlockedDates(datesRes.data.data ?? []);
+      if (datesRes?.data?.success) setBlockedDates(datesRes.data.data ?? []);
     } catch {
       Alert.alert('Error', 'Failed to load listing');
     } finally {

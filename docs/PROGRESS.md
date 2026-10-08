@@ -11,7 +11,11 @@ _Updated: 2026-10-08. All Build Plan Phase 0 items resolved._
 | B2 | `payment_intent.succeeded` tried to find transaction by `meta.transaction_id` (never set) | Fixed: match by `reference_number` (PaymentIntent ID) via `updateMany` |
 | B3 | `customer.subscription.updated` and `customer.subscription.deleted` were no-ops | Fixed: both handlers look up vendor by `billing_id`, sync `subscription_active` and `payment_status` |
 | B4 | Profile update upserted `VendorProfile` for all user types | Fixed: guarded behind `user.type === UserType.VENDOR` |
-| R5 | `cancel()` scanned last 10 Stripe sessions to find subscription (unreliable) | Fixed: `stripe_subscription_id` now stored on `VendorSubscriptionPlan` at checkout; cancellation uses it directly |
+| B5 | `cancel()` scanned last 10 Stripe sessions to find subscription (unreliable) | Fixed: `stripe_subscription_id` now stored on `VendorSubscriptionPlan` at checkout; cancellation uses it directly |
+| B6 | Web "unblock dates" called a non-existent route | Fixed: `DELETE /vendor/listings/availability/:blockId` |
+| B7 | Mobile sent deliverable `links` as an array; backend only parsed a JSON string | Backend accepts both |
+| S6 | Deliverable links rendered as `href` / `Linking.openURL` allowed `javascript:` URLs (stored XSS) | Backend keeps only `http(s)://` links |
+| B8 | A failed proofs/deliverables/availability request blanked the whole booking or listing page | Secondary requests are now non-fatal (web + mobile) |
 
 ## Features Added
 
@@ -25,14 +29,18 @@ _Updated: 2026-10-08. All Build Plan Phase 0 items resolved._
 | F6 | Photo proof of service | `POST/GET /bookings/:id/proof` (up to 10 photos) |
 | F7 | Digital delivery | `POST/GET /bookings/:id/deliverables` (files + links) |
 | F8 | Branded booking emails | `booking-notification.ejs` — status badge, service details, CTA button |
+| F9 | Push notifications | `PushService` sends via Expo on booking create/confirm/reject/start/complete/cancel and new deliverables; mobile taps open the booking detail |
+| F10 | Web + mobile UI | Booking detail pages (proof upload, deliverables), unavailable dates on listing pages, block/unblock dates on vendor listing edit |
 
 ## Remaining Open Items
 
 | ID | Location | Issue | Priority |
 |----|----------|-------|----------|
-| R1 | `Mobile/src/hooks/usePushNotifications.ts` | Push notification deep-linking not wired — `addResponseListener` has a comment placeholder but no navigation to the relevant screen | Medium |
-| R2 | General | No `.env.example` files in repo roots. Developers must know required env vars from memory | Low |
-| R3 | `Front-End/` | Auth token cookies need `HttpOnly` + `SameSite=Strict` verification at the server level | Medium |
-| R4 | Testing | Near-zero automated test coverage (one test file found: `Front-End/hooks/useNotifications.test.ts`) | High |
-| R5 | `Mobile/src/screens/` | Deliverables, proof, and availability calendar UI not yet in the mobile app | Medium |
-| R6 | `Front-End/app/(Frond-End)/` | ~~Deliverables, proof upload, and availability calendar UI not yet in the web frontend~~ **Done** | ~~Medium~~ |
+| R1 | `Front-End/helper/cookie.helper.ts` | Auth token cookie is `Secure` (prod) + `SameSite=Lax` but not `HttpOnly`, because the client reads it to build `Authorization` headers. Making it HttpOnly needs server-set cookies and `credentials: include` on every request. Accepted for now; XSS hardening (S6) reduces exposure | Medium |
+| R2 | `Back-end/**/*.spec.ts` | 18 suites / 10 tests were already failing before this work (stale specs: missing DTO fields, enum string literals, controller DI). Production code builds cleanly | Medium |
+| R3 | `Mobile/src/` | 5 pre-existing TypeScript errors (`notifications.service.ts`, `ListingForm.tsx`, `EventPlannerTabs.tsx`) | Low |
+
+## Closed
+
+- `.env.example` files exist in `Back-end/`, `Front-End/` (`example.env.local`) and `Mobile/`.
+- Test coverage: 50+ backend spec files exist; added specs for `PushService`, booking proofs/deliverables/push, listing pause/availability, and the deposit fix (326 backend tests, 316 passing — the 10 failures predate this work).

@@ -67,14 +67,14 @@ export default function CustomerBookingDetailPage() {
     if (!id) return;
     Promise.all([
       BookingService.getOne(id),
-      BookingService.getProofs(id),
-      BookingService.getDeliverables(id),
+      BookingService.getProofs(id).catch(() => null),
+      BookingService.getDeliverables(id).catch(() => null),
     ])
       .then(([bookingRes, proofsRes, delivRes]) => {
         if (bookingRes.data?.success) setBooking(bookingRes.data.data);
         else { toast.error("Booking not found"); router.push("/bookings"); }
-        if (proofsRes.data?.success) setProofs(proofsRes.data.data ?? []);
-        if (delivRes.data?.success) setDeliverables(delivRes.data.data ?? []);
+        if (proofsRes?.data?.success) setProofs(proofsRes.data.data ?? []);
+        if (delivRes?.data?.success) setDeliverables(delivRes.data.data ?? []);
       })
       .catch(() => { toast.error("Failed to load booking"); router.push("/bookings"); })
       .finally(() => setLoading(false));

@@ -3,7 +3,16 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { BookingService } from './booking.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
+import { PushService } from 'src/modules/push/push.service';
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
+import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+
+jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
+  TanvirStorage: {
+    put: jest.fn().mockResolvedValue(undefined),
+    url: jest.fn((p: string) => `https://cdn.test/${p}`),
+  },
+}));
 
 const mockPrisma = {
   vendorListing: {
@@ -19,10 +28,21 @@ const mockPrisma = {
   user: {
     findUnique: jest.fn(),
   },
+  bookingProof: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+  },
+  bookingDeliverable: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+  },
 };
+
+const mockPush = { sendToUser: jest.fn().mockResolvedValue(undefined) };
 
 const mockMail = {
   sendOtpCodeToEmail: jest.fn().mockResolvedValue(undefined),
+  sendBookingNotification: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockListing = {
@@ -59,6 +79,7 @@ describe('BookingService', () => {
         BookingService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MailService, useValue: mockMail },
+        { provide: PushService, useValue: mockPush },
       ],
     }).compile();
 
@@ -200,6 +221,119 @@ describe('BookingService', () => {
       mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
 
       await expect(service.getBooking('booking-1', 'random-user')).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('push notifications', () => {
+    it('pushes the vendor when a booking is created', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'customer-1', name: 'Customer', email: 'c@test.com' });
+      mockPrisma.booking.create.mockResolvedValue(mockBooking);
+
+      await service.create('customer-1', { listing_id: 'listing-1', vendor_id: 'vendor-1' } as any);
+
+      expect(mockPush.sendToUser).toHaveBeenCalledWith(
+        'vendor-1',
+        expect.objectContaining({ data: { type: 'booking', bookingId: 'booking-1' } }),
+      );
+    });
+
+    it('pushes the customer when a booking is confirmed', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED });
+
+      await service.confirm('booking-1', 'vendor-1');
+
+      expect(mockPush.sendToUser).toHaveBeenCalledWith(
+        'customer-1',
+        expect.objectContaining({ title: 'Booking confirmed' }),
+      );
+    });
+
+    it('pushes the other party on cancellation', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.CANCELLED });
+
+      await service.cancel('booking-1', 'customer-1', {} as any);
+
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.anything());
+    });
+  });
+
+  describe('proofs', () => {
+    const photo = { originalname: 'a.jpg', buffer: Buffer.from('x') } as Express.Multer.File;
+
+    it('lets a booking participant upload proof photos', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      mockPrisma.bookingProof.create.mockImplementation(({ data }) => Promise.resolve({ id: 'p1', ...data }));
+
+      const res = await service.uploadProof('booking-1', 'vendor-1', [photo], 'done');
+
+      expect(TanvirStorage.put).toHaveBeenCalledTimes(1);
+      expect(res.data.photos[0]).toMatch(/^https:\/\/cdn\.test\/proofs\//);
+      expect(mockPrisma.bookingProof.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ uploader_id: 'vendor-1', notes: 'done' }) }),
+      );
+    });
+
+    it('rejects proof upload from an unrelated user', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      await expect(service.uploadProof('booking-1', 'stranger', [photo])).rejects.toThrow(ForbiddenException);
+    });
+
+    it('requires at least one photo', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      await expect(service.uploadProof('booking-1', 'vendor-1', [])).rejects.toThrow(BadRequestException);
+    });
+
+    it('hides proofs from unrelated users', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      await expect(service.getProofs('booking-1', 'stranger')).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('deliverables', () => {
+    beforeEach(() => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      mockPrisma.bookingDeliverable.create.mockImplementation(({ data }) => Promise.resolve({ id: 'd1', ...data }));
+    });
+
+    it('only allows the booking vendor to send deliverables', async () => {
+      await expect(
+        service.sendDeliverable('booking-1', 'customer-1', [], { title: 'x' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('accepts links as a JSON string (multipart) or an array (JSON body)', async () => {
+      await service.sendDeliverable('booking-1', 'vendor-1', [], {
+        title: 'Photos',
+        links: JSON.stringify(['https://a.test/1']),
+      });
+      await service.sendDeliverable('booking-1', 'vendor-1', [], {
+        title: 'Photos',
+        links: ['https://a.test/2'],
+      });
+
+      const calls = mockPrisma.bookingDeliverable.create.mock.calls;
+      expect(calls[0][0].data.links).toEqual(['https://a.test/1']);
+      expect(calls[1][0].data.links).toEqual(['https://a.test/2']);
+    });
+
+    it('drops non-http(s) links such as javascript: URLs', async () => {
+      await service.sendDeliverable('booking-1', 'vendor-1', [], {
+        title: 'x',
+        links: ['javascript:alert(1)', 'https://ok.test', 'ftp://nope'],
+      });
+
+      expect(mockPrisma.bookingDeliverable.create.mock.calls[0][0].data.links).toEqual(['https://ok.test']);
+    });
+
+    it('pushes the customer when a deliverable is sent', async () => {
+      await service.sendDeliverable('booking-1', 'vendor-1', [], { title: 'Final files' });
+      expect(mockPush.sendToUser).toHaveBeenCalledWith(
+        'customer-1',
+        expect.objectContaining({ title: 'New deliverable', body: 'Final files' }),
+      );
     });
   });
 });

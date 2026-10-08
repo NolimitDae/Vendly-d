@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { BookingService } from '../../services/booking.service';
-import type { RouteProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 
 interface Proof {
@@ -98,12 +98,12 @@ export default function VendorBookingDetail() {
     try {
       const [bookingRes, proofsRes, delivRes] = await Promise.all([
         api.get(`/bookings/${bookingId}`),
-        BookingService.getProofs(bookingId),
-        BookingService.getDeliverables(bookingId),
+        BookingService.getProofs(bookingId).catch(() => null),
+        BookingService.getDeliverables(bookingId).catch(() => null),
       ]);
       if (bookingRes.data?.success) setBooking(bookingRes.data.data);
-      if (proofsRes.data?.success) setProofs(proofsRes.data.data ?? []);
-      if (delivRes.data?.success) setDeliverables(delivRes.data.data ?? []);
+      if (proofsRes?.data?.success) setProofs(proofsRes.data.data ?? []);
+      if (delivRes?.data?.success) setDeliverables(delivRes.data.data ?? []);
     } catch {
       Alert.alert('Error', 'Failed to load booking details.');
     } finally {

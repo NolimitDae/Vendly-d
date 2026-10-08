@@ -89,13 +89,16 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([
-      MarketplaceService.getListing(id),
-      MarketplaceService.getBlockedDates(id),
-    ]).then(([listingRes, datesRes]) => {
-      if (listingRes.data?.success) setListing(listingRes.data.data);
-      if (datesRes.data?.success) setBlockedDates(datesRes.data.data ?? []);
-    }).finally(() => setLoading(false));
+    MarketplaceService.getListing(id)
+      .then((res) => {
+        if (res.data?.success) setListing(res.data.data);
+      })
+      .finally(() => setLoading(false));
+    MarketplaceService.getBlockedDates(id)
+      .then((res) => {
+        if (res.data?.success) setBlockedDates(res.data.data ?? []);
+      })
+      .catch(() => {});
   }, [id]);
 
   useEffect(() => {

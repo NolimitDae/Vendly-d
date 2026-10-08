@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { VendorListingService } from './listing.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ListingStatus } from 'prisma/generated/client';
@@ -41,6 +41,12 @@ const mockPrisma = {
     count: jest.fn(),
     findFirst: jest.fn(),
     update: jest.fn(),
+  },
+  listingAvailability: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    delete: jest.fn(),
+    findMany: jest.fn(),
   },
 };
 
@@ -188,6 +194,64 @@ describe('VendorListingService', () => {
 
       const result = await service.publishListing('listing-1', 'vendor-1');
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('pauseListing', () => {
+    it('pauses an active listing', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, status: ListingStatus.ACTIVE });
+      mockPrisma.vendorListing.update.mockResolvedValue({ ...mockListing, status: ListingStatus.PAUSED });
+
+      const res = await service.pauseListing('listing-1', 'vendor-1');
+
+      expect(res.data.status).toBe(ListingStatus.PAUSED);
+    });
+
+    it('refuses to pause a non-active listing', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      await expect(service.pauseListing('listing-1', 'vendor-1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('availability', () => {
+    const range = { start_date: new Date('2026-12-20'), end_date: new Date('2026-12-27'), reason: 'Holiday' };
+
+    it('blocks a date range for the owning vendor', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      mockPrisma.listingAvailability.create.mockResolvedValue({ id: 'blk-1', listing_id: 'listing-1', ...range });
+
+      const res = await service.blockDates('listing-1', 'vendor-1', range);
+
+      expect(res.data.id).toBe('blk-1');
+      expect(mockPrisma.listingAvailability.create).toHaveBeenCalledWith({
+        data: { listing_id: 'listing-1', ...range },
+      });
+    });
+
+    it('rejects an inverted date range', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      await expect(
+        service.blockDates('listing-1', 'vendor-1', { start_date: range.end_date, end_date: range.start_date }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects blocking dates on another vendor\'s listing', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      await expect(service.blockDates('listing-1', 'vendor-2', range)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('unblocks dates only for the owning vendor', async () => {
+      mockPrisma.listingAvailability.findUnique.mockResolvedValue({ id: 'blk-1', listing: { vendor_id: 'vendor-1' } });
+
+      await expect(service.unblockDates('blk-1', 'vendor-2')).rejects.toThrow(ForbiddenException);
+      await service.unblockDates('blk-1', 'vendor-1');
+
+      expect(mockPrisma.listingAvailability.delete).toHaveBeenCalledWith({ where: { id: 'blk-1' } });
+    });
+
+    it('404s when the block does not exist', async () => {
+      mockPrisma.listingAvailability.findUnique.mockResolvedValue(null);
+      await expect(service.unblockDates('nope', 'vendor-1')).rejects.toThrow(NotFoundException);
     });
   });
 });

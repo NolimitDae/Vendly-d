@@ -181,7 +181,7 @@ export default function EditListingPage() {
   const handleUnblock = async (blockId: string) => {
     setRemovingId(blockId);
     try {
-      const res = await VendorListingService.unblockDates(id, blockId);
+      const res = await VendorListingService.unblockDates(blockId);
       if (res.data?.success) {
         toast.success("Dates unblocked");
         fetchBlockedDates();

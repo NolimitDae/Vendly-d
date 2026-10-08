@@ -23,7 +23,10 @@ jest.mock('next/link', () => ({
 }));
 
 jest.mock('@/service/marketplace/marketplace.service', () => ({
-  MarketplaceService: { getListing: jest.fn() },
+  MarketplaceService: {
+    getListing: jest.fn(),
+    getBlockedDates: jest.fn().mockResolvedValue({ data: { success: true, data: [] } }),
+  },
 }));
 
 jest.mock('@/service/savedListings/savedListings.service', () => ({
@@ -336,6 +339,29 @@ describe('ListingDetailPage', () => {
       await waitFor(() => screen.getByText('Spring Wedding'));
       await user.click(screen.getByRole('button', { name: /continue to book/i }));
       expect(screen.getByTestId('booking-modal')).toBeInTheDocument();
+    });
+  });
+
+  describe('unavailable dates', () => {
+    it('lists blocked date ranges from the availability endpoint', async () => {
+      setupListingMock();
+      (MarketplaceService.getBlockedDates as jest.Mock).mockResolvedValueOnce({
+        data: {
+          success: true,
+          data: [{ id: 'b1', start_date: '2026-12-20', end_date: '2026-12-27', reason: 'Holiday' }],
+        },
+      });
+      render(<ListingDetailPage />);
+      expect(await screen.findByText('Unavailable Dates')).toBeInTheDocument();
+      expect(screen.getByText('Holiday')).toBeInTheDocument();
+    });
+
+    it('still renders the listing when the availability request fails', async () => {
+      setupListingMock();
+      (MarketplaceService.getBlockedDates as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+      render(<ListingDetailPage />);
+      expect(await screen.findByText(mockListing.title)).toBeInTheDocument();
+      expect(screen.queryByText('Unavailable Dates')).not.toBeInTheDocument();
     });
   });
 });

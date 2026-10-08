@@ -46,6 +46,6 @@ export const VendorListingService = {
     data: { start_date: string; end_date: string; reason?: string },
   ) => Fetch.post(`/vendor/listings/${listingId}/availability`, data, authHeaders()),
 
-  unblockDates: async (listingId: string, blockId: string) =>
-    Fetch.delete(`/vendor/listings/${listingId}/availability/${blockId}`, authHeaders()),
+  unblockDates: async (blockId: string) =>
+    Fetch.delete(`/vendor/listings/availability/${blockId}`, authHeaders()),
 };

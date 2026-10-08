@@ -85,12 +85,12 @@ export default function VendorBookingDetailPage() {
     try {
       const [bookingRes, proofsRes, delivRes] = await Promise.all([
         BookingService.getOne(id),
-        BookingService.getProofs(id),
-        BookingService.getDeliverables(id),
+        BookingService.getProofs(id).catch(() => null),
+        BookingService.getDeliverables(id).catch(() => null),
       ]);
       if (bookingRes.data?.success) setBooking(bookingRes.data.data);
-      if (proofsRes.data?.success) setProofs(proofsRes.data.data);
-      if (delivRes.data?.success) setDeliverables(delivRes.data.data);
+      if (proofsRes?.data?.success) setProofs(proofsRes.data.data);
+      if (delivRes?.data?.success) setDeliverables(delivRes.data.data);
     } catch {
       toast.error("Failed to load booking");
       router.push("/vendor/bookings");
