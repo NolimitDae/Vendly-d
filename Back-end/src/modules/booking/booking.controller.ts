@@ -6,9 +6,12 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { BookingStatus } from 'prisma/generated/client';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
@@ -94,5 +97,24 @@ export class BookingController {
   @Post(':id/checkout')
   createCheckout(@GetUser() user: any, @Param('id') id: string) {
     return this.service.createCheckoutSession(id, user.id);
+  }
+
+  /** Upload photo proof of service completion */
+  @Post(':id/proof')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('photos', 10))
+  uploadProof(
+    @GetUser() user: any,
+    @Param('id') id: string,
+    @UploadedFiles() photos: Express.Multer.File[],
+    @Body('notes') notes?: string,
+  ) {
+    return this.service.uploadProof(id, user.id, photos, notes);
+  }
+
+  /** Get proof submissions for a booking */
+  @Get(':id/proof')
+  getProofs(@GetUser() user: any, @Param('id') id: string) {
+    return this.service.getProofs(id, user.id);
   }
 }

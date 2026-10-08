@@ -211,6 +211,8 @@ model User {
   customerBookings Booking[] @relation("BookingCustomer")
   // Bookings as vendor
   vendorBookings Booking[] @relation("BookingVendor")
+  // Proof uploads
+  bookingProofs BookingProof[] @relation("ProofUploader")
 
   // Events as planner
   plannedEvents Event[] @relation("EventPlannerEvents")
@@ -662,11 +664,26 @@ model VendorListing {
   sub_category_id String?
   sub_category   ServiceSubCategory? @relation(fields: [sub_category_id], references: [id])
 
-  bookings  Booking[]
-  reviews   Review[]
-  savedBy   SavedListing[] @relation("ListingSavedBy")
+  bookings       Booking[]
+  reviews        Review[]
+  savedBy        SavedListing[]        @relation("ListingSavedBy")
+  blockedDates   ListingAvailability[]
 
   @@map("vendor_listings")
+}
+
+model ListingAvailability {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  listing_id String
+  listing    VendorListing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  start_date DateTime @db.Date
+  end_date   DateTime @db.Date
+  reason     String?  @db.VarChar(255)
+
+  @@map("listing_availability")
 }
 
 /**
@@ -738,8 +755,25 @@ model Booking {
 
   review        Review?
   event_bookings EventBooking[]
+  proofs        BookingProof[]
 
   @@map("bookings")
+}
+
+model BookingProof {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  booking_id String
+  booking    Booking @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+
+  uploader_id String
+  uploader    User   @relation("ProofUploader", fields: [uploader_id], references: [id])
+
+  photos      String[]
+  notes       String?  @db.Text
+
+  @@map("booking_proofs")
 }
 
 /**

@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { ListingStatus } from 'prisma/generated/client';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
+import { BlockDatesDto } from './dto/availability.dto';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
 import { VendorListingService } from './listing.service';
@@ -78,5 +79,21 @@ export class VendorListingController {
   @Delete(':id')
   remove(@GetUser() user: any, @Param('id') id: string) {
     return this.service.remove(id, user.id);
+  }
+
+  /** Block a date range to mark unavailability */
+  @Post(':id/availability')
+  blockDates(
+    @GetUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: BlockDatesDto,
+  ) {
+    return this.service.blockDates(id, user.id, dto);
+  }
+
+  /** Remove a blocked date range */
+  @Delete('availability/:blockId')
+  unblockDates(@GetUser() user: any, @Param('blockId') blockId: string) {
+    return this.service.unblockDates(blockId, user.id);
   }
 }

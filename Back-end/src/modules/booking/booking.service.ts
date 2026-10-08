@@ -7,6 +7,7 @@ import {
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
+import { StringHelper } from 'src/common/helper/string.helper';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
@@ -271,6 +272,71 @@ export class BookingService {
     });
 
     return { success: true, data: { checkout_url: session.url } };
+  }
+
+  async uploadProof(
+    bookingId: string,
+    userId: string,
+    photos: Express.Multer.File[],
+    notes?: string,
+  ) {
+    const booking = await this.getBookingOrFail(bookingId);
+    if (booking.vendor_id !== userId && booking.customer_id !== userId)
+      throw new ForbiddenException('Access denied');
+    if (!photos || photos.length === 0)
+      throw new BadRequestException('At least one photo is required');
+
+    const fileNames: string[] = [];
+    for (const photo of photos) {
+      const fileName = `${StringHelper.randomString()}_${photo.originalname}`;
+      await TanvirStorage.put(`proofs/${fileName}`, photo.buffer);
+      fileNames.push(fileName);
+    }
+
+    const proof = await this.prisma.bookingProof.create({
+      data: {
+        booking_id: bookingId,
+        uploader_id: userId,
+        photos: fileNames,
+        notes,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        ...proof,
+        photos: fileNames.map((f) => TanvirStorage.url(`proofs/${f}`)),
+      },
+    };
+  }
+
+  async getProofs(bookingId: string, userId: string) {
+    const booking = await this.getBookingOrFail(bookingId);
+    if (booking.vendor_id !== userId && booking.customer_id !== userId)
+      throw new ForbiddenException('Access denied');
+
+    const proofs = await this.prisma.bookingProof.findMany({
+      where: { booking_id: bookingId },
+      include: {
+        uploader: { select: { id: true, name: true, avatar: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: proofs.map((p) => ({
+        ...p,
+        photos: (p.photos ?? []).map((f: string) => TanvirStorage.url(`proofs/${f}`)),
+        uploader: p.uploader?.avatar
+          ? {
+              ...p.uploader,
+              avatar_url: TanvirStorage.url(`${appConfig().storageUrl.avatar}/${p.uploader.avatar}`),
+            }
+          : p.uploader,
+      })),
+    };
   }
 
   // Admin: get all bookings

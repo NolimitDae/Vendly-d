@@ -200,6 +200,15 @@ export class MarketplaceService {
     return { success: true, data: categories };
   }
 
+  async getBlockedDates(listingId: string) {
+    const blocks = await this.prisma.listingAvailability.findMany({
+      where: { listing_id: listingId },
+      select: { id: true, start_date: true, end_date: true, reason: true },
+      orderBy: { start_date: 'asc' },
+    });
+    return { success: true, data: blocks };
+  }
+
   async getFeaturedListings() {
     const listings = await this.prisma.vendorListing.findMany({
       where: { status: ListingStatus.ACTIVE, deleted_at: null },

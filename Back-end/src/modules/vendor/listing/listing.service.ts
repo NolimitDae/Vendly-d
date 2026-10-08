@@ -215,6 +215,50 @@ export class VendorListingService {
     return { success: true, data: updated };
   }
 
+  async blockDates(
+    listingId: string,
+    vendorId: string,
+    dto: { start_date: Date; end_date: Date; reason?: string },
+  ) {
+    const listing = await this.prisma.vendorListing.findFirst({
+      where: { id: listingId, deleted_at: null },
+    });
+    if (!listing) throw new NotFoundException('Listing not found');
+    if (listing.vendor_id !== vendorId) throw new ForbiddenException('Access denied');
+    if (dto.start_date > dto.end_date)
+      throw new BadRequestException('start_date must be before end_date');
+
+    const block = await this.prisma.listingAvailability.create({
+      data: {
+        listing_id: listingId,
+        start_date: dto.start_date,
+        end_date: dto.end_date,
+        reason: dto.reason,
+      },
+    });
+    return { success: true, data: block };
+  }
+
+  async unblockDates(blockId: string, vendorId: string) {
+    const block = await this.prisma.listingAvailability.findUnique({
+      where: { id: blockId },
+      include: { listing: { select: { vendor_id: true } } },
+    });
+    if (!block) throw new NotFoundException('Availability block not found');
+    if (block.listing.vendor_id !== vendorId) throw new ForbiddenException('Access denied');
+
+    await this.prisma.listingAvailability.delete({ where: { id: blockId } });
+    return { success: true };
+  }
+
+  async getBlockedDates(listingId: string) {
+    const blocks = await this.prisma.listingAvailability.findMany({
+      where: { listing_id: listingId },
+      orderBy: { start_date: 'asc' },
+    });
+    return { success: true, data: blocks };
+  }
+
   private formatListing(listing: any) {
     const base = { ...listing };
     base.images = (listing.images ?? []).map((img: string) =>

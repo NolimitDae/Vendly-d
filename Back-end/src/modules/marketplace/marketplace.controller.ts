@@ -32,4 +32,9 @@ export class MarketplaceController {
   getCategories() {
     return this.service.getCategories();
   }
+
+  @Get('listings/:id/availability')
+  getBlockedDates(@Param('id') id: string) {
+    return this.service.getBlockedDates(id);
+  }
 }
