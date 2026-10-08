@@ -8,11 +8,8 @@ export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter>;
 
   async connectToRedis(): Promise<void> {
-    const cfg = appConfig().redis;
     const redisOpts = {
-      host: cfg.host,
-      port: +cfg.port,
-      ...(cfg.password ? { password: cfg.password } : {}),
+      ...appConfig().redis,
       connectTimeout: 5000,
       maxRetriesPerRequest: 3,
       retryStrategy: (times: number) => (times > 2 ? null : times * 500),

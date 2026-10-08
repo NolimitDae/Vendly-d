@@ -7,8 +7,9 @@ import appConfig from '../../../config/app.config';
 export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
   constructor() {
     super({
-      clientID: appConfig().auth.facebook.app_id,
-      clientSecret: appConfig().auth.facebook.app_secret,
+      // placeholders keep the server booting when facebook login isn't configured; the login itself will fail
+      clientID: appConfig().auth.facebook.app_id || 'not-configured',
+      clientSecret: appConfig().auth.facebook.app_secret || 'not-configured',
       callbackURL: appConfig().auth.facebook.callback,
       scope: ['email', 'public_profile'],
       profileFields: ['id', 'emails', 'name', 'photos'],

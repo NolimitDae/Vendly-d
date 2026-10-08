@@ -38,17 +38,8 @@ export class NotificationGateway
   constructor(private readonly notificationService: NotificationService) {}
 
   onModuleInit() {
-    this.redisPubClient = new Redis({
-      host: appConfig().redis.host,
-      port: Number(appConfig().redis.port),
-      password: appConfig().redis.password,
-    });
-
-    this.redisSubClient = new Redis({
-      host: appConfig().redis.host,
-      port: Number(appConfig().redis.port),
-      password: appConfig().redis.password,
-    });
+    this.redisPubClient = new Redis(appConfig().redis);
+    this.redisSubClient = new Redis(appConfig().redis);
 
     this.redisSubClient.subscribe('notification', (err, message: string) => {
       if (err) {

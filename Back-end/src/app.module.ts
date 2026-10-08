@@ -40,9 +40,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     }),
     BullModule.forRoot({
       connection: {
-        host: appConfig().redis.host,
-        password: appConfig().redis.password,
-        port: +appConfig().redis.port,
+        ...appConfig().redis,
         connectTimeout: 5000,
         maxRetriesPerRequest: null,
         retryStrategy: (times: number) => (times > 2 ? null : times * 500),
@@ -51,9 +49,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     RedisModule.forRoot({
       type: 'single',
       options: {
-        host: appConfig().redis.host,
-        password: appConfig().redis.password,
-        port: +appConfig().redis.port,
+        ...appConfig().redis,
         connectTimeout: 5000,
         maxRetriesPerRequest: 3,
         retryStrategy: (times: number) => (times > 2 ? null : times * 500),

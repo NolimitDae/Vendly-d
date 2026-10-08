@@ -7,8 +7,9 @@ import appConfig from '../../../config/app.config';
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor() {
     super({
-      clientID: appConfig().auth.google.app_id,
-      clientSecret: appConfig().auth.google.app_secret,
+      // placeholders keep the server booting when google login isn't configured; the login itself will fail
+      clientID: appConfig().auth.google.app_id || 'not-configured',
+      clientSecret: appConfig().auth.google.app_secret || 'not-configured',
       callbackURL: appConfig().auth.google.callback,
       scope: ['email', 'profile'],
     });

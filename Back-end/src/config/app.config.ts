@@ -1,3 +1,19 @@
+function redisConfig() {
+  // Railway's Redis service exposes REDIS_URL and REDISHOST/REDISPORT/REDISPASSWORD
+  const url = process.env.REDIS_URL ? new URL(process.env.REDIS_URL) : null;
+  return {
+    host: process.env.REDIS_HOST || process.env.REDISHOST || url?.hostname || '127.0.0.1',
+    port: Number(process.env.REDIS_PORT || process.env.REDISPORT || url?.port || 6379),
+    username: process.env.REDIS_USERNAME || process.env.REDISUSER || (url?.username ? decodeURIComponent(url.username) : undefined),
+    password:
+      process.env.REDIS_PASSWORD ||
+      process.env.REDISPASSWORD ||
+      (url?.password ? decodeURIComponent(url.password) : ''),
+    // 0 = IPv4 or IPv6; Railway private networking (*.railway.internal) is IPv6-only
+    family: 0,
+  };
+}
+
 export default () => ({
   app: {
     name: process.env.APP_NAME,
@@ -31,11 +47,7 @@ export default () => ({
     url: String(process.env.DATABASE_URL),
   },
 
-  redis: {
-    host: process.env.REDIS_HOST,
-    password: process.env.REDIS_PASSWORD || '',
-    port: process.env.REDIS_PORT,
-  },
+  redis: redisConfig(),
 
   security: {
     salt: 10,
