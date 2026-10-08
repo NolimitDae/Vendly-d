@@ -3,7 +3,9 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "timeout 30 npx prisma migrate deploy; node dist/src/main"
+# Runs once per deploy before the new container starts; a failed migration aborts the deploy.
+preDeployCommand = ["npx prisma migrate deploy"]
+startCommand = "node dist/src/main"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
