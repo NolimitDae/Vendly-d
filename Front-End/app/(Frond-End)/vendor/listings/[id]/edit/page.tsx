@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import { VendorListingService } from "@/service/vendor/vendor-listing.service";
 import { toast } from "react-toastify";
-import { Upload, X, Loader2, ArrowLeft } from "lucide-react";
+import { Upload, X, Loader2, ArrowLeft, CalendarX, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -13,6 +13,13 @@ interface Category {
   id: string;
   name: string;
   sub_categories?: { id: string; name: string }[];
+}
+
+interface BlockedDate {
+  id: string;
+  start_date: string;
+  end_date: string;
+  reason?: string;
 }
 
 export default function EditListingPage() {
@@ -23,6 +30,14 @@ export default function EditListingPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Availability management
+  const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([]);
+  const [blockStart, setBlockStart] = useState("");
+  const [blockEnd, setBlockEnd] = useState("");
+  const [blockReason, setBlockReason] = useState("");
+  const [blockingDates, setBlockingDates] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   // Existing images from backend (full URLs)
   const [existingImages, setExistingImages] = useState<string[]>([]);
@@ -42,6 +57,13 @@ export default function EditListingPage() {
     sub_category_id: "",
     tags: "",
   });
+
+  const fetchBlockedDates = async () => {
+    try {
+      const res = await MarketplaceService.getBlockedDates(id);
+      if (res.data?.success) setBlockedDates(res.data.data ?? []);
+    } catch { /* silent */ }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -73,6 +95,8 @@ export default function EditListingPage() {
       toast.error("Failed to load listing");
       router.push("/vendor/listings");
     }).finally(() => setPageLoading(false));
+
+    fetchBlockedDates();
   }, [id]);
 
   const selectedCategory = categories.find((c) => c.id === form.category_id);
@@ -131,6 +155,43 @@ export default function EditListingPage() {
 
   const set = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  const handleBlockDates = async () => {
+    if (!blockStart || !blockEnd) return toast.error("Select start and end dates");
+    if (new Date(blockStart) > new Date(blockEnd)) return toast.error("Start must be before end");
+    setBlockingDates(true);
+    try {
+      const res = await VendorListingService.blockDates(id, {
+        start_date: blockStart,
+        end_date: blockEnd,
+        reason: blockReason || undefined,
+      });
+      if (res.data?.success) {
+        toast.success("Dates blocked");
+        setBlockStart(""); setBlockEnd(""); setBlockReason("");
+        fetchBlockedDates();
+      }
+    } catch {
+      toast.error("Failed to block dates");
+    } finally {
+      setBlockingDates(false);
+    }
+  };
+
+  const handleUnblock = async (blockId: string) => {
+    setRemovingId(blockId);
+    try {
+      const res = await VendorListingService.unblockDates(id, blockId);
+      if (res.data?.success) {
+        toast.success("Dates unblocked");
+        fetchBlockedDates();
+      }
+    } catch {
+      toast.error("Failed to unblock dates");
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   if (pageLoading) {
     return (
@@ -402,6 +463,73 @@ export default function EditListingPage() {
             </button>
           </div>
         </form>
+
+        {/* Availability management (outside form) */}
+        <div className="mt-6 bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2">
+            <CalendarX className="w-5 h-5 text-primary" />
+            <h2 className="font-semibold text-gray-900 dark:text-white">Block Unavailable Dates</h2>
+          </div>
+
+          {/* Existing blocked dates */}
+          {blockedDates.length > 0 && (
+            <div className="space-y-2">
+              {blockedDates.map((b) => (
+                <div key={b.id} className="flex items-center justify-between px-3 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm">
+                  <span className="text-red-700 dark:text-red-300 font-medium">
+                    {new Date(b.start_date).toLocaleDateString()} – {new Date(b.end_date).toLocaleDateString()}
+                    {b.reason && <span className="ml-2 text-red-400 font-normal">({b.reason})</span>}
+                  </span>
+                  <button
+                    onClick={() => handleUnblock(b.id)}
+                    disabled={removingId === b.id}
+                    className="text-red-500 hover:text-red-700 transition"
+                  >
+                    {removingId === b.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new block */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={blockStart}
+                onChange={(e) => setBlockStart(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">End Date</label>
+              <input
+                type="date"
+                value={blockEnd}
+                onChange={(e) => setBlockEnd(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="col-span-2">
+              <input
+                value={blockReason}
+                onChange={(e) => setBlockReason(e.target.value)}
+                placeholder="Reason (optional, e.g. Holiday)"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+          </div>
+          <button
+            onClick={handleBlockDates}
+            disabled={blockingDates || !blockStart || !blockEnd}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-primary text-white hover:bg-primary/90 transition disabled:opacity-50"
+          >
+            {blockingDates ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Block Dates
+          </button>
+        </div>
       </div>
     </div>
   );

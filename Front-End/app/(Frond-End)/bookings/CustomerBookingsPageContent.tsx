@@ -14,6 +14,7 @@ import {
   Loader2,
   Star,
   CreditCard,
+  Eye,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -202,6 +203,12 @@ export default function CustomerBookingsPageContent() {
 
                     {/* Actions */}
                     <div className="flex gap-2 mt-4 flex-wrap">
+                      <Link
+                        href={`/bookings/${booking.id}`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View Details
+                      </Link>
                       {booking.status === "PENDING" && (
                         <button
                           onClick={() => handlePayNow(booking.id)}

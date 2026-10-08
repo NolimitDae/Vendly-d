@@ -59,6 +59,13 @@ interface EventOption {
   status: string;
 }
 
+interface BlockedDate {
+  id: string;
+  start_date: string;
+  end_date: string;
+  reason?: string;
+}
+
 export default function ListingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -68,6 +75,7 @@ export default function ListingDetailPage() {
   const [showBooking, setShowBooking] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savingToggle, setSavingToggle] = useState(false);
+  const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([]);
   const isLoggedIn = !!CookieHelper.get({ key: "token" });
 
   // Event planner state
@@ -81,11 +89,13 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    MarketplaceService.getListing(id)
-      .then((res) => {
-        if (res.data?.success) setListing(res.data.data);
-      })
-      .finally(() => setLoading(false));
+    Promise.all([
+      MarketplaceService.getListing(id),
+      MarketplaceService.getBlockedDates(id),
+    ]).then(([listingRes, datesRes]) => {
+      if (listingRes.data?.success) setListing(listingRes.data.data);
+      if (datesRes.data?.success) setBlockedDates(datesRes.data.data ?? []);
+    }).finally(() => setLoading(false));
   }, [id]);
 
   useEffect(() => {
@@ -325,6 +335,26 @@ export default function ListingDetailPage() {
                 </div>
               )}
             </div>
+
+            {/* Blocked dates */}
+            {blockedDates.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="w-5 h-5 text-red-500" />
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Unavailable Dates</h3>
+                </div>
+                <div className="space-y-2">
+                  {blockedDates.map((b) => (
+                    <div key={b.id} className="flex items-center justify-between text-sm px-3 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                      <span className="text-red-700 dark:text-red-300 font-medium">
+                        {new Date(b.start_date).toLocaleDateString()} – {new Date(b.end_date).toLocaleDateString()}
+                      </span>
+                      {b.reason && <span className="text-red-500 text-xs">{b.reason}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Reviews */}
             {listing.id && <ReviewList listingId={listing.id} />}

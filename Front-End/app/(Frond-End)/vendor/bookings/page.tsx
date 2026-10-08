@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { BookingService } from "@/service/booking/booking.service";
 import Image from "next/image";
-import { Calendar, Clock, Loader2, CheckCircle2, XCircle, Play } from "lucide-react";
+import { Calendar, Clock, Loader2, CheckCircle2, XCircle, Play, Eye } from "lucide-react";
 import { toast } from "react-toastify";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -167,6 +168,12 @@ export default function VendorBookingsPage() {
 
                     {/* Action buttons based on status */}
                     <div className="flex flex-wrap gap-2 mt-4">
+                      <Link
+                        href={`/vendor/bookings/${booking.id}`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View Details
+                      </Link>
                       {booking.status === "PENDING" && (
                         <>
                           <ActionButton

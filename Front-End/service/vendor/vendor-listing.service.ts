@@ -35,6 +35,17 @@ export const VendorListingService = {
   publish: async (id: string) =>
     Fetch.patch(`/vendor/listings/${id}/publish`, {}, authHeaders()),
 
+  pause: async (id: string) =>
+    Fetch.patch(`/vendor/listings/${id}/pause`, {}, authHeaders()),
+
   remove: async (id: string) =>
     Fetch.delete(`/vendor/listings/${id}`, authHeaders()),
+
+  blockDates: async (
+    listingId: string,
+    data: { start_date: string; end_date: string; reason?: string },
+  ) => Fetch.post(`/vendor/listings/${listingId}/availability`, data, authHeaders()),
+
+  unblockDates: async (listingId: string, blockId: string) =>
+    Fetch.delete(`/vendor/listings/${listingId}/availability/${blockId}`, authHeaders()),
 };

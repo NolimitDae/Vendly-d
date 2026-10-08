@@ -35,4 +35,7 @@ export const MarketplaceService = {
     Fetch.get(`/marketplace/vendors/${vendorId}`),
 
   getCategories: async () => Fetch.get("/marketplace/categories"),
+
+  getBlockedDates: async (listingId: string) =>
+    Fetch.get(`/marketplace/listings/${listingId}/availability`),
 };
