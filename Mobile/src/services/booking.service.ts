@@ -81,4 +81,24 @@ export const BookingService = {
 
   createCheckout: (id: string) =>
     api.post<CheckoutResponse>(`/bookings/${id}/checkout`),
+
+  getProofs: (id: string) =>
+    api.get<{ success: boolean; data: any[] }>(`/bookings/${id}/proof`),
+
+  uploadProof: (id: string, photoUris: { uri: string; name: string; type: string }[], notes?: string) => {
+    const form = new FormData();
+    photoUris.forEach((p) => form.append('photos', p as any));
+    if (notes) form.append('notes', notes);
+    return api.post(`/bookings/${id}/proof`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  getDeliverables: (id: string) =>
+    api.get<{ success: boolean; data: any[] }>(`/bookings/${id}/deliverables`),
+
+  sendDeliverable: (
+    id: string,
+    data: { title: string; message?: string; links?: string[] },
+  ) => api.post(`/bookings/${id}/deliverables`, data),
 };

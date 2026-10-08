@@ -35,4 +35,4 @@ _Updated: 2026-10-08. All Build Plan Phase 0 items resolved._
 | R3 | `Front-End/` | Auth token cookies need `HttpOnly` + `SameSite=Strict` verification at the server level | Medium |
 | R4 | Testing | Near-zero automated test coverage (one test file found: `Front-End/hooks/useNotifications.test.ts`) | High |
 | R5 | `Mobile/src/screens/` | Deliverables, proof, and availability calendar UI not yet in the mobile app | Medium |
-| R6 | `Front-End/app/(Frond-End)/` | Deliverables, proof upload, and availability calendar UI not yet in the web frontend | Medium |
+| R6 | `Front-End/app/(Frond-End)/` | ~~Deliverables, proof upload, and availability calendar UI not yet in the web frontend~~ **Done** | ~~Medium~~ |

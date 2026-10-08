@@ -55,11 +55,16 @@ export default function ListingDetail() {
   const [scheduledAt, setScheduledAt] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [blockedDates, setBlockedDates] = useState<{ id: string; start_date: string; end_date: string; reason?: string }[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get(`/marketplace/listings/${listingId}`);
-      if (res.data?.success) setListing(res.data.data);
+      const [listingRes, datesRes] = await Promise.all([
+        api.get(`/marketplace/listings/${listingId}`),
+        api.get(`/marketplace/listings/${listingId}/availability`),
+      ]);
+      if (listingRes.data?.success) setListing(listingRes.data.data);
+      if (datesRes.data?.success) setBlockedDates(datesRes.data.data ?? []);
     } catch {
       Alert.alert('Error', 'Failed to load listing');
     } finally {
@@ -193,6 +198,22 @@ export default function ListingDetail() {
             <View style={s.section}>
               <Text style={s.sectionTitle}>About this service</Text>
               <Text style={s.description}>{listing.description}</Text>
+            </View>
+          )}
+
+          {/* Blocked dates */}
+          {blockedDates.length > 0 && (
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Unavailable Dates</Text>
+              {blockedDates.map((b) => (
+                <View key={b.id} style={s.blockedItem}>
+                  <Ionicons name="close-circle-outline" size={14} color="#ef4444" />
+                  <Text style={s.blockedText}>
+                    {new Date(b.start_date).toLocaleDateString()} – {new Date(b.end_date).toLocaleDateString()}
+                    {b.reason ? `  (${b.reason})` : ''}
+                  </Text>
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -364,4 +385,6 @@ const s = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.6 },
   submitBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+  blockedItem: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+  blockedText: { fontSize: 13, color: '#ef4444' },
 });

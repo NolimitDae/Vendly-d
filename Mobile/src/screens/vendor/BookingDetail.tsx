@@ -7,14 +7,35 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
+  TextInput,
+  Linking,
+  Image,
 } from 'react-native';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../../constants/colors';
 import { api } from '../../services/api';
+import { BookingService } from '../../services/booking.service';
 import type { RouteProp } from '@react-navigation/native-stack';
 import type { VendorBookingsStackParams } from '../../navigation/types';
+
+interface Proof {
+  id: string;
+  photos: string[];
+  notes?: string;
+  created_at: string;
+}
+
+interface Deliverable {
+  id: string;
+  title: string;
+  message?: string;
+  files: string[];
+  links: string[];
+  created_at: string;
+}
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -60,10 +81,29 @@ export default function VendorBookingDetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Proof state
+  const [proofs, setProofs] = useState<Proof[]>([]);
+  const [proofPhotos, setProofPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [proofNotes, setProofNotes] = useState('');
+  const [uploadingProof, setUploadingProof] = useState(false);
+
+  // Deliverable state
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
+  const [delivTitle, setDelivTitle] = useState('');
+  const [delivMsg, setDelivMsg] = useState('');
+  const [delivLink, setDelivLink] = useState('');
+  const [sendingDeliv, setSendingDeliv] = useState(false);
+
   const load = useCallback(async () => {
     try {
-      const res = await api.get(`/bookings/${bookingId}`);
-      if (res.data?.success) setBooking(res.data.data);
+      const [bookingRes, proofsRes, delivRes] = await Promise.all([
+        api.get(`/bookings/${bookingId}`),
+        BookingService.getProofs(bookingId),
+        BookingService.getDeliverables(bookingId),
+      ]);
+      if (bookingRes.data?.success) setBooking(bookingRes.data.data);
+      if (proofsRes.data?.success) setProofs(proofsRes.data.data ?? []);
+      if (delivRes.data?.success) setDeliverables(delivRes.data.data ?? []);
     } catch {
       Alert.alert('Error', 'Failed to load booking details.');
     } finally {
@@ -92,6 +132,57 @@ export default function VendorBookingDetail() {
       { text: 'Cancel', style: 'cancel' },
       { text: label, onPress: () => handleAction(action, label.toLowerCase()) },
     ]);
+  };
+
+  const pickProofPhotos = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) setProofPhotos(result.assets);
+  };
+
+  const handleUploadProof = async () => {
+    if (!proofPhotos.length) return Alert.alert('Error', 'Select at least one photo');
+    setUploadingProof(true);
+    try {
+      const photoUris = proofPhotos.map((p) => ({
+        uri: p.uri,
+        name: p.fileName ?? 'photo.jpg',
+        type: p.mimeType ?? 'image/jpeg',
+      }));
+      await BookingService.uploadProof(bookingId, photoUris, proofNotes || undefined);
+      setProofPhotos([]);
+      setProofNotes('');
+      await load();
+      Alert.alert('Success', 'Proof uploaded');
+    } catch {
+      Alert.alert('Error', 'Failed to upload proof');
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
+  const handleSendDeliverable = async () => {
+    if (!delivTitle.trim()) return Alert.alert('Error', 'Title is required');
+    setSendingDeliv(true);
+    try {
+      await BookingService.sendDeliverable(bookingId, {
+        title: delivTitle,
+        message: delivMsg || undefined,
+        links: delivLink.trim() ? [delivLink.trim()] : [],
+      });
+      setDelivTitle('');
+      setDelivMsg('');
+      setDelivLink('');
+      await load();
+      Alert.alert('Success', 'Deliverable sent');
+    } catch {
+      Alert.alert('Error', 'Failed to send deliverable');
+    } finally {
+      setSendingDeliv(false);
+    }
   };
 
   if (loading) {
@@ -172,6 +263,105 @@ export default function VendorBookingDetail() {
             {format(new Date(booking.created_at), 'MMM d, yyyy · h:mm a')}
           </Text>
         </DetailSection>
+
+        {/* Photo Proof */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>Photo Proof</Text>
+          {proofs.map((proof) => (
+            <View key={proof.id} style={s.proofItem}>
+              <Text style={s.proofDate}>{format(new Date(proof.created_at), 'MMM d, yyyy')}</Text>
+              {proof.notes ? <Text style={s.proofNotes}>{proof.notes}</Text> : null}
+              <View style={s.photoRow}>
+                {proof.photos.map((url, i) => (
+                  <TouchableOpacity key={i} onPress={() => Linking.openURL(url)}>
+                    <Image source={{ uri: url }} style={s.proofThumb} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
+          <TouchableOpacity style={s.outlineBtn} onPress={pickProofPhotos}>
+            <Ionicons name="camera-outline" size={16} color={COLORS.primary} />
+            <Text style={s.outlineBtnText}>
+              {proofPhotos.length ? `${proofPhotos.length} photo(s) selected` : 'Select Photos'}
+            </Text>
+          </TouchableOpacity>
+          {proofPhotos.length > 0 && (
+            <>
+              <TextInput
+                style={s.input}
+                value={proofNotes}
+                onChangeText={setProofNotes}
+                placeholder="Notes (optional)"
+                placeholderTextColor={COLORS.gray[400]}
+                multiline
+              />
+              <TouchableOpacity
+                style={[s.primaryBtn, uploadingProof && s.btnDisabled]}
+                onPress={handleUploadProof}
+                disabled={uploadingProof}
+              >
+                {uploadingProof ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <Text style={s.primaryBtnText}>Upload Proof</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* Deliverables */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>Deliverables</Text>
+          {deliverables.map((d) => (
+            <View key={d.id} style={s.proofItem}>
+              <Text style={s.detailValue}>{d.title}</Text>
+              <Text style={s.proofDate}>{format(new Date(d.created_at), 'MMM d, yyyy')}</Text>
+              {d.message ? <Text style={s.proofNotes}>{d.message}</Text> : null}
+              {d.links.map((link, i) => (
+                <TouchableOpacity key={i} onPress={() => Linking.openURL(link)}>
+                  <Text style={s.link}>{link}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+          <TextInput
+            style={s.input}
+            value={delivTitle}
+            onChangeText={setDelivTitle}
+            placeholder="Deliverable title *"
+            placeholderTextColor={COLORS.gray[400]}
+          />
+          <TextInput
+            style={[s.input, { marginTop: 8 }]}
+            value={delivMsg}
+            onChangeText={setDelivMsg}
+            placeholder="Message (optional)"
+            placeholderTextColor={COLORS.gray[400]}
+            multiline
+          />
+          <TextInput
+            style={[s.input, { marginTop: 8 }]}
+            value={delivLink}
+            onChangeText={setDelivLink}
+            placeholder="Link (optional)"
+            placeholderTextColor={COLORS.gray[400]}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <TouchableOpacity
+            style={[s.primaryBtn, { marginTop: 8 }, sendingDeliv && s.btnDisabled]}
+            onPress={handleSendDeliverable}
+            disabled={sendingDeliv}
+          >
+            {sendingDeliv ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={s.primaryBtnText}>Send Deliverable</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* Action buttons */}
         {actionLoading ? (
@@ -309,4 +499,27 @@ const s = StyleSheet.create({
   },
   btnText: { color: COLORS.white, fontWeight: '700', fontSize: 15 },
   btnRejectText: { color: '#ef4444', fontWeight: '700', fontSize: 15 },
+  proofItem: { borderWidth: 1, borderColor: COLORS.gray[100], borderRadius: 10, padding: 10, marginBottom: 8 },
+  proofDate: { fontSize: 11, color: COLORS.gray[400], marginBottom: 2 },
+  proofNotes: { fontSize: 13, color: COLORS.gray[600], marginBottom: 4 },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  proofThumb: { width: 64, height: 64, borderRadius: 8 },
+  outlineBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.gray[300],
+    borderRadius: 10, padding: 12, justifyContent: 'center', marginBottom: 8,
+  },
+  outlineBtnText: { fontSize: 13, color: COLORS.primary },
+  input: {
+    backgroundColor: COLORS.gray[50], borderWidth: 1, borderColor: COLORS.gray[200],
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: COLORS.gray[900],
+  },
+  primaryBtn: {
+    backgroundColor: COLORS.primary, borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center', marginTop: 8,
+  },
+  primaryBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  btnDisabled: { opacity: 0.6 },
+  link: { fontSize: 12, color: COLORS.primary, textDecorationLine: 'underline', marginTop: 2 },
 });

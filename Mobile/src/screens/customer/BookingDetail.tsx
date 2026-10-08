@@ -11,6 +11,7 @@ import {
   TextInput,
   Linking,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,22 @@ import { COLORS } from '../../constants/colors';
 import { BookingService, Booking, BookingStatus } from '../../services/booking.service';
 import { api } from '../../services/api';
 import type { RouteProp } from '@react-navigation/native';
+
+interface Proof {
+  id: string;
+  photos: string[];
+  notes?: string;
+  created_at: string;
+}
+
+interface Deliverable {
+  id: string;
+  title: string;
+  message?: string;
+  files: string[];
+  links: string[];
+  created_at: string;
+}
 
 type RouteParams = { bookingId: string };
 
@@ -42,6 +59,8 @@ export default function BookingDetail() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [proofs, setProofs] = useState<Proof[]>([]);
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
 
   // Review modal state
   const [reviewVisible, setReviewVisible] = useState(false);
@@ -51,8 +70,14 @@ export default function BookingDetail() {
 
   const load = useCallback(async () => {
     try {
-      const res = await BookingService.getBooking(bookingId);
-      if (res.data?.success) setBooking(res.data.data);
+      const [bookingRes, proofsRes, delivRes] = await Promise.all([
+        BookingService.getBooking(bookingId),
+        BookingService.getProofs(bookingId),
+        BookingService.getDeliverables(bookingId),
+      ]);
+      if (bookingRes.data?.success) setBooking(bookingRes.data.data);
+      if (proofsRes.data?.success) setProofs(proofsRes.data.data ?? []);
+      if (delivRes.data?.success) setDeliverables(delivRes.data.data ?? []);
     } catch {
       Alert.alert('Error', 'Failed to load booking');
     } finally {
@@ -197,6 +222,50 @@ export default function BookingDetail() {
           <View style={s.messageCard}>
             <Text style={s.messageLabel}>Your Message</Text>
             <Text style={s.messageText}>{booking.message}</Text>
+          </View>
+        )}
+
+        {/* Photo Proof */}
+        {proofs.length > 0 && (
+          <View style={s.card}>
+            <Text style={s.sectionTitle}>Photo Proof</Text>
+            {proofs.map((proof) => (
+              <View key={proof.id} style={s.proofItem}>
+                <Text style={s.proofDate}>{format(new Date(proof.created_at), 'MMM d, yyyy')}</Text>
+                {proof.notes ? <Text style={s.messageText}>{proof.notes}</Text> : null}
+                <View style={s.photoRow}>
+                  {proof.photos.map((url, i) => (
+                    <TouchableOpacity key={i} onPress={() => Linking.openURL(url)}>
+                      <Image source={{ uri: url }} style={s.proofThumb} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Deliverables */}
+        {deliverables.length > 0 && (
+          <View style={s.card}>
+            <Text style={s.sectionTitle}>Deliverables</Text>
+            {deliverables.map((d) => (
+              <View key={d.id} style={s.proofItem}>
+                <Text style={s.detailValue}>{d.title}</Text>
+                <Text style={s.proofDate}>{format(new Date(d.created_at), 'MMM d, yyyy')}</Text>
+                {d.message ? <Text style={s.messageText}>{d.message}</Text> : null}
+                {d.links.map((link, i) => (
+                  <TouchableOpacity key={i} onPress={() => Linking.openURL(link)}>
+                    <Text style={s.link}>{link}</Text>
+                  </TouchableOpacity>
+                ))}
+                {d.files.map((url, i) => (
+                  <TouchableOpacity key={i} onPress={() => Linking.openURL(url)}>
+                    <Text style={s.link}>File {i + 1}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
@@ -453,4 +522,10 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   submitBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.gray[700], marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
+  proofItem: { borderTopWidth: 1, borderTopColor: COLORS.gray[50], paddingTop: 8, marginTop: 4 },
+  proofDate: { fontSize: 11, color: COLORS.gray[400], marginBottom: 2 },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  proofThumb: { width: 64, height: 64, borderRadius: 8 },
+  link: { fontSize: 12, color: COLORS.primary, textDecorationLine: 'underline', marginTop: 2 },
 });
