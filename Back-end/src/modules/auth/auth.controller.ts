@@ -937,4 +937,20 @@ export class AuthController {
     }
   }
   // --------- end 2FA ---------
+
+  @ApiOperation({ summary: 'Save Expo push token for mobile notifications' })
+  @UseGuards(JwtAuthGuard)
+  @Post('push-token')
+  async savePushToken(
+    @Req() req: Request,
+    @Body() body: { token: string; platform?: string },
+  ) {
+    try {
+      const userId = req.user.userId;
+      await this.authService.savePushToken(userId, body.token);
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
 }

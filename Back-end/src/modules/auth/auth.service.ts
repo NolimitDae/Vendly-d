@@ -14,6 +14,7 @@ import { UserRepository } from '../../common/repository/user/user.repository';
 import appConfig from '../../config/app.config';
 import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { UserType } from 'prisma/generated/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
@@ -355,12 +356,22 @@ export class AuthService {
           data: { ...data },
         });
 
-        if (updateUserDto.business_name !== undefined) {
-          await this.prisma.vendorProfile.upsert({
-            where: { user_id: userId },
-            create: { user_id: userId, business_name: updateUserDto.business_name, license_photo: [] },
-            update: { business_name: updateUserDto.business_name },
-          });
+        if (user.type === UserType.VENDOR) {
+          const vendorProfilePatch: Record<string, any> = {};
+          if (updateUserDto.business_name !== undefined)
+            vendorProfilePatch.business_name = updateUserDto.business_name;
+          if (updateUserDto.about_me !== undefined)
+            vendorProfilePatch.about_me = updateUserDto.about_me;
+          if (updateUserDto.address !== undefined)
+            vendorProfilePatch.address = updateUserDto.address;
+
+          if (Object.keys(vendorProfilePatch).length > 0) {
+            await this.prisma.vendorProfile.upsert({
+              where: { user_id: userId },
+              create: { user_id: userId, license_photo: [], ...vendorProfilePatch },
+              update: vendorProfilePatch,
+            });
+          }
         }
 
         return {
@@ -983,4 +994,11 @@ export class AuthService {
     }
   }
   // --------- end 2FA ---------
+
+  async savePushToken(userId: string, token: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { push_token: token },
+    });
+  }
 }

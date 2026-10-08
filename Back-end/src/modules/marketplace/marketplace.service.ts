@@ -36,6 +36,8 @@ export class MarketplaceService {
       if (query.max_price !== undefined) where.price.lte = query.max_price;
     }
 
+    const sortByRating = query.sort === 'rating';
+
     let orderBy: any = { created_at: 'desc' };
     if (query.sort === 'price_asc') orderBy = { price: 'asc' };
     else if (query.sort === 'price_desc') orderBy = { price: 'desc' };
@@ -45,8 +47,8 @@ export class MarketplaceService {
       this.prisma.vendorListing.count({ where }),
       this.prisma.vendorListing.findMany({
         where,
-        skip,
-        take: limit,
+        skip: sortByRating ? 0 : skip,
+        take: sortByRating ? undefined : limit,
         orderBy,
         include: {
           category: { select: { id: true, name: true } },
@@ -66,12 +68,19 @@ export class MarketplaceService {
 
     const avgRatings = await this.getAverageRatings(listings.map((l) => l.id));
 
+    let formattedListings = listings.map((l) => ({
+      ...this.formatListingCard(l),
+      avg_rating: avgRatings[l.id] ?? null,
+    }));
+
+    if (sortByRating) {
+      formattedListings.sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
+      formattedListings = formattedListings.slice(skip, skip + limit);
+    }
+
     return {
       success: true,
-      data: listings.map((l) => ({
-        ...this.formatListingCard(l),
-        avg_rating: avgRatings[l.id] ?? null,
-      })),
+      data: formattedListings,
       meta: { total, page, limit, last_page: Math.ceil(total / limit) },
     };
   }

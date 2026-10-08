@@ -387,19 +387,44 @@ export class SubscriptionsService {
             `Subscription updated: ${subscription.id}, status: ${subscription.status}`,
           );
 
+          const customerId = subscription.customer as string;
+          if (!customerId) break;
+
+          const user = await this.prisma.user.findFirst({
+            where: { billing_id: customerId },
+            include: { vendorProfile: true },
+          });
+          if (!user?.vendorProfile) break;
+
           if (
             subscription.status === 'active' ||
             subscription.status === 'trialing'
           ) {
-            // Subscription is healthy — ensure vendor is marked active
-            // We'd need a mapping from stripe customer to vendor_id here
+            await this.prisma.vendorProfile.update({
+              where: { id: user.vendorProfile.id },
+              data: { subscription_active: true },
+            });
           } else if (
             subscription.status === 'past_due' ||
-            subscription.status === 'unpaid'
+            subscription.status === 'unpaid' ||
+            subscription.status === 'canceled' ||
+            subscription.status === 'paused'
           ) {
-            this.logger.warn(
-              `Subscription ${subscription.id} is ${subscription.status}`,
-            );
+            await this.prisma.vendorProfile.update({
+              where: { id: user.vendorProfile.id },
+              data: { subscription_active: false },
+            });
+
+            const activePlan = await this.prisma.vendorSubscriptionPlan.findFirst({
+              where: { vendor_id: user.vendorProfile.id },
+              orderBy: { created_at: 'desc' },
+            });
+            if (activePlan) {
+              await this.prisma.vendorSubscriptionPlan.update({
+                where: { id: activePlan.id },
+                data: { payment_status: SubscriptionPaymentStatus.FAILED },
+              });
+            }
           }
           break;
         }
@@ -408,11 +433,34 @@ export class SubscriptionsService {
           const subscription = event.data.object as stripe.Subscription;
           this.logger.log(`Subscription deleted: ${subscription.id}`);
 
-          // Find the latest VendorSubscriptionPlan tied to this customer
-          // via Stripe customer ID if stored, otherwise log for now
-          this.logger.warn(
-            `Vendor subscription deleted on Stripe: ${subscription.id}`,
-          );
+          const customerId = subscription.customer as string;
+          if (!customerId) break;
+
+          const user = await this.prisma.user.findFirst({
+            where: { billing_id: customerId },
+            include: { vendorProfile: true },
+          });
+          if (!user?.vendorProfile) break;
+
+          await this.prisma.vendorProfile.update({
+            where: { id: user.vendorProfile.id },
+            data: { subscription_active: false },
+          });
+
+          const activePlan = await this.prisma.vendorSubscriptionPlan.findFirst({
+            where: { vendor_id: user.vendorProfile.id },
+            orderBy: { created_at: 'desc' },
+          });
+          if (activePlan) {
+            await this.prisma.vendorSubscriptionPlan.update({
+              where: { id: activePlan.id },
+              data: { payment_status: SubscriptionPaymentStatus.FAILED },
+            });
+            await this.prisma.subscriptionlist.update({
+              where: { id: activePlan.subscription_id },
+              data: { status: SubscriptionStatus.CANCELLED },
+            });
+          }
           break;
         }
 

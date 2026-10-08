@@ -35,14 +35,19 @@ export class DepositeService {
       try {
 
         let customerId = user.billing_id;
-        if(!customerId) throw new BadRequestException('User does not have a billing customer ID');
 
-        const customer = await StripePayment.createCustomer({
-          user_id: userId,
-          name: user.name,
-          email: user.email,
-        }) 
-        customerId = customer.id;
+        if (!customerId) {
+          const customer = await StripePayment.createCustomer({
+            user_id: userId,
+            name: user.name,
+            email: user.email,
+          });
+          customerId = customer.id;
+          await this.prisma.user.update({
+            where: { id: userId },
+            data: { billing_id: customerId },
+          });
+        }
 
         const paymentIntent = await StripePayment.createPaymentIntent({
           amount: amount,

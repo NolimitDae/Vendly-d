@@ -70,6 +70,11 @@ export class VendorListingController {
     return this.service.publishListing(id, user.id);
   }
 
+  @Patch(':id/pause')
+  pause(@GetUser() user: any, @Param('id') id: string) {
+    return this.service.pauseListing(id, user.id);
+  }
+
   @Delete(':id')
   remove(@GetUser() user: any, @Param('id') id: string) {
     return this.service.remove(id, user.id);

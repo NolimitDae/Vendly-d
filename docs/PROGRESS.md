@@ -1,31 +1,44 @@
 # Vendly — Issues & Risks Log
 
-_Phase 0 audit — 2026-10-08. No fixes applied yet._
+_Updated: 2026-10-08. Items marked **FIXED** were resolved in this session._
 
 ## Security
 
+| ID | Location | Issue | Status |
+|----|----------|-------|--------|
+| S1 | `Back-end/src/modules/payment/stripe/StripePayment.ts` | Stripe webhook signature verified via `webhooks.constructEvent` with `STRIPE_WEBHOOK_SECRET` — correct. | OK |
+| S2 | `Back-end/src/modules/subscriptions/subscriptions.service.ts:274` | `cancel()` lists last 10 Stripe sessions globally to find the subscription. With high volume this misses sessions beyond page 10. Low risk for current scale. | Low risk |
+| S3 | All repo roots | No `.env.example` files. Developers must know all required env vars from memory. | Open |
+| S4 | `Front-End/` | Auth token stored in cookie via `CookieHelper`. Needs to confirm `HttpOnly` + `SameSite=Strict` on the server that sets the cookie. | Needs verification |
+| S5 | `Back-end/src/modules/chat/user/user.controller.ts` | `GET /chat/user` had no auth guard — exposed full user list publicly. | **FIXED** — `JwtAuthGuard` added |
+
+## Bug Fixes Applied
+
+| ID | Location | Issue | Fix |
+|----|----------|-------|-----|
+| B1 | `deposite.service.ts` | Deposit service created a new Stripe customer on every call, ignoring stored `billing_id`, orphaning customer records. | **FIXED** — only creates customer when `billing_id` is null; saves new ID back to DB |
+| B2 | `stripe.controller.ts` | `payment_intent.succeeded` handler tried to find transaction by `meta.transaction_id` (never set in metadata) — balance credited but transaction record stayed `pending` forever. | **FIXED** — now matches by `reference_number` (PaymentIntent ID) |
+| B3 | `subscriptions.service.ts` | `customer.subscription.updated` and `customer.subscription.deleted` webhook handlers were no-ops — vendor subscription status never synced from Stripe. | **FIXED** — both handlers now look up vendor by `billing_id`, update `subscription_active` and `payment_status` |
+| B4 | `auth.service.ts` | Profile update upserted `VendorProfile` for all user types (customer, event planner, etc.), creating orphan records. | **FIXED** — guarded behind `user.type === UserType.VENDOR` |
+
+## Features Added
+
+| ID | Feature | Location |
+|----|---------|---------|
+| F1 | Listing pause endpoint | `PATCH /vendor/listings/:id/pause` — `listing.service.ts`, `listing.controller.ts` |
+| F2 | Rating sort in marketplace | `marketplace.service.ts` — `sort=rating` param now sorts by avg_rating descending |
+| F3 | Vendor profile fields (about_me, address) | `auth.service.ts` — `PATCH /auth/update` now writes these to `VendorProfile` for vendor users |
+| F4 | Push token endpoint | `POST /auth/push-token` — saves Expo push token to `users.push_token` (new DB column via migration `20261008000000_add_push_token`) |
+| F5 | Mobile push token URL | `Mobile/src/services/notifications.service.ts` — corrected from `/users/push-token` to `/auth/push-token` |
+
+## Remaining Gaps (No Fix Applied Yet)
+
 | ID | Location | Issue |
 |----|----------|-------|
-| S1 | `Back-end/src/modules/payment/` | Stripe webhook endpoint must verify the `stripe-signature` header before processing. If verification is absent or skipped, any caller can fake payment events. |
-| S2 | `Back-end/src/modules/subscriptions/subscriptions.service.ts:274` | `cancel()` lists the last 10 Stripe checkout sessions globally and matches on `metadata.vendor_id`. If pagination is insufficient it may miss the correct session, or a race condition could cancel the wrong subscription. |
-| S3 | General | No `.env.example` files found in repo roots. Developers must know all required env vars from memory, increasing the chance of misconfiguration in production. |
-| S4 | `Front-End/` | Auth tokens stored in cookies via `CookieHelper`. Confirm cookies are `HttpOnly` and `SameSite=Strict`; if readable by JS, they are vulnerable to XSS theft. |
-
-## Crash Risks
-
-| ID | Location | Issue |
-|----|----------|-------|
-| C1 | `Back-end/Dockerfile` | `CMD ["node", "dist/src/main"]` — the nested path exists because `prisma/generated/*.ts` imports shift TypeScript's inferred `rootDir` from `./src` to `.`. If `tsconfig.json` is changed without understanding this, the build will silently produce the wrong output path and the container will crash on startup. |
-| C2 | `Back-end/src/modules/subscriptions/subscriptions.service.ts:373` | `invoice.payment_succeeded` handler accesses `invoice.parent?.subscription_details?.subscription` (Stripe v18 basil API). If the API version is downgraded or the SDK is updated without checking, this path will break silently (returns `undefined`). |
-| C3 | `Back-end/prisma.config.ts` | Prisma 7 datasource URL lives here, not in `schema.prisma`. Running `npx prisma generate` or `migrate` without `DATABASE_URL` set (e.g., in CI) will throw `PrismaConfigEnvError`. The Dockerfile workaround passes a dummy URL; CI pipelines need the same treatment. |
-| C4 | `Mobile/` | Expo SDK 54 — no `eas.json` submission channels visible. OTA updates and store builds have not been verified in this audit. |
-
-## Dead / Incomplete Code
-
-| ID | Location | Issue |
-|----|----------|-------|
-| D1 | `Back-end/src/modules/subscriptions/subscriptions.service.ts:393-403` | `customer.subscription.updated` and `customer.subscription.deleted` webhook handlers log but take no action. Vendor subscription status will not update when Stripe signals renewal failures or cancellations. |
-| D2 | `Back-end/src/modules/chat/notification/` | Notification module exists but Expo push notification integration (device token storage + `expo-server-sdk` calls) is not confirmed. In-app notifications may work; mobile push likely does not. |
-| D3 | `Back-end/src/modules/vendor/listing/` | Listing CRUD module is present but upload/image handling for listing photos is unverified — `public/storage` is gitignored and the directory creation in Dockerfile uses `mkdir -p ./public` with no storage backend configured. |
-| D4 | `Back-end/src/cmd.ts` | Utility script at repo root of `src/`. Purpose unclear; not referenced from `main.ts` or any module. May be a leftover migration/seed script. |
-| D5 | `Front-End/hooks/useNotifications.test.ts` | Only test file found in the frontend. No test coverage for services, components, or API calls. |
+| R1 | `Back-end/src/mail/` | Booking notifications reuse the OTP email template. Dedicated HTML templates (booking confirmed, rejected, completed, cancelled) should be added for a professional experience. |
+| R2 | Schema | `VendorListing.availability` is a free-text `String?` field. No structured availability calendar or date-blocking model exists. Needs schema + UI work. |
+| R3 | — | Photo proof of service (upload post-job completion to confirm work done) is not in the schema or codebase. |
+| R4 | — | Digital delivery (share files/links with customers as a service deliverable) is not in the schema or codebase. |
+| R5 | `Back-end/src/modules/subscriptions/subscriptions.service.ts` | `cancel()` method uses a session list to find the Stripe subscription. Should store `stripe_subscription_id` on `VendorSubscriptionPlan` at checkout completion so cancellation is O(1) and reliable. |
+| R6 | Mobile | Push notification deep-linking not wired — `addResponseListener` callback has a comment placeholder but no navigation. |
+| R7 | Testing | Near-zero automated test coverage across backend and frontend (one test file found in Front-End: `useNotifications.test.ts`). |

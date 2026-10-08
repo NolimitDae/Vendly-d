@@ -70,10 +70,10 @@ export class StripeController {
           const pi = event.data.object as Stripe.PaymentIntent;
           const meta = pi.metadata || {};
 
-          if (meta.type === 'deposit' && meta.transaction_id) {
-            await this.prisma.paymentTransaction.update({
-              where: { id: meta.transaction_id },
-              data: { status: 'succeeded', reference_number: pi.id },
+          if (meta.type === 'deposit') {
+            await this.prisma.paymentTransaction.updateMany({
+              where: { reference_number: pi.id, type: 'deposit' },
+              data: { status: 'succeeded' },
             });
           }
 

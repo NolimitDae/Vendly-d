@@ -197,6 +197,24 @@ export class VendorListingService {
     return { success: true, data: updated };
   }
 
+  async pauseListing(id: string, vendorId: string) {
+    const listing = await this.prisma.vendorListing.findFirst({
+      where: { id, deleted_at: null },
+    });
+    if (!listing) throw new NotFoundException('Listing not found');
+    if (listing.vendor_id !== vendorId)
+      throw new ForbiddenException('Access denied');
+    if (listing.status !== ListingStatus.ACTIVE)
+      throw new BadRequestException('Only active listings can be paused');
+
+    const updated = await this.prisma.vendorListing.update({
+      where: { id },
+      data: { status: ListingStatus.PAUSED },
+    });
+
+    return { success: true, data: updated };
+  }
+
   private formatListing(listing: any) {
     const base = { ...listing };
     base.images = (listing.images ?? []).map((img: string) =>

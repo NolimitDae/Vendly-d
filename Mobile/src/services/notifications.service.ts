@@ -35,7 +35,7 @@ export const NotificationsService = {
   },
 
   async savePushToken(token: string): Promise<void> {
-    await api.post('/users/push-token', { token, platform: Platform.OS });
+    await api.post('/auth/push-token', { token, platform: Platform.OS });
   },
 
   async scheduleLocal(title: string, body: string, secondsFromNow = 0): Promise<string> {
