@@ -268,26 +268,13 @@ export class SubscriptionsService {
         throw new BadRequestException('No active subscription found');
       }
 
-      // Cancel on Stripe if there's a stripe_subscription_id stored in metadata
-      // We look up by metadata to find the matching Stripe subscription
-      try {
-        const sessions = await Stripe.checkout.sessions.list({
-          limit: 10,
-        });
-
-        for (const session of sessions.data) {
-          if (
-            session.metadata?.vendor_id === vendor.id &&
-            session.subscription
-          ) {
-            await Stripe.subscriptions.cancel(
-              session.subscription as string,
-            );
-            break;
-          }
+      // Cancel on Stripe using the stored stripe_subscription_id
+      if (activePlan.stripe_subscription_id) {
+        try {
+          await Stripe.subscriptions.cancel(activePlan.stripe_subscription_id);
+        } catch (stripeError) {
+          this.logger.warn('Could not cancel Stripe subscription', stripeError);
         }
-      } catch (stripeError) {
-        this.logger.warn('Could not cancel Stripe subscription', stripeError);
       }
 
       await this.prisma.vendorSubscriptionPlan.update({
@@ -358,6 +345,7 @@ export class SubscriptionsService {
               start_date: now,
               end_date: endDate,
               payment_status: SubscriptionPaymentStatus.PAID,
+              stripe_subscription_id: session.subscription as string | null,
             },
           });
 

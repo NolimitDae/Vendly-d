@@ -52,10 +52,17 @@ export class BookingService {
     });
 
     // notify vendor via email
-    await this.mailService.sendOtpCodeToEmail({
-      email: listing.vendor.email,
-      name: listing.vendor.name,
-      otp: `New booking request from ${customer.name} for "${listing.title}"`,
+    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    await this.mailService.sendBookingNotification({
+      to: listing.vendor.email,
+      recipientName: listing.vendor.name,
+      subject: `New booking request — ${listing.title}`,
+      message: `${customer.name} has submitted a new booking request. Review and confirm or decline it.`,
+      status: 'PENDING',
+      listingTitle: listing.title,
+      scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
+      amount: Number(booking.amount),
+      ctaUrl: `${clientUrl}/vendor/bookings`,
     }).catch(() => null);
 
     return { success: true, data: this.formatBooking(booking) };
@@ -75,10 +82,17 @@ export class BookingService {
       include: this.bookingIncludes(),
     });
 
-    await this.mailService.sendOtpCodeToEmail({
-      email: booking.customer.email,
-      name: booking.customer.name,
-      otp: `Your booking for "${booking.listing?.title}" has been confirmed!`,
+    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    await this.mailService.sendBookingNotification({
+      to: booking.customer.email,
+      recipientName: booking.customer.name,
+      subject: `Booking confirmed — ${booking.listing?.title}`,
+      message: 'Great news! Your booking has been confirmed by the vendor.',
+      status: 'CONFIRMED',
+      listingTitle: booking.listing?.title ?? 'Service',
+      scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
+      amount: Number(booking.amount),
+      ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
 
     return { success: true, data: this.formatBooking(updated) };
@@ -98,10 +112,16 @@ export class BookingService {
       include: this.bookingIncludes(),
     });
 
-    await this.mailService.sendOtpCodeToEmail({
-      email: booking.customer.email,
-      name: booking.customer.name,
-      otp: `Your booking for "${booking.listing?.title}" was not accepted${dto.reason ? `: ${dto.reason}` : '.'}`,
+    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    await this.mailService.sendBookingNotification({
+      to: booking.customer.email,
+      recipientName: booking.customer.name,
+      subject: `Booking declined — ${booking.listing?.title}`,
+      message: 'Unfortunately, your booking request was not accepted by the vendor.',
+      status: 'REJECTED',
+      listingTitle: booking.listing?.title ?? 'Service',
+      reason: dto.reason,
+      ctaUrl: `${clientUrl}/marketplace`,
     }).catch(() => null);
 
     return { success: true, data: this.formatBooking(updated) };
@@ -138,10 +158,15 @@ export class BookingService {
       include: this.bookingIncludes(),
     });
 
-    await this.mailService.sendOtpCodeToEmail({
-      email: booking.customer.email,
-      name: booking.customer.name,
-      otp: `Your booking for "${booking.listing?.title}" is complete! Please leave a review.`,
+    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    await this.mailService.sendBookingNotification({
+      to: booking.customer.email,
+      recipientName: booking.customer.name,
+      subject: `Service completed — ${booking.listing?.title}`,
+      message: 'Your service has been completed! We\'d love to hear your feedback.',
+      status: 'COMPLETED',
+      listingTitle: booking.listing?.title ?? 'Service',
+      ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
 
     return { success: true, data: this.formatBooking(updated) };
@@ -172,10 +197,16 @@ export class BookingService {
 
     // notify the other party
     const notifyUser = isCustomer ? booking.vendor : booking.customer;
-    await this.mailService.sendOtpCodeToEmail({
-      email: notifyUser.email,
-      name: notifyUser.name,
-      otp: `Booking for "${booking.listing?.title}" has been cancelled${dto.reason ? `: ${dto.reason}` : '.'}`,
+    const clientUrl = process.env.CLIENT_APP_URL ?? 'http://localhost:3000';
+    await this.mailService.sendBookingNotification({
+      to: notifyUser.email,
+      recipientName: notifyUser.name,
+      subject: `Booking cancelled — ${booking.listing?.title}`,
+      message: `The booking has been cancelled by the ${isCustomer ? 'customer' : 'vendor'}.`,
+      status: 'CANCELLED',
+      listingTitle: booking.listing?.title ?? 'Service',
+      reason: dto.reason,
+      ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
 
     return { success: true, data: this.formatBooking(updated) };

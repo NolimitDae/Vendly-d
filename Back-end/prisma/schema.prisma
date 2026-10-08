@@ -308,7 +308,8 @@ model VendorSubscriptionPlan {
   start_date DateTime?
   end_date   DateTime?
 
-  payment_status SubscriptionPaymentStatus?
+  payment_status         SubscriptionPaymentStatus?
+  stripe_subscription_id String?
 
   @@map("vendor_subscriptions")
 }

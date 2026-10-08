@@ -78,4 +78,30 @@ export class MailService {
       console.log(error);
     }
   }
+
+  async sendBookingNotification(params: {
+    to: string;
+    recipientName: string;
+    subject: string;
+    message: string;
+    status: string;
+    listingTitle: string;
+    scheduledAt?: string;
+    amount?: number;
+    reason?: string;
+    ctaUrl?: string;
+  }) {
+    try {
+      const from = `${process.env.APP_NAME} <${appConfig().mail.from}>`;
+      await this.queue.add('sendBookingNotification', {
+        to: params.to,
+        from,
+        subject: params.subject,
+        template: 'booking-notification',
+        context: { ...params },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  }
 }
