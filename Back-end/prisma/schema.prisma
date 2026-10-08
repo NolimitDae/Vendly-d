@@ -213,6 +213,8 @@ model User {
   vendorBookings Booking[] @relation("BookingVendor")
   // Proof uploads
   bookingProofs BookingProof[] @relation("ProofUploader")
+  // Deliverables sent
+  deliverables  BookingDeliverable[] @relation("DeliverableVendor")
 
   // Events as planner
   plannedEvents Event[] @relation("EventPlannerEvents")
@@ -756,6 +758,7 @@ model Booking {
   review        Review?
   event_bookings EventBooking[]
   proofs        BookingProof[]
+  deliverables  BookingDeliverable[]
 
   @@map("bookings")
 }
@@ -774,6 +777,24 @@ model BookingProof {
   notes       String?  @db.Text
 
   @@map("booking_proofs")
+}
+
+model BookingDeliverable {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  booking_id String
+  booking    Booking @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+
+  vendor_id String
+  vendor    User   @relation("DeliverableVendor", fields: [vendor_id], references: [id])
+
+  title   String   @db.VarChar(255)
+  message String?  @db.Text
+  files   String[]
+  links   String[]
+
+  @@map("booking_deliverables")
 }
 
 /**

@@ -339,6 +339,66 @@ export class BookingService {
     };
   }
 
+  async sendDeliverable(
+    bookingId: string,
+    vendorId: string,
+    files: Express.Multer.File[],
+    body: { title: string; message?: string; links?: string },
+  ) {
+    const booking = await this.getBookingOrFail(bookingId);
+    if (booking.vendor_id !== vendorId) throw new ForbiddenException('Access denied');
+
+    const fileNames: string[] = [];
+    for (const file of files ?? []) {
+      const fileName = `${StringHelper.randomString()}_${file.originalname}`;
+      await TanvirStorage.put(`deliverables/${fileName}`, file.buffer);
+      fileNames.push(fileName);
+    }
+
+    let links: string[] = [];
+    if (body.links) {
+      try { links = JSON.parse(body.links); } catch { links = [body.links]; }
+    }
+
+    const deliverable = await this.prisma.bookingDeliverable.create({
+      data: {
+        booking_id: bookingId,
+        vendor_id: vendorId,
+        title: body.title,
+        message: body.message,
+        files: fileNames,
+        links,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        ...deliverable,
+        files: fileNames.map((f) => TanvirStorage.url(`deliverables/${f}`)),
+      },
+    };
+  }
+
+  async getDeliverables(bookingId: string, userId: string) {
+    const booking = await this.getBookingOrFail(bookingId);
+    if (booking.vendor_id !== userId && booking.customer_id !== userId)
+      throw new ForbiddenException('Access denied');
+
+    const deliverables = await this.prisma.bookingDeliverable.findMany({
+      where: { booking_id: bookingId },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: deliverables.map((d) => ({
+        ...d,
+        files: (d.files ?? []).map((f: string) => TanvirStorage.url(`deliverables/${f}`)),
+      })),
+    };
+  }
+
   // Admin: get all bookings
   async getAllBookings(query: { page?: number; limit?: number; status?: BookingStatus }) {
     return this.getPaginatedBookings(

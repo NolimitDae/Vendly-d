@@ -117,4 +117,23 @@ export class BookingController {
   getProofs(@GetUser() user: any, @Param('id') id: string) {
     return this.service.getProofs(id, user.id);
   }
+
+  /** Vendor sends deliverables (files + links) to customer */
+  @Post(':id/deliverables')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('files', 10))
+  sendDeliverable(
+    @GetUser() user: any,
+    @Param('id') id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() body: { title: string; message?: string; links?: string },
+  ) {
+    return this.service.sendDeliverable(id, user.id, files, body);
+  }
+
+  /** Get deliverables for a booking */
+  @Get(':id/deliverables')
+  getDeliverables(@GetUser() user: any, @Param('id') id: string) {
+    return this.service.getDeliverables(id, user.id);
+  }
 }
