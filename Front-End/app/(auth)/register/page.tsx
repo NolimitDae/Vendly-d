@@ -243,7 +243,7 @@ export default function RegisterPage() {
 
               <p className="text-xs text-gray-400 text-center">
                 By registering you agree to our{" "}
-                <span className="text-primary hover:underline cursor-pointer">Terms of Service</span>
+                <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>
                 {" "}and{" "}
                 <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
               </p>

@@ -116,7 +116,7 @@ export default function BookingDetail() {
     setActionLoading(true);
     try {
       const res = await BookingService.createCheckout(bookingId);
-      const url = res.data?.url ?? res.data?.data?.url;
+      const url = res.data?.data?.checkout_url ?? res.data?.url ?? res.data?.data?.url;
       if (url) {
         await Linking.openURL(url);
       } else {
@@ -207,8 +207,12 @@ export default function BookingDetail() {
           {booking.amount != null && (
             <DetailRow
               icon="cash-outline"
-              label="Amount"
-              value={`$${Number(booking.amount).toLocaleString()}`}
+              label="Total"
+              value={
+                Number(booking.service_fee ?? 0) > 0
+                  ? `$${(Number(booking.amount) + Number(booking.service_fee)).toFixed(2)} (incl. $${Number(booking.service_fee).toFixed(2)} Vendly fee)`
+                  : `$${Number(booking.amount).toLocaleString()}`
+              }
             />
           )}
           <DetailRow
@@ -292,17 +296,23 @@ export default function BookingDetail() {
 
           {booking.status === 'CONFIRMED' && (
             <View style={s.actionRow}>
-              <TouchableOpacity
-                style={[s.payBtn, actionLoading && s.btnDisabled]}
-                onPress={handlePayNow}
-                disabled={actionLoading}
-              >
-                {actionLoading ? (
-                  <ActivityIndicator color={COLORS.white} />
-                ) : (
-                  <Text style={s.payBtnText}>Pay Now</Text>
-                )}
-              </TouchableOpacity>
+              {booking.paid_at ? (
+                <View style={[s.payBtn, { backgroundColor: '#16a34a' }]}>
+                  <Text style={s.payBtnText}>Paid</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[s.payBtn, actionLoading && s.btnDisabled]}
+                  onPress={handlePayNow}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <ActivityIndicator color={COLORS.white} />
+                  ) : (
+                    <Text style={s.payBtnText}>Pay Now</Text>
+                  )}
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[s.cancelBtnSmall, actionLoading && s.btnDisabled]}
                 onPress={handleCancel}

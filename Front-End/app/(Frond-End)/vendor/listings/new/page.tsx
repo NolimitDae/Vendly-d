@@ -40,7 +40,11 @@ export default function NewListingPage() {
   });
 
   useEffect(() => {
-    // Subscription gate — check before allowing listing creation
+    // vendor plans aren't required until subscriptions launch
+    if (process.env.NEXT_PUBLIC_REQUIRE_VENDOR_PLAN !== "true") {
+      setPlanGateChecked(true);
+      return;
+    }
     SubscriptionService.getCurrentPlan()
       .then((res) => {
         if (res.data?.success && res.data.data) {

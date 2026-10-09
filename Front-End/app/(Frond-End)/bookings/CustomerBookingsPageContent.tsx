@@ -38,6 +38,8 @@ interface Booking {
   listing?: { id: string; title: string; price: number; images: string[] };
   vendor?: { id: string; name: string; avatar_url?: string };
   review?: { id: string; rating: number } | null;
+  service_fee?: number | string | null;
+  paid_at?: string | null;
 }
 
 export default function CustomerBookingsPageContent() {
@@ -54,7 +56,7 @@ export default function CustomerBookingsPageContent() {
   useEffect(() => {
     const payment = searchParams.get("payment");
     if (payment === "success") {
-      toast.success("Payment successful! Your booking is confirmed.");
+      toast.success("Payment received. Thank you!");
     } else if (payment === "cancelled") {
       toast.info("Payment cancelled. You can pay from your bookings page.");
     }
@@ -196,7 +198,10 @@ export default function CustomerBookingsPageContent() {
                       )}
                       {booking.amount && (
                         <span className="font-medium text-gray-700 dark:text-gray-300">
-                          ${Number(booking.amount).toFixed(2)}
+                          ${(Number(booking.amount) + Number(booking.service_fee ?? 0)).toFixed(2)}
+                          {Number(booking.service_fee ?? 0) > 0 && (
+                            <span className="font-normal text-gray-400"> incl. ${Number(booking.service_fee).toFixed(2)} service fee</span>
+                          )}
                         </span>
                       )}
                     </div>
@@ -210,6 +215,14 @@ export default function CustomerBookingsPageContent() {
                         <Eye className="w-3.5 h-3.5" /> View Details
                       </Link>
                       {booking.status === "PENDING" && (
+                        <span className="px-3 py-1.5 text-xs text-gray-500">Waiting for the vendor to accept &amp; sign</span>
+                      )}
+                      {["CONFIRMED", "IN_PROGRESS"].includes(booking.status) && booking.paid_at && (
+                        <span className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-600">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Paid
+                        </span>
+                      )}
+                      {["CONFIRMED", "IN_PROGRESS"].includes(booking.status) && !booking.paid_at && (
                         <button
                           onClick={() => handlePayNow(booking.id)}
                           disabled={payingId === booking.id}

@@ -42,6 +42,7 @@ const preview = {
   source_pdf_url: null,
   consent_text: 'I agree to sign electronically and receive this contract electronically.',
   missing_message: null,
+  pricing: { price: '$500.00', service_fee: '$25.00', total: '$525.00' },
 };
 
 async function fillDetails(user: ReturnType<typeof userEvent.setup>) {
@@ -115,7 +116,7 @@ describe('BookingModal', () => {
     expect(sign).toBeEnabled();
   });
 
-  it('signs, sends the request and moves to payment', async () => {
+  it('signs and sends the request without asking for payment', async () => {
     (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
     (BookingService.create as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'booking-1' } } });
     const onBookingCreated = jest.fn();
@@ -140,7 +141,10 @@ describe('BookingModal', () => {
     });
     expect(ContractsService.bookingPreview).toHaveBeenCalledWith(expect.objectContaining({ event_id: 'event-1' }));
     expect(onBookingCreated).toHaveBeenCalledWith('booking-1');
-    expect(await screen.findByRole('button', { name: /pay now/i })).toBeInTheDocument();
+    expect(await screen.findByText(/contract signed and request sent/i)).toBeInTheDocument();
+    // customers pay only after the vendor accepts and signs
+    expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument();
+    expect(BookingService.createCheckout).not.toHaveBeenCalled();
   });
 
   it('reloads the contract when it changed before signing', async () => {
@@ -158,21 +162,15 @@ describe('BookingModal', () => {
     expect(ContractsService.bookingPreview).toHaveBeenCalledTimes(2);
   });
 
-  it('starts Stripe checkout for the new booking from the payment step', async () => {
+  it('shows the vendor price, service fee and total before signing', async () => {
     (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
-    (BookingService.create as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'booking-1' } } });
-    (BookingService.createCheckout as jest.Mock).mockResolvedValue({
-      data: { success: true, data: { checkout_url: 'https://checkout.stripe.test/s' } },
-    });
     const user = userEvent.setup();
     render(<BookingModal listing={listing} onClose={onClose} />);
     await fillDetails(user);
     await user.click(screen.getByRole('button', { name: /review contract/i }));
-    await user.click(await screen.findByLabelText(/sign electronically/i));
-    await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
-    await user.click(screen.getByRole('button', { name: /sign & send request/i }));
-    await user.click(await screen.findByRole('button', { name: /pay now/i }));
 
-    await waitFor(() => expect(BookingService.createCheckout).toHaveBeenCalledWith('booking-1'));
+    expect(await screen.findByText('$25.00')).toBeInTheDocument();
+    expect(screen.getByText('$525.00')).toBeInTheDocument();
+    expect(screen.getByText(/you pay after the vendor accepts and signs/i)).toBeInTheDocument();
   });
 });

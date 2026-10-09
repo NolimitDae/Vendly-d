@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Calendar, MessageSquare, Loader2, CreditCard, CheckCircle, MapPin, Users, Clock } from "lucide-react";
+import { X, Calendar, MessageSquare, Loader2, CheckCircle, MapPin, Users, Clock } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import {
   ContractsService,
@@ -26,7 +26,7 @@ interface Props {
   onBookingCreated?: (bookingId: string) => void;
 }
 
-type Step = "details" | "contract" | "pay";
+type Step = "details" | "contract" | "sent";
 
 interface Preview {
   title: string;
@@ -36,6 +36,7 @@ interface Preview {
   source_pdf_url: string | null;
   consent_text: string;
   missing_message: string | null;
+  pricing: { price: string; service_fee: string; total: string };
 }
 
 const inputCls =
@@ -107,7 +108,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
       const id: string = res.data.data.id;
       setBookingId(id);
       onBookingCreated?.(id);
-      setStep("pay");
+      setStep("sent");
     } catch (err: any) {
       if (err?.response?.status === 409) {
         toast.info("The contract was updated. Please review it again.");
@@ -120,32 +121,10 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
     }
   };
 
-  const handlePayNow = async () => {
-    if (!bookingId) return;
-    setLoading(true);
-    try {
-      const res = await BookingService.createCheckout(bookingId);
-      if (res.data?.success && res.data.data?.checkout_url) {
-        window.location.href = res.data.data.checkout_url;
-      } else {
-        toast.error(res.data?.message || "Failed to open payment page");
-        setLoading(false);
-      }
-    } catch {
-      toast.error("Failed to initiate payment");
-      setLoading(false);
-    }
-  };
-
-  const handlePayLater = () => {
-    toast.success("Booking request sent! Pay later from your bookings page.");
-    onClose();
-  };
-
   const titles: Record<Step, string> = {
     details: "Book Service",
     contract: "Review & Sign Contract",
-    pay: "Complete Payment",
+    sent: "Request Sent",
   };
 
   return (
@@ -166,7 +145,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
           </button>
         </div>
 
-        {step !== "contract" && (
+        {step === "details" && (
           <div className="mb-5 p-4 bg-primary/5 rounded-xl">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600 dark:text-gray-300">Service price</span>
@@ -174,6 +153,15 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
                 ${Number(listing.price).toFixed(2)} / {listing.price_unit}
               </span>
             </div>
+            <p className="text-xs text-gray-500 mt-1">A Vendly service fee is added. You&apos;ll see the total in the contract.</p>
+          </div>
+        )}
+        {step === "contract" && preview?.pricing && (
+          <div className="mb-4 p-4 bg-primary/5 rounded-xl text-sm space-y-1">
+            <div className="flex justify-between"><span>Vendor price</span><span>{preview.pricing.price}</span></div>
+            <div className="flex justify-between"><span>Vendly service fee</span><span>{preview.pricing.service_fee}</span></div>
+            <div className="flex justify-between font-bold"><span>Total</span><span>{preview.pricing.total}</span></div>
+            <p className="text-xs text-gray-500 pt-1">You pay after the vendor accepts and signs.</p>
           </div>
         )}
 
@@ -239,7 +227,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
               />
             </div>
             <p className="text-xs text-gray-500">
-              Next you&apos;ll review and sign the vendor&apos;s contract. Nothing is charged until you pay.
+              Next you&apos;ll review and sign the vendor&apos;s contract. You pay only after the vendor accepts and signs.
             </p>
 
             <div className="flex gap-3 pt-2">
@@ -276,36 +264,26 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
           />
         )}
 
-        {step === "pay" && (
+        {step === "sent" && (
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-xl text-green-700 dark:text-green-400 text-sm">
               <CheckCircle className="w-5 h-5 flex-shrink-0" />
               <span>Contract signed and request sent. The vendor will review it and Accept &amp; Sign.</span>
             </div>
-            {bookingId && (
-              <a href={`/bookings/${bookingId}`} className="block text-sm text-primary underline">
-                View contract
-              </a>
-            )}
             <p className="text-sm text-gray-500">
-              Pay securely via Stripe. You&apos;ll be redirected to a secure checkout page and brought back when done.
+              Once the vendor signs, you&apos;ll get a notification and can pay securely from your bookings page.
             </p>
-
             <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handlePayLater}
-                className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm"
-              >
-                Pay Later
-              </button>
-              <button
-                onClick={handlePayNow}
-                disabled={loading}
-                className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                Pay Now
+              {bookingId && (
+                <a
+                  href={`/bookings/${bookingId}`}
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-center font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                >
+                  View contract
+                </a>
+              )}
+              <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition">
+                Done
               </button>
             </div>
           </div>

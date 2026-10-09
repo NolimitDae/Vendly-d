@@ -43,7 +43,7 @@ const supportLinks = [
   { name: "Contact me", slug: "/contact-us" }, {
     name: "Privacy Policy", slug: "/privacy"
   }, {
-    name: "Terms", slug: "#"
+    name: "Terms", slug: "/terms"
   }
 ]
 

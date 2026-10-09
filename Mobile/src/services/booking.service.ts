@@ -14,6 +14,8 @@ export interface Booking {
   scheduled_at?: string;
   message?: string;
   amount?: number;
+  service_fee?: number | string | null;
+  paid_at?: string | null;
   created_at: string;
   listing: {
     id: string;

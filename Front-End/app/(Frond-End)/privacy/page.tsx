@@ -15,7 +15,8 @@ const sections: { title: string; body: React.ReactNode }[] = [
     title: "Who we are",
     body: (
       <p>
-        Vendly is an online marketplace that connects customers and event planners with independent vendors. This policy
+        Vendly is an online marketplace operated by ADEJORO HOLDINGS LLC, a Delaware limited liability company, that
+        connects customers and event planners with independent vendors. This policy
         explains what personal information we collect when you use the Vendly website and mobile apps, why we collect
         it, who we share it with and the choices you have. Vendors and customers who book through Vendly are separate
         businesses and people; when a vendor receives your booking details, they handle them under their own practices.

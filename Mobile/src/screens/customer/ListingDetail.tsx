@@ -75,7 +75,7 @@ export default function ListingDetail() {
 
   const handleBookingCreated = () => {
     setModalVisible(false);
-    Alert.alert('Request sent', 'You signed the contract. The vendor will review it and Accept & Sign.', [
+    Alert.alert('Request sent', 'You signed the contract. Once the vendor accepts and signs, you can pay from your bookings.', [
       { text: 'View Bookings', onPress: () => nav.navigate('BookingsTab', { screen: 'CustomerBookings' }) },
       { text: 'OK' },
     ]);

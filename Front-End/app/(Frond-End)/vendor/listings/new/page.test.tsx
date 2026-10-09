@@ -73,6 +73,14 @@ describe('NewListingPage', () => {
   beforeEach(() => jest.clearAllMocks());
 
   describe('subscription gate', () => {
+    // vendor plans are optional until subscriptions launch
+    beforeEach(() => {
+      process.env.NEXT_PUBLIC_REQUIRE_VENDOR_PLAN = 'true';
+    });
+    afterEach(() => {
+      delete process.env.NEXT_PUBLIC_REQUIRE_VENDOR_PLAN;
+    });
+
     it('shows subscription blocked screen when plan is inactive', async () => {
       setupNoActivePlan();
       render(<NewListingPage />);
@@ -267,5 +275,14 @@ describe('NewListingPage', () => {
       expect(screen.getByRole('option', { name: 'Day' })).toBeInTheDocument();
       expect(screen.getByRole('option', { name: 'Event' })).toBeInTheDocument();
     });
+  });
+
+  it('does not require a vendor plan unless NEXT_PUBLIC_REQUIRE_VENDOR_PLAN is set', async () => {
+    setupNoActivePlan();
+    render(<NewListingPage />);
+    await waitFor(() => {
+      expect(screen.queryByText('Subscription Required')).not.toBeInTheDocument();
+    });
+    expect(SubscriptionService.getCurrentPlan).not.toHaveBeenCalled();
   });
 });

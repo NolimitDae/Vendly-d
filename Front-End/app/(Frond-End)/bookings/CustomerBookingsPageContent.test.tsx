@@ -128,12 +128,30 @@ describe('CustomerBookingsPageContent', () => {
       });
     });
 
-    it('shows Pay Now button for PENDING bookings', async () => {
+    it('does not offer payment before the vendor accepts and signs', async () => {
       setupSuccess();
+      render(<CustomerBookingsPageContent />);
+      await waitFor(() => {
+        expect(screen.getByText(/waiting for the vendor to accept/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument();
+    });
+
+    it('shows Pay Now once the vendor has signed and the booking is unpaid', async () => {
+      setupSuccess([makeBooking({ status: 'CONFIRMED', paid_at: null })]);
       render(<CustomerBookingsPageContent />);
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /pay now/i })).toBeInTheDocument();
       });
+    });
+
+    it('shows Paid instead of Pay Now after payment', async () => {
+      setupSuccess([makeBooking({ status: 'CONFIRMED', paid_at: '2030-01-01T00:00:00Z' })]);
+      render(<CustomerBookingsPageContent />);
+      await waitFor(() => {
+        expect(screen.getByText('Paid')).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument();
     });
 
     it('shows Cancel button for PENDING bookings', async () => {
@@ -242,7 +260,7 @@ describe('CustomerBookingsPageContent', () => {
       render(<CustomerBookingsPageContent />);
       await waitFor(() => {
         expect(toast.success).toHaveBeenCalledWith(
-          'Payment successful! Your booking is confirmed.',
+          'Payment received. Thank you!',
         );
       });
     });

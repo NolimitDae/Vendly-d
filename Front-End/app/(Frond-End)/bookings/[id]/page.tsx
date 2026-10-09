@@ -48,6 +48,8 @@ interface Booking {
   id: string;
   status: string;
   amount?: number;
+  service_fee?: number | string | null;
+  paid_at?: string | null;
   scheduled_at?: string;
   message?: string;
   created_at: string;
@@ -80,6 +82,19 @@ export default function CustomerBookingDetailPage() {
       .catch(() => { toast.error("Failed to load booking"); router.push("/bookings"); })
       .finally(() => setLoading(false));
   }, [id]);
+
+  const [paying, setPaying] = useState(false);
+  const payNow = async () => {
+    setPaying(true);
+    try {
+      const res = await BookingService.createCheckout(id);
+      if (res.data?.data?.checkout_url) window.location.href = res.data.data.checkout_url;
+      else setPaying(false);
+    } catch {
+      toast.error("Couldn't open payment");
+      setPaying(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -129,10 +144,15 @@ export default function CustomerBookingDetailPage() {
           )}
           {booking.amount && (
             <div>
-              <p className="text-gray-400 text-xs">Amount</p>
+              <p className="text-gray-400 text-xs">Total</p>
               <p className="font-medium text-gray-800 dark:text-gray-200">
-                ${Number(booking.amount).toFixed(2)}
+                ${(Number(booking.amount) + Number(booking.service_fee ?? 0)).toFixed(2)}
               </p>
+              {Number(booking.service_fee ?? 0) > 0 && (
+                <p className="text-xs text-gray-400">
+                  ${Number(booking.amount).toFixed(2)} + ${Number(booking.service_fee).toFixed(2)} Vendly service fee
+                </p>
+              )}
             </div>
           )}
           {booking.message && (
@@ -143,6 +163,25 @@ export default function CustomerBookingDetailPage() {
           )}
         </div>
       </div>
+
+      {["CONFIRMED", "IN_PROGRESS"].includes(booking.status) && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
+          {booking.paid_at ? (
+            <p className="text-sm text-green-700">Paid on {dayjs(booking.paid_at).format("MMM D, YYYY")}</p>
+          ) : (
+            <>
+              <p className="text-sm text-gray-600 dark:text-gray-300">The vendor signed. Pay to secure your booking.</p>
+              <button
+                onClick={payNow}
+                disabled={paying}
+                className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {paying ? "Opening…" : "Pay now"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <BookingContractSection bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
 
