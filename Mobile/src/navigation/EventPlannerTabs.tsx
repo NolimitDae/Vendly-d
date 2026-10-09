@@ -15,6 +15,7 @@ import ChatList from '../screens/customer/ChatList';
 import ChatDetail from '../screens/customer/ChatDetail';
 
 import type {
+  DiscoverStackParams,
   EventPlannerStackParams,
   CustomerMessagesStackParams,
   EPTabParams,
@@ -23,6 +24,7 @@ import type {
 const Tab = createBottomTabNavigator<EPTabParams>();
 const Stack = createNativeStackNavigator<EventPlannerStackParams>();
 const MsgStack = createNativeStackNavigator<CustomerMessagesStackParams>();
+const DiscStack = createNativeStackNavigator<DiscoverStackParams>();
 
 const HEADER = {
   headerStyle: { backgroundColor: COLORS.primary },
@@ -47,9 +49,9 @@ function EventsStack() {
 
 function DiscoverStack() {
   return (
-    <Stack.Navigator screenOptions={HEADER}>
-      <Stack.Screen name="Discover" component={Discover} options={{ title: 'Find Vendors' }} />
-    </Stack.Navigator>
+    <DiscStack.Navigator screenOptions={HEADER}>
+      <DiscStack.Screen name="Discover" component={Discover} options={{ title: 'Find Vendors' }} />
+    </DiscStack.Navigator>
   );
 }
 

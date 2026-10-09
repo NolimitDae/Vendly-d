@@ -19,7 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { api } from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { NativeStackNavigationProp, RouteProp } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import type { VendorListingsStackParams } from '../../navigation/types';
 
 interface Category { id: string; name: string; }

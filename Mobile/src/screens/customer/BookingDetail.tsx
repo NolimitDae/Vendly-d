@@ -278,7 +278,7 @@ export default function BookingDetail() {
       </ScrollView>
 
       {/* Action buttons */}
-      {booking.status !== 'IN_PROGRESS' && booking.status !== 'CANCELLED' && (
+      {booking.status !== 'CANCELLED' && !(booking.status === 'IN_PROGRESS' && booking.paid_at) && (
         <View style={s.footer}>
           {booking.status === 'PENDING' && (
             <TouchableOpacity
@@ -321,6 +321,16 @@ export default function BookingDetail() {
                 <Text style={s.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
             </View>
+          )}
+
+          {(booking.status === 'IN_PROGRESS' || booking.status === 'COMPLETED') && !booking.paid_at && (
+            <TouchableOpacity
+              style={[s.payBtn, { marginBottom: 10 }, actionLoading && s.btnDisabled]}
+              onPress={handlePayNow}
+              disabled={actionLoading}
+            >
+              {actionLoading ? <ActivityIndicator color={COLORS.white} /> : <Text style={s.payBtnText}>Pay Now</Text>}
+            </TouchableOpacity>
           )}
 
           {booking.status === 'COMPLETED' && (

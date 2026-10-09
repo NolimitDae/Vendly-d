@@ -51,10 +51,13 @@ Built: data model with DB-enforced write-once signatures/audit log, Vendly defau
 | ID | Location | Issue | Priority |
 |----|----------|-------|----------|
 | R1 | `Front-End/helper/cookie.helper.ts` | Auth token cookie is `Secure` (prod) + `SameSite=Lax` but not `HttpOnly`, because the client reads it to build `Authorization` headers. Making it HttpOnly needs server-set cookies and `credentials: include` on every request. Accepted for now; XSS hardening (S6) reduces exposure | Medium |
-| R2 | `Back-end/**/*.spec.ts` | 18 suites / 10 tests were already failing before this work (stale specs: missing DTO fields, enum string literals, controller DI). Production code builds cleanly | Medium |
-| R3 | `Mobile/src/` | 5 pre-existing TypeScript errors (`notifications.service.ts`, `ListingForm.tsx`, `EventPlannerTabs.tsx`) | Low |
 
 ## Closed
+
+- All backend tests pass (52 suites, 554 tests) and the backend, web and mobile apps type-check with no errors.
+- Stripe webhooks: `main.ts` replaced Nest's raw-body parser, so every webhook failed signature checks; fixed with `useBodyParser`. Webhook failures now return 5xx so Stripe retries, and handlers are idempotent (booking payments, deposits, subscription checkouts).
+- Booking emails: the template threw for optional values; fixed.
+- Payments: customers pay after Accept & Sign; duplicate payments are refunded automatically; vendor price credited once when a paid booking completes.
 
 - `.env.example` files exist in `Back-end/`, `Front-End/` (`example.env.local`) and `Mobile/`.
 - Test coverage: 50+ backend spec files exist; added specs for `PushService`, booking proofs/deliverables/push, listing pause/availability, and the deposit fix (326 backend tests, 316 passing — the 10 failures predate this work).

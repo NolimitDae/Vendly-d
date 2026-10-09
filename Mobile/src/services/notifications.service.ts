@@ -4,7 +4,8 @@ import { api } from './api';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
@@ -41,7 +42,10 @@ export const NotificationsService = {
   async scheduleLocal(title: string, body: string, secondsFromNow = 0): Promise<string> {
     return Notifications.scheduleNotificationAsync({
       content: { title, body, sound: true },
-      trigger: secondsFromNow > 0 ? { seconds: secondsFromNow } : null,
+      trigger:
+        secondsFromNow > 0
+          ? { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsFromNow }
+          : null,
     });
   },
 
