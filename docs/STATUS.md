@@ -32,3 +32,7 @@ _Last updated: 2026-10-08 (Build Plan Phase 0 complete)_
 | **Mobile app (Expo)** | Done | `Mobile/src/screens/` | Customer, vendor, event planner screens; proofs, deliverables, unavailable dates; push deep-linking |
 | **Booking email templates** | Done | `src/mail/templates/booking-notification.ejs` | Branded HTML email for new booking, confirmed, rejected, completed, cancelled |
 | **Rental inventory (date blocking)** | Done | `ListingAvailability`, `GET/POST/DELETE /vendor/listings/:id/availability` | Structured unavailability ranges; customers read via marketplace endpoint |
+
+## Contracts
+
+In-house vendor-customer contracts with e-signature are live on backend, web and mobile. See `docs/CONTRACTS.md` for the spec and `docs/PROGRESS.md` (C1-C7) for what depends on features that don't exist yet.

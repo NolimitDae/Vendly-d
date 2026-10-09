@@ -32,6 +32,20 @@ _Updated: 2026-10-08. All Build Plan Phase 0 items resolved._
 | F9 | Push notifications | `PushService` sends via Expo on booking create/confirm/reject/start/complete/cancel and new deliverables; mobile taps open the booking detail |
 | F10 | Web + mobile UI | Booking detail pages (proof upload, deliverables), unavailable dates on listing pages, block/unblock dates on vendor listing edit |
 
+## Contracts (docs/CONTRACTS.md)
+
+Built: data model with DB-enforced write-once signatures/audit log, Vendly default templates (all clauses marked [LAWYER REVIEW]), vendor default or uploaded-PDF contracts with versioning, customer signs at request, vendor Accept & Sign executes, signed PDF with signature certificate and SHA-256 (verify by upload or code), amendments, planner list + zip, admin templates/audit/disable, reminders and notifications, account deletion that keeps executed contracts. Web and mobile UI. Tests: `yarn test` (unit) and `yarn test:e2e:contracts` (needs a disposable Postgres + Redis).
+
+| ID | Gap | Why |
+|----|-----|-----|
+| C1 | Deposit charged on Accept & Sign | Phase 1 payments (saved card + deposit) don't exist yet; contracts run on the current Pay Now flow and the contract text says payment is in full through Vendly |
+| C2 | Request expiry voiding contracts | Bookings have no expiry concept yet; decline and cancel do void |
+| C3 | Custom quotes in chat generating contracts | Custom quotes don't exist yet |
+| C4 | Dispute queue showing the contract | No dispute system exists yet; admin can view any booking's contract and audit log |
+| C5 | Client co-signature | Behind a flag and off at launch per spec; not built |
+| C6 | Privacy policy wording | Add "Signed contracts are kept for 7 years" to the privacy policy (admin dashboard > Privacy) |
+| C7 | Lawyer review | Remove [LAWYER REVIEW] by publishing new template versions once approved |
+
 ## Remaining Open Items
 
 | ID | Location | Issue | Priority |
