@@ -29,16 +29,13 @@ const mockUser = {
 };
 
 const mockUserRepo = {
-  findByEmail: jest.fn(),
-  findById: jest.fn(),
-  create: jest.fn(),
-  update: jest.fn(),
+  getUserDetails: jest.fn(),
+  exist: jest.fn(),
+  validatePassword: jest.fn(),
 };
 
 const mockUcodeRepo = {
-  create: jest.fn(),
-  findByEmailAndToken: jest.fn(),
-  deleteByEmail: jest.fn(),
+  createToken: jest.fn(),
 };
 
 const mockJwt = {
@@ -100,110 +97,127 @@ describe('AuthService', () => {
 
   describe('me', () => {
     it('should return user data for valid userId', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.user.findFirst.mockResolvedValue({ id: 'user-1', name: 'Jane Doe', email: 'jane@test.com', avatar: null, type: 'CUSTOMER' });
 
-      const result = await service.me('user-1');
-      expect(result).toBeDefined();
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'user-1' } }),
-      );
+      const result: any = await service.me('user-1');
+      expect(result.success).toBe(true);
+      expect(mockPrisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'user-1' } }));
     });
 
-    it('should throw NotFoundException for unknown userId', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+    it('should report an unknown userId', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(null);
 
-      await expect(service.me('bad-id')).rejects.toThrow(NotFoundException);
+      const result: any = await service.me('bad-id');
+      expect(result).toEqual({ success: false, message: 'User not found' });
     });
   });
 
   describe('login', () => {
-    it('should return tokens on successful login', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockRedis.set.mockResolvedValue('OK');
+    it('should return tokens and store the refresh token', async () => {
+      mockUserRepo.getUserDetails.mockResolvedValue(mockUser);
 
-      const result = await service.login({ email: 'jane@test.com', userId: 'user-1' });
+      const result: any = await service.login({ email: 'jane@test.com', userId: 'user-1' });
 
-      expect(result).toBeDefined();
-      expect(mockJwt.sign).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.authorization).toEqual({ type: 'bearer', access_token: 'mock-token', refresh_token: 'mock-token' });
+      expect(mockJwt.sign).toHaveBeenCalledWith(
+        { email: 'jane@test.com', sub: 'user-1', type: 'CUSTOMER' },
+        expect.any(Object),
+      );
+      expect(mockRedis.set).toHaveBeenCalledWith('refresh_token:user-1', 'mock-token', 'EX', 604800);
     });
   });
 
   describe('forgotPassword', () => {
     it('should send OTP when user exists', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue(mockUser);
-      mockPrisma.uCode.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrisma.uCode.create.mockResolvedValue({ token: '123456' });
+      mockUserRepo.exist.mockResolvedValue({ id: 'user-1', name: 'Jane Doe' });
+      mockUcodeRepo.createToken.mockResolvedValue('123456');
 
-      await service.forgotPassword('jane@test.com');
-      expect(mockMail.sendOtpCodeToEmail).toHaveBeenCalled();
+      const result: any = await service.forgotPassword('jane@test.com');
+      expect(result.success).toBe(true);
+      expect(mockMail.sendOtpCodeToEmail).toHaveBeenCalledWith({ email: 'jane@test.com', name: 'Jane Doe', otp: '123456' });
     });
 
-    it('should not reveal whether email exists (no throw)', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue(null);
+    it('gives the same answer for unknown emails, so accounts cannot be discovered', async () => {
+      mockUserRepo.exist.mockResolvedValue(null);
 
-      await expect(service.forgotPassword('nobody@test.com')).resolves.not.toThrow();
+      const known: any = await (async () => {
+        mockUserRepo.exist.mockResolvedValueOnce({ id: 'user-1', name: 'Jane' });
+        mockUcodeRepo.createToken.mockResolvedValueOnce('1');
+        return service.forgotPassword('jane@test.com');
+      })();
+      const unknown: any = await service.forgotPassword('nobody@test.com');
+
+      expect(unknown).toEqual(known);
+      expect(mockMail.sendOtpCodeToEmail).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('refreshToken', () => {
     it('should issue new access token with valid refresh token', async () => {
       mockRedis.get.mockResolvedValue('valid-refresh');
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockUserRepo.getUserDetails.mockResolvedValue(mockUser);
 
-      const result = await service.refreshToken('user-1', 'valid-refresh');
-      expect(result).toBeDefined();
+      const result: any = await service.refreshToken('user-1', 'valid-refresh');
+      expect(result.success).toBe(true);
+      expect(result.authorization.access_token).toBe('mock-token');
     });
 
-    it('should throw UnauthorizedException with invalid refresh token', async () => {
+    it('should reject a refresh token that does not match the stored one', async () => {
       mockRedis.get.mockResolvedValue('stored-token');
 
-      await expect(service.refreshToken('user-1', 'wrong-token')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      const result: any = await service.refreshToken('user-1', 'wrong-token');
+      expect(result.success).toBe(false);
+      expect(mockJwt.sign).not.toHaveBeenCalled();
     });
   });
 
   describe('get2FAStatus', () => {
     it('should return enabled status', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        ...mockUser,
-        two_factor_enabled: true,
-      });
+      mockPrisma.user.findFirst.mockResolvedValue({ is_two_factor_enabled: 1 });
 
-      const result = await service.get2FAStatus('user-1');
+      const result: any = await service.get2FAStatus('user-1');
       expect(result.data.enabled).toBe(true);
     });
 
     it('should return disabled status', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.user.findFirst.mockResolvedValue({ is_two_factor_enabled: 0 });
 
-      const result = await service.get2FAStatus('user-1');
+      const result: any = await service.get2FAStatus('user-1');
       expect(result.data.enabled).toBe(false);
     });
   });
 
   describe('validateUser', () => {
-    it('should return user for valid credentials', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue(mockUser);
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    const verified = { ...mockUser, email_verified_at: new Date(), is_two_factor_enabled: 0 };
+
+    it('should return the user without the password for valid credentials', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(verified);
+      mockUserRepo.validatePassword.mockResolvedValue(true);
 
       const result = await service.validateUser('jane@test.com', 'password');
-      expect(result).not.toBeNull();
+      expect(result.id).toBe('user-1');
+      expect(result.password).toBeUndefined();
     });
 
-    it('should return null for wrong password', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue(mockUser);
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+    it('should reject a wrong password', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(verified);
+      mockUserRepo.validatePassword.mockResolvedValue(false);
 
-      const result = await service.validateUser('jane@test.com', 'wrong');
-      expect(result).toBeNull();
+      await expect(service.validateUser('jane@test.com', 'wrong')).rejects.toThrow(UnauthorizedException);
     });
 
-    it('should return null for unknown email', async () => {
+    it('should reject an unverified email', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue({ ...verified, email_verified_at: null });
+      mockUserRepo.validatePassword.mockResolvedValue(true);
+
+      await expect(service.validateUser('jane@test.com', 'password')).rejects.toThrow(/verify your email/);
+    });
+
+    it('should reject an unknown email', async () => {
       mockPrisma.user.findFirst.mockResolvedValue(null);
 
-      const result = await service.validateUser('nobody@test.com', 'any');
-      expect(result).toBeNull();
+      await expect(service.validateUser('nobody@test.com', 'any')).rejects.toThrow(UnauthorizedException);
     });
   });
 });

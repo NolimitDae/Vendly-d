@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UserRepository } from 'src/common/repository/user/user.repository';
+import { ADMIN_APPROVE_STATUS } from './dto/approve-license.dto';
 
 jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
   TanvirStorage: {
@@ -191,7 +192,7 @@ describe('UserService', () => {
         license_status: 'APPROVED',
       });
 
-      const result = await service.approveLicense({ licenseStatus: 'APPROVED' }, 'vendor-1');
+      const result = await service.approveLicense({ licenseStatus: ADMIN_APPROVE_STATUS.APPROVED }, 'vendor-1');
 
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'vendor-1' } }),
@@ -210,7 +211,7 @@ describe('UserService', () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.approveLicense({ licenseStatus: 'APPROVED' }, 'bad-id'),
+        service.approveLicense({ licenseStatus: ADMIN_APPROVE_STATUS.APPROVED }, 'bad-id'),
       ).rejects.toThrow('User not found or does not have a vendor profile');
     });
 
@@ -221,7 +222,7 @@ describe('UserService', () => {
       });
 
       await expect(
-        service.approveLicense({ licenseStatus: 'APPROVED' }, 'vendor-1'),
+        service.approveLicense({ licenseStatus: ADMIN_APPROVE_STATUS.APPROVED }, 'vendor-1'),
       ).rejects.toThrow('User not found or does not have a vendor profile');
     });
   });

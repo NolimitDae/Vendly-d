@@ -59,6 +59,7 @@ describe('ContactService', () => {
       const result = await service.create({
         first_name: 'Jane',
         email: 'jane@example.com',
+        message: 'Hello',
       });
 
       expect(result.success).toBe(false);
@@ -68,11 +69,11 @@ describe('ContactService', () => {
     it('should only include provided fields in the data object', async () => {
       mockPrisma.contact.create.mockResolvedValue({ id: 'contact-2' });
 
-      const dto = { email: 'partial@example.com' };
+      const dto = { email: 'partial@example.com', message: 'Question' };
       await service.create(dto);
 
       expect(mockPrisma.contact.create).toHaveBeenCalledWith({
-        data: { email: 'partial@example.com' },
+        data: { email: 'partial@example.com', message: 'Question' },
       });
     });
   });
