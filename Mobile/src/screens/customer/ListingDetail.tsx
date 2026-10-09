@@ -19,7 +19,7 @@ import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/nativ
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { api } from '../../services/api';
-import { BookingService } from '../../services/booking.service';
+import RequestBookingSheet from '../../components/contracts/RequestBookingSheet';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
@@ -52,9 +52,6 @@ export default function ListingDetail() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [message, setMessage] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [blockedDates, setBlockedDates] = useState<{ id: string; start_date: string; end_date: string; reason?: string }[]>([]);
 
   const load = useCallback(async () => {
@@ -76,30 +73,12 @@ export default function ListingDetail() {
 
   const handleBookNow = () => setModalVisible(true);
 
-  const handleSubmitBooking = async () => {
-    if (!listing?.vendor?.id) return;
-    setSubmitting(true);
-    try {
-      const res = await BookingService.createBooking({
-        listing_id: listing.id,
-        vendor_id: listing.vendor.id,
-        scheduled_at: scheduledAt || undefined,
-        message: message || undefined,
-      });
-      if (res.data?.success) {
-        setModalVisible(false);
-        setScheduledAt('');
-        setMessage('');
-        Alert.alert('Success', 'Booking request sent!', [
-          { text: 'View Bookings', onPress: () => nav.navigate('CustomerBookings') },
-          { text: 'OK' },
-        ]);
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message ?? 'Failed to create booking');
-    } finally {
-      setSubmitting(false);
-    }
+  const handleBookingCreated = () => {
+    setModalVisible(false);
+    Alert.alert('Request sent', 'You signed the contract. The vendor will review it and Accept & Sign.', [
+      { text: 'View Bookings', onPress: () => nav.navigate('BookingsTab', { screen: 'CustomerBookings' }) },
+      { text: 'OK' },
+    ]);
   };
 
   if (loading) {
@@ -226,57 +205,14 @@ export default function ListingDetail() {
         </TouchableOpacity>
       </View>
 
-      {/* Booking modal */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Request Booking</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={COLORS.gray[600]} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={s.label}>Preferred Date & Time</Text>
-            <TextInput
-              style={s.input}
-              value={scheduledAt}
-              onChangeText={setScheduledAt}
-              placeholder="e.g. 2024-12-25 or Dec 25, 2024"
-              placeholderTextColor={COLORS.gray[400]}
-            />
-
-            <Text style={s.label}>Message to Vendor (optional)</Text>
-            <TextInput
-              style={[s.input, s.textarea]}
-              value={message}
-              onChangeText={setMessage}
-              placeholder="Tell the vendor about your event..."
-              placeholderTextColor={COLORS.gray[400]}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-
-            <TouchableOpacity
-              style={[s.submitBtn, submitting && s.btnDisabled]}
-              onPress={handleSubmitBooking}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color={COLORS.white} />
-              ) : (
-                <Text style={s.submitBtnText}>Request Booking</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {listing.vendor && (
+        <RequestBookingSheet
+          visible={modalVisible}
+          listing={{ id: listing.id, title: listing.title, vendorId: listing.vendor.id }}
+          onClose={() => setModalVisible(false)}
+          onCreated={handleBookingCreated}
+        />
+      )}
     </View>
   );
 }

@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { api } from '../../services/api';
+import DeleteAccountButton from '../../components/contracts/DeleteAccountButton';
 
 interface User {
   id: string;
@@ -180,15 +181,27 @@ export default function VendorProfile() {
         )}
       </View>
 
+      <TouchableOpacity style={s.menuRow} onPress={() => navigation.navigate('VendorContracts')}>
+        <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+        <Text style={s.menuText}>Contracts</Text>
+        <Ionicons name="chevron-forward" size={18} color={COLORS.gray[400]} />
+      </TouchableOpacity>
+
       <TouchableOpacity style={s.logout} onPress={handleLogout}>
         <Ionicons name="log-out-outline" size={18} color="#ef4444" />
         <Text style={s.logoutText}>Log Out</Text>
       </TouchableOpacity>
+      <DeleteAccountButton />
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
+  menuRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 12,
+    padding: 16, backgroundColor: COLORS.white, borderRadius: 14,
+  },
+  menuText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.gray[900] },
   root: { flex: 1, backgroundColor: COLORS.gray[50] },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { alignItems: 'center', paddingVertical: 32, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.gray[100] },

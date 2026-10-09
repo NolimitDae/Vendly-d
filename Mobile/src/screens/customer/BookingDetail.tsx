@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { COLORS } from '../../constants/colors';
 import { BookingService, Booking, BookingStatus } from '../../services/booking.service';
 import { api } from '../../services/api';
+import BookingContractCard from '../../components/contracts/BookingContractCard';
 import type { RouteProp } from '@react-navigation/native';
 
 interface Proof {
@@ -216,6 +217,8 @@ export default function BookingDetail() {
             value={format(new Date(booking.created_at), 'MMM d, yyyy')}
           />
         </View>
+
+        <BookingContractCard bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
 
         {/* Message */}
         {booking.message && (

@@ -10,6 +10,7 @@ import VendorListings from '../screens/vendor/Listings';
 import ListingForm from '../screens/vendor/ListingForm';
 import VendorBookings from '../screens/vendor/Bookings';
 import VendorBookingDetail from '../screens/vendor/BookingDetail';
+import VendorContracts from '../screens/vendor/Contracts';
 import VendorProfile from '../screens/vendor/Profile';
 import ChatList from '../screens/customer/ChatList';
 import ChatDetail from '../screens/customer/ChatDetail';
@@ -75,6 +76,7 @@ function ProfileNavigator() {
   return (
     <ProfileStack.Navigator screenOptions={HEADER}>
       <ProfileStack.Screen name="VendorProfile" component={VendorProfile} options={{ title: 'My Profile' }} />
+      <ProfileStack.Screen name="VendorContracts" component={VendorContracts} options={{ title: 'Contracts' }} />
     </ProfileStack.Navigator>
   );
 }

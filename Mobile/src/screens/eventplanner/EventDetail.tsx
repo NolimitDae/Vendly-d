@@ -15,6 +15,7 @@ import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { COLORS } from '../../constants/colors';
+import EventContractsCard from '../../components/contracts/EventContractsCard';
 import {
   EventsService,
   EventDetail as EventDetailType,
@@ -114,7 +115,12 @@ export default function EventDetail() {
         {tab === 'overview' && (
           <OverviewTab event={event} completedTasks={completedTasks} totalTasks={totalTasks} />
         )}
-        {tab === 'vendors' && <VendorsTab event={event} />}
+        {tab === 'vendors' && (
+          <>
+            <VendorsTab event={event} />
+            <EventContractsCard eventId={event.id} />
+          </>
+        )}
         {tab === 'budget' && <BudgetTab event={event} onRefresh={load} />}
         {tab === 'tasks' && <TasksTab event={event} onRefresh={load} />}
       </ScrollView>

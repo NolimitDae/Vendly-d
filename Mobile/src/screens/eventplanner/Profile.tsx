@@ -14,6 +14,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
+import DeleteAccountButton from '../../components/contracts/DeleteAccountButton';
 import {
   EventPlannerService,
   EventPlannerProfile,
@@ -275,6 +276,7 @@ export default function EPProfile() {
           <Text style={s.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
+      <DeleteAccountButton />
     </ScrollView>
   );
 }

@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { BookingService } from '../../services/booking.service';
+import BookingContractCard from '../../components/contracts/BookingContractCard';
 import type { RouteProp } from '@react-navigation/native';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 
@@ -80,6 +81,8 @@ export default function VendorBookingDetail() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  // bookings with a contract are confirmed through Accept & Sign on the contract card
+  const [hasContract, setHasContract] = useState<boolean | null>(null);
 
   // Proof state
   const [proofs, setProofs] = useState<Proof[]>([]);
@@ -264,6 +267,14 @@ export default function VendorBookingDetail() {
           </Text>
         </DetailSection>
 
+        <BookingContractCard
+          bookingId={booking.id}
+          role="VENDOR"
+          bookingStatus={booking.status}
+          onLoaded={setHasContract}
+          onChanged={load}
+        />
+
         {/* Photo Proof */}
         <View style={s.section}>
           <Text style={s.sectionLabel}>Photo Proof</Text>
@@ -368,7 +379,7 @@ export default function VendorBookingDetail() {
           <ActivityIndicator color={COLORS.primary} style={{ marginTop: 24 }} />
         ) : (
           <View style={s.actions}>
-            {booking.status === 'PENDING' && (
+            {booking.status === 'PENDING' && hasContract === false && (
               <>
                 <TouchableOpacity
                   style={s.btnConfirm}

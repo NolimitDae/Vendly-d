@@ -6,9 +6,11 @@ import { navigationRef } from '../navigation/navigationRef';
 function openFromNotification(data: Record<string, unknown> | undefined, userType?: string) {
   if (!data || !navigationRef.isReady()) return;
 
-  if (data.type === 'booking' && userType === 'EVENT_PLANNER') {
+  // contract notifications (signed, executed, amendments, reminders) open the booking too
+  const isBooking = data.type === 'booking' || data.type === 'contract';
+  if (isBooking && userType === 'EVENT_PLANNER') {
     navigationRef.navigate('EventsTab');
-  } else if (data.type === 'booking' && typeof data.bookingId === 'string') {
+  } else if (isBooking && typeof data.bookingId === 'string') {
     const screen = userType === 'VENDOR' ? 'VendorBookingDetail' : 'BookingDetail';
     navigationRef.navigate('BookingsTab', {
       screen,

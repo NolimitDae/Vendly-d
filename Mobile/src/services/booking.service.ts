@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { BookingFields, SignaturePayload } from './contracts.service';
 
 export type BookingStatus =
   | 'PENDING'
@@ -32,11 +33,10 @@ export interface Booking {
   };
 }
 
-export interface CreateBookingData {
-  listing_id: string;
-  vendor_id: string;
-  scheduled_at?: string;
-  message?: string;
+/** A signed booking request (see ContractsService.bookingPreview). */
+export interface CreateBookingData extends BookingFields {
+  preview_token: string;
+  signature: SignaturePayload;
 }
 
 export interface BookingListParams {
@@ -64,8 +64,9 @@ export const BookingService = {
   getBooking: (id: string) =>
     api.get<{ success: boolean; data: Booking }>(`/bookings/${id}`),
 
-  confirmBooking: (id: string) =>
-    api.patch<{ success: boolean; data: Booking }>(`/bookings/${id}/confirm`),
+  /** Accept & Sign: the vendor's countersignature confirms the booking. */
+  confirmBooking: (id: string, signature?: SignaturePayload) =>
+    api.patch<{ success: boolean; data: Booking }>(`/bookings/${id}/confirm`, signature ? { signature } : {}),
 
   rejectBooking: (id: string) =>
     api.patch<{ success: boolean; data: Booking }>(`/bookings/${id}/reject`),

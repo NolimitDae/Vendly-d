@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../../constants/colors';
+import DeleteAccountButton from '../../components/contracts/DeleteAccountButton';
 import { api, TOKEN_KEY, USER_KEY } from '../../services/api';
 import { BookingService } from '../../services/booking.service';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -217,6 +218,7 @@ export default function CustomerProfile() {
         <Ionicons name="log-out-outline" size={20} color="#ef4444" />
         <Text style={s.logoutText}>Log Out</Text>
       </TouchableOpacity>
+      <DeleteAccountButton />
     </ScrollView>
   );
 }

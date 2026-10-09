@@ -14,7 +14,8 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { MarketplaceService, BookingService, Listing } from '../../services/marketplace.service';
+import { MarketplaceService, Listing } from '../../services/marketplace.service';
+import RequestBookingSheet from '../../components/contracts/RequestBookingSheet';
 import { EventsService, Event } from '../../services/events.service';
 
 const DEBOUNCE_MS = 400;
@@ -86,6 +87,8 @@ export default function Discover() {
     search(query, categoryId, next, true);
   };
 
+  const [request, setRequest] = useState<{ listing: Listing; event: Event } | null>(null);
+
   const handleAddToEvent = async (listing: Listing) => {
     if (!selectedEvent) {
       if (activeEvents.length === 0) {
@@ -112,29 +115,8 @@ export default function Discover() {
     );
   };
 
-  const bookAndLink = async (listing: Listing, event: Event) => {
-    setAddingId(listing.id);
-    try {
-      // 1. Create a booking (event planner acts as customer)
-      const bookRes = await BookingService.create({
-        listing_id: listing.id,
-        vendor_id: listing.vendor.id,
-      });
-      if (!bookRes.data?.success) {
-        Alert.alert('Error', 'Failed to create booking');
-        return;
-      }
-      const bookingId = bookRes.data.data.id;
-
-      // 2. Link booking to event
-      await EventsService.linkBooking(event.id, bookingId);
-      Alert.alert('Success', `${listing.vendor.name} added to "${event.name}"`);
-    } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message ?? 'Failed to add vendor');
-    } finally {
-      setAddingId(null);
-    }
-  };
+  // the signed request attaches the booking to the event
+  const bookAndLink = (listing: Listing, event: Event) => setRequest({ listing, event });
 
   const renderItem = ({ item }: { item: Listing }) => (
     <ListingCard
@@ -231,6 +213,20 @@ export default function Discover() {
           ))}
         </View>
       </Modal>
+
+      {request && (
+        <RequestBookingSheet
+          visible
+          listing={{ id: request.listing.id, title: request.listing.title, vendorId: request.listing.vendor.id }}
+          eventId={request.event.id}
+          onClose={() => setRequest(null)}
+          onCreated={() => {
+            const { listing, event } = request;
+            setRequest(null);
+            Alert.alert('Request sent', `You signed ${listing.vendor.name}'s contract. They'll be added to "${event.name}" and will Accept & Sign.`);
+          }}
+        />
+      )}
 
       {/* Booking confirmation modal (event selection) */}
       <Modal visible={!!addModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAddModal(null)}>

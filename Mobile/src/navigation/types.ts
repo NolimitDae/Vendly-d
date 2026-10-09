@@ -70,6 +70,7 @@ export type VendorBookingsStackParams = {
 
 export type VendorProfileStackParams = {
   VendorProfile: undefined;
+  VendorContracts: undefined;
 };
 
 export type VendorMessagesStackParams = {

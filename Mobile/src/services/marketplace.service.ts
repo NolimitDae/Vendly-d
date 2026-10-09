@@ -41,11 +41,3 @@ export const MarketplaceService = {
     api.get<{ success: boolean; data: Listing }>(`/marketplace/listings/${id}`),
 };
 
-export const BookingService = {
-  create: (data: {
-    listing_id: string;
-    vendor_id: string;
-    scheduled_at?: string;
-    message?: string;
-  }) => api.post<{ success: boolean; data: { id: string } }>('/bookings', data),
-};
