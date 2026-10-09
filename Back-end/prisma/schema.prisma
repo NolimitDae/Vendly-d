@@ -216,6 +216,12 @@ model User {
   // Deliverables sent
   deliverables  BookingDeliverable[] @relation("DeliverableVendor")
 
+  vendorContracts     VendorContract[]     @relation("VendorContractOwner")
+  contractSignatures  ContractSignature[]  @relation("ContractSigner")
+  contractAuditEvents ContractAuditEvent[] @relation("ContractAuditActor")
+  // anonymised instead of deleted when the user is party to an executed contract
+  anonymized_at       DateTime?
+
   // Events as planner
   plannedEvents Event[] @relation("EventPlannerEvents")
 
@@ -252,6 +258,8 @@ model VendorProfile {
   about_me                String?                  @db.Text
   address                 String?
   vendorSubscriptionPlans VendorSubscriptionPlan[]
+  // private storage key of the vendor's saved drawn signature
+  saved_signature_key     String?
 
   @@map("vendor_profiles")
 }
@@ -670,6 +678,7 @@ model VendorListing {
   reviews        Review[]
   savedBy        SavedListing[]        @relation("ListingSavedBy")
   blockedDates   ListingAvailability[]
+  contractAssignments VendorContractListing[]
 
   @@map("vendor_listings")
 }
@@ -755,7 +764,13 @@ model Booking {
 
   payment_transaction_id String?
 
+  event_start_at DateTime?
+  event_end_at   DateTime?
+  venue_address  String?  @db.VarChar(500)
+  guest_count    Int?
+
   review        Review?
+  contracts     BookingContract[]
   event_bookings EventBooking[]
   proofs        BookingProof[]
   deliverables  BookingDeliverable[]
@@ -999,3 +1014,221 @@ model Contact {
  * --- Others Schema end ---
  * -------------------------------------------------------------
  */
+
+
+// ─── Contracts ──────────────────────────────────────────────────────────────
+
+enum ContractCategory {
+  GENERAL
+  PHOTO_VIDEO
+  RENTALS
+  CATERING
+  ENTERTAINMENT
+  VENUE
+  BEAUTY
+}
+
+enum ContractTemplateStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum VendorContractType {
+  DEFAULT
+  UPLOADED
+}
+
+enum VendorContractStatus {
+  ACTIVE
+  ARCHIVED
+  DISABLED
+}
+
+enum BookingContractStatus {
+  DRAFT
+  AWAITING_CUSTOMER
+  AWAITING_VENDOR
+  EXECUTED
+  VOID
+  SUPERSEDED
+}
+
+enum ContractSignerRole {
+  CUSTOMER
+  PLANNER
+  VENDOR
+}
+
+enum ContractAuditAction {
+  CREATED
+  VIEWED
+  SIGNED
+  COUNTERSIGNED
+  EXECUTED
+  EMAILED
+  DOWNLOADED
+  VOIDED
+  SUPERSEDED
+  ADMIN_VIEWED
+  VERIFIED
+  VENDOR_CONTRACT_DISABLED
+}
+
+model ContractTemplate {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  category        ContractCategory
+  version         Int
+  title           String                 @db.VarChar(255)
+  // markdown-ish text with {{merge_field}} placeholders
+  body            String                 @db.Text
+  required_fields String[]
+  status          ContractTemplateStatus @default(DRAFT)
+
+  vendorContracts VendorContract[]
+
+  @@unique([category, version])
+  @@map("contract_templates")
+}
+
+model VendorContract {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  vendor_id String
+  vendor    User   @relation("VendorContractOwner", fields: [vendor_id], references: [id], onDelete: Restrict)
+
+  type    VendorContractType
+  version Int
+  status  VendorContractStatus @default(ACTIVE)
+
+  // DEFAULT: the exact template version used
+  template_id String?
+  template    ContractTemplate? @relation(fields: [template_id], references: [id], onDelete: Restrict)
+
+  field_values     Json    @default("{}")
+  additional_terms String? @db.Text
+
+  // UPLOADED: private storage key + hash of the vendor's PDF
+  file_key      String?
+  file_sha256   String? @db.VarChar(64)
+  file_name     String? @db.VarChar(255)
+  ownership_confirmed_at DateTime?
+
+  applies_to_all Boolean @default(true)
+  listings       VendorContractListing[]
+
+  disabled_reason String?   @db.Text
+  disabled_at     DateTime?
+  disabled_by_id  String?
+
+  bookingContracts BookingContract[]
+
+  @@unique([vendor_id, version])
+  @@index([vendor_id, status])
+  @@map("vendor_contracts")
+}
+
+model VendorContractListing {
+  vendor_contract_id String
+  vendor_contract    VendorContract @relation(fields: [vendor_contract_id], references: [id], onDelete: Cascade)
+  listing_id         String
+  listing            VendorListing  @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@id([vendor_contract_id, listing_id])
+  @@map("vendor_contract_listings")
+}
+
+model BookingContract {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  booking_id String
+  booking    Booking @relation(fields: [booking_id], references: [id], onDelete: Restrict)
+
+  vendor_contract_id String
+  vendor_contract    VendorContract @relation(fields: [vendor_contract_id], references: [id], onDelete: Restrict)
+
+  version Int
+  status  BookingContractStatus @default(DRAFT)
+
+  // frozen snapshot shown to signers
+  title           String  @db.VarChar(255)
+  rendered_body   String  @db.Text
+  merge_data      Json
+  // uploaded contracts: copy of the vendor PDF at the time of booking
+  source_pdf_key    String?
+  source_pdf_sha256 String? @db.VarChar(64)
+  // hash of exactly what signers agreed to (rendered body + source PDF hash)
+  content_sha256  String  @db.VarChar(64)
+
+  executed_pdf_key    String?
+  executed_pdf_sha256 String?   @db.VarChar(64)
+  verification_code   String    @unique @db.VarChar(32)
+  executed_at         DateTime?
+  voided_at           DateTime?
+  void_reason         String?   @db.Text
+  last_reminder_at    DateTime?
+
+  supersedes_id String?          @unique
+  supersedes    BookingContract? @relation("ContractAmendment", fields: [supersedes_id], references: [id], onDelete: Restrict)
+  superseded_by BookingContract? @relation("ContractAmendment")
+
+  signatures  ContractSignature[]
+  auditEvents ContractAuditEvent[]
+
+  @@unique([booking_id, version])
+  @@index([status])
+  @@map("booking_contracts")
+}
+
+model ContractSignature {
+  id        String   @id @default(cuid())
+  signed_at DateTime @default(now())
+
+  booking_contract_id String
+  booking_contract    BookingContract @relation(fields: [booking_contract_id], references: [id], onDelete: Restrict)
+
+  user_id String?
+  user    User?   @relation("ContractSigner", fields: [user_id], references: [id], onDelete: SetNull)
+
+  role                 ContractSignerRole
+  legal_name           String  @db.VarChar(255)
+  signer_email         String? @db.VarChar(255)
+  signature_image_key  String?
+  consent_text_version String  @db.VarChar(32)
+  ip_address           String? @db.VarChar(64)
+  user_agent           String? @db.Text
+  app_version          String? @db.VarChar(64)
+  device_platform      String? @db.VarChar(64)
+  document_sha256      String  @db.VarChar(64)
+
+  @@unique([booking_contract_id, role])
+  @@map("contract_signatures")
+}
+
+model ContractAuditEvent {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  booking_contract_id String?
+  booking_contract    BookingContract? @relation(fields: [booking_contract_id], references: [id], onDelete: Restrict)
+  vendor_contract_id  String?
+
+  actor_id   String?
+  actor      User?   @relation("ContractAuditActor", fields: [actor_id], references: [id], onDelete: SetNull)
+  actor_role String? @db.VarChar(32)
+
+  action     ContractAuditAction
+  ip_address String? @db.VarChar(64)
+  user_agent String? @db.Text
+  details    Json?
+
+  @@index([booking_contract_id, created_at])
+  @@map("contract_audit_events")
+}
