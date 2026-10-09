@@ -4,6 +4,7 @@ import { BookingService } from './booking.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
+import { BookingContractsService } from 'src/modules/contracts/booking-contracts.service';
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 
@@ -21,6 +22,7 @@ const mockPrisma = {
   booking: {
     create: jest.fn(),
     findFirst: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
     update: jest.fn(),
     count: jest.fn(),
     findMany: jest.fn(),
@@ -39,6 +41,12 @@ const mockPrisma = {
 };
 
 const mockPush = { sendToUser: jest.fn().mockResolvedValue(undefined) };
+
+const mockContracts = {
+  createSignedBooking: jest.fn(),
+  countersignForBooking: jest.fn(),
+  voidPendingForBooking: jest.fn().mockResolvedValue(0),
+};
 
 const mockMail = {
   sendOtpCodeToEmail: jest.fn().mockResolvedValue(undefined),
@@ -80,6 +88,7 @@ describe('BookingService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MailService, useValue: mockMail },
         { provide: PushService, useValue: mockPush },
+        { provide: BookingContractsService, useValue: mockContracts },
       ],
     }).compile();
 
@@ -91,51 +100,27 @@ describe('BookingService', () => {
   });
 
   describe('create', () => {
-    it('should create a booking successfully', async () => {
-      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'customer-1', name: 'Customer', email: 'customer@test.com' });
-      mockPrisma.booking.create.mockResolvedValue(mockBooking);
+    const signedRequest = {
+      listing_id: 'listing-1',
+      vendor_id: 'vendor-1',
+      preview_token: 'token',
+      signature: { legal_name: 'Customer', consent: true, content_sha256: 'a'.repeat(64) },
+    } as any;
 
-      const result = await service.create('customer-1', {
-        listing_id: 'listing-1',
-        vendor_id: 'vendor-1',
-      });
+    it('creates the booking through the signed-contract flow and notifies the vendor', async () => {
+      mockContracts.createSignedBooking.mockResolvedValue({ id: 'booking-1' });
+      mockPrisma.booking.findUniqueOrThrow.mockResolvedValue(mockBooking);
+
+      const result = await service.create('customer-1', signedRequest, { ip: '1.2.3.4' });
 
       expect(result.success).toBe(true);
-      expect(mockPrisma.booking.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            customer_id: 'customer-1',
-            vendor_id: 'vendor-1',
-            listing_id: 'listing-1',
-            status: BookingStatus.PENDING,
-          }),
-        }),
-      );
+      expect(mockContracts.createSignedBooking).toHaveBeenCalledWith('customer-1', signedRequest, { ip: '1.2.3.4' });
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.objectContaining({ data: { type: 'booking', bookingId: 'booking-1' } }));
     });
 
-    it('should throw NotFoundException when listing not found', async () => {
-      mockPrisma.vendorListing.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.create('customer-1', { listing_id: 'bad-id', vendor_id: 'vendor-1' }),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should throw BadRequestException when vendor books own listing', async () => {
-      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
-
-      await expect(
-        service.create('vendor-1', { listing_id: 'listing-1', vendor_id: 'vendor-1' }),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should throw BadRequestException when vendor_id does not match listing', async () => {
-      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
-
-      await expect(
-        service.create('customer-1', { listing_id: 'listing-1', vendor_id: 'wrong-vendor' }),
-      ).rejects.toThrow(BadRequestException);
+    it('propagates contract validation errors (e.g. missing listing)', async () => {
+      mockContracts.createSignedBooking.mockRejectedValue(new NotFoundException('Listing not found or not active'));
+      await expect(service.create('customer-1', signedRequest)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -147,11 +132,29 @@ describe('BookingService', () => {
         status: BookingStatus.CONFIRMED,
       });
 
+      mockContracts.countersignForBooking.mockResolvedValue(null);
+
       const result = await service.confirm('booking-1', 'vendor-1');
       expect(result.success).toBe(true);
       expect(mockPrisma.booking.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: { status: BookingStatus.CONFIRMED } }),
       );
+    });
+
+    it('countersigns the contract and confirms inside the same transaction (Accept & Sign)', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      const signature = { legal_name: 'Vendor', consent: true, content_sha256: 'a'.repeat(64) } as any;
+      const tx = { booking: { update: jest.fn() } };
+      mockContracts.countersignForBooking.mockImplementation(async (_b, _v, _s, _m, onExecuted) => {
+        await onExecuted(tx);
+        return { id: 'contract-1' };
+      });
+
+      await service.confirm('booking-1', 'vendor-1', { signature });
+
+      expect(mockContracts.countersignForBooking).toHaveBeenCalledWith('booking-1', 'vendor-1', signature, {}, expect.any(Function));
+      expect(tx.booking.update).toHaveBeenCalledWith({ where: { id: 'booking-1' }, data: { status: BookingStatus.CONFIRMED } });
+      expect(mockPrisma.booking.update).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when wrong vendor tries to confirm', async () => {
@@ -180,6 +183,7 @@ describe('BookingService', () => {
 
       const result = await service.cancel('booking-1', 'customer-1', { reason: 'Changed mind' });
       expect(result.success).toBe(true);
+      expect(mockContracts.voidPendingForBooking).toHaveBeenCalledWith('booking-1', 'Booking cancelled', 'customer-1');
     });
 
     it('should allow vendor to cancel', async () => {
@@ -225,19 +229,6 @@ describe('BookingService', () => {
   });
 
   describe('push notifications', () => {
-    it('pushes the vendor when a booking is created', async () => {
-      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'customer-1', name: 'Customer', email: 'c@test.com' });
-      mockPrisma.booking.create.mockResolvedValue(mockBooking);
-
-      await service.create('customer-1', { listing_id: 'listing-1', vendor_id: 'vendor-1' } as any);
-
-      expect(mockPush.sendToUser).toHaveBeenCalledWith(
-        'vendor-1',
-        expect.objectContaining({ data: { type: 'booking', bookingId: 'booking-1' } }),
-      );
-    });
-
     it('pushes the customer when a booking is confirmed', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
       mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED });

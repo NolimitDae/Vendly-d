@@ -5,6 +5,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { RedisModule } from '@nestjs-modules/ioredis';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ContractsModule } from './modules/contracts/contracts.module';
 
 // internal imports
 import appConfig from './config/app.config';
@@ -34,6 +36,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [appConfig],
@@ -91,6 +94,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     SavedListingsModule,
     EventsModule,
     SubscriptionsModule,
+    ContractsModule,
   ],
   controllers: [AppController],
   providers: [

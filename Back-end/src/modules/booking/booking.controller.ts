@@ -6,6 +6,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -16,7 +17,10 @@ import { BookingStatus } from 'prisma/generated/client';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { BookingService } from './booking.service';
-import { CreateBookingDto } from './dto/create-booking.dto';
+import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
+import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
+import { requestMeta } from 'src/modules/contracts/request-meta';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 
 @ApiTags('bookings')
@@ -27,8 +31,9 @@ export class BookingController {
   constructor(private readonly service: BookingService) {}
 
   @Post()
-  create(@GetUser() user: any, @Body() dto: CreateBookingDto) {
-    return this.service.create(user.id, dto);
+  @Throttle({ short: { limit: 2, ttl: 1000 }, medium: { limit: 30, ttl: 60_000 } })
+  create(@GetUser() user: any, @Body() dto: SignedBookingRequestDto, @Req() req: Request) {
+    return this.service.create(user.id, dto, requestMeta(req));
   }
 
   @Get('my/customer')
@@ -59,8 +64,9 @@ export class BookingController {
 
   @Patch(':id/confirm')
   @ApiBearerAuth('vendor-token')
-  confirm(@GetUser() user: any, @Param('id') id: string) {
-    return this.service.confirm(id, user.id);
+  @Throttle({ short: { limit: 2, ttl: 1000 }, medium: { limit: 30, ttl: 60_000 } })
+  confirm(@GetUser() user: any, @Param('id') id: string, @Body() dto: VendorConfirmDto, @Req() req: Request) {
+    return this.service.confirm(id, user.id, dto, requestMeta(req));
   }
 
   @Patch(':id/reject')

@@ -56,9 +56,10 @@ async function bootstrap() {
     }),
   );
 
-  app.useStaticAssets(join(__dirname, "..", "..", "public"), {
+  // only public/storage is served; public/private holds contracts and signatures
+  app.useStaticAssets(join(__dirname, "..", "..", "public", "storage"), {
     index: false,
-    prefix: "/public",
+    prefix: "/public/storage",
   });
 
   app.useGlobalPipes(

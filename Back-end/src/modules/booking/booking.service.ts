@@ -12,7 +12,8 @@ import { StringHelper } from 'src/common/helper/string.helper';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
-import { CreateBookingDto } from './dto/create-booking.dto';
+import { BookingContractsService, RequestMeta } from 'src/modules/contracts/booking-contracts.service';
+import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class BookingService {
     private prisma: PrismaService,
     private mailService: MailService,
     private pushService: PushService,
+    private contracts: BookingContractsService,
   ) {}
 
   private pushBooking(userId: string, bookingId: string, title: string, body: string) {
@@ -31,36 +33,15 @@ export class BookingService {
     });
   }
 
-  async create(customerId: string, dto: CreateBookingDto) {
-    const listing = await this.prisma.vendorListing.findFirst({
-      where: { id: dto.listing_id, status: ListingStatus.ACTIVE, deleted_at: null },
-      include: { vendor: { select: { id: true, name: true, email: true } } },
-    });
-
-    if (!listing) throw new NotFoundException('Listing not found or not active');
-    if (listing.vendor_id !== dto.vendor_id)
-      throw new BadRequestException('Vendor ID does not match listing');
-    if (listing.vendor_id === customerId)
-      throw new BadRequestException('You cannot book your own listing');
-
-    const customer = await this.prisma.user.findUnique({
-      where: { id: customerId },
-      select: { id: true, name: true, email: true },
-    });
-
-    const booking = await this.prisma.booking.create({
-      data: {
-        customer_id: customerId,
-        vendor_id: dto.vendor_id,
-        listing_id: dto.listing_id,
-        scheduled_at: dto.scheduled_at,
-        message: dto.message,
-        amount: listing.price,
-        currency: 'usd',
-        status: BookingStatus.PENDING,
-      },
+  async create(customerId: string, dto: SignedBookingRequestDto, meta: RequestMeta = {}) {
+    // validates the listing, the signed contract and creates booking + contract atomically
+    const created = await this.contracts.createSignedBooking(customerId, dto, meta);
+    const booking = await this.prisma.booking.findUniqueOrThrow({
+      where: { id: created.id },
       include: this.bookingIncludes(),
     });
+    const listing = { title: booking.listing?.title ?? 'Service', vendor: booking.vendor };
+    const customer = booking.customer;
 
     // notify vendor via email
     const clientUrl = appConfig().app.client_app_url;
@@ -68,19 +49,19 @@ export class BookingService {
       to: listing.vendor.email,
       recipientName: listing.vendor.name,
       subject: `New booking request — ${listing.title}`,
-      message: `${customer.name} has submitted a new booking request. Review and confirm or decline it.`,
+      message: `${customer.name} signed the contract and sent a booking request. Review it, then Accept & Sign or decline.`,
       status: 'PENDING',
       listingTitle: listing.title,
       scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
       amount: Number(booking.amount),
-      ctaUrl: `${clientUrl}/vendor/bookings`,
+      ctaUrl: `${clientUrl}/vendor/bookings/${booking.id}`,
     }).catch(() => null);
-    this.pushBooking(dto.vendor_id, booking.id, 'New booking request', `${customer.name} requested ${listing.title}`);
+    this.pushBooking(booking.vendor_id, booking.id, 'New signed booking request', `${customer.name} requested ${listing.title}`);
 
     return { success: true, data: this.formatBooking(booking) };
   }
 
-  async confirm(bookingId: string, vendorId: string) {
+  async confirm(bookingId: string, vendorId: string, dto: VendorConfirmDto = {}, meta: RequestMeta = {}) {
     const booking = await this.getBookingOrFail(bookingId);
 
     if (booking.vendor_id !== vendorId)
@@ -88,11 +69,14 @@ export class BookingService {
     if (booking.status !== BookingStatus.PENDING)
       throw new BadRequestException(`Cannot confirm a booking in ${booking.status} status`);
 
-    const updated = await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: { status: BookingStatus.CONFIRMED },
-      include: this.bookingIncludes(),
-    });
+    // Accept & Sign: the vendor's countersignature executes the contract and confirms the booking together
+    const executed = await this.contracts.countersignForBooking(bookingId, vendorId, dto.signature, meta, (tx) =>
+      tx.booking.update({ where: { id: bookingId }, data: { status: BookingStatus.CONFIRMED } }),
+    );
+    if (!executed) {
+      await this.prisma.booking.update({ where: { id: bookingId }, data: { status: BookingStatus.CONFIRMED } });
+    }
+    const updated = await this.getBookingOrFail(bookingId);
 
     const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
@@ -124,6 +108,7 @@ export class BookingService {
       data: { status: BookingStatus.REJECTED, reject_reason: dto.reason },
       include: this.bookingIncludes(),
     });
+    await this.contracts.voidPendingForBooking(bookingId, 'Vendor declined the booking', vendorId);
 
     const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
@@ -210,6 +195,7 @@ export class BookingService {
       },
       include: this.bookingIncludes(),
     });
+    await this.contracts.voidPendingForBooking(bookingId, 'Booking cancelled', userId);
 
     // notify the other party
     const notifyUser = isCustomer ? booking.vendor : booking.customer;

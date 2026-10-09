@@ -1175,15 +1175,17 @@ model BookingContract {
   void_reason         String?   @db.Text
   last_reminder_at    DateTime?
 
-  supersedes_id String?          @unique
-  supersedes    BookingContract? @relation("ContractAmendment", fields: [supersedes_id], references: [id], onDelete: Restrict)
-  superseded_by BookingContract? @relation("ContractAmendment")
+  // an amendment points at the contract it would replace; declined amendments are voided
+  supersedes_id String?
+  supersedes    BookingContract?  @relation("ContractAmendment", fields: [supersedes_id], references: [id], onDelete: Restrict)
+  amendments    BookingContract[] @relation("ContractAmendment")
 
   signatures  ContractSignature[]
   auditEvents ContractAuditEvent[]
 
   @@unique([booking_id, version])
   @@index([status])
+  @@index([supersedes_id])
   @@map("booking_contracts")
 }
 

@@ -58,3 +58,7 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /prisma/generated
+
+# local runtime data
+public/
+dump.rdb

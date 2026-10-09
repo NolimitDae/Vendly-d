@@ -1001,4 +1001,12 @@ export class AuthService {
       data: { push_token: token },
     });
   }
+
+  async deleteAccount(userId: string) {
+    const result = await this.userRepository.deleteUser(userId);
+    if (result.success) {
+      await this.redis.del(`refresh_token:${userId}`).catch(() => null);
+    }
+    return result;
+  }
 }

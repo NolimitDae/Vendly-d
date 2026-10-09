@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpException,
   HttpStatus,
@@ -937,6 +939,19 @@ export class AuthController {
     }
   }
   // --------- end 2FA ---------
+
+  @ApiOperation({ summary: 'Delete my account (users with bookings or signed contracts are anonymised)' })
+  @UseGuards(JwtAuthGuard)
+  @Delete('account')
+  async deleteAccount(@Req() req: Request, @Body() body: { confirm?: string }) {
+    if (body?.confirm !== 'DELETE') {
+      throw new BadRequestException('Type DELETE to confirm. Signed contracts are kept for 7 years for legal records.');
+    }
+    const userId = req.user.userId;
+    const result = await this.authService.deleteAccount(userId);
+    if (!result.success) throw new BadRequestException(result.message);
+    return result;
+  }
 
   @ApiOperation({ summary: 'Save Expo push token for mobile notifications' })
   @UseGuards(JwtAuthGuard)

@@ -416,6 +416,61 @@ export class UserRepository {
    * @param param0
    * @returns
    */
+  /** Removes personal data but keeps the row so bookings, contracts and audit logs stay intact. */
+  async anonymizeUser(user_id: string) {
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user_id },
+        data: {
+          name: 'Deleted user',
+          first_name: null,
+          last_name: null,
+          email: `deleted-${user_id}@deleted.invalid`,
+          password: null,
+          avatar: null,
+          location: null,
+          phone_number: null,
+          birthday: null,
+          about_me: null,
+          address: null,
+          bio: null,
+          domain: null,
+          username: null,
+          country: null,
+          state: null,
+          city: null,
+          zip_code: null,
+          gender: null,
+          date_of_birth: null,
+          availability: null,
+          push_token: null,
+          two_factor_secret: null,
+          is_two_factor_enabled: 0,
+          status: 0,
+          deleted_at: now,
+          anonymized_at: now,
+        },
+      }),
+      this.prisma.vendorProfile.updateMany({
+        where: { user_id },
+        data: { about_me: null, address: null, license_photo: [], saved_signature_key: null, deleted_at: now },
+      }),
+      this.prisma.vendorListing.updateMany({
+        where: { vendor_id: user_id, deleted_at: null },
+        data: { deleted_at: now, status: 'PAUSED' },
+      }),
+      this.prisma.vendorContract.updateMany({
+        where: { vendor_id: user_id, status: 'ACTIVE' },
+        data: { status: 'ARCHIVED' },
+      }),
+      this.prisma.account.deleteMany({ where: { user_id } }),
+      this.prisma.ucode.deleteMany({ where: { user_id } }),
+      this.prisma.userPaymentMethod.deleteMany({ where: { user_id } }),
+      this.prisma.savedListing.deleteMany({ where: { user_id } }),
+    ]);
+  }
+
   async deleteUser(user_id: string) {
     try {
       // check if user exist
@@ -428,6 +483,22 @@ export class UserRepository {
         return {
           success: false,
           message: 'User not found',
+        };
+      }
+
+      // Signed contracts are legal records kept for 7 years, and bookings belong to the
+      // other party too, so users with either are anonymised instead of deleted.
+      const [bookings, contracts, signatures] = await Promise.all([
+        this.prisma.booking.count({ where: { OR: [{ customer_id: user_id }, { vendor_id: user_id }] } }),
+        this.prisma.vendorContract.count({ where: { vendor_id: user_id } }),
+        this.prisma.contractSignature.count({ where: { user_id } }),
+      ]);
+      if (bookings || contracts || signatures) {
+        await this.anonymizeUser(user_id);
+        return {
+          success: true,
+          message: 'Account deleted. Signed contracts are kept for 7 years for legal records.',
+          anonymized: true,
         };
       }
 
