@@ -7,6 +7,7 @@ import Container from "@/app/_components/Container";
 import { TwoFAService } from "@/service/twofa/twofa.service";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
+import DeleteAccountCard from "@/components/contracts/DeleteAccountCard";
 
 type SetupStep = "idle" | "qr" | "verify";
 
@@ -288,6 +289,7 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+        <DeleteAccountCard />
       </Container>
 
       {/* Disable 2FA modal */}

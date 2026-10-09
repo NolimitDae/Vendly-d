@@ -107,10 +107,15 @@ export class VendorContractsService implements OnModuleInit {
       orderBy: { version: 'desc' },
     });
     const active = contracts.filter((c) => c.status === VendorContractStatus.ACTIVE);
+    const profile = await this.prisma.vendorProfile.findUnique({
+      where: { user_id: vendorId },
+      select: { saved_signature_key: true },
+    });
     return {
       success: true,
       data: {
         has_active_contract: active.length > 0,
+        has_saved_signature: !!profile?.saved_signature_key,
         active: active.map((c) => this.present(c)),
         history: contracts.filter((c) => c.status !== VendorContractStatus.ACTIVE).map((c) => this.present(c)),
       },

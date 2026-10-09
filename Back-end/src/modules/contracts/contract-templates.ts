@@ -149,6 +149,7 @@ The Vendor will provide: {{package_name}}.
 - End time: {{event_end_time}}
 - Venue: {{venue_address}}
 - Guest count: {{guest_count}}
+- Booking comments: {{booking_comments}}
 
 ## 4. Price and payment ${R}
 - Vendor price: {{vendor_price}}

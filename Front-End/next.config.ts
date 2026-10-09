@@ -15,6 +15,7 @@ const securityHeaders = [
       "img-src 'self' data: blob: https: http://localhost http://127.0.0.1",
       "font-src 'self'",
       "connect-src 'self' https: wss: ws://localhost:* ws://127.0.0.1:*",
+      "frame-src 'self' https: http://localhost:* http://127.0.0.1:*",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

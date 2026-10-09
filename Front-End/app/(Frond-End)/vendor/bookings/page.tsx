@@ -56,14 +56,13 @@ export default function VendorBookingsPage() {
   useEffect(() => { fetchBookings(); }, [page, statusFilter]);
 
   const handleAction = async (
-    action: "confirm" | "reject" | "start" | "complete" | "cancel",
+    action: "reject" | "start" | "complete" | "cancel",
     id: string,
   ) => {
     setActionLoading(id + action);
     try {
       let res: any;
-      if (action === "confirm") res = await BookingService.confirm(id);
-      else if (action === "reject") res = await BookingService.reject(id);
+      if (action === "reject") res = await BookingService.reject(id);
       else if (action === "start") res = await BookingService.startWork(id);
       else if (action === "complete") res = await BookingService.complete(id);
       else res = await BookingService.cancel(id);
@@ -176,13 +175,13 @@ export default function VendorBookingsPage() {
                       </Link>
                       {booking.status === "PENDING" && (
                         <>
-                          <ActionButton
-                            label="Confirm"
-                            icon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                            variant="success"
-                            loading={actionLoading === booking.id + "confirm"}
-                            onClick={() => handleAction("confirm", booking.id)}
-                          />
+                          <Link
+                            href={`/vendor/bookings/${booking.id}`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition text-green-600 border-green-200 hover:bg-green-50"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Review &amp; Sign
+                          </Link>
                           <ActionButton
                             label="Reject"
                             icon={<XCircle className="w-3.5 h-3.5" />}

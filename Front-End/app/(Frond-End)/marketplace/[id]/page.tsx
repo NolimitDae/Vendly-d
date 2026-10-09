@@ -84,7 +84,6 @@ export default function ListingDetailPage() {
   const [showAddToEvent, setShowAddToEvent] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [loadingEvents, setLoadingEvents] = useState(false);
-  const [linkingBooking, setLinkingBooking] = useState(false);
   const [pendingBookingId, setPendingBookingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -143,33 +142,17 @@ export default function ListingDetailPage() {
     }
   };
 
-  // After booking is created, link it to the selected event
-  const handleBookingCreated = async (bookingId: string) => {
-    if (!selectedEventId) return;
-    setPendingBookingId(bookingId);
+  // The booking is attached to the selected event when the signed request is created
+  const handleBookingCreated = () => {
+    setPendingBookingId("linked");
   };
 
-  // Triggered when BookingModal closes with a pending link
-  const handleBookingModalClose = async () => {
+  const handleBookingModalClose = () => {
     setShowBooking(false);
-    if (pendingBookingId && selectedEventId) {
-      setLinkingBooking(true);
-      try {
-        const res = await EventsService.linkBooking(selectedEventId, pendingBookingId);
-        if (res.data?.success) {
-          toast.success("Vendor added to your event!");
-        } else {
-          toast.error(res.data?.message || "Booking created but failed to link to event");
-        }
-      } catch {
-        toast.error("Booking created but failed to link to event");
-      } finally {
-        setLinkingBooking(false);
-        setPendingBookingId(null);
-        setSelectedEventId("");
-        setShowAddToEvent(false);
-      }
-    }
+    if (pendingBookingId && selectedEventId) toast.success("Vendor added to your event!");
+    setPendingBookingId(null);
+    setSelectedEventId("");
+    setShowAddToEvent(false);
   };
 
   const toggleSave = async () => {
@@ -393,15 +376,10 @@ export default function ListingDetailPage() {
                   {isEventPlanner && (
                     <button
                       onClick={openAddToEventModal}
-                      disabled={linkingBooking}
                       className="w-full flex items-center justify-center gap-2 border-2 border-primary text-primary py-3 rounded-xl font-semibold hover:bg-primary/5 transition disabled:opacity-60"
                     >
-                      {linkingBooking ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <CalendarPlus className="w-4 h-4" />
-                      )}
-                      {linkingBooking ? "Linking…" : "Add to Event"}
+                      <CalendarPlus className="w-4 h-4" />
+                      Add to Event
                     </button>
                   )}
                 </div>
@@ -468,7 +446,8 @@ export default function ListingDetailPage() {
       {showBooking && listing && (
         <BookingModal
           listing={listing}
-          onClose={pendingBookingId ? handleBookingModalClose : () => setShowBooking(false)}
+          eventId={selectedEventId || undefined}
+          onClose={handleBookingModalClose}
           onBookingCreated={selectedEventId ? handleBookingCreated : undefined}
         />
       )}

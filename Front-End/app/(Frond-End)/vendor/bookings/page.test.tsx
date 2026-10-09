@@ -124,36 +124,16 @@ describe('VendorBookingsPage', () => {
   });
 
   describe('PENDING booking actions', () => {
-    it('shows Confirm and Reject buttons for PENDING bookings', async () => {
+    it('shows Review & Sign and Reject for PENDING bookings', async () => {
       setupSuccess([makeBooking({ status: 'PENDING' })]);
       render(<VendorBookingsPage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /^confirm$/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /review & sign/i })).toHaveAttribute('href', '/vendor/bookings/b1');
         expect(screen.getByRole('button', { name: /^reject$/i })).toBeInTheDocument();
       });
-    });
-
-    it('calls BookingService.confirm and shows success toast', async () => {
-      (BookingService.confirm as jest.Mock).mockResolvedValue({ data: { success: true } });
-      (BookingService.getMyAsVendor as jest.Mock)
-        .mockResolvedValueOnce({
-          data: { success: true, data: [makeBooking()], meta: { total: 1, last_page: 1 } },
-        })
-        .mockResolvedValueOnce({
-          data: { success: true, data: [makeBooking({ status: 'CONFIRMED' })], meta: { total: 1, last_page: 1 } },
-        });
-
-      const user = userEvent.setup();
-      render(<VendorBookingsPage />);
-
-      await waitFor(() => screen.getByRole('button', { name: /^confirm$/i }));
-      await user.click(screen.getByRole('button', { name: /^confirm$/i }));
-
-      await waitFor(() => {
-        expect(BookingService.confirm).toHaveBeenCalledWith('b1');
-      });
-      expect(toast.success).toHaveBeenCalledWith('Updated successfully');
+      // confirming requires signing the contract, so there is no one-tap confirm
+      expect(screen.queryByRole('button', { name: /^confirm$/i })).not.toBeInTheDocument();
     });
 
     it('calls BookingService.reject and shows success toast', async () => {
@@ -171,14 +151,14 @@ describe('VendorBookingsPage', () => {
       expect(toast.success).toHaveBeenCalledWith('Updated successfully');
     });
 
-    it('shows error toast when confirm fails', async () => {
-      (BookingService.confirm as jest.Mock).mockRejectedValue(new Error('fail'));
+    it('shows error toast when reject fails', async () => {
+      (BookingService.reject as jest.Mock).mockRejectedValue(new Error('fail'));
       setupSuccess([makeBooking()]);
       const user = userEvent.setup();
       render(<VendorBookingsPage />);
 
-      await waitFor(() => screen.getByRole('button', { name: /^confirm$/i }));
-      await user.click(screen.getByRole('button', { name: /^confirm$/i }));
+      await waitFor(() => screen.getByRole('button', { name: /^reject$/i }));
+      await user.click(screen.getByRole('button', { name: /^reject$/i }));
 
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalledWith('Action failed');

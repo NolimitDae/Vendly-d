@@ -1,5 +1,6 @@
 import { CookieHelper } from "../../helper/cookie.helper";
 import { Fetch } from "../../lib/Fetch";
+import type { BookingFields, SignaturePayload } from "../contracts/contracts.service";
 
 const authHeaders = () => ({
   headers: {
@@ -9,12 +10,9 @@ const authHeaders = () => ({
 });
 
 export const BookingService = {
-  create: async (data: {
-    listing_id: string;
-    vendor_id: string;
-    scheduled_at?: string;
-    message?: string;
-  }) => Fetch.post("/bookings", data, authHeaders()),
+  /** Sends a signed booking request (see ContractsService.bookingPreview). */
+  create: async (data: BookingFields & { preview_token: string; signature: SignaturePayload }) =>
+    Fetch.post("/bookings", data, authHeaders()),
 
   getMyAsCustomer: async (params?: { page?: number; limit?: number; status?: string }) => {
     const query = new URLSearchParams();
@@ -30,8 +28,9 @@ export const BookingService = {
 
   getOne: async (id: string) => Fetch.get(`/bookings/${id}`, authHeaders()),
 
-  confirm: async (id: string) =>
-    Fetch.patch(`/bookings/${id}/confirm`, {}, authHeaders()),
+  /** Accept & Sign: the vendor's countersignature confirms the booking. */
+  confirm: async (id: string, signature?: SignaturePayload) =>
+    Fetch.patch(`/bookings/${id}/confirm`, signature ? { signature } : {}, authHeaders()),
 
   reject: async (id: string, reason?: string) =>
     Fetch.patch(`/bookings/${id}/reject`, { reason }, authHeaders()),

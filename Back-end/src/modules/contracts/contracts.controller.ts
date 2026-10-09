@@ -26,6 +26,7 @@ import {
   SignContractDto,
 } from './dto/contracts.dto';
 import { requestMeta } from './request-meta';
+import appConfig from 'src/config/app.config';
 
 const SIGN_LIMIT = { short: { limit: 2, ttl: 1000 }, medium: { limit: 30, ttl: 60_000 } };
 const DOWNLOAD_LIMIT = { short: { limit: 5, ttl: 1000 }, medium: { limit: 30, ttl: 60_000 } };
@@ -48,6 +49,9 @@ export class ContractsController {
     res.setHeader('Content-Disposition', `${f.type === 'application/pdf' ? 'inline' : 'attachment'}; filename="${f.name.replace(/"/g, '')}"`);
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    // the web app shows vendor PDFs in an iframe during signing
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Security-Policy', `default-src 'none'; frame-ancestors 'self' ${appConfig().app.client_app_url}`);
     res.send(f.buffer);
   }
 

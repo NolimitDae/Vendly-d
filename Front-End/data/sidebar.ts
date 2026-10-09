@@ -78,6 +78,12 @@ export const navItems: NavItem[] = [
     type: "admin",
   },
   {
+    icon: PrivacyPolicyIcon,
+    label: "Contracts",
+    href: "/dashboard/contracts",
+    type: "admin",
+  },
+  {
     icon: TransactionsIcon,
     label: "Transactions",
     href: "/dashboard/transactions",

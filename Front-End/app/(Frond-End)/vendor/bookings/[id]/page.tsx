@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import { toast } from "react-toastify";
+import BookingContractSection from "@/components/contracts/BookingContractSection";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 
@@ -210,6 +211,8 @@ export default function VendorBookingDetailPage() {
           )}
         </div>
       </div>
+
+      <BookingContractSection bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={fetchAll} />
 
       {/* Photo Proof */}
       <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-4">

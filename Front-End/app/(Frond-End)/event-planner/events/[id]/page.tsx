@@ -22,6 +22,7 @@ import dayjs from "dayjs";
 import { EventsService } from "@/service/events/events.service";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
+import EventContractsSection from "@/components/contracts/EventContractsSection";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -533,6 +534,7 @@ export default function EventDetailPage() {
             </div>
           </div>
         )}
+        {tab === "vendors" && <EventContractsSection eventId={id} />}
 
         {/* ── TAB: Budget ── */}
         {tab === "budget" && (
