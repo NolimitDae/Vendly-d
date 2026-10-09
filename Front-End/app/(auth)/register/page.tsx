@@ -245,7 +245,7 @@ export default function RegisterPage() {
                 By registering you agree to our{" "}
                 <span className="text-primary hover:underline cursor-pointer">Terms of Service</span>
                 {" "}and{" "}
-                <span className="text-primary hover:underline cursor-pointer">Privacy Policy</span>.
+                <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
               </p>
             </form>
           )}

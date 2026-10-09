@@ -40,8 +40,8 @@ const partnerLinks = [
 ]
 
 const supportLinks = [
-  { name: "Contact me", slug: "#" }, {
-    name: "Privacy Policy", slug: "#"
+  { name: "Contact me", slug: "/contact-us" }, {
+    name: "Privacy Policy", slug: "/privacy"
   }, {
     name: "Terms", slug: "#"
   }
