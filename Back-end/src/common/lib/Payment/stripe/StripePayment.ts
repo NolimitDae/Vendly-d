@@ -485,6 +485,15 @@ export class StripePayment {
   }
   // end ACH
 
+  static retrieveCheckoutSession(id: string): Promise<stripe.Checkout.Session> {
+    return getStripe().checkout.sessions.retrieve(id);
+  }
+
+  /** Full refund of a payment; the idempotency key makes webhook retries safe. */
+  static refundPaymentIntent(paymentIntentId: string, idempotencyKey: string): Promise<stripe.Refund> {
+    return getStripe().refunds.create({ payment_intent: paymentIntentId }, { idempotencyKey });
+  }
+
   static async createCheckoutSessionForBooking({
     amount,
     serviceFee = 0,

@@ -317,6 +317,15 @@ export class SubscriptionsService {
           const { vendor_id, plan_id, billing } = session.metadata || {};
           if (!vendor_id || !plan_id) break;
 
+          // Stripe retries webhooks; don't create a second plan for the same subscription
+          if (session.subscription) {
+            const existing = await this.prisma.vendorSubscriptionPlan.findFirst({
+              where: { stripe_subscription_id: session.subscription as string },
+              select: { id: true },
+            });
+            if (existing) break;
+          }
+
           const billingCycle =
             billing === 'yearly'
               ? SubscriptionBillingCycle.YEARLY

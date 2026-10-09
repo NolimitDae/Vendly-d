@@ -36,8 +36,11 @@ describe('MailService', () => {
 
       expect(mockQueue.add).toHaveBeenCalledWith(
         'sendOtpCodeToEmail',
-        expect.objectContaining({ email: 'jane@test.com', otp: '123456' }),
-        expect.any(Object),
+        expect.objectContaining({
+          to: 'jane@test.com',
+          template: 'email-verification',
+          context: expect.objectContaining({ name: 'Jane', otp: '123456' }),
+        }),
       );
     });
   });
@@ -46,14 +49,19 @@ describe('MailService', () => {
     it('should add verification link job to queue', async () => {
       await service.sendVerificationLink({
         name: 'Jane',
-        email: 'jane@test.com',
-        url: 'https://vendly.com/verify?token=abc',
+        email: 'jane+test@test.com',
+        token: 'abc',
+        type: 'verify',
       });
 
       expect(mockQueue.add).toHaveBeenCalledWith(
         'sendVerificationLink',
-        expect.objectContaining({ email: 'jane@test.com' }),
-        expect.any(Object),
+        expect.objectContaining({
+          to: 'jane+test@test.com',
+          context: expect.objectContaining({
+            verificationLink: expect.stringContaining('token=abc&email=jane%2Btest%40test.com&type=verify'),
+          }),
+        }),
       );
     });
   });
@@ -68,8 +76,7 @@ describe('MailService', () => {
 
       expect(mockQueue.add).toHaveBeenCalledWith(
         'sendMemberInvitation',
-        expect.any(Object),
-        expect.any(Object),
+        expect.objectContaining({ to: 'member@test.com', template: 'member-invitation' }),
       );
     });
   });

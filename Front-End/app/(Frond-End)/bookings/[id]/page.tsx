@@ -164,7 +164,7 @@ export default function CustomerBookingDetailPage() {
         </div>
       </div>
 
-      {["CONFIRMED", "IN_PROGRESS"].includes(booking.status) && (
+      {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
         <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
           {booking.paid_at ? (
             <p className="text-sm text-green-700">Paid on {dayjs(booking.paid_at).format("MMM D, YYYY")}</p>

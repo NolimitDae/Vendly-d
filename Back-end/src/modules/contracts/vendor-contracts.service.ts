@@ -14,6 +14,7 @@ import {
   VendorContractType,
 } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import appConfig from 'src/config/app.config';
 import {
   CANCELLATION_PRESETS,
   CATEGORY_LABELS,
@@ -330,7 +331,7 @@ export class VendorContractsService implements OnModuleInit {
   }
 
   downloadUrl(key: string, uid: string, cid: string, name: string) {
-    const base = (process.env.APP_URL || '').replace(/\/+$/, '');
+    const base = appConfig().app.url ?? '';
     return `${base}/api/contracts/files/${SignedUrl.sign({ key, uid, cid, name })}`;
   }
 

@@ -553,8 +553,11 @@ export class BookingContractsService {
 
   // ─── Access ─────────────────────────────────────────────────────────────
 
-  private isAdmin(user: AuthUser) {
-    return user.type === UserType.ADMIN;
+  /** Confirms admin status in the database; tokens don't expire, so their role claim can be stale. */
+  private async isAdmin(user: AuthUser) {
+    if (user.type !== UserType.ADMIN) return false;
+    const row = await this.prisma.user.findUnique({ where: { id: user.userId }, select: { type: true, deleted_at: true } });
+    return row?.type === UserType.ADMIN && !row.deleted_at;
   }
 
   private async partyRole(booking: { id: string; customer_id: string; vendor_id: string }, userId: string) {
@@ -574,7 +577,7 @@ export class BookingContractsService {
     });
     if (!booking) throw new NotFoundException('Booking not found');
     const role = await this.partyRole(booking, user.userId);
-    if (!role && !this.isAdmin(user)) throw new ForbiddenException('Access denied');
+    if (!role && !(await this.isAdmin(user))) throw new ForbiddenException('Access denied');
     return { booking, role: role ?? 'ADMIN' };
   }
 
@@ -588,7 +591,7 @@ export class BookingContractsService {
     });
     if (!contract) throw new NotFoundException('Contract not found');
     const role = await this.partyRole(contract.booking, user.userId);
-    if (!role && !this.isAdmin(user)) throw new ForbiddenException('Access denied');
+    if (!role && !(await this.isAdmin(user))) throw new ForbiddenException('Access denied');
     return { contract, role: role ?? 'ADMIN' };
   }
 
@@ -960,7 +963,7 @@ export class BookingContractsService {
   private async assertEventOwner(eventId: string, user: AuthUser) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId }, select: { id: true, name: true, event_planner_id: true } });
     if (!event) throw new NotFoundException('Event not found');
-    if (event.event_planner_id !== user.userId && !this.isAdmin(user)) throw new ForbiddenException('Access denied');
+    if (event.event_planner_id !== user.userId && !(await this.isAdmin(user))) throw new ForbiddenException('Access denied');
     return event;
   }
 

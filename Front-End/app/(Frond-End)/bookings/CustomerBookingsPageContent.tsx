@@ -217,12 +217,12 @@ export default function CustomerBookingsPageContent() {
                       {booking.status === "PENDING" && (
                         <span className="px-3 py-1.5 text-xs text-gray-500">Waiting for the vendor to accept &amp; sign</span>
                       )}
-                      {["CONFIRMED", "IN_PROGRESS"].includes(booking.status) && booking.paid_at && (
+                      {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && booking.paid_at && (
                         <span className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-600">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Paid
                         </span>
                       )}
-                      {["CONFIRMED", "IN_PROGRESS"].includes(booking.status) && !booking.paid_at && (
+                      {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && !booking.paid_at && (
                         <button
                           onClick={() => handlePayNow(booking.id)}
                           disabled={payingId === booking.id}

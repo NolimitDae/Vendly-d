@@ -1,4 +1,12 @@
-import { Controller, Post, Req, Headers, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Headers,
+  InternalServerErrorException,
+  Logger,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { Request } from 'express';
 import { TransactionRepository } from '../../../common/repository/transaction/transaction.repository';
@@ -6,6 +14,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { Stripe } from 'stripe';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
+import { BookingService } from '../../booking/booking.service';
 
 @ApiExcludeController()
 @Controller('payment/stripe')
@@ -17,6 +26,7 @@ export class StripeController {
     private transactionRepository: TransactionRepository,
     private readonly prisma: PrismaService,
     private readonly subscriptionsService: SubscriptionsService,
+    private readonly bookingService: BookingService,
   ) {}
 
   @Post('webhook')
@@ -43,28 +53,8 @@ export class StripeController {
 
           // Handle booking payment
           // payment is recorded only; confirmation happens when the vendor accepts and signs
-          const bookingId = session.metadata?.booking_id;
-          if (bookingId && session.payment_status === 'paid') {
-            const paid = await this.prisma.booking.updateMany({
-              where: { id: bookingId, paid_at: null },
-              data: { paid_at: new Date() },
-            });
-            const booking = paid.count
-              ? await this.prisma.booking.findUnique({ where: { id: bookingId }, select: { customer_id: true, currency: true } })
-              : null;
-            if (booking) {
-              await this.prisma.paymentTransaction.create({
-                data: {
-                  user_id: booking.customer_id,
-                  type: 'booking_payment',
-                  provider: 'stripe',
-                  reference_number: session.id,
-                  status: 'succeeded',
-                  amount: (session.amount_total ?? 0) / 100,
-                  currency: booking.currency ?? session.currency ?? 'usd',
-                },
-              });
-            }
+          if (session.metadata?.booking_id && session.payment_status === 'paid') {
+            await this.bookingService.recordPayment(session);
           }
           break;
         }
@@ -86,17 +76,19 @@ export class StripeController {
           const pi = event.data.object as Stripe.PaymentIntent;
           const meta = pi.metadata || {};
 
-          if (meta.type === 'deposit') {
-            await this.prisma.paymentTransaction.updateMany({
-              where: { reference_number: pi.id, type: 'deposit' },
-              data: { status: 'succeeded' },
-            });
-          }
-
-          if (meta.userId) {
-            await this.prisma.user.update({
-              where: { id: meta.userId },
-              data: { balance: { increment: pi.amount_received / 100 } },
+          // credit a deposit only on its first successful delivery; Stripe may deliver events more than once
+          if (meta.type === 'deposit' && meta.userId) {
+            await this.prisma.$transaction(async (tx) => {
+              const settled = await tx.paymentTransaction.updateMany({
+                where: { reference_number: pi.id, type: 'deposit', status: { not: 'succeeded' } },
+                data: { status: 'succeeded' },
+              });
+              if (settled.count === 1) {
+                await tx.user.update({
+                  where: { id: meta.userId },
+                  data: { balance: { increment: pi.amount_received / 100 } },
+                });
+              }
             });
           }
           break;
@@ -109,7 +101,11 @@ export class StripeController {
       return { received: true };
     } catch (error) {
       this.logger.error('Webhook error', error);
-      return { received: false };
+      // a non-2xx response makes Stripe retry; handlers above are safe to repeat
+      if ((error as any)?.type === 'StripeSignatureVerificationError') {
+        throw new BadRequestException('Invalid Stripe signature');
+      }
+      throw new InternalServerErrorException('Webhook processing failed');
     }
   }
 }

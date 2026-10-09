@@ -1,9 +1,11 @@
+import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { StripeController } from './stripe.controller';
 import { StripeService } from './stripe.service';
 import { TransactionRepository } from '../../../common/repository/transaction/transaction.repository';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
+import { BookingService } from '../../booking/booking.service';
 
 const mockStripeService = {
   handleWebhook: jest.fn(),
@@ -16,15 +18,20 @@ const mockPrisma = {
     updateMany: jest.fn(),
   },
   paymentTransaction: {
-    update: jest.fn(),
+    updateMany: jest.fn(),
   },
   user: {
     update: jest.fn(),
   },
+  $transaction: jest.fn((fn: any) => fn(mockPrisma)),
 };
 
 const mockSubscriptionsService = {
   handleWebhookEvent: jest.fn(),
+};
+
+const mockBookingService = {
+  recordPayment: jest.fn().mockResolvedValue(undefined),
 };
 
 function makeRawBodyRequest(rawBody: string, signature: string) {
@@ -47,6 +54,7 @@ describe('StripeController', () => {
         { provide: TransactionRepository, useValue: mockTransactionRepository },
         { provide: PrismaService, useValue: mockPrisma },
         { provide: SubscriptionsService, useValue: mockSubscriptionsService },
+        { provide: BookingService, useValue: mockBookingService },
       ],
     }).compile();
 
@@ -69,7 +77,7 @@ describe('StripeController', () => {
       expect(mockStripeService.handleWebhook).toHaveBeenCalledWith('{}', 'sig');
     });
 
-    it('should confirm a paid booking on checkout.session.completed (payment mode)', async () => {
+    it('records a paid booking payment without confirming the booking', async () => {
       const bookingId = 'booking-99';
       const event = {
         type: 'checkout.session.completed',
@@ -88,12 +96,19 @@ describe('StripeController', () => {
       const result = await controller.handleWebhook('sig', req);
 
       expect(result).toEqual({ received: true });
-      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ id: bookingId }),
-        }),
-      );
+      expect(mockBookingService.recordPayment).toHaveBeenCalledWith(event.data.object);
+      // confirmation only happens through the vendor's Accept & Sign
+      expect(mockPrisma.booking.updateMany).not.toHaveBeenCalled();
       expect(mockSubscriptionsService.handleWebhookEvent).not.toHaveBeenCalled();
+    });
+
+    it('ignores unpaid booking checkouts', async () => {
+      mockStripeService.handleWebhook.mockResolvedValue({
+        type: 'checkout.session.completed',
+        data: { object: { mode: 'payment', payment_status: 'unpaid', metadata: { booking_id: 'b1' } } },
+      });
+      await controller.handleWebhook('sig', makeRawBodyRequest('{}', 'sig'));
+      expect(mockBookingService.recordPayment).not.toHaveBeenCalled();
     });
 
     it('should delegate subscription checkout to subscriptionsService', async () => {
@@ -170,24 +185,23 @@ describe('StripeController', () => {
           object: {
             id: 'pi_001',
             amount_received: 10000,
-            metadata: { type: 'deposit', transaction_id: 'txn-1', userId: 'user-1' },
+            metadata: { type: 'deposit', userId: 'user-1' },
           },
         },
       };
       mockStripeService.handleWebhook.mockResolvedValue(event);
-      mockPrisma.paymentTransaction.update.mockResolvedValue({});
+      mockPrisma.paymentTransaction.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.user.update.mockResolvedValue({});
 
       const req = makeRawBodyRequest('{}', 'sig');
       const result = await controller.handleWebhook('sig', req);
 
       expect(result).toEqual({ received: true });
-      expect(mockPrisma.paymentTransaction.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'txn-1' },
-          data: expect.objectContaining({ status: 'succeeded', reference_number: 'pi_001' }),
-        }),
-      );
+      // deposits are matched by PaymentIntent id, which is stored as the reference number
+      expect(mockPrisma.paymentTransaction.updateMany).toHaveBeenCalledWith({
+        where: { reference_number: 'pi_001', type: 'deposit', status: { not: 'succeeded' } },
+        data: { status: 'succeeded' },
+      });
       expect(mockPrisma.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'user-1' },
@@ -198,15 +212,31 @@ describe('StripeController', () => {
       );
     });
 
-    it('should return { received: false } when handleWebhook throws', async () => {
+    it('does not credit a deposit twice when Stripe redelivers the event', async () => {
+      mockStripeService.handleWebhook.mockResolvedValue({
+        type: 'payment_intent.succeeded',
+        data: { object: { id: 'pi_001', amount_received: 10000, metadata: { type: 'deposit', userId: 'user-1' } } },
+      });
+      mockPrisma.paymentTransaction.updateMany.mockResolvedValue({ count: 0 });
+
+      await controller.handleWebhook('sig', makeRawBodyRequest('{}', 'sig'));
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a bad signature with 400', async () => {
       mockStripeService.handleWebhook.mockRejectedValue(
-        new Error('Invalid signature'),
+        Object.assign(new Error('No signatures found'), { type: 'StripeSignatureVerificationError' }),
       );
+      await expect(controller.handleWebhook('bad-sig', makeRawBodyRequest('bad', 'bad-sig'))).rejects.toBeInstanceOf(BadRequestException);
+    });
 
-      const req = makeRawBodyRequest('bad-payload', 'bad-sig');
-      const result = await controller.handleWebhook('bad-sig', req);
-
-      expect(result).toEqual({ received: false });
+    it('fails with 500 when processing fails, so Stripe retries', async () => {
+      mockStripeService.handleWebhook.mockResolvedValue({
+        type: 'checkout.session.completed',
+        data: { object: { mode: 'payment', payment_status: 'paid', metadata: { booking_id: 'b1' } } },
+      });
+      mockBookingService.recordPayment.mockRejectedValueOnce(new Error('db down'));
+      await expect(controller.handleWebhook('sig', makeRawBodyRequest('{}', 'sig'))).rejects.toBeInstanceOf(InternalServerErrorException);
     });
 
     it('should return { received: true } for unhandled event types without side-effects', async () => {

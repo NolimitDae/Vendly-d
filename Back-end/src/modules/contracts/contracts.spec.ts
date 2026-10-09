@@ -259,6 +259,7 @@ describe('contract access control', () => {
     eventBooking: { findFirst: jest.fn().mockResolvedValue(null) },
     event: { findUnique: jest.fn().mockResolvedValue({ id: 'e1', name: 'E', event_planner_id: 'planner' }) },
     contractAuditEvent: { create: jest.fn() },
+    user: { findUnique: jest.fn(({ where }: any) => Promise.resolve(where.id === 'admin' ? { type: 'ADMIN', deleted_at: null } : { type: 'CUSTOMER', deleted_at: null })) },
   };
   const service = new BookingContractsService(prisma, { downloadUrl: () => 'url' } as any, {} as any, {} as any);
   const stranger = { userId: 'stranger', type: 'CUSTOMER' };
@@ -286,6 +287,10 @@ describe('contract access control', () => {
     await expect(service.downloadLink('c1', { userId: 'admin', type: 'ADMIN' }, 'executed')).resolves.toBeDefined();
     prisma.eventBooking.findFirst.mockResolvedValueOnce({ event_id: 'e1' });
     await expect(service.downloadLink('c1', { userId: 'planner' }, 'executed')).resolves.toBeDefined();
+  });
+
+  it('rejects a stale admin role claim the database no longer confirms', async () => {
+    await expect(service.downloadLink('c1', { userId: 'former-admin', type: 'ADMIN' }, 'executed')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('logs admin views separately from party views', async () => {

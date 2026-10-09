@@ -416,12 +416,12 @@ export class AuthService {
           success: true,
           message: 'We have sent an OTP code to your email',
         };
-      } else {
-        return {
-          success: false,
-          message: 'Email not found',
-        };
       }
+      // same response either way, so the endpoint can't be used to discover which emails have accounts
+      return {
+        success: true,
+        message: 'We have sent an OTP code to your email',
+      };
     } catch (error) {
       return {
         success: false,

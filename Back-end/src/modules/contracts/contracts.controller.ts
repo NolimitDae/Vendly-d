@@ -46,7 +46,12 @@ export class ContractsController {
   async file(@Param('token') token: string, @Req() req: Request, @Res() res: Response) {
     const f = await this.contracts.resolveFile(token, requestMeta(req));
     res.setHeader('Content-Type', f.type);
-    res.setHeader('Content-Disposition', `${f.type === 'application/pdf' ? 'inline' : 'attachment'}; filename="${f.name.replace(/"/g, '')}"`);
+    // vendor-supplied names can contain characters that are invalid in headers
+    const ascii = f.name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '') || 'download';
+    res.setHeader(
+      'Content-Disposition',
+      `${f.type === 'application/pdf' ? 'inline' : 'attachment'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(f.name)}`,
+    );
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // the web app shows vendor PDFs in an iframe during signing

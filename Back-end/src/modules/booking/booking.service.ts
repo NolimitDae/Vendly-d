@@ -174,14 +174,60 @@ export class BookingService {
     return { success: true, data: this.formatBooking(updated) };
   }
 
+  /**
+   * Records a paid Checkout session (called from the Stripe webhook). A second payment for an
+   * already-paid booking is refunded; a retried webhook for the same session is a no-op.
+   */
+  async recordPayment(session: { id: string; payment_intent?: string | { id: string } | null; amount_total?: number | null; currency?: string | null; metadata?: Record<string, string> | null }) {
+    const bookingId = session.metadata?.booking_id;
+    if (!bookingId) return;
+    const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const seen = await tx.paymentTransaction.findFirst({ where: { reference_number: session.id } });
+      if (seen) return 'retry' as const;
+      const booking = await tx.booking.findUnique({ where: { id: bookingId }, select: { customer_id: true, currency: true } });
+      if (!booking) return 'unknown' as const;
+      // row lock: a concurrent delivery waits here until the other transaction commits
+      const claimed = await tx.booking.updateMany({ where: { id: bookingId, paid_at: null }, data: { paid_at: new Date() } });
+      if (claimed.count === 0) {
+        // re-check after the lock: the same session may have just been recorded by a concurrent delivery
+        const recorded = await tx.paymentTransaction.findFirst({ where: { reference_number: session.id } });
+        if (recorded) return 'retry' as const;
+      }
+      await tx.paymentTransaction.create({
+        data: {
+          user_id: booking.customer_id,
+          type: claimed.count === 1 ? 'booking_payment' : 'booking_payment_duplicate',
+          provider: 'stripe',
+          reference_number: session.id,
+          status: claimed.count === 1 ? 'succeeded' : 'refund_pending',
+          amount: (session.amount_total ?? 0) / 100,
+          currency: booking.currency ?? session.currency ?? 'usd',
+        },
+      });
+      return claimed.count === 1 ? ('paid' as const) : ('duplicate' as const);
+    });
+
+    if (outcome === 'duplicate' && paymentIntentId) {
+      await StripePayment.refundPaymentIntent(paymentIntentId, `duplicate-${session.id}`);
+      await this.prisma.paymentTransaction.updateMany({
+        where: { reference_number: session.id },
+        data: { status: 'refunded' },
+      });
+    }
+    // paid after the vendor already marked the job complete
+    if (outcome === 'paid') await this.creditVendorEarnings(bookingId);
+  }
+
   /** Releases the vendor price (not the customer service fee) to the vendor's payout balance, once. */
   private async creditVendorEarnings(bookingId: string) {
     await this.prisma.$transaction(async (tx) => {
       const b = await tx.booking.findUnique({
         where: { id: bookingId },
-        select: { paid_at: true, payout_credited_at: true, amount: true, currency: true, vendor_id: true },
+        select: { status: true, paid_at: true, payout_credited_at: true, amount: true, currency: true, vendor_id: true },
       });
-      if (!b?.paid_at || b.payout_credited_at || !b.amount) return;
+      if (!b?.paid_at || b.payout_credited_at || !b.amount || b.status !== BookingStatus.COMPLETED) return;
       const claimed = await tx.booking.updateMany({
         where: { id: bookingId, payout_credited_at: null },
         data: { payout_credited_at: new Date() },
@@ -284,9 +330,18 @@ export class BookingService {
     if (booking.customer_id !== customerId)
       throw new ForbiddenException('Access denied');
     // customers pay after the vendor accepts and signs, never before
-    if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.IN_PROGRESS)
+    const payable: BookingStatus[] = [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED];
+    if (!payable.includes(booking.status))
       throw new BadRequestException('You can pay once the vendor accepts and signs your booking.');
     if (booking.paid_at) throw new BadRequestException('This booking is already paid.');
+
+    // reuse a checkout that's still open, so two tabs can't create two charges
+    if (booking.payment_transaction_id?.startsWith('cs_')) {
+      const existing = await StripePayment.retrieveCheckoutSession(booking.payment_transaction_id).catch(() => null);
+      if (existing?.status === 'open' && existing.url) {
+        return { success: true, data: { checkout_url: existing.url } };
+      }
+    }
     if (!booking.amount || Number(booking.amount) <= 0)
       throw new BadRequestException('Booking has no payable amount');
 

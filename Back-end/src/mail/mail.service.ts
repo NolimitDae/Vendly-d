@@ -62,7 +62,8 @@ export class MailService {
     type: string;
   }) {
     try {
-      const verificationLink = `${appConfig().app.client_app_url}/verify-email?token=${params.token}&email=${params.email}&type=${params.type}`;
+      const q = new URLSearchParams({ token: params.token, email: params.email, type: params.type });
+      const verificationLink = `${appConfig().app.client_app_url}/verify-email?${q.toString()}`;
 
       // add to queue
       await this.queue.add('sendVerificationLink', {

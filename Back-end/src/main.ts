@@ -4,7 +4,6 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { json, urlencoded } from 'express';
 import { join } from 'path';
 // internal imports
 import { AppModule } from './app.module';
@@ -29,8 +28,9 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // Body size limits
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ extended: true, limit: '10mb' }));
+  // Nest's own parsers keep req.rawBody, which Stripe webhook signature checks need
+  app.useBodyParser('json', { limit: '10mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '10mb' });
 
   app.enableCors({
     origin: appConfig().app.client_app_url,
