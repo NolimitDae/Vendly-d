@@ -6,7 +6,14 @@ import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
 import { BookingContractsService } from 'src/modules/contracts/booking-contracts.service';
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
+import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+
+jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
+  StripePayment: {
+    createCheckoutSessionForBooking: jest.fn().mockResolvedValue({ id: 'cs_1', url: 'https://checkout.test/cs_1' }),
+  },
+}));
 
 jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
   TanvirStorage: {
@@ -23,13 +30,18 @@ const mockPrisma = {
     create: jest.fn(),
     findFirst: jest.fn(),
     findUniqueOrThrow: jest.fn(),
+    findUnique: jest.fn(),
+    updateMany: jest.fn(),
     update: jest.fn(),
     count: jest.fn(),
     findMany: jest.fn(),
   },
   user: {
     findUnique: jest.fn(),
+    update: jest.fn(),
   },
+  paymentTransaction: { create: jest.fn() },
+  $transaction: jest.fn((fn: any) => fn(mockPrisma)),
   bookingProof: {
     create: jest.fn(),
     findMany: jest.fn(),
@@ -325,6 +337,54 @@ describe('BookingService', () => {
         'customer-1',
         expect.objectContaining({ title: 'New deliverable', body: 'Final files' }),
       );
+    });
+  });
+
+  describe('payment', () => {
+    it('refuses checkout before the vendor accepts and signs', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.PENDING });
+      await expect(service.createCheckoutSession('booking-1', 'customer-1')).rejects.toThrow(/accepts and signs/);
+      expect(StripePayment.createCheckoutSessionForBooking).not.toHaveBeenCalled();
+    });
+
+    it('refuses to take a second payment', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED, paid_at: new Date() });
+      await expect(service.createCheckoutSession('booking-1', 'customer-1')).rejects.toThrow(/already paid/);
+    });
+
+    it('charges the vendor price plus the customer service fee once confirmed', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED, paid_at: null, service_fee: 5 });
+      const res = await service.createCheckoutSession('booking-1', 'customer-1');
+      expect(res.data.checkout_url).toBe('https://checkout.test/cs_1');
+      expect(StripePayment.createCheckoutSessionForBooking).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 100, serviceFee: 5, bookingId: 'booking-1' }),
+      );
+    });
+
+    it('credits the vendor price (not the fee) to the vendor once on completion of a paid booking', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.IN_PROGRESS });
+      mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.COMPLETED });
+      mockPrisma.booking.findUnique.mockResolvedValue({ paid_at: new Date(), payout_credited_at: null, amount: 100, currency: 'usd', vendor_id: 'vendor-1' });
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.complete('booking-1', 'vendor-1');
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 100 } } });
+      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ type: 'booking_earning', amount: 100, user_id: 'vendor-1' }) }),
+      );
+    });
+
+    it('does not credit unpaid or already-credited bookings', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.IN_PROGRESS });
+      mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.COMPLETED });
+
+      mockPrisma.booking.findUnique.mockResolvedValueOnce({ paid_at: null, payout_credited_at: null, amount: 100, vendor_id: 'vendor-1' });
+      await service.complete('booking-1', 'vendor-1');
+      mockPrisma.booking.findUnique.mockResolvedValueOnce({ paid_at: new Date(), payout_credited_at: new Date(), amount: 100, vendor_id: 'vendor-1' });
+      await service.complete('booking-1', 'vendor-1');
+
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
     });
   });
 });

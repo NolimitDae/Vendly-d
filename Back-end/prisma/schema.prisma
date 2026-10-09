@@ -761,6 +761,11 @@ model Booking {
 
   amount         Decimal? @db.Decimal(10, 2)
   currency       String?  @default("usd")
+  // Vendly's customer service fee, fixed when the booking is requested
+  service_fee    Decimal? @db.Decimal(10, 2)
+  paid_at            DateTime?
+  // vendor earnings credited to their payout balance (set once, on completion)
+  payout_credited_at DateTime?
 
   payment_transaction_id String?
 

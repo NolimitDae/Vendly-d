@@ -487,6 +487,7 @@ export class StripePayment {
 
   static async createCheckoutSessionForBooking({
     amount,
+    serviceFee = 0,
     currency,
     bookingId,
     listingTitle,
@@ -494,6 +495,7 @@ export class StripePayment {
     cancelUrl,
   }: {
     amount: number;
+    serviceFee?: number;
     currency: string;
     bookingId: string;
     listingTitle: string;
@@ -512,6 +514,18 @@ export class StripePayment {
           },
           quantity: 1,
         },
+        ...(serviceFee > 0
+          ? [
+              {
+                price_data: {
+                  currency,
+                  product_data: { name: 'Vendly service fee' },
+                  unit_amount: Math.round(serviceFee * 100),
+                },
+                quantity: 1,
+              },
+            ]
+          : []),
       ],
       metadata: { booking_id: bookingId },
       success_url: successUrl,

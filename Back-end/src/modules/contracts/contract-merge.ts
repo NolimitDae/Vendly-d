@@ -16,6 +16,7 @@ export interface MergeInput {
     guest_count?: number | null;
     message?: string | null;
     amount?: number | string | { toString(): string } | null;
+    service_fee?: number | string | { toString(): string } | null;
     currency?: string | null;
   };
   listing?: { title?: string | null; description?: string | null } | null;
@@ -95,7 +96,7 @@ export function buildMergeData(input: MergeInput): MergeData {
   const b = input.booking;
   const currency = b.currency || 'usd';
   const price = Number(b.amount ?? 0);
-  const serviceFee = 0;
+  const serviceFee = Number(b.service_fee ?? 0);
 
   const preset = CANCELLATION_PRESETS[fv.cancellation_policy];
   const isPlanner = input.customer.type === 'EVENT_PLANNER';
@@ -123,7 +124,7 @@ export function buildMergeData(input: MergeInput): MergeData {
     vendor_price: b.amount !== null && b.amount !== undefined ? fmtMoney(price, currency) : '',
     service_fee: fmtMoney(serviceFee, currency),
     total_price: fmtMoney(price + serviceFee, currency),
-    payment_schedule: 'The full price is paid through Vendly after the Vendor accepts this booking.',
+    payment_schedule: 'The total is paid through Vendly after the Vendor accepts and signs this agreement.',
     cancellation_policy: fv.cancellation_policy ?? '',
     cancellation_policy_name: preset?.label ?? '',
     cancellation_policy_text: preset?.text ?? '',
@@ -173,4 +174,10 @@ export function sha256(input: string | Buffer | Uint8Array) {
 /** Hash of exactly what signers agree to. */
 export function contentHash(renderedBody: string, sourcePdfSha256?: string | null) {
   return sha256(`${renderedBody}\n--source-pdf:${sourcePdfSha256 ?? 'none'}`);
+}
+
+/** Customer service fee for a vendor price, rounded to cents. */
+export function serviceFeeFor(price: unknown, percent: number) {
+  const p = Number(price ?? 0);
+  return Math.round(p * percent) / 100;
 }

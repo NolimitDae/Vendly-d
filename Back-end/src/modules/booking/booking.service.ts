@@ -157,6 +157,7 @@ export class BookingService {
       data: { status: BookingStatus.COMPLETED, completed_at: new Date() },
       include: this.bookingIncludes(),
     });
+    await this.creditVendorEarnings(bookingId);
 
     const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
@@ -171,6 +172,34 @@ export class BookingService {
     this.pushBooking(booking.customer_id, bookingId, 'Service completed', `${booking.listing?.title ?? 'Your booking'} is complete — leave a review`);
 
     return { success: true, data: this.formatBooking(updated) };
+  }
+
+  /** Releases the vendor price (not the customer service fee) to the vendor's payout balance, once. */
+  private async creditVendorEarnings(bookingId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const b = await tx.booking.findUnique({
+        where: { id: bookingId },
+        select: { paid_at: true, payout_credited_at: true, amount: true, currency: true, vendor_id: true },
+      });
+      if (!b?.paid_at || b.payout_credited_at || !b.amount) return;
+      const claimed = await tx.booking.updateMany({
+        where: { id: bookingId, payout_credited_at: null },
+        data: { payout_credited_at: new Date() },
+      });
+      if (claimed.count !== 1) return;
+      await tx.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: b.amount } } });
+      await tx.paymentTransaction.create({
+        data: {
+          user_id: b.vendor_id,
+          type: 'booking_earning',
+          provider: 'stripe',
+          reference_number: bookingId,
+          status: 'succeeded',
+          amount: b.amount,
+          currency: b.currency ?? 'usd',
+        },
+      });
+    });
   }
 
   async cancel(bookingId: string, userId: string, dto: CancelBookingDto) {
@@ -254,8 +283,10 @@ export class BookingService {
 
     if (booking.customer_id !== customerId)
       throw new ForbiddenException('Access denied');
-    if (booking.status !== BookingStatus.PENDING)
-      throw new BadRequestException('Only pending bookings can be paid');
+    // customers pay after the vendor accepts and signs, never before
+    if (booking.status !== BookingStatus.CONFIRMED && booking.status !== BookingStatus.IN_PROGRESS)
+      throw new BadRequestException('You can pay once the vendor accepts and signs your booking.');
+    if (booking.paid_at) throw new BadRequestException('This booking is already paid.');
     if (!booking.amount || Number(booking.amount) <= 0)
       throw new BadRequestException('Booking has no payable amount');
 
@@ -265,6 +296,7 @@ export class BookingService {
 
     const session = await StripePayment.createCheckoutSessionForBooking({
       amount: Number(booking.amount),
+      serviceFee: Number(booking.service_fee ?? 0),
       currency: booking.currency ?? 'usd',
       bookingId: booking.id,
       listingTitle: booking.listing?.title ?? 'Service Booking',

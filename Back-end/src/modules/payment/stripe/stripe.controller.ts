@@ -5,7 +5,6 @@ import { TransactionRepository } from '../../../common/repository/transaction/tr
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Stripe } from 'stripe';
 import { ApiExcludeController } from '@nestjs/swagger';
-import { BookingStatus } from 'prisma/generated/client';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 
 @ApiExcludeController()
@@ -43,12 +42,29 @@ export class StripeController {
           }
 
           // Handle booking payment
+          // payment is recorded only; confirmation happens when the vendor accepts and signs
           const bookingId = session.metadata?.booking_id;
           if (bookingId && session.payment_status === 'paid') {
-            await this.prisma.booking.updateMany({
-              where: { id: bookingId, status: BookingStatus.PENDING },
-              data: { status: BookingStatus.CONFIRMED },
+            const paid = await this.prisma.booking.updateMany({
+              where: { id: bookingId, paid_at: null },
+              data: { paid_at: new Date() },
             });
+            const booking = paid.count
+              ? await this.prisma.booking.findUnique({ where: { id: bookingId }, select: { customer_id: true, currency: true } })
+              : null;
+            if (booking) {
+              await this.prisma.paymentTransaction.create({
+                data: {
+                  user_id: booking.customer_id,
+                  type: 'booking_payment',
+                  provider: 'stripe',
+                  reference_number: session.id,
+                  status: 'succeeded',
+                  amount: (session.amount_total ?? 0) / 100,
+                  currency: booking.currency ?? session.currency ?? 'usd',
+                },
+              });
+            }
           }
           break;
         }

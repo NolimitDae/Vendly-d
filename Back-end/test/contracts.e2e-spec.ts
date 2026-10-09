@@ -169,6 +169,16 @@ run('Contracts (e2e)', () => {
     contractId = list.body.data.contracts[0].id;
     expect(list.body.data.contracts[0].status).toBe('AWAITING_VENDOR');
 
+    // 5% customer service fee is fixed on the booking and shown in the contract
+    const stored = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(Number(stored.service_fee)).toBe(75);
+    expect(pv.body.data.body).toContain('Vendly service fee: $75.00');
+    expect(pv.body.data.pricing).toEqual({ price: '$1,500.00', service_fee: '$75.00', total: '$1,575.00' });
+
+    // no payment before the vendor accepts and signs
+    const early = await http().post(`/api/bookings/${bookingId}/checkout`).auth(T.cust, { type: 'bearer' });
+    expect(early.status).toBe(400);
+
     await signing();
     const noSig = await http().patch(`/api/bookings/${bookingId}/confirm`).auth(T.vendor, { type: 'bearer' }).send({});
     expect(noSig.status).toBe(400);

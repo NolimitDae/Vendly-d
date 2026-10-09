@@ -8,6 +8,7 @@ import {
   missingFields,
   missingFieldsMessage,
   renderTemplate,
+  serviceFeeFor,
   sha256,
 } from './contract-merge';
 import {
@@ -73,6 +74,7 @@ function mergeFor(overrides: Partial<Parameters<typeof buildMergeData>[0]['booki
       guest_count: 120,
       message: 'Peanut allergy at table 4',
       amount: 1500,
+      service_fee: 75,
       currency: 'usd',
       ...overrides,
     },
@@ -103,6 +105,8 @@ describe('contract merge fields', () => {
     expect(body).toContain('Vera Photo LLC');
     expect(body).toContain('Carl Customer');
     expect(body).toContain('$1,500.00');
+    expect(body).toContain('Vendly service fee: $75.00');
+    expect(body).toContain('Total: $1,575.00');
     expect(body).toContain(PLATFORM_TERMS_CLAUSE);
     expect(body).toContain('No flash during the ceremony.');
     expect(body).toMatch(/\[LAWYER REVIEW\]/);
@@ -121,6 +125,12 @@ describe('contract merge fields', () => {
     for (const key of required.filter((k) => k !== 'event_date')) {
       expect(missing).toContain(key);
     }
+  });
+
+  it('computes the customer service fee to the cent', () => {
+    expect(serviceFeeFor(1500, 5)).toBe(75);
+    expect(serviceFeeFor(99.99, 5)).toBe(5);
+    expect(serviceFeeFor(0, 5)).toBe(0);
   });
 
   it('produces a readable missing-field message', () => {

@@ -31,6 +31,7 @@ import {
   missingFields,
   missingFieldsMessage,
   renderTemplate,
+  serviceFeeFor,
   sha256,
 } from './contract-merge';
 import {
@@ -152,6 +153,10 @@ export class BookingContractsService {
 
   // ─── Building contracts ─────────────────────────────────────────────────
 
+  private serviceFee(price: unknown) {
+    return serviceFeeFor(price, appConfig().fees.customer_service_fee_percent);
+  }
+
   private async loadBookingContext(userId: string, dto: BookingContractFieldsDto) {
     const listing = await this.prisma.vendorListing.findFirst({
       where: { id: dto.listing_id, status: ListingStatus.ACTIVE, deleted_at: null },
@@ -212,6 +217,7 @@ export class BookingContractsService {
         guest_count: dto.guest_count,
         message: dto.message,
         amount: ctx.listing.price,
+        service_fee: this.serviceFee(ctx.listing.price),
         currency: 'usd',
       },
       listing: ctx.listing,
@@ -245,6 +251,7 @@ export class BookingContractsService {
         vendor_contract_version: p.vc.version,
         missing_fields: p.missing,
         missing_message: p.missing.length ? missingFieldsMessage(p.missing) : null,
+        pricing: { price: p.data.vendor_price, service_fee: p.data.service_fee, total: p.data.total_price },
         preview_token: signPreview({ bid: bookingId, lid: dto.listing_id, uid: userId }),
         source_pdf_url: p.vc.file_key
           ? this.vendorContracts.downloadUrl(p.vc.file_key, userId, p.vc.id, p.vc.file_name || 'contract.pdf')
@@ -339,6 +346,7 @@ export class BookingContractsService {
           guest_count: dto.guest_count,
           message: dto.message,
           amount: p.listing.price,
+          service_fee: this.serviceFee(p.listing.price),
           currency: 'usd',
           status: BookingStatus.PENDING,
         },
@@ -787,6 +795,7 @@ export class BookingContractsService {
       guest_count: changes.guest_count ?? full.guest_count,
       message: full.message,
       amount: changes.amount ?? full.amount,
+      service_fee: changes.amount !== undefined ? this.serviceFee(changes.amount) : full.service_fee,
       currency: full.currency,
     };
     const vc = current.vendor_contract as ResolvedVendorContract;
@@ -919,7 +928,10 @@ export class BookingContractsService {
       if (changes.venue_address) bookingUpdate.venue_address = changes.venue_address;
       if (changes.guest_count) bookingUpdate.guest_count = Number(changes.guest_count);
       // price differences are settled under the payment rules, not here
-      if (changes.amount !== undefined) bookingUpdate.amount = Number(changes.amount);
+      if (changes.amount !== undefined) {
+        bookingUpdate.amount = Number(changes.amount);
+        bookingUpdate.service_fee = this.serviceFee(changes.amount);
+      }
       if (Object.keys(bookingUpdate).length) {
         await tx.booking.update({ where: { id: contract.booking_id }, data: bookingUpdate });
       }

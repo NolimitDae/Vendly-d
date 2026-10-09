@@ -55,6 +55,11 @@ export default () => ({
 
   redis: redisConfig(),
 
+  fees: {
+    // Vendly's fee charged to customers on top of the vendor's price; vendors pay no fee for now
+    customer_service_fee_percent: Number(process.env.CUSTOMER_SERVICE_FEE_PERCENT ?? 5),
+  },
+
   security: {
     salt: 10,
   },
