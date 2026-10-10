@@ -1,1 +1,7 @@
-.claude/
+# Claude Code: share project settings and skills, keep personal/workspace files local
+.claude/*
+!.claude/settings.json
+!.claude/skills/
+
+# Graphify knowledge graph (rebuilt locally with `graphify update .`)
+graphify-out/
