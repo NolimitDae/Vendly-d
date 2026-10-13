@@ -1,8 +1,9 @@
 import React from 'react';
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { COLORS } from '../constants/colors';
+import { COLORS, DARK } from '../constants/colors';
+import { LogoMark } from '../components/brand';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { navigationRef } from './navigationRef';
 
@@ -18,8 +19,7 @@ export default function RootNavigator() {
   if (loading) {
     return (
       <View style={s.splash}>
-        <Text style={s.splashTitle}>Vendly</Text>
-        <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 24 }} />
+        <LogoMark size={84} />
       </View>
     );
   }
@@ -28,7 +28,8 @@ export default function RootNavigator() {
     <NavigationContainer ref={navigationRef}>
       {!user ? (
         <AuthScreens />
-      ) : user.type === 'CUSTOMER' ? (
+      ) : user.type === 'CUSTOMER' || user.type === 'CLIENT' ? (
+        // The website registers customers as CLIENT; both are the same kind of account.
         <CustomerTabs />
       ) : user.type === 'VENDOR' ? (
         <VendorTabs />
@@ -54,13 +55,8 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primaryBg,
-  },
-  splashTitle: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: COLORS.primary,
-    letterSpacing: -0.5,
+    // Matches the native splash (app.json) so the hand-off is seamless.
+    backgroundColor: DARK.bg,
   },
   adminMsg: {
     flex: 1,

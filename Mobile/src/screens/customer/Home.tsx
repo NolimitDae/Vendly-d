@@ -1,262 +1,350 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
   ActivityIndicator,
-  StyleSheet,
-  TextInput,
-  RefreshControl,
+  FlatList,
   Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../constants/colors';
-import { api } from '../../services/api';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { DARK, FONTS } from '../../constants/colors';
+import { BrandGradient } from '../../components/brand';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
 
 type Nav = NativeStackNavigationProp<any>;
+type IconName = keyof typeof Ionicons.glyphMap;
 
 interface Listing {
   id: string;
   title: string;
   price: number;
   price_unit?: string;
-  avg_rating?: number;
-  review_count?: number;
+  avg_rating?: number | null;
   images?: string[];
-  vendor?: {
-    id: string;
-    name: string;
-    avatar?: string;
-  };
-  category?: string;
+  location?: string | null;
+  vendor?: { id: string; name: string; vendorProfile?: { business_name?: string | null } | null } | null;
 }
 
-// Category pills come from the API so each carries its id: the listings endpoint filters by
-// category_id and rejects unknown params (the old hard-coded names returned a 400 and an empty list).
-const ALL_CATEGORIES = { label: 'All', value: '' };
+interface Category {
+  id: string;
+  name: string;
+}
+
+// Icons for the category names the admin has set up; anything else gets a generic one.
+const CATEGORY_ICONS: [RegExp, IconName][] = [
+  [/beauty|hair|makeup|nail|personal/i, 'sparkles-outline'],
+  [/creative|media|photo|video|music|dj/i, 'camera-outline'],
+  [/event|planning|wedding|party/i, 'calendar-outline'],
+  [/rental|equipment|decor/i, 'key-outline'],
+  [/food|bev|cater|drink|bak/i, 'restaurant-outline'],
+  [/venue|space|hall/i, 'business-outline'],
+];
+const iconFor = (name: string): IconName => CATEGORY_ICONS.find(([re]) => re.test(name))?.[1] ?? 'pricetags-outline';
+
+const MAX_TILES = 6;
 
 export default function CustomerHome() {
   const nav = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [listings, setListings] = useState<Listing[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [showAll, setShowAll] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [categories, setCategories] = useState([ALL_CATEGORIES]);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('');
 
   useEffect(() => {
     api
       .get('/marketplace/categories')
-      .then((res) => {
-        const list: { id: string; name: string }[] = res.data?.data ?? [];
-        setCategories([ALL_CATEGORIES, ...list.map((c) => ({ label: c.name, value: c.id }))]);
-      })
+      .then((res) => setCategories(res.data?.data ?? []))
       .catch(() => {});
   }, []);
 
-  const load = useCallback(async (resetLoading = false) => {
-    if (resetLoading) setLoading(true);
+  // Search runs on submit, not per keystroke, so typing doesn't fire a request per letter.
+  const load = useCallback(async () => {
     try {
       const res = await api.get('/marketplace/listings', {
-        params: {
-          q: search || undefined,
-          category_id: selectedCategory || undefined,
-          limit: 20,
-        },
+        params: { q: query || undefined, category_id: category || undefined, sort: query || category ? undefined : 'rating', limit: 10 },
       });
-      if (res.data?.success) {
-        setListings(res.data.data ?? []);
-      }
+      if (res.data?.success) setListings(res.data.data ?? []);
     } catch {
-      // ignore
+      // keep what we have
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search, selectedCategory]);
+  }, [query, category]);
 
   useFocusEffect(
     useCallback(() => {
-      load(true);
-    }, [search, selectedCategory]),
+      load();
+    }, [load]),
   );
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    load();
-  };
-
-  const renderListing = ({ item }: { item: Listing }) => (
-    <TouchableOpacity
-      style={s.card}
-      onPress={() => nav.navigate('ListingDetail', { listingId: item.id })}
-    >
-      {item.images && item.images.length > 0 ? (
-        <Image source={{ uri: item.images[0] }} style={s.cardImage} resizeMode="cover" />
-      ) : (
-        <View style={[s.cardImage, s.cardImagePlaceholder]}>
-          <Ionicons name="image-outline" size={36} color={COLORS.gray[400]} />
-        </View>
-      )}
-      <View style={s.cardBody}>
-        <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
-        {item.vendor && (
-          <Text style={s.cardVendor} numberOfLines={1}>{item.vendor.name}</Text>
-        )}
-        <View style={s.cardFooter}>
-          <Text style={s.cardPrice}>
-            ${Number(item.price).toLocaleString()}
-            {item.price_unit ? ` / ${item.price_unit}` : ''}
-          </Text>
-          {item.avg_rating != null && (
-            <View style={s.ratingRow}>
-              <Ionicons name="star" size={12} color="#f59e0b" />
-              <Text style={s.ratingText}>
-                {Number(item.avg_rating).toFixed(1)}
-                {item.review_count ? ` (${item.review_count})` : ''}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+  const firstName = (user?.name ?? '').split(' ')[0];
+  const tiles = showAll ? categories : categories.slice(0, MAX_TILES);
+  const filtered = !!(query || category);
 
   return (
-    <View style={s.root}>
-      {/* Search bar */}
-      <View style={s.searchWrap}>
-        <Ionicons name="search-outline" size={18} color={COLORS.gray[400]} style={s.searchIcon} />
+    <ScrollView
+      style={s.root}
+      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 28 }}
+      keyboardShouldPersistTaps="handled"
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />
+      }
+    >
+      {/* Greeting */}
+      <View style={s.header}>
+        <View style={s.greeting}>
+          {user?.avatar_url ? (
+            <Image source={{ uri: user.avatar_url }} style={s.avatar} />
+          ) : (
+            <BrandGradient style={[s.avatar, s.center]}>
+              <Text style={s.initial}>{(firstName[0] ?? 'V').toUpperCase()}</Text>
+            </BrandGradient>
+          )}
+          <View style={{ flexShrink: 1 }}>
+            <Text style={s.hello} numberOfLines={1}>Hello {firstName || 'there'}!</Text>
+            <Text style={s.helloSub}>What are you planning today?</Text>
+          </View>
+        </View>
+        <Pressable
+          style={s.bell}
+          onPress={() => nav.navigate('Notifications')}
+          accessibilityRole="button"
+          accessibilityLabel="Notifications"
+        >
+          <Ionicons name="notifications-outline" size={22} color="#fff" />
+        </Pressable>
+      </View>
+
+      {/* Search */}
+      <View style={s.search}>
+        <Ionicons name="search-outline" size={20} color={DARK.muted} />
         <TextInput
           style={s.searchInput}
-          placeholder="Search vendors, services..."
-          placeholderTextColor={COLORS.gray[400]}
+          placeholder="Search services & vendors"
+          placeholderTextColor={DARK.muted}
           value={search}
-          onChangeText={setSearch}
+          onChangeText={(t) => {
+            setSearch(t);
+            if (!t) setQuery('');
+          }}
+          onSubmitEditing={() => setQuery(search.trim())}
           returnKeyType="search"
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={18} color={COLORS.gray[400]} />
-          </TouchableOpacity>
+          <Pressable onPress={() => { setSearch(''); setQuery(''); }} hitSlop={8} accessibilityLabel="Clear search">
+            <Ionicons name="close-circle" size={20} color={DARK.muted} />
+          </Pressable>
         )}
       </View>
 
-      {/* Category pills */}
-      <FlatList
-        horizontal
-        data={categories}
-        keyExtractor={(c) => c.value}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.categoryList}
-        renderItem={({ item: c }) => (
-          <TouchableOpacity
-            style={[s.pill, selectedCategory === c.value && s.pillActive]}
-            onPress={() => setSelectedCategory(c.value)}
-          >
-            <Text style={[s.pillText, selectedCategory === c.value && s.pillTextActive]}>
-              {c.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
-
-      {loading ? (
-        <View style={s.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+      {/* Banner: brand promise rather than Figma's $20-off promo, since there are no promo codes yet */}
+      <BrandGradient style={s.banner}>
+        <Image source={require('../../../assets/home/promo-wave.jpg')} style={[StyleSheet.absoluteFill, { opacity: 0.2 }]} resizeMode="cover" />
+        <View style={s.bannerText}>
+          <Text style={s.bannerKicker}>Plan with confidence</Text>
+          <Text style={s.bannerTitle}>Book trusted pros</Text>
+          <Text style={s.bannerBody}>Signed contracts and protected payments on every booking</Text>
         </View>
-      ) : (
-        <FlatList
-          data={listings}
-          keyExtractor={(item) => item.id}
-          renderItem={renderListing}
-          numColumns={2}
-          columnWrapperStyle={s.columnWrapper}
-          contentContainerStyle={[s.list, listings.length === 0 && s.listEmpty]}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
-          }
-          ListEmptyComponent={
-            <View style={s.emptyWrap}>
-              <Ionicons name="storefront-outline" size={52} color={COLORS.gray[300]} />
-              <Text style={s.emptyText}>No listings found</Text>
-            </View>
-          }
-        />
+        <View style={s.bannerPhoto}>
+          <Image source={require('../../../assets/home/promo-model.png')} style={s.bannerPhotoImg} resizeMode="cover" />
+        </View>
+      </BrandGradient>
+
+      {/* Categories */}
+      {categories.length > 0 && (
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Categories</Text>
+          <View style={s.grid}>
+            {tiles.map((c) => {
+              const on = c.id === category;
+              const inner = (
+                <>
+                  <Ionicons name={iconFor(c.name)} size={30} color={on ? '#fff' : DARK.accent} />
+                  <Text style={[s.tileText, on && { color: '#fff' }]} numberOfLines={3}>{c.name}</Text>
+                </>
+              );
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() => setCategory(on ? '' : c.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  style={s.tileWrap}
+                >
+                  {on ? <BrandGradient style={s.tile}>{inner}</BrandGradient> : <View style={s.tile}>{inner}</View>}
+                </Pressable>
+              );
+            })}
+          </View>
+          {categories.length > MAX_TILES && (
+            <Pressable style={s.others} onPress={() => setShowAll(!showAll)} accessibilityRole="button">
+              <Ionicons name={showAll ? 'chevron-up' : 'grid-outline'} size={24} color={DARK.muted} />
+              <Text style={s.othersText}>{showAll ? 'Show less' : 'Others'}</Text>
+            </Pressable>
+          )}
+        </View>
       )}
-    </View>
+
+      {/* Services */}
+      <View style={s.section}>
+        <Text style={s.sectionTitle}>{filtered ? 'Results' : 'Popular Services'}</Text>
+        {loading ? (
+          <ActivityIndicator color={DARK.accent} style={{ marginVertical: 32 }} />
+        ) : listings.length === 0 ? (
+          <View style={s.empty}>
+            <Ionicons name="storefront-outline" size={40} color={DARK.muted} />
+            <Text style={s.emptyText}>{filtered ? 'No services match yet' : 'No services listed yet'}</Text>
+          </View>
+        ) : (
+          <FlatList
+            horizontal
+            data={listings}
+            keyExtractor={(l) => l.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 12, paddingRight: 20 }}
+            style={{ marginRight: -20 }}
+            renderItem={({ item }) => <ServiceCard item={item} onPress={() => nav.navigate('ListingDetail', { listingId: item.id })} />}
+          />
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) {
+  const vendor = item.vendor?.vendorProfile?.business_name || item.vendor?.name;
+  return (
+    <Pressable style={s.card} onPress={onPress} accessibilityRole="button" accessibilityLabel={item.title}>
+      <View style={s.cardImage}>
+        {item.images?.[0] ? (
+          <Image source={{ uri: item.images[0] }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : (
+          <Ionicons name="image-outline" size={32} color={DARK.muted} />
+        )}
+        <View style={s.price}>
+          <Text style={s.priceText}>
+            ${Number(item.price).toLocaleString()}
+            {item.price_unit && item.price_unit !== 'fixed' ? ` / ${item.price_unit}` : ''}
+          </Text>
+        </View>
+      </View>
+      <View style={s.cardTitleRow}>
+        <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
+        {item.avg_rating != null && (
+          <View style={s.rating}>
+            <Ionicons name="star" size={14} color="#F5B700" />
+            <Text style={s.ratingText}>{Number(item.avg_rating).toFixed(1)}</Text>
+          </View>
+        )}
+      </View>
+      {!!vendor && (
+        <View style={s.meta}>
+          <Ionicons name="storefront-outline" size={14} color={DARK.muted} />
+          <Text style={s.metaText} numberOfLines={1}>{vendor}</Text>
+        </View>
+      )}
+      {!!item.location && (
+        <View style={s.meta}>
+          <Ionicons name="location-outline" size={14} color={DARK.muted} />
+          <Text style={s.metaText} numberOfLines={1}>{item.location}</Text>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  searchWrap: {
+  root: { flex: 1, backgroundColor: DARK.bg },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, gap: 12 },
+  greeting: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
+  avatar: { width: 56, height: 56, borderRadius: 28 },
+  initial: { color: '#fff', fontSize: 22, fontFamily: FONTS.semibold },
+  hello: { color: '#fff', fontSize: 20, lineHeight: 26, fontFamily: FONTS.semibold },
+  helloSub: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular },
+  bell: { width: 44, height: 44, borderRadius: 22, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  search: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: COLORS.gray[200],
     gap: 8,
-  },
-  searchIcon: { flexShrink: 0 },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.gray[900],
-    padding: 0,
-  },
-  categoryList: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: COLORS.white,
+    marginHorizontal: 20,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    height: 50,
+    borderRadius: 99,
+    backgroundColor: DARK.field,
     borderWidth: 1,
-    borderColor: COLORS.gray[200],
+    borderColor: DARK.border,
   },
-  pillActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  pillText: { fontSize: 13, fontWeight: '600', color: COLORS.gray[600] },
-  pillTextActive: { color: COLORS.white },
-  list: { paddingHorizontal: 12, paddingBottom: 32 },
-  listEmpty: { flex: 1 },
-  columnWrapper: { gap: 12, marginBottom: 12 },
-  card: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  cardImage: {
-    height: 110,
-    backgroundColor: COLORS.gray[100],
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  cardImagePlaceholder: {
+  searchInput: { flex: 1, color: '#fff', fontSize: 16, fontFamily: FONTS.regular, paddingVertical: 0 },
+  banner: { marginHorizontal: 20, marginTop: 24, height: 165, borderRadius: 20, overflow: 'hidden', flexDirection: 'row' },
+  bannerText: { flex: 1, justifyContent: 'center', paddingLeft: 20, paddingRight: 8, gap: 6 },
+  bannerKicker: { color: '#fff', fontSize: 14, fontFamily: FONTS.semibold },
+  bannerTitle: { color: '#fff', fontSize: 22, lineHeight: 28, fontFamily: FONTS.bold },
+  bannerBody: { color: '#fff', fontSize: 13, lineHeight: 18, fontFamily: FONTS.medium, opacity: 0.92 },
+  // Crop of the Figma banner photo: the model sits in the left third of a wide image.
+  bannerPhoto: { width: 117, height: 154, alignSelf: 'flex-end', marginRight: 18, overflow: 'hidden' },
+  bannerPhotoImg: { position: 'absolute', top: 0, left: '-8%', width: '271%', height: '100%' },
+  section: { marginTop: 24, paddingHorizontal: 20, gap: 16 },
+  sectionTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, rowGap: 12 },
+  tileWrap: { width: '33.333%', paddingHorizontal: 6 },
+  tile: {
+    height: 104,
+    borderRadius: 12,
+    backgroundColor: DARK.card,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 10,
   },
-  cardBody: { padding: 10 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: COLORS.gray[900], marginBottom: 2 },
-  cardVendor: { fontSize: 12, color: COLORS.gray[500], marginBottom: 6 },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardPrice: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  ratingText: { fontSize: 11, color: COLORS.gray[600], fontWeight: '600' },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 64 },
-  emptyText: { fontSize: 16, color: COLORS.gray[500], marginTop: 12 },
+  tileText: { color: DARK.muted, fontSize: 12, lineHeight: 17, fontFamily: FONTS.medium, textAlign: 'center' },
+  others: {
+    marginTop: -4,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: DARK.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  othersText: { color: DARK.muted, fontSize: 18, fontFamily: FONTS.medium },
+  empty: { alignItems: 'center', paddingVertical: 32, gap: 10, backgroundColor: DARK.card, borderRadius: 16 },
+  emptyText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium },
+  card: { width: 243, padding: 12, borderRadius: 16, backgroundColor: DARK.card, gap: 4 },
+  cardImage: {
+    height: 121,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: DARK.field,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  price: { position: 'absolute', top: 8, left: 8, backgroundColor: '#F6F8FA', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 },
+  priceText: { color: '#030303', fontSize: 11, fontFamily: FONTS.semibold },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardTitle: { flex: 1, color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.semibold },
+  rating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ratingText: { color: '#fff', fontSize: 12, fontFamily: FONTS.medium },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { flex: 1, color: DARK.muted, fontSize: 12, lineHeight: 19, fontFamily: FONTS.regular },
 });

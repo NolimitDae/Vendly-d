@@ -26,6 +26,7 @@ export type EPTabParams = {
 
 export type CustomerHomeStackParams = {
   CustomerHome: undefined;
+  Notifications: undefined;
   ListingDetail: { listingId: string };
 };
 
@@ -46,9 +47,8 @@ export type CustomerMessagesStackParams = {
 
 export type CustomerTabParams = {
   HomeTab: undefined;
-  BookingsTab: undefined;
   MessagesTab: undefined;
-  NotificationsTab: undefined;
+  BookingsTab: undefined;
   ProfileTab: undefined;
 };
 
@@ -88,9 +88,15 @@ export type VendorTabParams = {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
+export type SignupRole = 'CLIENT' | 'VENDOR' | 'EVENT_PLANNER';
+
 export type AuthStackParams = {
-  Login: undefined;
-  Register: undefined;
+  Onboarding: undefined;
+  RoleSelect: undefined;
+  SignIn: undefined;
+  SignUp: { role: SignupRole };
+  /** password is only passed in memory so the user is signed in right after verifying. */
+  VerifyEmail: { email: string; password?: string };
 };
 
 // ─── Screen props ─────────────────────────────────────────────────────────────

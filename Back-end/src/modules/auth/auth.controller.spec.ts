@@ -84,10 +84,18 @@ describe('AuthController', () => {
       last_name: 'Doe',
       email: 'john@example.com',
       password: 'password',
-      type: 'user',
+      type: 'CLIENT',
     };
     const result = await controller.create(dto as any, undefined);
     expect(result.success).toBe(true);
+  });
+
+  it('refuses to self-register an admin account', async () => {
+    mockAuthService.register.mockClear();
+    const dto = { first_name: 'Eve', last_name: 'X', email: 'eve@example.com', password: 'password', type: 'ADMIN' };
+    const result = await controller.create(dto as any, undefined);
+    expect(result.success).toBe(false);
+    expect(mockAuthService.register).not.toHaveBeenCalled();
   });
 
   it('should return current user info', async () => {

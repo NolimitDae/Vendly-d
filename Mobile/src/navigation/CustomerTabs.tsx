@@ -3,7 +3,9 @@ import { View, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../constants/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS, DARK, FONTS } from '../constants/colors';
+import { BrandGradient } from '../components/brand';
 
 import CustomerHome from '../screens/customer/Home';
 import ListingDetail from '../screens/customer/ListingDetail';
@@ -37,7 +39,8 @@ const HEADER = {
 function HomeNavigator() {
   return (
     <HomeStack.Navigator screenOptions={HEADER}>
-      <HomeStack.Screen name="CustomerHome" component={CustomerHome} options={{ title: 'Marketplace' }} />
+      <HomeStack.Screen name="CustomerHome" component={CustomerHome} options={{ headerShown: false }} />
+      <HomeStack.Screen name="Notifications" component={NotificationsPlaceholder} options={{ title: 'Notifications' }} />
       <HomeStack.Screen name="ListingDetail" component={ListingDetail} options={{ title: 'Listing Details' }} />
     </HomeStack.Navigator>
   );
@@ -83,37 +86,41 @@ function NotificationsPlaceholder() {
 }
 
 const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  HomeTab: 'home',
-  BookingsTab: 'receipt',
-  MessagesTab: 'chatbubbles',
-  NotificationsTab: 'notifications',
-  ProfileTab: 'person',
+  HomeTab: 'home-outline',
+  MessagesTab: 'chatbubble-ellipses-outline',
+  BookingsTab: 'calendar-outline',
+  ProfileTab: 'ellipsis-vertical',
 };
 
+const tabStyles = { active: { width: 40, height: 40, borderRadius: 20, alignItems: 'center' as const, justifyContent: 'center' as const } };
+
 export default function CustomerTabs() {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.gray[400],
+        tabBarActiveTintColor: '#fff',
+        tabBarInactiveTintColor: DARK.muted,
         tabBarStyle: {
-          backgroundColor: COLORS.white,
-          borderTopColor: COLORS.gray[200],
-          paddingBottom: 4,
-          height: 60,
+          backgroundColor: DARK.card,
+          borderTopWidth: 0,
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          height: 64 + insets.bottom,
+          paddingTop: 8,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-        tabBarIcon: ({ color, size }) => (
-          <Ionicons name={TAB_ICONS[route.name] ?? 'ellipse'} size={size} color={color} />
-        ),
+        tabBarLabelStyle: { fontSize: 12, fontFamily: FONTS.medium, marginTop: 4 },
+        tabBarIcon: ({ color, focused }) => {
+          const icon = <Ionicons name={TAB_ICONS[route.name] ?? 'ellipse'} size={22} color={color} />;
+          return focused ? <BrandGradient style={tabStyles.active}>{icon}</BrandGradient> : icon;
+        },
       })}
     >
       <Tab.Screen name="HomeTab" component={HomeNavigator} options={{ title: 'Home' }} />
-      <Tab.Screen name="BookingsTab" component={BookingsNavigator} options={{ title: 'Bookings' }} />
-      <Tab.Screen name="MessagesTab" component={MessagesNavigator} options={{ title: 'Messages' }} />
-      <Tab.Screen name="NotificationsTab" component={NotificationsPlaceholder} options={{ title: 'Alerts' }} />
-      <Tab.Screen name="ProfileTab" component={ProfileNavigator} options={{ title: 'Profile' }} />
+      <Tab.Screen name="MessagesTab" component={MessagesNavigator} options={{ title: 'Message' }} />
+      <Tab.Screen name="BookingsTab" component={BookingsNavigator} options={{ title: 'Booking' }} />
+      <Tab.Screen name="ProfileTab" component={ProfileNavigator} options={{ title: 'More' }} />
     </Tab.Navigator>
   );
 }

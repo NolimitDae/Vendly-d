@@ -31,6 +31,9 @@ import { memoryStorage } from 'multer';
 import { UserType } from 'prisma/generated/enums';
 import { LocalAuthGuard } from 'src/modules/auth/guards/local-auth.guard';
 import { AuthService } from './auth.service';
+
+// Admin and internal accounts are never self-service: an open ADMIN type would hand anyone the dashboard.
+const SELF_SIGNUP_TYPES: string[] = [UserType.CLIENT, UserType.CUSTOMER, UserType.VENDOR, UserType.EVENT_PLANNER];
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -143,6 +146,10 @@ export class AuthController {
           'Password not provided',
           HttpStatus.UNAUTHORIZED,
         );
+      }
+
+      if (type && !SELF_SIGNUP_TYPES.includes(type)) {
+        throw new HttpException('Invalid account type', HttpStatus.BAD_REQUEST);
       }
 
       const response = await this.authService.register({
