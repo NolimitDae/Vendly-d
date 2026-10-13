@@ -56,7 +56,7 @@ beforeEach(() => mockMatchMedia(false));
 describe('landing page', () => {
   it('renders every section heading', () => {
     render(<Home />);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Book trusted vendors\.\s*Pay when the job is done\./);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Book trusted vendors\.\s*Protected until the job is done\./);
     for (const name of [
       /From the glam to the gear/,
       /Booked, signed, protected/,
@@ -74,7 +74,7 @@ describe('landing page', () => {
   it('contains no invented or premature claims', () => {
     const { container } = render(<Home />);
     const text = container.textContent ?? '';
-    for (const banned of [/17K/i, /12\+ countries/i, /91%/, /Ayana|James Hock|Amy Daina/, /milestone/i, /25%/, /48[- ]hour/i]) {
+    for (const banned of [/17K/i, /12\+ countries/i, /91%/, /Ayana|James Hock|Amy Daina/, /milestone/i, /25%/, /48[- ]hour/i, /pay when the job is done/i, /held until the (job|work)/i]) {
       expect(text).not.toMatch(banned);
     }
     // "escrow" may only appear in the FAQ that says Vendly is not one.
@@ -90,6 +90,14 @@ describe('landing page', () => {
     expect(p.getByText('$1,000')).toBeInTheDocument();
     expect(p.getByText('+ $50')).toBeInTheDocument();
     expect(p.getByText('$1,050')).toBeInTheDocument();
+  });
+
+  it('describes vendor payment schedules and the fee timing', () => {
+    const { container } = render(<Home />);
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/in full, a deposit and balance, a few scheduled payments, or after the service/);
+    expect(text).toMatch(/charged with your first payment/);
+    expect(text).toMatch(/refunded in full/);
   });
 
   it('sends every primary call to action to vendor sign-up', () => {

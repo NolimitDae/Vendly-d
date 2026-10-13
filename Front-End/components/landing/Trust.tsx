@@ -20,7 +20,7 @@ export default function Trust() {
           ))}
         </h2>
         <p data-reveal className="mx-auto mt-10 max-w-2xl text-center text-lg leading-relaxed text-white/70">
-          Your money is held until the work is proven, then it&apos;s paid. That&apos;s the whole idea behind Vendly.
+          Your money goes through Vendly, the work is proven with photos and approvals, and then the vendor is paid. That&apos;s the whole idea behind Vendly.
         </p>
 
         <ul data-reveal-group className="mt-20 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

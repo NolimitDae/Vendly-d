@@ -14,8 +14,8 @@ export const nav = [
 
 export const hero = {
   eyebrow: "The event services marketplace",
-  headline: ["Book", "trusted", "vendors.", "Pay", "when", "the", "job", "is", "done."],
-  sub: "Vendly brings beauty, decor, DJs, catering, rentals, photography and venues into one app. Your payment is held until the work is delivered, so everyone is protected.",
+  headline: ["Book", "trusted", "vendors.", "Protected", "until", "the", "job", "is", "done."],
+  sub: "Vendly brings beauty, decor, DJs, catering, rentals, photography and venues into one app. Every payment goes through Vendly, so you're protected until the work is done.",
   primary: "List your business free",
   secondary: "App coming soon to iPhone and Android",
   chips: [
@@ -50,7 +50,7 @@ export const steps: { title: string; body: string; screen: StepScreen }[] = [
   },
   {
     title: "Pay securely",
-    body: "You pay through Vendly, not straight to the vendor. Your money is held until the job is done.",
+    body: "Pay the way your vendor offers: in full, a deposit and balance, a few scheduled payments, or after the service. Every payment goes through Vendly, never straight to the vendor.",
     screen: "checkout",
   },
   {
@@ -60,7 +60,7 @@ export const steps: { title: string; body: string; screen: StepScreen }[] = [
   },
   {
     title: "Vendor gets paid, you both review",
-    body: "Once the work is confirmed, the vendor is paid. Then both sides leave a review.",
+    body: "Once the work is confirmed, Vendly releases the payment to the vendor. Then both sides leave a review.",
     screen: "paid",
   },
 ];
@@ -70,13 +70,13 @@ export const pricing = {
     title: "For vendors",
     price: "Free",
     note: "No commission. No listing fees. You keep 100% of your price.",
-    points: ["Unlimited bookings", "Payouts through Stripe", "Contracts and proof photos built in"],
+    points: ["Choose how customers pay you", "Payouts through Stripe", "Contracts and proof photos built in"],
   },
   bookers: {
     title: "For people booking",
     price: "5%",
-    note: "A Vendly Protection fee on top of the vendor's price.",
-    points: ["Payment held until the job is done", "Verified vendors", "Support if something goes wrong"],
+    note: "A Vendly Protection fee on top of the vendor's price, charged with your first payment.",
+    points: ["Payments protected until the job is done", "Verified vendors", "Full refund if a vendor cancels"],
   },
   example: { vendorPrice: 1000, feePercent: 5 },
 } as const;
@@ -99,7 +99,7 @@ export const roles: { key: RoleKey; id: string; label: string; title: string; po
     points: [
       "Browse vendors by category and save your favourites",
       "Chat before you book, and send notes and reference photos",
-      "See price, fee and total before you pay",
+      "See every payment, due date, fee and total before you book",
       "Approve photo and video deliveries before the vendor is paid",
     ],
   },
@@ -110,9 +110,10 @@ export const roles: { key: RoleKey; id: string; label: string; title: string; po
     title: "Run your bookings in one place",
     points: [
       "List services, packages and rental items with your own stock levels",
+      "Choose how customers pay: in full, deposit and balance, instalments or after the service",
       "Set your availability and cancellation policy",
       "Use the Vendly contract for your category or upload your own",
-      "Get paid through Stripe once the job is confirmed",
+      "Get paid through Stripe as the work is confirmed",
     ],
   },
   {
@@ -132,7 +133,7 @@ export const roles: { key: RoleKey; id: string; label: string; title: string; po
 export const trust = {
   words: ["Held.", "Proven.", "Paid."],
   items: [
-    { title: "Held payment", body: "Your money sits with Vendly, not the vendor, until the work is done." },
+    { title: "Protected payments", body: "Payments go through Vendly, not straight to the vendor. If a vendor cancels or doesn't show, you're refunded in full." },
     { title: "No proof, no payout", body: "Vendors upload an in-app photo at delivery or setup before they can be paid." },
     { title: "Signed contracts", body: "Every booking has a contract both sides sign in the app, with a signature certificate." },
     { title: "Verified vendors and planners", body: "Vendly checks vendors' and planners' identity and business details before they go live." },
@@ -146,16 +147,20 @@ export const faqs = [
     a: "Vendors list for free and pay no commission. Whoever books, a customer or an event planner, pays a 5% Vendly Protection fee on top of the vendor's price. You always see the price, the fee and the total separately before paying.",
   },
   {
+    q: "How do I pay for a booking?",
+    a: "Each vendor chooses how you pay: in full, a deposit with the balance before the event, a few scheduled payments, or after the service for events coming up soon. Before you book, you see every amount, its due date, the Vendly fee and the total, and the schedule is written into your contract.",
+  },
+  {
     q: "When do vendors get paid?",
-    a: "After the job. Vendly holds the payment, then releases it to the vendor once the work is confirmed, backed by an in-app proof photo or, for photos and video, the customer approving the delivery. Payouts go through Stripe.",
+    a: "Vendly holds payments and releases them to the vendor once the work is confirmed, backed by an in-app proof photo or, for photos and video, the customer approving the delivery. Trusted vendors with a strong track record can receive their non-refundable deposit once your free-cancellation window ends. If such a vendor later cancels or doesn't show, Vendly still refunds you in full. Payouts go through Stripe.",
   },
   {
     q: "What happens if a booking is cancelled?",
-    a: "If the vendor cancels, you get a full refund, including the Vendly fee. If you cancel, the refund follows the cancellation policy the vendor chose (flexible, moderate or strict), which you see before booking.",
+    a: "If the vendor cancels, you get a full refund, including the Vendly fee. If you cancel, the refund follows the vendor's cancellation policy (flexible, moderate or strict) and payment schedule, which you see before booking, and any payments not yet due are cancelled.",
   },
   {
     q: "Is Vendly an escrow service?",
-    a: "No. Vendly holds payments in its Stripe platform account and pays vendors once the job is done. We call this a held payment.",
+    a: "No. Vendly holds payments in its Stripe platform account and releases them to vendors as the work is done. We call this a held payment.",
   },
   {
     q: "Do I need to sign a contract?",

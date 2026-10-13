@@ -12,7 +12,7 @@ const CHIP_LAYOUT = [
   { pos: "right-[-30%] top-[14%]", depth: "0.6", delay: "1200ms" },
   { pos: "right-[-26%] bottom-[14%]", depth: "0.2", delay: "2400ms" },
 ];
-const HIGHLIGHT_FROM = 3; // "Pay when the job is done." gets the gradient
+const HIGHLIGHT_FROM = 3; // "Protected until the job is done." gets the gradient
 
 export default function Hero() {
   return (

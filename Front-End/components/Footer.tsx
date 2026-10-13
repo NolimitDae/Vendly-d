@@ -42,7 +42,7 @@ export default function Footer() {
             <Logo variant="stacked" size={56} className="dark:hidden" />
             <Logo variant="stacked" tone="dark" size={56} className="hidden dark:inline-flex" />
             <p className="max-w-[320px] text-base leading-relaxed text-ink-600 dark:text-white/70">
-              The marketplace for booking trusted event vendors, with payment held until the job is done.
+              The marketplace for booking trusted event vendors, with every payment protected until the job is done.
             </p>
             <StoreBadges tone={isHome ? "dark" : "light"} className="dark:[&>div]:border-white/15" />
           </div>

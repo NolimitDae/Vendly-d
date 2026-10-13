@@ -17,6 +17,10 @@ export default function CheckoutScreen() {
         <Row label={`Vendly Protection fee (${pricing.example.feePercent}%)`} value={money(fee)} />
         <Row label="Total" value={money(price + fee)} strong />
       </Card>
+      <Card>
+        <p className="font-bold">Payment schedule</p>
+        <p className="text-ink-600">Set by {sample.vendor.name}: paid in full when they accept your request.</p>
+      </Card>
       <div className="flex gap-3 rounded-2xl border border-orchid-500/30 bg-white p-3">
         <ShieldCheck className="size-6 shrink-0 text-orchid-500" />
         <p>

@@ -31,7 +31,7 @@ export default function HomeScreen() {
       </div>
       <div className="rounded-2xl bg-brand p-4 text-white">
         <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-80">Protected booking</p>
-        <p className="mt-1 text-[15px] font-bold leading-tight">Pay through Vendly. The vendor is paid when the job is done.</p>
+        <p className="mt-1 text-[15px] font-bold leading-tight">Every payment goes through Vendly, protected until the job is done.</p>
       </div>
       <div className="grid grid-cols-4 gap-2">
         {CATS.slice(0, 8).map(({ label, icon: Icon }, i) => (

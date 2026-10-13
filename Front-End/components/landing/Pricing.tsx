@@ -64,7 +64,7 @@ export default function Pricing() {
             </div>
           </dl>
           <p className="mt-6 text-ink-600">
-            The vendor receives the full {money(vendorPrice)}. Price, fee and total are always shown separately before you pay.
+            The vendor receives the full {money(vendorPrice)}. The fee is charged with your first payment, and every amount is shown separately before you book.
           </p>
         </div>
       </div>
