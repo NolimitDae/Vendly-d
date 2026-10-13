@@ -1,7 +1,7 @@
 # Vendly brand + landing page redesign — design
 
 Date: 2026-10-13
-Status: awaiting owner brand files, then review
+Status: awaiting review (prototype files optional)
 Scope: round 1 of the rebrand. Brand system, landing page, and the shared navbar/footer/favicon. Logged-in web pages and the mobile app are later rounds.
 
 ## Goals
@@ -22,7 +22,7 @@ Scope: round 1 of the rebrand. Brand system, landing page, and the shared navbar
 
 ### Logo
 
-Built from the owner's original logo files (requested; the brief says the owner supplies logo files and exact colour codes). If a vector original isn't available, it is redrawn by hand as SVG from the reference image. One React component, `Logo`, with:
+Redrawn by hand as SVG from the owner's 1760×1120 logo image (no vector original exists). The VM mark follows the image's geometry: rounded strokes, one horizontal gradient across the whole mark. The wordmark is set cleanly in Plus Jakarta Sans ExtraBold; the supplied render has glyph glitches (notched "e" and "d", a flagged "l", a clipped "y") that are not reproduced. The stacked variant keeps "MARKETPLACE" beneath the wordmark, as in the owner's first reference. One React component, `Logo`, with:
 
 - `variant`: `mark` (VM only), `horizontal` (mark + "Vendly"), `stacked` (mark, "Vendly", "MARKETPLACE").
 - `tone`: `light` (for light backgrounds: plum wordmark) and `dark` (for plum/dark backgrounds: white wordmark). The mark keeps its gradient in both.
@@ -32,16 +32,16 @@ The favicon / app icon (`app/icon.svg`) is generated from the same mark geometry
 
 ### Colour tokens
 
-Values below are provisional, sampled from the logo image, and are replaced by the owner's exact colour codes when supplied. Added to `app/globals.css` alongside the existing tokens (existing names are untouched so logged-in pages do not change):
+Mark, wordmark and background values are sampled from the owner's logo image; the rest are derived from them. Added to `app/globals.css` alongside the existing tokens (existing names are untouched so logged-in pages do not change):
 
 | Token | Value | Use |
 |---|---|---|
 | `plum-950` | `#1E0822` | Dark section backgrounds |
-| `plum-900` | `#3B1040` | Headings, wordmark |
+| `plum-900` | `#3A1040` | Headings, wordmark |
 | `plum-700` | `#5E1B66` | Hover/pressed states |
-| `orchid-500` | `#A84FB5` | Accents, focus rings |
-| `brand-gradient` | `#4A1450 → #7B2A87 → #A84FB5` | Primary buttons, highlights, the mark |
-| `blush-50` / `blush-100` | `#FBF4F9` / `#F3E4EF` | Light section backgrounds |
+| `orchid-500` | `#A84AB0` | Accents, focus rings |
+| `brand-gradient` | `#4A1650 → #7A2A82 → #A84AB0` (left to right) | Primary buttons, highlights, the mark |
+| `blush-50` / `blush-100` | `#FBF4F9` / `#F3E6F0` | Light section backgrounds (`blush-100` is the logo background) |
 | `ink-600` | `#4A3F4D` | Body text |
 
 All text/background pairs used must meet WCAG AA contrast.
