@@ -1,7 +1,7 @@
 # Vendly brand + landing page redesign — design
 
 Date: 2026-10-13
-Status: awaiting review
+Status: awaiting owner brand files, then review
 Scope: round 1 of the rebrand. Brand system, landing page, and the shared navbar/footer/favicon. Logged-in web pages and the mobile app are later rounds.
 
 ## Goals
@@ -9,7 +9,8 @@ Scope: round 1 of the rebrand. Brand system, landing page, and the shared navbar
 - Replace the Figma-V2 landing page with a from-scratch page built around the new logo (VM monogram, plum-to-orchid gradient, "Vendly / MARKETPLACE" wordmark).
 - No grainy images: every product visual is rendered in code and stays sharp at any size.
 - Polished, story-driven, cinematic motion that degrades gracefully on phones and for reduced-motion users.
-- Every statement on the page is true of the current product. Vendly has not launched: no invented stats, testimonials, or store links.
+- Act as a pre-launch page for the mobile app (per the Vendly App Development Brief, 6 Oct 2026). The main goal is recruiting founding vendors; customers and planners learn the app is coming.
+- Describe how Vendly works at launch in principles that won't change. No invented stats, testimonials or store links, and no fine-print rules that are not built yet (25% deposit, balance timing, 48-hour release, $3 minimum fee).
 
 ## Non-goals
 
@@ -21,7 +22,7 @@ Scope: round 1 of the rebrand. Brand system, landing page, and the shared navbar
 
 ### Logo
 
-Redrawn by hand as vector SVG from the reference image (or traced from an original file if one is supplied). One React component, `Logo`, with:
+Built from the owner's original logo files (requested; the brief says the owner supplies logo files and exact colour codes). If a vector original isn't available, it is redrawn by hand as SVG from the reference image. One React component, `Logo`, with:
 
 - `variant`: `mark` (VM only), `horizontal` (mark + "Vendly"), `stacked` (mark, "Vendly", "MARKETPLACE").
 - `tone`: `light` (for light backgrounds: plum wordmark) and `dark` (for plum/dark backgrounds: white wordmark). The mark keeps its gradient in both.
@@ -31,7 +32,7 @@ The favicon / app icon (`app/icon.svg`) is generated from the same mark geometry
 
 ### Colour tokens
 
-Added to `app/globals.css` alongside the existing tokens (existing names are untouched so logged-in pages do not change):
+Values below are provisional, sampled from the logo image, and are replaced by the owner's exact colour codes when supplied. Added to `app/globals.css` alongside the existing tokens (existing names are untouched so logged-in pages do not change):
 
 | Token | Value | Use |
 |---|---|---|
@@ -51,32 +52,31 @@ Plus Jakarta Sans (already loaded). Display headlines at weight 800; eyebrow lab
 
 ## 2. Page content
 
-Section order, with the claims each section makes. Claims were checked against the backend (`Back-end/prisma/schema.prisma`, `booking.service.ts`).
+Source of truth for claims: the Vendly App Development Brief (launch product), stated as principles. Where the current code differs (e.g. vendor subscription plans exist in code, but vendors are free at launch per the brief), the page follows the brief.
 
-1. **Navbar** — frosted plum bar, horizontal logo, links: How it works, For vendors, For planners, Marketplace. "Log in" and a gradient "Join Vendly" (→ `/register`). Existing logged-in user menu and notification bell are kept as-is functionally.
-2. **Hero** — headline in the spirit of "Book trusted vendors. Sign, pay, and track it all in one place." Buttons: "Explore the marketplace" (→ `/marketplace`) and "Join as a vendor" (→ `/register`). Store badges labelled "Coming soon" (not links). Visual: 3D phone cycling search → listing → booking confirmed, with floating chips ("Contract signed ✓", "Payment secured", "New message").
-3. **Categories** — Beauty & Personal Care, Creative & Media, Event Services, Rentals, with a marquee of sub-services.
-4. **How it works** (pinned scroll story) — 1 Search & filter, 2 Request a booking, 3 Sign the contract, 4 Pay securely, 5 Get it done & review. The phone screen changes per step.
-5. **One app, three roles** (tabs) —
-   - Customers: search and save listings, chat with vendors, book and pay, leave reviews.
-   - Vendors: listings with availability, contract templates, bookings, payouts via Stripe, subscription plans.
-   - Event planners: events with budgets and tasks, hire vendors for an event.
-6. **Trust & safety** —
-   - Pay through Vendly; the vendor's earnings are released to their payout balance only when the booking is completed.
-   - E-signed contracts with an audit trail.
-   - Vendors are approved by Vendly before going live.
-   - Reviews can only be left on a real booking (one per booking).
-7. **Vendor band** — dark plum, "Grow your business on Vendly", CTA → `/register`.
-8. **FAQ** — payments, contracts, fees, becoming a vendor. Fee answers must match the current service-fee logic; no specific numbers unless taken from code/config.
-9. **Final CTA + footer** — stacked logo, navigation, legal links (`/privacy`, `/terms`, `/contact-us`), "Coming soon" badges. Social icons hidden until real accounts exist.
+Primary audience before launch: vendors. Primary action everywhere: "List your business free" → `/register` (vendor sign-up). Customers and planners see "App coming soon" store badges (not links).
 
-Removed: invented stats (17K+, 12+, 91%), testimonials, inert carousel arrows, the dead "About Us" button, and the false "milestone-based payments" claim. Bookings are paid once in full (any time after confirmation); there are no payment stages, and the page must not imply any.
+1. **Navbar** — frosted plum bar, horizontal logo, links: How it works, For vendors, For planners, Pricing. "Log in" and a gradient "List your business free". Existing logged-in user menu and notification bell kept as-is functionally.
+2. **Hero** — two-sided headline about booking trusted event vendors with payment held until the job is done. Primary button: "List your business free"; secondary: "App coming soon" badges. Visual: 3D phone cycling Home → vendor profile → booking confirmed, with floating chips ("Contract signed ✓", "Payment held", "Proof photo uploaded").
+3. **Categories** — Beauty & glam, Decor, DJs & entertainment, Catering, Rentals, Photography & video, Venues.
+4. **How it works** (pinned scroll story) — 1 Find a vendor (search, filters, reviews, verified badge); 2 Request & sign (pick a package and date, add notes, sign the vendor's contract in the app); 3 Pay securely (payment is held by Vendly, not paid straight to the vendor); 4 The event happens (vendor uploads a proof photo; digital work is delivered for approval); 5 Vendor gets paid, both sides review. The phone screen changes per step.
+5. **Pricing** — Vendors: free to join, no commission, no listing fees. People booking: a 5% Vendly Protection fee on top of the vendor's price, which pays for held payments, verified vendors and dispute support. Price, fee and total always shown separately. Example: a $1,000 booking costs $1,050 and the vendor receives the full $1,000.
+6. **Founding vendors** — dark plum band: vendors who join before launch keep a Founding Vendor badge on their profile and get a discount on Vendly Pro when it launches. Eligibility is determined by account creation date before the public launch; no new code is needed now. CTA → `/register`.
+7. **One app, three roles** (tabs) —
+   - Customers: browse and save vendors, chat, book with notes and reference photos, pay securely, approve deliveries, review.
+   - Vendors: services and packages, rentals with stock you control, availability calendar, contracts (Vendly template or your own), proof photos, digital delivery, payouts through Stripe.
+   - Event planners: everything customers get, plus client events with every vendor, payment and status in one place, an event group chat, a run-of-show timeline, a budget tracker, a read-only client view and saved vendor teams. Planners are verified by Vendly.
+8. **Trust & safety** — held payment (described as "held payment", never "escrow"); no proof, no payout; signed contracts with a signature certificate; verified vendors and planners; if something goes wrong the money stays held and the Vendly team reviews it.
+9. **FAQ** — fees, when vendors get paid, cancellations (vendor sets a flexible, moderate or strict policy; a vendor cancelling means a full refund including the fee), contracts, rentals, launch timing.
+10. **Final CTA + footer** — stacked logo, navigation, legal links (`/privacy`, `/terms`, `/contact-us`), "Coming soon" badges. Social icons hidden until real accounts exist.
+
+Removed: invented stats (17K+, 12+, 91%), testimonials, inert carousel arrows, the dead "About Us" button, "Explore the marketplace" as a main action (a customer web app is out of scope for v1 per the brief), and the false "milestone-based payments" claim.
 
 ## 3. Motion and product visuals
 
 ### Phone screens
 
-`PhoneFrame` renders a device bezel at true phone proportions and accepts a screen. Screens are small presentational components: Search results, Listing, Booking confirmed, Contract signing, Checkout, Chat, Deliverables & review. Sample content lives in `content.ts` and uses clearly fictional vendors (e.g. "Glow Studio by Ama"). Screens are `aria-hidden`; each phone has a short text alternative describing what it shows.
+`PhoneFrame` renders a device bezel at true phone proportions and accepts a screen. Screens are small presentational components: Home, Vendor profile, Booking request with notes, Contract signing, Checkout (price / fee / total), Proof photo, Delivery approval, Chat, Planner event overview. Screens follow the owner's `vendly-app.html` prototype and investor-page phone demo where supplied. Sample content lives in `content.ts` and uses clearly fictional vendors (e.g. "Glow Studio by Ama"). Screens are `aria-hidden`; each phone has a short text alternative describing what it shows.
 
 ### Motion layers
 
@@ -106,8 +106,8 @@ Front-End/
 │   ├── brand/Logo.tsx                 mark / horizontal / stacked × light / dark
 │   ├── landing/
 │   │   ├── content.ts                 all copy + sample data
-│   │   ├── Hero.tsx, Categories.tsx, HowItWorks.tsx, Roles.tsx,
-│   │   ├── Trust.tsx, VendorBand.tsx, Faq.tsx, FinalCta.tsx
+│   │   ├── Hero.tsx, Categories.tsx, HowItWorks.tsx, Pricing.tsx,
+│   │   ├── FoundingVendors.tsx, Roles.tsx, Trust.tsx, Faq.tsx, FinalCta.tsx
 │   │   ├── phone/PhoneFrame.tsx
 │   │   ├── phone/screens/*.tsx        one file per app screen
 │   │   └── motion/                    useReveal, usePinnedStory, useTilt (+ fallbacks)
@@ -123,7 +123,8 @@ Front-End/
 Automated (Jest + Testing Library, alongside existing tests):
 
 - Landing page renders every section heading.
-- No invented content: the page contains none of "17K", "12+ countries", "91%", testimonial names, "milestone".
+- No invented or premature content: the page contains none of "17K", "12+ countries", "91%", testimonial names, "milestone", "escrow", "25%".
+- Pricing section states 5% and "free" for vendors, and the $1,000 → $1,050 example adds up.
 - Roles tabs switch panels by click and keyboard.
 - FAQ items expand and collapse.
 - Every `Logo` variant exposes an accessible name.
