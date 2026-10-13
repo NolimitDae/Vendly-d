@@ -21,7 +21,7 @@ const ServiceOverviewCard = ({ image, title, features, link, isActive }: Service
     return (
         <div className='space-y-4 sm:space-y-6 '>
             <div className='w-full'>
-                <Image src={image} alt={title} width={300} height={300} className='w-full h-full object-cover' />
+                <Image src={image} alt={title} width={270} height={200} className='w-full h-auto' />
             </div>
 
             <div>

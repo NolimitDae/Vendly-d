@@ -13,7 +13,7 @@ interface CustomerCardProps {
 
 const CustomerCard = ({ item }: CustomerCardProps) => {
     return (
-        <div className='space-y-9 rounded-2xl p-3 sm:p-6
+        <div className='space-y-9 rounded-[20px] p-4 sm:p-6
          border-[0.5px] border-borderColor bg-white hover:border-purpleOne hover:shadow-lg transition-all duration-300'>
             <div className='flex flex-col space-y-4'>
                 <ApostropheIcon />
@@ -21,13 +21,13 @@ const CustomerCard = ({ item }: CustomerCardProps) => {
             </div>
 
             <div className='flex items-center gap-3'>
-                <div className='w-10 h-10 rounded-full overflow-hidden'>
+                <div className='w-14 h-14 rounded-full overflow-hidden shrink-0'>
                     <Image
                         src={item.image}
                         alt={item.name}
-                        width={40}
-                        height={40}
-                        className="h-auto"
+                        width={56}
+                        height={56}
+                        className="w-full h-full object-cover"
                     />
                 </div>
                 <div className='space-y-1'>

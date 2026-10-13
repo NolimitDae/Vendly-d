@@ -8,7 +8,7 @@ import Container from '@/app/_components/Container'
 const whyChooseData = [
     {
         icon: <MultiServiceIcon />,
-        header: 'Multi-Service, OneApp',
+        header: 'Multi-Service, One App',
         description: 'All your services, all in one place. Discover, book, and manage multiple services seamlessly with just one app'
     }, {
         icon: <VerifiedIcon />,
@@ -25,9 +25,9 @@ const whyChooseData = [
 const WhyChoose = () => {
     return (
         <Container className='py-10 lg:py-30 space-y-12'>
-            <div>
-                <h2 className='text-2xl sm:text-[2.5rem] font-semibold capitalize leading-[130%] text-center text-blackColor dark:text-white'>Why Choose Our Platform</h2>
-                <p className='text-sm sm:text-lg leading-[160%] max-w-2xl mx-auto text-center text-descriptionColor dark:text-white'>Our platform is designed to make your experience simple, reliable, and efficient. We bring everything together in one place so you can manage</p>
+            <div className='space-y-4'>
+                <h2 className='text-2xl sm:text-[2.5rem] font-semibold capitalize leading-[130%] text-center text-white'>Why Choose Our Platform</h2>
+                <p className='text-sm sm:text-base leading-[160%] max-w-[570px] mx-auto text-center text-white'>Our platform is designed to make your experience simple, reliable, and efficient. We bring everything together in one place so you can manage</p>
             </div>
 
             <div className='grid grid-cols-1 xl:grid-cols-3 gap-7.5'>

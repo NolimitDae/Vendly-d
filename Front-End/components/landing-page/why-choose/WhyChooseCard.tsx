@@ -10,7 +10,7 @@ interface WhyChooseCardProps {
 
 const WhyChooseCard = ({ item }: WhyChooseCardProps) => {
     return (
-        <div className='flex flex-col justify-center items-center gap-4 sm:gap-12 p-3 sm:p-4 bg-white rounded-2xl border-[0.5px] border-borderColor hover:border-purpleOne hover:shadow-lg transition-all duration-300'>
+        <div className='flex flex-col justify-center items-center gap-6 sm:gap-12 p-6 sm:p-8 bg-white rounded-2xl border-[0.5px] border-borderColor hover:border-purpleOne hover:shadow-lg transition-all duration-300'>
             <div className='rounded-full p-[0.5px] bg-linear-to-r from-[#B09DFF] to-[#B09DFF]'>
                 <div className='rounded-full flex items-center justify-center p-4.5 bg-white w-full h-full'>
                     {item.icon}

@@ -16,23 +16,25 @@ import PinterestIcon from "@/icons/PinterestIcon";
 import LinkedInIcon from "@/icons/LinkedInIcon";
 import Container from "@/app/_components/Container";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 const footerIcon = [
   { icon: <FacebookIcon /> },
   { icon: <TwitterIcon /> },
   { icon: <InstagramIcon /> },
-  { icon: <PinterestIcon /> },
   { icon: <LinkedInIcon /> },
+  { icon: <PinterestIcon /> },
 ]
 const navigationLinks = [
   { name: "Home", slug: "/" },
-  { name: "About", slug: "/about" },
-  { name: "How It Wroks", slug: "/how-it-works" },
-  { name: "Services", slug: "/services" },
+  { name: "About Us", slug: "/#about" },
+  { name: "How It Works", slug: "/#how-it-works" },
+  { name: "Services", slug: "/#services" },
 ]
 
 const partnerLinks = [
-  { name: "My partners", slug: "#" }, {
+  { name: "My Partners", slug: "#" }, {
     name: "Community", slug: "#"
   }, {
     name: "Clients", slug: "#"
@@ -40,16 +42,19 @@ const partnerLinks = [
 ]
 
 const supportLinks = [
-  { name: "Contact me", slug: "/contact-us" }, {
+  { name: "Contact Us", slug: "/contact-us" }, {
     name: "Privacy Policy", slug: "/privacy"
   }, {
-    name: "Terms", slug: "/terms"
+    name: "Terms & Conditions", slug: "/terms"
   }
 ]
 
 export default function Footer() {
+  const pathname = usePathname();
+
   return (
-    <footer>
+    // Matches the always-dark home hero; other pages keep the theme's footer.
+    <footer className={cn(pathname === "/" && "dark bg-darkBg")}>
       <Container className="py-10 lg:pt-30 pb-10 lg:pb-20">
         <div className="flex flex-col lg:flex-row  space-y-10">
           <div className="space-y-4">
@@ -57,7 +62,7 @@ export default function Footer() {
               <Image src="/site_logo.png" alt="logo" width={50} height={50} />
               <span className=" bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent text-2xl font-bold">Vendly</span>
             </div>
-            <p className="text-base font-normal text-descriptionColor dark:text-white leading-[160%] max-w-[380px]">Explore the world with us! Find inspiration, plan adventures, and make unforgettable memories every journey.</p>
+            <p className="text-base font-normal text-descriptionColor dark:text-white leading-[160%] max-w-[310px]">An all-in-one marketplace for booking verified beauty, creative, event, and rental services.</p>
             <div className="flex items-center gap-[1.053rem]">
               {footerIcon.map((item, index) => (
                 <Link
@@ -85,7 +90,7 @@ export default function Footer() {
             </div>
 
             <div className="space-y-2 sm:space-y-6">
-              <h3 className="text-lg sm:text-2xl font-semibold text-blackColor dark:text-white leading-[130%] capitalize">Partners</h3>
+              <h3 className="text-lg sm:text-2xl font-semibold text-blackColor dark:text-white leading-[130%] capitalize">Partner</h3>
               <ul className="space-y-1 sm:space-y-3">
                 {partnerLinks.map((item, index) => (
                   <li key={index}>
@@ -114,7 +119,7 @@ export default function Footer() {
 
 
       </Container>
-      <p className="text-center text-sm font-normal gradient-bg text-white leading-[130%] px-2.5 py-3.5">Copyright © 2026 Vendly. All rights reserved.</p>
+      <p className="text-center text-sm font-normal gradient-bg text-white leading-[130%] px-2.5 py-3.5">Copyright © 2026 Vendly | All Rights Reserved</p>
     </footer>
   );
 }

@@ -2,7 +2,10 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { ThemeScript } from "@/providers/ThemeScript";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "../globals.css";
+
+const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
 export default function AuthLayout({
   children,
@@ -14,7 +17,7 @@ export default function AuthLayout({
       <head>
         <ThemeScript />
       </head>
-      <body>
+      <body className={jakarta.className}>
         <ThemeProvider>
         
           {children}

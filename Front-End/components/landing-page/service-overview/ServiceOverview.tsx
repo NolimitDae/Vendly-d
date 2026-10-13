@@ -8,11 +8,11 @@ const serviceOverviewData = [
     {
         id: 1,
         image: "/serviceOne.png",
-        title: "Beauty & personal care",
+        title: "Beauty & Personal Care",
         features: [
             { icon: <CircleTickIcon />, desc: "Bridal & party makeup" },
-            { icon: <CircleTickIcon />, desc: "Hair styling & treatments" },
-            { icon: <CircleTickIcon />, desc: "Skincare & facials" },
+            { icon: <CircleTickIcon />, desc: "Hair styling & grooming" },
+            { icon: <CircleTickIcon />, desc: "Skincare & facial treatments" },
 
         ],
         link: {
@@ -27,8 +27,8 @@ const serviceOverviewData = [
         title: "Creative & Media",
         features: [
             { icon: <CircleTickIcon />, desc: "Photography & videography" },
+            { icon: <CircleTickIcon />, desc: "Content creation & editing" },
             { icon: <CircleTickIcon />, desc: "Graphic design & branding" },
-            { icon: <CircleTickIcon />, desc: "Content writing & editing" },
 
         ],
         link: {
@@ -40,11 +40,11 @@ const serviceOverviewData = [
     {
         id: 3,
         image: "/serviceThree.png",
-        title: "Event Service",
+        title: "Event Services",
         features: [
             { icon: <CircleTickIcon />, desc: "Event planners & coordinators" },
-            { icon: <CircleTickIcon />, desc: "Venue & vendor management" },
-            { icon: <CircleTickIcon />, desc: "Decorations & styling" },
+            { icon: <CircleTickIcon />, desc: "Catering & food services" },
+            { icon: <CircleTickIcon />, desc: "Decoration & floral design" },
 
         ],
         link: {
@@ -58,9 +58,9 @@ const serviceOverviewData = [
         image: "/serviceFour.png",
         title: "Rentals",
         features: [
-            { icon: <CircleTickIcon />, desc: "Furniture & decor rentals" },
-            { icon: <CircleTickIcon />, desc: "Equipment & supply rentals" },
-            { icon: <CircleTickIcon />, desc: "Delivery & setup services" },
+            { icon: <CircleTickIcon />, desc: "Event furniture & tents" },
+            { icon: <CircleTickIcon />, desc: "Camera & production gear" },
+            { icon: <CircleTickIcon />, desc: "Cars & luxury vehicles" },
 
         ],
         link: {
@@ -76,8 +76,8 @@ const ServiceOverview = () => {
 
         <Container className='py-10 lg:py-30 space-y-12'>
             <div className='flex flex-col items-center justify-center gap-4'>
-                <h2 className='text-2xl sm:text-[2.5rem] font-semibold capitalize leading-[130%] text-center'>Our Core Services overview</h2>
-                <p className='text-sm sm:text-lg leading-[160%] max-w-[600px] mx-auto text-center text-descriptionColor'>Our core services are designed to deliver seamless, high-quality solutions tailored to your needs. Ensure exceptional results at every stage</p>
+                <h2 className='text-2xl sm:text-[2.5rem] font-semibold capitalize leading-[130%] text-center text-blackColor'>Our Core Services overview</h2>
+                <p className='text-sm sm:text-base leading-[160%] max-w-[570px] mx-auto text-center text-descriptionColor'>Our core services are designed to deliver seamless, high-quality solutions tailored to your needs. Ensure exceptional results at every stage</p>
             </div>
 
             <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-7.5'>

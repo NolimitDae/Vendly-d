@@ -30,14 +30,14 @@ export default function Home() {
       <section id="services" className="scroll-mt-28">
         <ServiceOverview />
       </section>
-      <div className="bg-[#FAFAFA] dark:bg-background">
+      <div className="bg-darkBg">
         <WhyChoose />
       </div>
       <GrowBusiness />
       <div className="bg-[#FAFAFA]">
         <Customers />
       </div>
-      <div className="dark:bg-blackColor">
+      <div className="bg-darkBg">
         <ZeroHassle />
       </div>
     </div>

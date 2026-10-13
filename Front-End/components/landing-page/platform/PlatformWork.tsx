@@ -10,7 +10,7 @@ import ConfirmationIcon from '@/icons/ConfirmationIcon'
 const platformData = [
     {
         icon: <PlatmorSearch />,
-        title: "Search & Discover",
+        title: "Search & Filter",
         description: "Easily discover vendors using smart filters like category, location, budget, availability, and customer ratings"
 
     },
@@ -40,10 +40,10 @@ const PlatformWork = () => {
             <div className="flex flex-col items-center justify-center space-y-3 sm:space-y-4 text-center">
 
                 <h2 className="text-2xl sm:text-[2.5rem] font-semibold text-blackColor leading-[130%] capitalize">
-                    how out platform works
+                    How Our Platform Works
                 </h2>
 
-                <p className="text-sm sm:text-base font-normal text-descriptionColor leading-[160%] max-w-full sm:max-w-[700px]">
+                <p className="text-sm sm:text-base font-normal text-descriptionColor leading-[160%] max-w-full sm:max-w-[570px]">
                     We’ve built our platform to simplify the entire process from start to finish. Find the right services, communicate effortlessly, and manage everything
                 </p>
 

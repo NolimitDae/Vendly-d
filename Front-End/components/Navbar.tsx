@@ -113,7 +113,8 @@ export default function Navbar() {
   };
 
   return (
-    <Container className="mt-4 relative z-50">
+    // The home hero is always dark, so the navbar over it uses its dark styling in both themes.
+    <Container className={cn("mt-4 relative z-50", pathname === "/" && "dark")}>
       <div className={cn("flex justify-between items-center p-3 md:p-4 rounded-full nav_container")}>
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 flex-shrink-0">

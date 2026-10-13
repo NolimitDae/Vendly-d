@@ -5,7 +5,7 @@ import React from 'react'
 
 const ConnectPeople = () => {
     return (
-        <Container className="flex flex-col md:flex-row items-center gap-10 md:gap-20 pt-5 md:pt-12.5 pb-10 lg:pb-30">
+        <Container className="flex flex-col md:flex-row items-center gap-10 md:gap-25 py-10 lg:py-30">
 
             {/* Left Content */}
             <div className="flex flex-col w-full md:w-1/2">
@@ -39,7 +39,7 @@ const ConnectPeople = () => {
                     <div className="flex flex-col space-y-1 w-full md:w-auto">
                         <div className="h-[0.5px] w-full bg-[#D2D2D5] mb-3" />
                         <strong className="text-blackColor text-xl md:text-[2.5rem] font-semibold">
-                            12K+
+                            12+
                         </strong>
                         <span className="text-descriptionColor text-sm md:text-base">
                             Countries with active app users
