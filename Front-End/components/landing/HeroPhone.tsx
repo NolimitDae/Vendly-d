@@ -6,7 +6,7 @@ import PhoneFrame from "./phone/PhoneFrame";
 import HomeScreen from "./phone/screens/HomeScreen";
 import ProfileScreen from "./phone/screens/ProfileScreen";
 import ConfirmedScreen from "./phone/screens/ConfirmedScreen";
-import { prefersReducedMotion, useGsap } from "./motion/useGsap";
+import { useGsap } from "./motion/useGsap";
 
 const SCREENS = [HomeScreen, ProfileScreen, ConfirmedScreen];
 const CYCLE_MS = 3600;
@@ -16,16 +16,16 @@ export default function HeroPhone({ width }: { width: number }) {
   const [active, setActive] = useState(0);
   const tiltRef = useRef<HTMLDivElement>(null);
 
+  // Cross-fades only (no movement), so it also runs for reduced-motion users.
   useEffect(() => {
-    if (prefersReducedMotion()) return;
     const id = window.setInterval(() => setActive((i) => (i + 1) % SCREENS.length), CYCLE_MS);
     return () => window.clearInterval(id);
   }, []);
 
-  useGsap(({ gsap, isDesktop }) => {
+  useGsap(({ gsap, isDesktop, reduced }) => {
     const el = tiltRef.current;
     const stage = el?.closest("section");
-    if (!el || !stage || !isDesktop) return;
+    if (!el || !stage || !isDesktop || reduced) return;
     gsap.set(el, { transformPerspective: 1200 });
     const rotY = gsap.quickTo(el, "rotationY", { duration: 0.8, ease: "power3.out" });
     const rotX = gsap.quickTo(el, "rotationX", { duration: 0.8, ease: "power3.out" });
@@ -49,6 +49,8 @@ export default function HeroPhone({ width }: { width: number }) {
 
   return (
     <div ref={tiltRef} className="will-change-transform">
+      {/* Touch screens and narrow windows: a slow 3D sway (CSS), since there is no mouse to tilt with */}
+      <div className="landing-sway-touch">
       <PhoneFrame width={width} label="The Vendly app: home screen, a vendor profile, and a confirmed booking with a signed contract and held payment">
         {SCREENS.map((S, i) => (
           <div
@@ -59,6 +61,7 @@ export default function HeroPhone({ width }: { width: number }) {
           </div>
         ))}
       </PhoneFrame>
+      </div>
     </div>
   );
 }

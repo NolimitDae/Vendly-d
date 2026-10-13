@@ -8,9 +8,10 @@ import StoreBadges from "./StoreBadges";
 const CHIP_ICONS = [FileSignature, ShieldCheck, Camera];
 // Where each chip floats around the phone, and how far it drifts on scroll (parallax depth).
 const CHIP_LAYOUT = [
-  { pos: "left-[-30%] top-[34%]", depth: "0.35", delay: "0ms" },
-  { pos: "right-[-30%] top-[14%]", depth: "0.6", delay: "1200ms" },
-  { pos: "right-[-26%] bottom-[14%]", depth: "0.2", delay: "2400ms" },
+  // Phones: tucked over the phone's edges so they stay on screen; large screens: out to the sides.
+  { pos: "left-[-8%] top-[36%] lg:left-[-30%] lg:top-[34%]", depth: "0.35", delay: "0ms" },
+  { pos: "right-[-8%] top-[12%] lg:right-[-30%] lg:top-[14%]", depth: "0.6", delay: "1200ms" },
+  { pos: "right-[-6%] bottom-[16%] lg:right-[-26%] lg:bottom-[14%]", depth: "0.2", delay: "2400ms" },
 ];
 const HIGHLIGHT_FROM = 3; // "Protected until the job is done." gets the gradient
 
@@ -72,9 +73,9 @@ export default function Hero() {
             const Icon = CHIP_ICONS[i];
             const layout = CHIP_LAYOUT[i];
             return (
-              <div key={chip.label} aria-hidden="true" data-parallax={layout.depth} className={cn("absolute hidden sm:block", layout.pos)}>
+              <div key={chip.label} aria-hidden="true" data-parallax={layout.depth} className={cn("absolute z-10", layout.pos)}>
                 <div
-                  className="landing-float flex items-center gap-2 rounded-2xl border border-white/15 bg-plum-900/95 px-4 py-3 text-sm font-semibold shadow-[0_20px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-md"
+                  className="landing-float flex items-center gap-2 whitespace-nowrap rounded-2xl border border-white/15 bg-plum-900/95 px-3 py-2 text-xs font-semibold sm:px-4 sm:py-3 sm:text-sm shadow-[0_20px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-md"
                   style={{ "--delay": layout.delay } as React.CSSProperties}
                 >
                   <span className="grid size-7 place-items-center rounded-full bg-brand">

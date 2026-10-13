@@ -153,16 +153,38 @@ describe('Logo', () => {
 });
 
 describe('motion', () => {
-  it('loads GSAP when motion is allowed', async () => {
+  // Hand LandingMotion one fake element per selector so we can see how each effect is set up.
+  const fakeEl = (selector: string) => {
+    const el = document.createElement('div');
+    el.dataset.selector = selector;
+    el.textContent = '$1,050';
+    return el;
+  };
+  beforeEach(() => {
+    (gsap.utils.toArray as jest.Mock).mockImplementation((sel: string) => [fakeEl(sel)]);
+    (gsap as unknown as { to: jest.Mock }).to = jest.fn();
+  });
+  afterEach(() => (gsap.utils.toArray as jest.Mock).mockImplementation(() => []));
+
+  const revealFrom = () =>
+    (gsap.fromTo as jest.Mock).mock.calls.find(([el]) => el?.dataset?.selector === '[data-reveal]')?.[1];
+  const calledFor = (selector: string) =>
+    (gsap.fromTo as jest.Mock).mock.calls.some(([el]) => el?.dataset?.selector === selector);
+
+  it('reveals rise into place, with parallax and count-ups, when motion is allowed', async () => {
     render(<LandingMotion />);
     await waitFor(() => expect(gsap.registerPlugin).toHaveBeenCalled());
+    expect(revealFrom()).toMatchObject({ y: 72, autoAlpha: 0 });
+    expect(calledFor('[data-parallax]')).toBe(true);
+    expect((gsap as unknown as { to: jest.Mock }).to).toHaveBeenCalled(); // count-up
   });
 
-  it('never loads GSAP for users who prefer reduced motion', async () => {
+  it('with reduce motion, content still fades in but nothing moves, drifts or counts', async () => {
     mockMatchMedia(true);
     render(<LandingMotion />);
-    await new Promise((r) => setTimeout(r, 50));
-    expect(gsap.registerPlugin).not.toHaveBeenCalled();
-    expect(gsap.context).not.toHaveBeenCalled();
+    await waitFor(() => expect(gsap.registerPlugin).toHaveBeenCalled());
+    expect(revealFrom()).toMatchObject({ y: 0, autoAlpha: 0 });
+    expect(calledFor('[data-parallax]')).toBe(false);
+    expect((gsap as unknown as { to: jest.Mock }).to).not.toHaveBeenCalled();
   });
 });

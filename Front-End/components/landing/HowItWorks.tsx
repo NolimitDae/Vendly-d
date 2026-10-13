@@ -42,8 +42,30 @@ export default function HowItWorks() {
     return () => observer.disconnect();
   }, []);
 
-  useGsap(({ gsap }) => {
+  useGsap(({ gsap, reduced }) => {
     if (!railRef.current || !listRef.current) return;
+
+    // Phones (one per step on smaller screens): swing up into place in 3D as you scroll; fade only if reduced.
+    gsap.utils.toArray<HTMLElement>("[data-step-phone]", listRef.current).forEach((phone) => {
+      gsap.fromTo(
+        phone,
+        reduced
+          ? { autoAlpha: 0 }
+          : { autoAlpha: 0.15, y: 120, scale: 0.82, rotationX: 28, rotationY: -14, transformPerspective: 1000 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          scale: 1,
+          rotationX: 0,
+          rotationY: 0,
+          ease: "power2.out",
+          ...(reduced
+            ? { duration: 0.8, scrollTrigger: { trigger: phone, start: "top 90%", once: true } }
+            : { scrollTrigger: { trigger: phone, start: "top bottom", end: "center 60%", scrub: 0.5 } }),
+        },
+      );
+    });
+
     gsap.fromTo(
       railRef.current,
       { scaleY: 0 },
@@ -103,7 +125,7 @@ export default function HowItWorks() {
                       </div>
                     </div>
                     {/* Per-step phone on smaller screens, where the sticky phone is hidden */}
-                    <div data-reveal className="mx-auto lg:hidden">
+                    <div data-step-phone className="mx-auto lg:hidden">
                       <PhoneFrame width={240} label={PHONE_LABEL}>
                         <Screen />
                       </PhoneFrame>

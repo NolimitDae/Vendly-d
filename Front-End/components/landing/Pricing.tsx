@@ -31,7 +31,7 @@ export default function Pricing() {
               )}
             >
               <p className={cn("text-sm font-semibold uppercase tracking-[0.2em]", p.featured ? "text-orchid-300" : "text-plum-500 dark:text-orchid-300")}>{p.title}</p>
-              <p className={cn("mt-6 text-7xl font-extrabold tracking-[-0.04em]", p.featured ? "text-white" : "text-brand dark:bg-none dark:text-orchid-300")}>{p.price}</p>
+              <p data-countup className={cn("mt-6 text-7xl font-extrabold tracking-[-0.04em]", p.featured ? "text-white" : "text-brand dark:bg-none dark:text-orchid-300")}>{p.price}</p>
               <p className={cn("mt-4 text-lg", p.featured ? "text-white/75" : "text-ink-600 dark:text-white/70")}>{p.note}</p>
               <ul className="mt-8 space-y-3">
                 {p.points.map((pt) => (
@@ -52,15 +52,15 @@ export default function Pricing() {
           <dl className="mt-6 grid gap-6 text-plum-900 sm:grid-cols-3 dark:text-white">
             <div>
               <dt className="text-ink-600 dark:text-white/70">Vendor&apos;s price</dt>
-              <dd className="mt-1 text-3xl font-extrabold">{money(vendorPrice)}</dd>
+              <dd data-countup className="mt-1 text-3xl font-extrabold">{money(vendorPrice)}</dd>
             </div>
             <div>
               <dt className="text-ink-600 dark:text-white/70">Vendly Protection fee ({feePercent}%)</dt>
-              <dd className="mt-1 text-3xl font-extrabold">+ {money(fee)}</dd>
+              <dd data-countup className="mt-1 text-3xl font-extrabold">+ {money(fee)}</dd>
             </div>
             <div>
               <dt className="text-ink-600 dark:text-white/70">You pay</dt>
-              <dd className="mt-1 text-3xl font-extrabold text-brand dark:bg-none dark:text-orchid-300">{money(vendorPrice + fee)}</dd>
+              <dd data-countup className="mt-1 text-3xl font-extrabold text-brand dark:bg-none dark:text-orchid-300">{money(vendorPrice + fee)}</dd>
             </div>
           </dl>
           <p className="mt-6 text-ink-600 dark:text-white/70">
