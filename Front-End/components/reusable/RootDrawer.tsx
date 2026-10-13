@@ -17,7 +17,7 @@ function RootDrawer({
             <button
               onClick={() => setOpen(false)}
               aria-label="Close drawer"
-              className="group hover:scale-105 transition-all duration-200 bg-white rounded-full cursor-pointer w-12 h-12 flex justify-center shadow-2xl items-center absolute top-1/2 transform -translate-y-1/2 left-4 md:-left-12 lg:-left-16 z-50"
+              className="group hover:scale-105 transition-all duration-200 bg-white rounded-full cursor-pointer w-12 h-12 flex justify-center shadow-2xl items-center absolute top-1/2 transform -translate-y-1/2 left-4 md:-left-12 lg:-left-16 z-50 dark:bg-gray-800"
             >
               <Image
                 src="/icon/arrow-right-01.svg"

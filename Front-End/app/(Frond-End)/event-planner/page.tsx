@@ -51,7 +51,7 @@ export default function EventPlannerPage() {
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Event Planners</h1>
-          <p className="text-gray-500 mt-1">Find the perfect event planner for your occasion</p>
+          <p className="text-gray-500 mt-1 dark:text-gray-400">Find the perfect event planner for your occasion</p>
         </div>
 
         {/* Event type filter */}
@@ -59,7 +59,7 @@ export default function EventPlannerPage() {
           <button
             onClick={() => { setEventType(""); setPage(1); }}
             className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
-              !eventType ? "bg-primary text-white" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100"
+              !eventType ? "bg-primary text-primary-foreground" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             }`}
           >
             All Events
@@ -70,8 +70,8 @@ export default function EventPlannerPage() {
               onClick={() => { setEventType(type); setPage(1); }}
               className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
                 eventType === type
-                  ? "bg-primary text-white"
-                  : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
               }`}
             >
               {type.replace("_", " ")}
@@ -79,7 +79,7 @@ export default function EventPlannerPage() {
           ))}
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">{meta.total} planners found</p>
+        <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">{meta.total} planners found</p>
 
         {loading ? (
           <div className="flex justify-center py-20">
@@ -106,7 +106,7 @@ export default function EventPlannerPage() {
                 onClick={() => setPage(i + 1)}
                 className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
                   page === i + 1
-                    ? "bg-primary text-white"
+                    ? "bg-primary text-primary-foreground"
                     : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
                 }`}
               >
@@ -147,7 +147,7 @@ function PlannerCard({ planner }: { planner: Planner }) {
                 className="rounded-full object-cover border-4 border-white dark:border-gray-800 shadow"
               />
             ) : (
-              <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xl border-4 border-white dark:border-gray-800 shadow">
+              <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl border-4 border-white dark:border-gray-800 shadow">
                 {planner.user?.name?.[0]?.toUpperCase() ?? "P"}
               </div>
             )}
@@ -158,10 +158,10 @@ function PlannerCard({ planner }: { planner: Planner }) {
           </h3>
 
           {planner.bio && (
-            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{planner.bio}</p>
+            <p className="text-sm text-gray-500 mt-1 line-clamp-2 dark:text-gray-400">{planner.bio}</p>
           )}
 
-          <div className="flex flex-wrap gap-3 mt-3 text-xs text-gray-500">
+          <div className="flex flex-wrap gap-3 mt-3 text-xs text-gray-500 dark:text-gray-400">
             {planner.years_experience !== undefined && (
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3" />

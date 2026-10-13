@@ -45,11 +45,11 @@ export const ModalHeader: React.FC<ModalHeaderProps> = ({
   return (
     <div
       className={cn(
-        "flex items-start gap-3 bg-white",
+        "flex items-start gap-3 bg-white dark:bg-gray-800",
         paddingStyles[padding],
         alignStyles[align],
         showDivider && "border-b",
-        dividerClassName || "border-gray-100",
+        dividerClassName || "border-gray-100 dark:border-gray-800",
         wrapperClassName
       )}
     >
@@ -62,7 +62,7 @@ export const ModalHeader: React.FC<ModalHeaderProps> = ({
             <h2
               className={cn(
                 "font-medium leading-[130%]",
-                "text-lg text-black",
+                "text-lg text-black dark:text-white",
                 titleClassName
               )}
             >
@@ -73,7 +73,7 @@ export const ModalHeader: React.FC<ModalHeaderProps> = ({
           {subtitle && (
             <p
               className={cn(
-                "text-sm leading-[160%] text-gray-500",
+                "text-sm leading-[160%] text-gray-500 dark:text-gray-400",
                 subtitleClassName
               )}
             >

@@ -19,7 +19,7 @@ function SocialShare() {
                     </svg>
                     Google
                 </button>
-                <button className="flex justify-center cursor-pointer w-full items-center gap-2 border border-gray-300 px-4 py-3 rounded-full">
+                <button className="flex justify-center cursor-pointer w-full items-center gap-2 border border-gray-300 px-4 py-3 rounded-full dark:border-gray-600">
                     <svg xmlns="http://www.w3.org/2000/svg" width="23" height="22" viewBox="0 0 23 22" fill="none">
                         <path d="M11.25 0C8.33262 0 5.53473 1.15893 3.47183 3.22183C1.40893 5.28473 0.25 8.08262 0.25 11C0.25 13.9174 1.40893 16.7153 3.47183 18.7782C5.53473 20.8411 8.33262 22 11.25 22C14.1674 22 16.9653 20.8411 19.0282 18.7782C21.0911 16.7153 22.25 13.9174 22.25 11C22.25 8.08262 21.0911 5.28473 19.0282 3.22183C16.9653 1.15893 14.1674 0 11.25 0Z" fill="#039BE5" />
                         <path d="M12.7389 13.9156H15.5855L16.0325 11.0237H12.7383V9.4432C12.7383 8.24188 13.1308 7.17662 14.2545 7.17662H16.0603V4.65299C15.743 4.61015 15.072 4.51636 13.8041 4.51636C11.1566 4.51636 9.60444 5.91452 9.60444 9.09988V11.0237H6.88281V13.9156H9.60444V21.8639C10.1434 21.945 10.6894 22 11.2498 22C11.7564 22 12.2508 21.9537 12.7389 21.8877V13.9156Z" fill="white" />

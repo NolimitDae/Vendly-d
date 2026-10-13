@@ -138,7 +138,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
         <div className="flex items-start justify-between mb-5">
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">{titles[step]}</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{listing.title}</p>
+            <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">{listing.title}</p>
           </div>
           <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600 transition">
             <X className="w-5 h-5" />
@@ -153,7 +153,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
                 ${Number(listing.price).toFixed(2)} / {listing.price_unit}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">A Vendly service fee is added. You&apos;ll see the total in the contract.</p>
+            <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">A Vendly service fee is added. You&apos;ll see the total in the contract.</p>
           </div>
         )}
         {step === "contract" && preview?.pricing && (
@@ -161,7 +161,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
             <div className="flex justify-between"><span>Vendor price</span><span>{preview.pricing.price}</span></div>
             <div className="flex justify-between"><span>Vendly service fee</span><span>{preview.pricing.service_fee}</span></div>
             <div className="flex justify-between font-bold"><span>Total</span><span>{preview.pricing.total}</span></div>
-            <p className="text-xs text-gray-500 pt-1">You pay after the vendor accepts and signs.</p>
+            <p className="text-xs text-gray-500 pt-1 dark:text-gray-400">You pay after the vendor accepts and signs.</p>
           </div>
         )}
 
@@ -226,7 +226,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
                 className={`${inputCls} resize-none`}
               />
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Next you&apos;ll review and sign the vendor&apos;s contract. You pay only after the vendor accepts and signs.
             </p>
 
@@ -241,7 +241,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Review contract
@@ -270,7 +270,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
               <CheckCircle className="w-5 h-5 flex-shrink-0" />
               <span>Contract signed and request sent. The vendor will review it and Accept &amp; Sign.</span>
             </div>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Once the vendor signs, you&apos;ll get a notification and can pay securely from your bookings page.
             </p>
             <div className="flex gap-3 pt-2">
@@ -282,7 +282,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
                   View contract
                 </a>
               )}
-              <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition">
+              <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition">
                 Done
               </button>
             </div>

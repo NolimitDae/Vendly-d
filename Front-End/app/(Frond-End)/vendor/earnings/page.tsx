@@ -667,7 +667,7 @@ export default function VendorEarningsPage() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-sm text-gray-500">
+                <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
                   <span>
                     {(txPage - 1) * TX_PER_PAGE + 1}–
                     {Math.min(txPage * TX_PER_PAGE, tableRows.length)} of{" "}
@@ -758,7 +758,7 @@ export default function VendorEarningsPage() {
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
                       No payout account connected
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-gray-500 mt-0.5 dark:text-gray-400">
                       Connect a Stripe account to receive payouts directly to your bank.
                     </p>
                   </div>
@@ -787,13 +787,13 @@ export default function VendorEarningsPage() {
                   {stripeBalance && (
                     <div className="p-4 bg-gray-50 dark:bg-gray-700/40 rounded-xl space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Available</span>
+                        <span className="text-gray-500 dark:text-gray-400">Available</span>
                         <span className="font-semibold text-gray-900 dark:text-white">
                           ${stripeBalance.available.amount.toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Pending</span>
+                        <span className="text-gray-500 dark:text-gray-400">Pending</span>
                         <span className="text-gray-600 dark:text-gray-400">
                           ${stripeBalance.pending.amount.toFixed(2)}
                         </span>

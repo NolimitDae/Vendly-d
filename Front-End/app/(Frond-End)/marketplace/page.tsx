@@ -126,7 +126,7 @@ export default function MarketplacePage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Browse Services</h1>
-          <p className="text-gray-500 mt-1">Find the perfect vendor for your needs</p>
+          <p className="text-gray-500 mt-1 dark:text-gray-400">Find the perfect vendor for your needs</p>
         </div>
 
         {/* Search + filters bar */}
@@ -174,7 +174,7 @@ export default function MarketplacePage() {
         {showFilters && (
           <div className="flex gap-3 mb-6 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Min Price ($)</label>
+              <label className="text-xs text-gray-500 block mb-1 dark:text-gray-400">Min Price ($)</label>
               <input
                 type="number"
                 value={minPrice}
@@ -184,7 +184,7 @@ export default function MarketplacePage() {
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Max Price ($)</label>
+              <label className="text-xs text-gray-500 block mb-1 dark:text-gray-400">Max Price ($)</label>
               <input
                 type="number"
                 value={maxPrice}
@@ -197,7 +197,7 @@ export default function MarketplacePage() {
         )}
 
         {/* Results count */}
-        <p className="text-sm text-gray-500 mb-4">{meta.total} services found</p>
+        <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">{meta.total} services found</p>
 
         {/* Listings grid */}
         {loading ? (
@@ -241,8 +241,8 @@ export default function MarketplacePage() {
                 onClick={() => setPage(i + 1)}
                 className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
                   page === i + 1
-                    ? "bg-primary text-white"
-                    : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
                 }`}
               >
                 {i + 1}
@@ -305,7 +305,7 @@ function ListingCard({
           <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-1 group-hover:text-primary transition">
             {listing.title}
           </h3>
-          <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{listing.description}</p>
+          <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 dark:text-gray-400">{listing.description}</p>
 
           {listing.location && (
             <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">

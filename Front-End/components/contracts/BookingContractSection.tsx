@@ -140,7 +140,7 @@ export default function BookingContractSection({ bookingId, role, bookingStatus,
       </div>
 
       {!current ? (
-        <p className="text-sm text-gray-500">This booking was made before contracts and has no contract.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">This booking was made before contracts and has no contract.</p>
       ) : (
         <>
           <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
@@ -148,12 +148,12 @@ export default function BookingContractSection({ bookingId, role, bookingStatus,
               {current.title} · version {current.version}
             </p>
             {current.signatures.map((s) => (
-              <p key={s.role} className="text-xs text-gray-500">
+              <p key={s.role} className="text-xs text-gray-500 dark:text-gray-400">
                 Signed by {s.legal_name} ({s.role.toLowerCase()}) on {new Date(s.signed_at).toLocaleString()}
               </p>
             ))}
             {current.status === "EXECUTED" && (
-              <p className="text-xs text-gray-500">Verification code: {current.verification_code}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Verification code: {current.verification_code}</p>
             )}
           </div>
 
@@ -177,7 +177,7 @@ export default function BookingContractSection({ bookingId, role, bookingStatus,
               <button
                 onClick={openAcceptAndSign}
                 disabled={busy}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold disabled:opacity-60"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
                 Accept &amp; Sign
@@ -212,7 +212,7 @@ export default function BookingContractSection({ bookingId, role, bookingStatus,
             )}
           </div>
           {contracts.length > 1 && (
-            <details className="text-xs text-gray-500">
+            <details className="text-xs text-gray-500 dark:text-gray-400">
               <summary className="cursor-pointer">All versions ({contracts.length})</summary>
               <ul className="mt-2 space-y-1">
                 {contracts.map((c) => (

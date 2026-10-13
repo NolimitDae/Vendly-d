@@ -229,7 +229,7 @@ export default function Navbar() {
                               unoptimized
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
+                            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold flex-shrink-0 mt-0.5">
                               {n.sender?.name?.[0]?.toUpperCase() ?? "?"}
                             </div>
                           )}
@@ -268,7 +268,7 @@ export default function Navbar() {
                 onClick={() => setUserMenuOpen((o) => !o)}
                 className="flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition text-sm font-medium text-gray-700 dark:text-gray-200"
               >
-                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
+                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
                   {user.name?.[0]?.toUpperCase() ?? "U"}
                 </div>
                 {user.name?.split(" ")[0]}
@@ -443,7 +443,7 @@ export default function Navbar() {
       {/* Mobile drawer */}
       <div
         className={cn(
-          "lg:hidden fixed top-0 right-0 w-full bg-blackColor/20 backdrop-blur-xs h-screen z-50 transform transition-transform duration-300 ease-in-out",
+          "lg:hidden fixed top-0 right-0 w-full bg-black/40 backdrop-blur-xs h-screen z-50 transform transition-transform duration-300 ease-in-out",
           menuOpen ? "translate-x-0" : "translate-x-full",
         )}
       >
@@ -471,7 +471,7 @@ export default function Navbar() {
                   "block text-sm py-2.5 px-3 rounded-xl dark:text-white",
                   linkIsActive(item.hash)
                     ? "text-primary font-medium bg-primary/5"
-                    : "text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800",
+                    : "text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-200",
                 )}
                 onClick={(e) => {
                   handleNavClick(e, item.hash);

@@ -22,7 +22,7 @@ const AuthRightSection = () => {
 
         <div className="space-y-2 mb-8">
           <h2 className="text-[2rem] leading-[130%] text-white">Welcome to Vendly</h2>
-          <p className="text-borderColor text-sm leading-[160%]">
+          <p className="text-white/75 text-sm leading-[160%]">
             Vendly is an all-in-one platform designed to manage multiple
             businesses and services effortlessly. Customers can discover and
             book trusted vendors.
@@ -31,7 +31,7 @@ const AuthRightSection = () => {
 
         {/* progress bars */}
         <div className="flex gap-2 mb-[5.188rem]">
-          <div className="w-[1.5rem] h-1 bg-white rounded-lg" />
+          <div className="w-[1.5rem] h-1 bg-white rounded-lg dark:bg-gray-800" />
           <div className="w-[0.75rem] h-1 bg-progressBarBg rounded-lg" />
           <div className="w-[0.75rem] h-1 bg-progressBarBg rounded-lg" />
           <div className="w-[0.75rem] h-1 bg-progressBarBg rounded-lg" />

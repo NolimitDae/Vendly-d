@@ -77,7 +77,7 @@ export const TagInput = ({
                 removeTag(tag);
               }}
               disabled={disabled}
-              className="text-gray-500 hover:text-black transition-colors"
+              className="text-gray-500 hover:text-black transition-colors dark:text-gray-400"
             >
               ✕
             </button>
@@ -102,12 +102,12 @@ export const TagInput = ({
 
       {/* DROPDOWN */}
       {open && filtered.length > 0 && (
-        <div className="absolute top-full left-0 z-10 w-full mt-1 border border-gray-200 rounded-lg bg-white shadow-md max-h-60 overflow-y-auto">
+        <div className="absolute top-full left-0 z-10 w-full mt-1 border border-gray-200 rounded-lg bg-white shadow-md max-h-60 overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
           {filtered.map((opt: string) => (
             <div
               key={opt}
               onClick={() => addTag(opt)}
-              className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               {opt}
             </div>

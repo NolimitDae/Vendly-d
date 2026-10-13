@@ -340,7 +340,7 @@ export default function TermsOfServicePage() {
       <Container>
         <article className="max-w-3xl mx-auto bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-6 sm:p-10">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Terms of Service</h1>
-          <p className="mt-2 text-sm text-gray-500">Last updated {LAST_UPDATED}</p>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Last updated {LAST_UPDATED}</p>
           <nav aria-label="Contents" className="mt-6 text-sm">
             <ol className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
               {sections.map((s) => (

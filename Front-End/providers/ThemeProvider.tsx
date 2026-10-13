@@ -34,16 +34,25 @@ export function ThemeProvider({
   children,
   defaultTheme = DEFAULT_THEME,
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(
-    () => themeStorage.get() ?? defaultTheme
-  );
-  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getSystemTheme);
+  // Start from the same values the server renders with, then read the saved choice after mount.
+  // Reading localStorage during the first render made client and server disagree (hydration errors).
+  // ThemeScript has already put the right class on <html> before paint, so nothing flashes.
+  const [theme, setThemeState] = useState<Theme>(defaultTheme);
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>('light');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setThemeState(themeStorage.get() ?? defaultTheme);
+    setSystemTheme(getSystemTheme());
+    setMounted(true);
+  }, [defaultTheme]);
 
   const resolvedTheme: ResolvedTheme =
     theme === 'system' ? systemTheme : theme;
 
-  // Apply theme to DOM
+  // Apply theme to DOM (only once the saved choice is known, so we never overwrite ThemeScript's class)
   useEffect(() => {
+    if (!mounted) return;
     const root = document.documentElement;
     if (THEME_ATTRIBUTE === 'class') {
       root.classList.remove('light', 'dark');
@@ -52,7 +61,7 @@ export function ThemeProvider({
       root.setAttribute(THEME_ATTRIBUTE, resolvedTheme);
     }
     root.style.colorScheme = resolvedTheme;
-  }, [resolvedTheme]);
+  }, [resolvedTheme, mounted]);
 
   // Sync system theme changes in real time
   useEffect(() => {

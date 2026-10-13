@@ -86,14 +86,14 @@ const DataFilterBar = ({
               />
             )}
             <div className="min-w-0 flex-1">
-              <div className="text-[14px] text-gray-900 truncate">
+              <div className="text-[14px] text-gray-900 truncate dark:text-white">
                 {item.vendorName?.name ||
                   item.plannerName?.name ||
                   item?.info?.eventName ||
                   item.payerName ||
                   item.payeeName}
               </div>
-              <div className="text-[12px] text-gray-500 truncate">
+              <div className="text-[12px] text-gray-500 truncate dark:text-gray-400">
                 {item.category || item.eventType} •{" "}
                 {item.location ||
                   item.services ||

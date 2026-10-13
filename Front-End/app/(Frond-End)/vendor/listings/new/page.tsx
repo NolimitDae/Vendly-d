@@ -139,7 +139,7 @@ export default function NewListingPage() {
           <div className="flex flex-col gap-2 pt-2">
             <Link
               href="/vendor/subscription?reason=no-plan"
-              className="w-full py-3 rounded-xl bg-primary text-white font-semibold text-sm hover:bg-primary/90 transition"
+              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition"
             >
               View Subscription Plans
             </Link>
@@ -158,7 +158,7 @@ export default function NewListingPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
       <div className="max-w-3xl mx-auto">
-        <Link href="/vendor/listings" className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition text-sm">
+        <Link href="/vendor/listings" className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition text-sm dark:text-gray-400">
           <ArrowLeft className="w-4 h-4" />
           Back to Listings
         </Link>
@@ -176,7 +176,7 @@ export default function NewListingPage() {
               onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
             >
               <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-              <p className="text-sm text-gray-500">Drop images here or click to upload</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Drop images here or click to upload</p>
               <p className="text-xs text-gray-400 mt-1">Up to 10 images</p>
               <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
             </div>
@@ -353,7 +353,7 @@ export default function NewListingPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Save as Draft

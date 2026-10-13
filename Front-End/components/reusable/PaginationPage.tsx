@@ -121,7 +121,7 @@ function PaginationPage({
             <button
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage === 1}
-              className="w-6 h-6 flex justify-center items-center bg-white hover:bg-purpleOne hover:text-white px-[0.563rem] py-1.5 rounded-sm cursor-pointer"
+              className="w-6 h-6 flex justify-center items-center bg-white hover:bg-purpleOne hover:text-white px-[0.563rem] py-1.5 rounded-sm cursor-pointer dark:bg-gray-800"
             >
               <ChevronLeft  />
             </button>

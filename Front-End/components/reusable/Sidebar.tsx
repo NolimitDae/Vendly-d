@@ -131,7 +131,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                               "flex items-center gap-2 px-3 py-2 rounded-md transition-all duration-200",
                               childActive
                                 ? "gradient-bg opacity-100 text-white shadow-sm"
-                                : "hover:bg-gray-100",
+                                : "hover:bg-gray-100 dark:hover:bg-gray-800",
                             )}
                           >
                             <child.icon

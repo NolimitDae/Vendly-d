@@ -38,7 +38,7 @@ const variantStyles: Record<Variant, string> = {
     "disabled:opacity-50 disabled:cursor-not-allowed",
   ].join(" "),
   plain: [
-    " bg-white font-semibold text-descriptionColor cursor-pointer",
+    " bg-white font-semibold text-descriptionColor cursor-pointer dark:bg-gray-800",
     " disabled:cursor-not-allowed",
   ].join(" "),
 };

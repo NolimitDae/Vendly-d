@@ -203,7 +203,7 @@ export default function ListingDetailPage() {
         {/* Back */}
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 mb-6 transition"
+          className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 mb-6 transition dark:text-gray-400"
         >
           <ChevronLeft className="w-4 h-4" />
           Back
@@ -275,7 +275,7 @@ export default function ListingDetailPage() {
                 </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-gray-500">
+              <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-gray-500 dark:text-gray-400">
                 {listing.avg_rating && (
                   <div className="flex items-center gap-1 text-amber-500">
                     <Star className="w-4 h-4 fill-current" />
@@ -355,7 +355,7 @@ export default function ListingDetailPage() {
                 <span className="text-base font-normal text-gray-400 ml-1">/ {listing.price_unit}</span>
               </div>
 
-              <div className="mt-4 space-y-2 text-sm text-gray-500">
+              <div className="mt-4 space-y-2 text-sm text-gray-500 dark:text-gray-400">
                 {listing._count?.bookings !== undefined && (
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
@@ -368,7 +368,7 @@ export default function ListingDetailPage() {
                 <div className="mt-5 space-y-2">
                   <button
                     onClick={() => setShowBooking(true)}
-                    className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary/90 transition"
+                    className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-semibold hover:bg-primary/90 transition"
                   >
                     Book Now
                   </button>
@@ -386,7 +386,7 @@ export default function ListingDetailPage() {
               ) : (
                 <Link
                   href="/login"
-                  className="block w-full mt-5 bg-primary text-white py-3 rounded-xl font-semibold text-center hover:bg-primary/90 transition"
+                  className="block w-full mt-5 bg-primary text-primary-foreground py-3 rounded-xl font-semibold text-center hover:bg-primary/90 transition"
                 >
                   Log in to Book
                 </Link>
@@ -396,7 +396,7 @@ export default function ListingDetailPage() {
             {/* Vendor card */}
             {listing.vendor && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 dark:text-gray-400">
                   About the Vendor
                 </h3>
                 <div className="flex items-center gap-3">
@@ -516,7 +516,7 @@ export default function ListingDetailPage() {
                   <button
                     disabled={!selectedEventId}
                     onClick={() => { setShowAddToEvent(false); setShowBooking(true); }}
-                    className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
+                    className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
                   >
                     Continue to Book
                   </button>

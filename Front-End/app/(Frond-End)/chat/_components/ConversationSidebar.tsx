@@ -238,7 +238,7 @@ export default function ConversationSidebar() {
                 }}
                 className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
               >
-                <X className="w-4 h-4 text-gray-500" />
+                <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
 

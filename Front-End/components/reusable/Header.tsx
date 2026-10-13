@@ -147,7 +147,7 @@ const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-3">
               <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
                 <PopoverTrigger
-                  className="cursor-pointer relative flex justify-center items-center bg-white rounded-full p-[0.402rem] border-[0.5px] border-borderColor w-9 h-9"
+                  className="cursor-pointer relative flex justify-center items-center bg-white rounded-full p-[0.402rem] border-[0.5px] border-borderColor w-9 h-9 dark:bg-gray-800"
                   onClick={() => setPopoverOpen(!popoverOpen)}
                 >
                   <div className="absolute top-1.5 right-1.5">
@@ -158,7 +158,7 @@ const Header: React.FC<HeaderProps> = ({
 
                 <PopoverContent className="w-70 md:w-[267px] mt-4 p-0 max-h-[500px] flex flex-col mr-6">
                   {/* Header */}
-                  <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+                  <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10 dark:bg-gray-800">
                     <h4 className="text-base font-bold md:text-lg text-headerColor">
                       Notifications
                     </h4>
@@ -172,7 +172,7 @@ const Header: React.FC<HeaderProps> = ({
                   </div>
 
                   <div className="overflow-y-auto px-4 py-3 flex-1">
-                    <p className="text-center text-sm text-gray-500 py-6">
+                    <p className="text-center text-sm text-gray-500 py-6 dark:text-gray-400">
                       No notifications available
                     </p>
                   </div>
@@ -195,7 +195,7 @@ const Header: React.FC<HeaderProps> = ({
                           unoptimized
                         />
                       ) : (
-                        <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold">
+                        <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold">
                           {admin?.name?.[0]?.toUpperCase() ?? "A"}
                         </div>
                       )}
@@ -239,7 +239,7 @@ const Header: React.FC<HeaderProps> = ({
                             unoptimized
                           />
                         ) : (
-                          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold">
+                          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-bold">
                             {admin?.name?.[0]?.toUpperCase() ?? "A"}
                           </div>
                         )}

@@ -82,12 +82,12 @@ export default function ServicesPageContent() {
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="New category name…"
-          className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+          className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-gray-800 dark:border-gray-700"
         />
         <button
           type="submit"
           disabled={creating || !newName.trim()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
         >
           {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           Add
@@ -105,7 +105,7 @@ export default function ServicesPageContent() {
           {categories.map((cat) => (
             <div
               key={cat.id}
-              className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between gap-3"
+              className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between gap-3 dark:bg-gray-800 dark:border-gray-800"
             >
               <div className="min-w-0">
                 <p className="font-semibold text-sm text-blackColor truncate">{cat.name}</p>

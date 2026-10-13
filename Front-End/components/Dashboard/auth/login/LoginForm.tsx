@@ -110,7 +110,7 @@ const LoginForm = () => {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               Two-Factor Authentication
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">
               Enter the 6-digit code from your authenticator app.
             </p>
           </div>
@@ -206,7 +206,7 @@ const LoginForm = () => {
           </div>
           <Link
             href="/forget-password"
-            className="text-sm text-brand cursor-pointer"
+            className="text-sm text-brand cursor-pointer dark:bg-none dark:text-orchid-300"
           >
             Forgot your password?
           </Link>
@@ -230,7 +230,7 @@ const LoginForm = () => {
         Don&apos;t have an account?{" "}
         <Link
           href="/register"
-          className="text-brand font-medium"
+          className="text-brand font-medium dark:bg-none dark:text-orchid-300"
         >
           Sign up
         </Link>
@@ -253,7 +253,8 @@ const LoginForm = () => {
             Google
           </CustomButton>
           <CustomButton fullWidth className="flex items-center justify-center gap-2 w-full border border-borderColor rounded-2xl py-2 px-3 h-12 hover:border-orchid-500 transition-colors">
-            <AppleIconBlack />
+            {/* The Apple glyph is near-black; turn it white on the dark-mode button */}
+            <span className="dark:[&_path[fill='#070707']]:fill-white"><AppleIconBlack /></span>
             Apple
           </CustomButton>
         </div>

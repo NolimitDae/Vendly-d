@@ -45,7 +45,7 @@ const PLANS: PlanDef[] = [
     trialDays: 14,
     badge: undefined,
     icon: Zap,
-    colorClass: "from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-750",
+    colorClass: "from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900",
     ringClass: "border-gray-200 dark:border-gray-700",
     features: [
       "14-day free trial",
@@ -404,7 +404,7 @@ function SubscriptionPageInner() {
                   </span>
                 )}
                 {isCurrent && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white text-[11px] font-bold px-3 py-0.5 rounded-full whitespace-nowrap shadow">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[11px] font-bold px-3 py-0.5 rounded-full whitespace-nowrap shadow">
                     Current
                   </span>
                 )}
@@ -461,7 +461,7 @@ function SubscriptionPageInner() {
                     variant === "current" &&
                       "bg-primary/10 text-primary cursor-default",
                     variant === "primary" &&
-                      "bg-primary text-white hover:bg-primary/90 active:scale-95",
+                      "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95",
                     variant === "secondary" &&
                       "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600",
                     (isCurrent || subscribing !== null) && subscribing !== plan.id && "opacity-60",

@@ -95,7 +95,7 @@ export default function EventPlannerEventsPage() {
           </div>
           <Link
             href="/event-planner/events/new"
-            className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition"
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition"
           >
             <Plus className="w-4 h-4" />
             New Event
@@ -111,7 +111,7 @@ export default function EventPlannerEventsPage() {
               className={cn(
                 "px-4 py-1.5 rounded-full text-sm font-medium border transition",
                 filter === f
-                  ? "bg-primary text-white border-primary"
+                  ? "bg-primary text-primary-foreground border-primary"
                   : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-primary/50",
               )}
             >
@@ -184,7 +184,7 @@ export default function EventPlannerEventsPage() {
                     <span
                       className={cn(
                         "text-[10px] font-semibold px-2.5 py-1 rounded-full",
-                        STATUS_STYLES[ev.status] ?? "bg-gray-100 text-gray-500",
+                        STATUS_STYLES[ev.status] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
                       )}
                     >
                       {ev.status.replace("_", " ")}

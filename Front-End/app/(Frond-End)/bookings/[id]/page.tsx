@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
   CONFIRMED: "bg-blue-100 text-blue-700",
   IN_PROGRESS: "bg-purple-100 text-purple-700",
   COMPLETED: "bg-green-100 text-green-700",
-  CANCELLED: "bg-gray-100 text-gray-500",
+  CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   REJECTED: "bg-red-100 text-red-600",
 };
 
@@ -110,7 +110,7 @@ export default function CustomerBookingDetailPage() {
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
       <Link
         href="/bookings"
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white dark:text-gray-400"
       >
         <ArrowLeft className="w-4 h-4" /> Back to bookings
       </Link>
@@ -122,12 +122,12 @@ export default function CustomerBookingDetailPage() {
             <p className="font-semibold text-gray-900 dark:text-white">
               {booking.listing?.title ?? "Booking"}
             </p>
-            <p className="text-sm text-gray-500 mt-0.5">by {booking.vendor?.name}</p>
+            <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">by {booking.vendor?.name}</p>
           </div>
           <span
             className={cn(
               "text-xs font-semibold px-2.5 py-1 rounded-full",
-              STATUS_COLORS[booking.status] ?? "bg-gray-100 text-gray-500",
+              STATUS_COLORS[booking.status] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
             )}
           >
             {booking.status}
@@ -174,7 +174,7 @@ export default function CustomerBookingDetailPage() {
               <button
                 onClick={payNow}
                 disabled={paying}
-                className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold disabled:opacity-60"
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60"
               >
                 {paying ? "Opening…" : "Pay now"}
               </button>

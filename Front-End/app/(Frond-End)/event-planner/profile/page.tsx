@@ -238,7 +238,7 @@ export default function EventPlannerProfilePage() {
                   onClick={() => toggleEventType(type)}
                   className={`px-4 py-2 rounded-full text-sm font-medium transition ${
                     eventTypes.includes(type)
-                      ? "bg-primary text-white"
+                      ? "bg-primary text-primary-foreground"
                       : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
                   }`}
                 >
@@ -255,7 +255,7 @@ export default function EventPlannerProfilePage() {
             {existingPortfolio.length > 0 && (
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-4">
                 {existingPortfolio.map((url, i) => (
-                  <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100">
+                  <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
                     <Image src={url} alt="" fill className="object-cover" />
                   </div>
                 ))}
@@ -265,7 +265,7 @@ export default function EventPlannerProfilePage() {
             <button
               type="button"
               onClick={() => portfolioRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:border-primary hover:text-primary transition text-sm"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:border-primary hover:text-primary transition text-sm dark:text-gray-400"
             >
               <Upload className="w-4 h-4" />
               {newPortfolioFiles.length > 0
@@ -290,7 +290,7 @@ export default function EventPlannerProfilePage() {
           {/* License */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
             <h2 className="font-semibold text-gray-900 dark:text-white mb-2">License / Certification</h2>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">
               Upload supporting documents for admin verification. Your profile becomes publicly
               visible once approved.
             </p>
@@ -298,7 +298,7 @@ export default function EventPlannerProfilePage() {
             <button
               type="button"
               onClick={() => licenseRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:border-primary hover:text-primary transition text-sm"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:border-primary hover:text-primary transition text-sm dark:text-gray-400"
             >
               <Upload className="w-4 h-4" />
               {newLicenseFiles.length > 0
@@ -317,7 +317,7 @@ export default function EventPlannerProfilePage() {
             {newLicenseFiles.length > 0 && (
               <div className="mt-3 space-y-1">
                 {newLicenseFiles.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                  <div key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                     <span className="flex-1 truncate">{f.name}</span>
                     <button
                       type="button"
@@ -334,7 +334,7 @@ export default function EventPlannerProfilePage() {
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-3 rounded-2xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             {saving ? "Saving…" : "Save Profile"}

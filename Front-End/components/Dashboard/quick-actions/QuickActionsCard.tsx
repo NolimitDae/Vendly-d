@@ -13,7 +13,7 @@ interface QuickActionsCardProps {
 
 const QuickActionsCard = ({ action }: QuickActionsCardProps) => {
   const inner = (
-    <div className="flex justify-between items-center p-3 bg-white rounded-lg">
+    <div className="flex justify-between items-center p-3 bg-white rounded-lg dark:bg-gray-800">
       <div className="flex justify-center items-center gap-1.5">
         <div className="h-[1.983rem] w-[1.983rem] flex justify-center items-center rounded-full bg-grayBg border-[0.5px] border-grayBorder">
           {action.icon}

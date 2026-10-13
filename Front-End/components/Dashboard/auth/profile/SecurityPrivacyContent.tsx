@@ -84,7 +84,7 @@ const SecurityPrivacyContent = () => {
         <div className="space-y-3">
           {devicesData.map((device) => (
             <div key={device.id} className="flex items-center gap-3">
-              <div className="w-[2.5rem] h-[2.5rem] flex items-center justify-center bg-white rounded-lg border-[0.5px] border-borderColor">
+              <div className="w-[2.5rem] h-[2.5rem] flex items-center justify-center bg-white rounded-lg border-[0.5px] border-borderColor dark:bg-gray-800">
                 {device.icon}
               </div>
               <div className="flex-1 space-y-1">

@@ -56,7 +56,7 @@ export default function HowItWorks() {
   });
 
   return (
-    <section id="how-it-works" aria-labelledby="how-title" className="scroll-mt-24 bg-white py-24 sm:py-32">
+    <section id="how-it-works" aria-labelledby="how-title" className="scroll-mt-24 bg-white py-24 sm:py-32 dark:bg-[#16061a]">
       <div className="mx-auto max-w-[1240px] px-5 sm:px-8">
         <SectionHeading
           id="how-title"
@@ -68,7 +68,7 @@ export default function HowItWorks() {
         <div className="mt-16 grid gap-16 lg:mt-8 lg:grid-cols-[1fr_auto] lg:gap-24">
           <div className="relative">
             {/* Progress rail (desktop) */}
-            <div aria-hidden="true" className="absolute bottom-[35vh] left-[19px] top-[35vh] hidden w-px bg-plum-900/10 lg:block">
+            <div aria-hidden="true" className="absolute bottom-[35vh] left-[19px] top-[35vh] hidden w-px bg-plum-900/10 lg:block dark:bg-white/10">
               <div ref={railRef} className="h-full w-full origin-top bg-brand" />
             </div>
             <ol ref={listRef}>
@@ -92,14 +92,14 @@ export default function HowItWorks() {
                       <span
                         className={cn(
                           "relative z-10 grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors duration-500",
-                          i <= active ? "bg-brand text-white" : "bg-blush-100 text-plum-700",
+                          i <= active ? "bg-brand text-white" : "bg-blush-100 text-plum-700 dark:bg-white/10 dark:text-orchid-300",
                         )}
                       >
                         {i + 1}
                       </span>
                       <div className="max-w-md">
-                        <h3 className="text-2xl font-extrabold tracking-[-0.01em] text-plum-900 sm:text-3xl">{step.title}</h3>
-                        <p className="mt-3 text-lg leading-relaxed text-ink-600">{step.body}</p>
+                        <h3 className="text-2xl font-extrabold tracking-[-0.01em] text-plum-900 sm:text-3xl dark:text-white">{step.title}</h3>
+                        <p className="mt-3 text-lg leading-relaxed text-ink-600 dark:text-white/70">{step.body}</p>
                       </div>
                     </div>
                     {/* Per-step phone on smaller screens, where the sticky phone is hidden */}

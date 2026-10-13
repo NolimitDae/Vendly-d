@@ -10,7 +10,7 @@ const headerConfig = {
   padding: "md",
   align: "between",
   showDivider: true,
-  wrapperClassName: "bg-white",
+  wrapperClassName: "bg-white dark:bg-gray-800",
   titleClassName: "text-lg font-semibold text-blackColor",
   subtitleClassName: "text-sm text-descriptionColor leading mt-1",
   dividerClassName: "border-borderColor",
@@ -105,7 +105,7 @@ const CreateServiceModal = ({ closeModal }: { closeModal: () => void }) => {
         </div>
       </ModalBody>
 
-      <div className="p-5 flex justify-end gap-3 border-t border-gray-100">
+      <div className="p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-800">
         <GenericButton
           variant="outline"
           rounded="full"

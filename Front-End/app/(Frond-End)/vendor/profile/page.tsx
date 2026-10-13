@@ -248,7 +248,7 @@ export default function VendorProfilePage() {
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-3 rounded-2xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-2xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             {saving ? "Saving…" : "Save Profile"}
@@ -258,14 +258,14 @@ export default function VendorProfilePage() {
         {/* License Upload — separate section */}
         <div className="mt-6 bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="font-semibold text-gray-900 dark:text-white mb-2">License / Verification</h2>
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">
             Upload your business license or certification documents for admin verification.
           </p>
 
           <button
             type="button"
             onClick={() => licenseRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:border-primary hover:text-primary transition text-sm"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:border-primary hover:text-primary transition text-sm dark:text-gray-400"
           >
             <Upload className="w-4 h-4" />
             {licenseFiles.length > 0 ? `${licenseFiles.length} file(s) selected` : "Upload documents"}
@@ -282,7 +282,7 @@ export default function VendorProfilePage() {
           {licenseFiles.length > 0 && (
             <div className="mt-3 space-y-1">
               {licenseFiles.map((f, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                <div key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                   <span className="flex-1 truncate">{f.name}</span>
                   <button type="button" onClick={() => setLicenseFiles((prev) => prev.filter((_, j) => j !== i))}>
                     <X className="w-4 h-4 text-gray-400 hover:text-red-500" />
@@ -293,7 +293,7 @@ export default function VendorProfilePage() {
                 type="button"
                 onClick={handleLicenseUpload}
                 disabled={uploadingLicense}
-                className="mt-3 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center gap-2"
+                className="mt-3 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center gap-2"
               >
                 {uploadingLicense && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Upload

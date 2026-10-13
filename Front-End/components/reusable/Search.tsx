@@ -128,7 +128,7 @@ export default function Search() {
 
       {/* Display the filtered product list */}
       {search !== "" && (
-        <div className="mt-4 bg-white shadow-md rounded-lg px-3 py-6 absolute w-full">
+        <div className="mt-4 bg-white shadow-md rounded-lg px-3 py-6 absolute w-full dark:bg-gray-800">
           {filteredProducts.length > 0 ? (
             filteredProducts.map((item: any, index: number) => (
               <button

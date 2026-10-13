@@ -175,7 +175,7 @@ export default function SavedListingsPage() {
                     <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-1 group-hover:text-primary transition">
                       {listing.title}
                     </h3>
-                    <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{listing.description}</p>
+                    <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 dark:text-gray-400">{listing.description}</p>
 
                     {listing.location && (
                       <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
@@ -230,7 +230,7 @@ export default function SavedListingsPage() {
                       </Link>
                       <Link
                         href={`/marketplace/${listing.id}`}
-                        className="flex-1 text-center py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition"
+                        className="flex-1 text-center py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
                       >
                         Book Now
                       </Link>

@@ -27,7 +27,7 @@ const STATUS_COLORS: Record<string, string> = {
   CONFIRMED: "bg-blue-100 text-blue-700",
   IN_PROGRESS: "bg-purple-100 text-purple-700",
   COMPLETED: "bg-green-100 text-green-700",
-  CANCELLED: "bg-gray-100 text-gray-500",
+  CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   REJECTED: "bg-red-100 text-red-600",
 };
 
@@ -161,7 +161,7 @@ export default function VendorBookingDetailPage() {
       {/* Back */}
       <Link
         href="/vendor/bookings"
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white dark:text-gray-400"
       >
         <ArrowLeft className="w-4 h-4" /> Back to bookings
       </Link>
@@ -173,14 +173,14 @@ export default function VendorBookingDetailPage() {
             <p className="font-semibold text-gray-900 dark:text-white">
               {booking.listing?.title ?? "Booking"}
             </p>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">
               {booking.customer?.name} &middot; {booking.customer?.email}
             </p>
           </div>
           <span
             className={cn(
               "text-xs font-semibold px-2.5 py-1 rounded-full",
-              STATUS_COLORS[booking.status] ?? "bg-gray-100 text-gray-500",
+              STATUS_COLORS[booking.status] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
             )}
           >
             {booking.status}
@@ -257,7 +257,7 @@ export default function VendorBookingDetailPage() {
           />
           <button
             onClick={() => proofInputRef.current?.click()}
-            className="flex items-center gap-2 text-sm px-3 py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary text-gray-500 hover:text-primary transition w-full justify-center"
+            className="flex items-center gap-2 text-sm px-3 py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary text-gray-500 hover:text-primary transition w-full justify-center dark:text-gray-400"
           >
             <Upload className="w-4 h-4" />
             {proofFiles.length ? `${proofFiles.length} photo(s) selected` : "Select photos"}
@@ -389,7 +389,7 @@ export default function VendorBookingDetailPage() {
           />
           <button
             onClick={() => delivInputRef.current?.click()}
-            className="flex items-center gap-2 text-sm px-3 py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary text-gray-500 hover:text-primary transition w-full justify-center"
+            className="flex items-center gap-2 text-sm px-3 py-2 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary text-gray-500 hover:text-primary transition w-full justify-center dark:text-gray-400"
           >
             <Upload className="w-4 h-4" />
             {delivFiles.length ? `${delivFiles.length} file(s) selected` : "Attach files (optional)"}

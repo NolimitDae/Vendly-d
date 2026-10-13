@@ -61,9 +61,9 @@ export interface GenericSelectProps {
 }
 
 const VARIANT_DEFAULTS: Record<SelectVariant, string> = {
-  primary: "bg-white border border-gray-200 text-gray-900",
-  outline: "bg-transparent border border-gray-400 text-gray-900",
-  ghost: "bg-gray-100 border border-transparent text-gray-700",
+  primary: "bg-white border border-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white dark:border-gray-700",
+  outline: "bg-transparent border border-gray-400 text-gray-900 dark:text-white",
+  ghost: "bg-gray-100 border border-transparent text-gray-700 dark:bg-gray-800 dark:text-gray-200",
 };
 
 const GenericSelect = ({
@@ -90,7 +90,7 @@ const GenericSelect = ({
   shadow = "shadow-none",
   dropdownClassName,
   dropdownShadow = "shadow-lg",
-  dropdownBg = "bg-white",
+  dropdownBg = "bg-white dark:bg-gray-800",
   itemClassName,
   itemHoverBg = "focus:bg-gray-50",
   itemHoverText = "focus:text-purpleOne",
@@ -195,7 +195,7 @@ const GenericSelect = ({
                 </SelectItem>
               ))
             ) : (
-              <div className="py-2 px-2 text-xs text-center text-gray-500">
+              <div className="py-2 px-2 text-xs text-center text-gray-500 dark:text-gray-400">
                 No results found
               </div>
             )}

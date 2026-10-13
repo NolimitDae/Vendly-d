@@ -9,7 +9,8 @@ function themeInitScript(
   const stored = localStorage.getItem(storageKey);
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const resolved =
-    stored === 'dark' || (!stored && systemDark && defaultTheme === 'system')
+    stored === 'dark' ||
+    (systemDark && (stored === 'system' || (!stored && defaultTheme === 'system')))
       ? 'dark'
       : 'light';
 

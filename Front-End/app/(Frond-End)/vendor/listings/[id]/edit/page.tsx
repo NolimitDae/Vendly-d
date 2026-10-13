@@ -208,7 +208,7 @@ export default function EditListingPage() {
       <div className="max-w-3xl mx-auto">
         <Link
           href="/vendor/listings"
-          className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition text-sm"
+          className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition text-sm dark:text-gray-400"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Listings
@@ -273,7 +273,7 @@ export default function EditListingPage() {
                 }}
               >
                 <Upload className="w-7 h-7 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {newImages.length > 0
                     ? "Add more photos"
                     : existingImages.length > 0
@@ -456,7 +456,7 @@ export default function EditListingPage() {
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               Save Changes
@@ -495,7 +495,7 @@ export default function EditListingPage() {
           {/* Add new block */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">Start Date</label>
               <input
                 type="date"
                 value={blockStart}
@@ -504,7 +504,7 @@ export default function EditListingPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">End Date</label>
+              <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">End Date</label>
               <input
                 type="date"
                 value={blockEnd}
@@ -524,7 +524,7 @@ export default function EditListingPage() {
           <button
             onClick={handleBlockDates}
             disabled={blockingDates || !blockStart || !blockEnd}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-primary text-white hover:bg-primary/90 transition disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition disabled:opacity-50"
           >
             {blockingDates ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             Block Dates

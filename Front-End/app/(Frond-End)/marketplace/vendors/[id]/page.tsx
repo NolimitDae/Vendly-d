@@ -68,7 +68,7 @@ export default function VendorProfilePage() {
       <div className="max-w-5xl mx-auto">
         <Link
           href="/marketplace"
-          className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition text-sm"
+          className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition text-sm dark:text-gray-400"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Marketplace
@@ -87,7 +87,7 @@ export default function VendorProfilePage() {
                 unoptimized
               />
             ) : (
-              <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-white font-bold text-3xl flex-shrink-0">
+              <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-3xl flex-shrink-0">
                 {initials}
               </div>
             )}
@@ -95,7 +95,7 @@ export default function VendorProfilePage() {
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{displayName}</h1>
               {profile?.business_name && vendor.name !== profile.business_name && (
-                <p className="text-sm text-gray-500 mt-0.5">{vendor.name}</p>
+                <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">{vendor.name}</p>
               )}
 
               {/* Rating */}
@@ -121,7 +121,7 @@ export default function VendorProfilePage() {
               </div>
 
               {/* Stats */}
-              <div className="flex items-center gap-4 mt-3 text-sm text-gray-500">
+              <div className="flex items-center gap-4 mt-3 text-sm text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1.5">
                   <Package className="w-4 h-4" />
                   {vendor.listings?.length ?? 0} active service{vendor.listings?.length !== 1 ? "s" : ""}

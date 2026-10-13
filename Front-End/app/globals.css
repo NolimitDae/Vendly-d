@@ -182,6 +182,33 @@
 }
 
 .dark {
+  /* Legacy colour tokens had no dark values, so text and surfaces stayed light-mode colours in dark mode. */
+  --blackColor: #f4f4f5;
+  --whiteColor: #18181b;
+  --headerColor: #f4f4f5;
+  --descriptionColor: #a1a1aa;
+  --grayColor1: #a1a1aa;
+  --grayColor2: #e4e4e7;
+  --borderColor: rgba(255, 255, 255, 0.1);
+  --bgColor: rgba(255, 255, 255, 0.04);
+  --bgColorOne: #1f1a2b;
+  --grayBg: #1f1f23;
+  --tableHeaderBg: #26262b;
+  --progressBarBg: #52525b;
+  --warningBg: #2e2508;
+  --warningBorder: #5c4a10;
+  --greenBg: #0c2a25;
+  --greenBorder: #1a4d44;
+  --greenText: #6ee7c7;
+  --pendingBg: #2e2508;
+  --pendingText: #fcd34d;
+  --refundBorder: #1e3a5f;
+  --refundBg: #0f2236;
+  --refundText: #93c5fd;
+  --failedBorder: #6b1f27;
+  --failedBg: #34110f;
+  --failedText: #fca5a5;
+
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -221,7 +248,8 @@
   }
 
   body {
-    @apply bg-white text-blackColor;
+    /* gray-900 matches the logged-in pages' existing dark styling (cards sit on it in gray-800) */
+    @apply bg-white text-blackColor dark:bg-gray-900;
   }
 }
 

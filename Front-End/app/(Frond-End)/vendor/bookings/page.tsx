@@ -12,7 +12,7 @@ const STATUS_COLORS: Record<string, string> = {
   CONFIRMED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   IN_PROGRESS: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
   COMPLETED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  CANCELLED: "bg-gray-100 text-gray-500",
+  CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   REJECTED: "bg-red-100 text-red-600",
 };
 
@@ -92,7 +92,7 @@ export default function VendorBookingsPage() {
               onClick={() => { setStatusFilter(s); setPage(1); }}
               className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
                 statusFilter === s
-                  ? "bg-primary text-white"
+                  ? "bg-primary text-primary-foreground"
                   : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
               }`}
             >
@@ -135,7 +135,7 @@ export default function VendorBookingsPage() {
                               {booking.customer?.name?.[0]?.toUpperCase()}
                             </div>
                           )}
-                          <span className="text-sm text-gray-500">{booking.customer?.name}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">{booking.customer?.name}</span>
                         </div>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${STATUS_COLORS[booking.status] ?? ""}`}>
@@ -143,7 +143,7 @@ export default function VendorBookingsPage() {
                       </span>
                     </div>
 
-                    <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
+                    <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500 dark:text-gray-400">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5" />
                         {new Date(booking.created_at).toLocaleDateString()}
@@ -162,7 +162,7 @@ export default function VendorBookingsPage() {
                     </div>
 
                     {booking.message && (
-                      <p className="mt-2 text-sm text-gray-500 italic">"{booking.message}"</p>
+                      <p className="mt-2 text-sm text-gray-500 italic dark:text-gray-400">"{booking.message}"</p>
                     )}
 
                     {/* Action buttons based on status */}
@@ -224,7 +224,7 @@ export default function VendorBookingsPage() {
                 key={i}
                 onClick={() => setPage(i + 1)}
                 className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
-                  page === i + 1 ? "bg-primary text-white" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
+                  page === i + 1 ? "bg-primary text-primary-foreground" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
                 }`}
               >
                 {i + 1}

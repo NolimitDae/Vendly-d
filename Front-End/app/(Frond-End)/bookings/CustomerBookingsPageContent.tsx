@@ -129,8 +129,8 @@ export default function CustomerBookingsPageContent() {
               onClick={() => { setStatusFilter(s); setPage(1); }}
               className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
                 statusFilter === s
-                  ? "bg-primary text-white"
-                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
               }`}
             >
               {s || "All"}
@@ -176,7 +176,7 @@ export default function CustomerBookingsPageContent() {
                         >
                           {booking.listing?.title ?? "Service"}
                         </Link>
-                        <p className="text-sm text-gray-500 mt-0.5">
+                        <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">
                           by {booking.vendor?.name}
                         </p>
                       </div>
@@ -185,7 +185,7 @@ export default function CustomerBookingsPageContent() {
                       </span>
                     </div>
 
-                    <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
+                    <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500 dark:text-gray-400">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5" />
                         {new Date(booking.created_at).toLocaleDateString()}
@@ -215,7 +215,7 @@ export default function CustomerBookingsPageContent() {
                         <Eye className="w-3.5 h-3.5" /> View Details
                       </Link>
                       {booking.status === "PENDING" && (
-                        <span className="px-3 py-1.5 text-xs text-gray-500">Waiting for the vendor to accept &amp; sign</span>
+                        <span className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400">Waiting for the vendor to accept &amp; sign</span>
                       )}
                       {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && booking.paid_at && (
                         <span className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-600">
@@ -282,7 +282,7 @@ export default function CustomerBookingsPageContent() {
                 onClick={() => setPage(i + 1)}
                 className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
                   page === i + 1
-                    ? "bg-primary text-white"
+                    ? "bg-primary text-primary-foreground"
                     : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
                 }`}
               >
@@ -356,10 +356,10 @@ function QuickReviewModal({
           className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
         />
         <div className="flex gap-3 mt-4">
-          <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 transition">
+          <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 transition dark:hover:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
             Cancel
           </button>
-          <button type="submit" disabled={loading} className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2">
+          <button type="submit" disabled={loading} className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2">
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             Submit
           </button>

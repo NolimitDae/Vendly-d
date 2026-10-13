@@ -8,7 +8,7 @@ import Link from "next/link";
 import { toast } from "react-toastify";
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-500",
+  DRAFT: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   ACTIVE: "bg-green-100 text-green-700",
   PAUSED: "bg-yellow-100 text-yellow-700",
   ARCHIVED: "bg-red-100 text-red-600",
@@ -86,12 +86,12 @@ export default function AdminListingsPage() {
           placeholder="Search by title…"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white flex-1 min-w-[200px]"
+          className="px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white flex-1 min-w-[200px] dark:bg-gray-800 dark:border-gray-700"
         />
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none bg-white"
+          className="px-4 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none bg-white dark:bg-gray-800 dark:border-gray-700"
         >
           <option value="">All Status</option>
           <option value="ACTIVE">Active</option>
@@ -112,9 +112,9 @@ export default function AdminListingsPage() {
           {listings.map((listing) => (
             <div
               key={listing.id}
-              className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-start gap-4"
+              className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-start gap-4 dark:bg-gray-800 dark:border-gray-800"
             >
-              <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
+              <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 dark:bg-gray-800">
                 {listing.images?.[0] ? (
                   <Image src={listing.images[0]} alt="" fill className="object-cover" />
                 ) : (
@@ -171,9 +171,9 @@ export default function AdminListingsPage() {
               onClick={() => setPage(i + 1)}
               className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
                 page === i + 1
-                  ? "bg-primary text-white"
-                  : "bg-white border border-gray-200 text-gray-600"
-              }`}
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-white border border-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+              } dark:border-gray-700`}
             >
               {i + 1}
             </button>

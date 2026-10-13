@@ -239,7 +239,7 @@ export default function VendorContractsPage() {
       </label>
       {!appliesToAll && (
         <div className="pl-6 space-y-1 max-h-40 overflow-y-auto">
-          {listings.length === 0 && <p className="text-xs text-gray-500">You have no listings yet.</p>}
+          {listings.length === 0 && <p className="text-xs text-gray-500 dark:text-gray-400">You have no listings yet.</p>}
           {listings.map((l) => (
             <label key={l.id} className="flex items-center gap-2 text-sm">
               <input
@@ -274,11 +274,11 @@ export default function VendorContractsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Contracts</h1>
-            <p className="text-sm text-gray-500">Customers sign your contract when they request a booking. You countersign when you Accept &amp; Sign.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Customers sign your contract when they request a booking. You countersign when you Accept &amp; Sign.</p>
           </div>
           {mode.kind === "none" && (
             <div className="flex gap-2">
-              <button onClick={() => startForm("default")} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-white text-sm">
+              <button onClick={() => startForm("default")} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">
                 <FileSignature className="w-4 h-4" /> Set up Vendly default
               </button>
               <button onClick={() => startForm("upload")} className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm bg-white dark:bg-gray-800">
@@ -324,7 +324,7 @@ export default function VendorContractsPage() {
               {assignment}
               <div className="flex gap-2">
                 <button type="button" onClick={() => setMode({ kind: "none" })} className="px-4 py-2 rounded-lg border text-sm">Cancel</button>
-                <button type="submit" disabled={busy} className="flex-1 px-4 py-2 rounded-lg bg-primary text-white text-sm disabled:opacity-60">
+                <button type="submit" disabled={busy} className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm disabled:opacity-60">
                   {busy ? "Saving…" : "Save contract"}
                 </button>
               </div>
@@ -342,7 +342,7 @@ export default function VendorContractsPage() {
         {mode.kind === "upload" && (
           <form onSubmit={saveUpload} className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-4 max-w-2xl">
             <h2 className="font-semibold">{mode.replaceId ? "Replace uploaded contract (creates a new version)" : "Upload your own contract"}</h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               PDF only, up to 10 MB, not password-protected. Vendly adds a booking addendum (event, price, cancellation terms and the
               platform terms clause) and a signature certificate to each booking. No signature fields are needed in your PDF.
             </p>
@@ -363,7 +363,7 @@ export default function VendorContractsPage() {
             </label>
             <div className="flex gap-2">
               <button type="button" onClick={() => setMode({ kind: "none" })} className="px-4 py-2 rounded-lg border text-sm">Cancel</button>
-              <button type="submit" disabled={busy || !confirmOwn} className="flex-1 px-4 py-2 rounded-lg bg-primary text-white text-sm disabled:opacity-60">
+              <button type="submit" disabled={busy || !confirmOwn} className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm disabled:opacity-60">
                 {busy ? "Uploading…" : "Upload contract"}
               </button>
             </div>
@@ -379,12 +379,12 @@ export default function VendorContractsPage() {
                     <p className="font-semibold text-gray-900 dark:text-white">
                       {c.type === "UPLOADED" ? `Uploaded: ${c.file_name}` : c.template?.title}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       Version {c.version} · {new Date(c.created_at).toLocaleDateString()} ·{" "}
                       {c.applies_to_all ? "All listings" : c.listing_ids.map(listingName).join(", ")}
                     </p>
                     {c.field_values?.cancellation_policy && (
-                      <p className="text-xs text-gray-500">Cancellation: {c.field_values.cancellation_policy}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Cancellation: {c.field_values.cancellation_policy}</p>
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -402,7 +402,7 @@ export default function VendorContractsPage() {
                     >
                       <Pencil className="w-4 h-4" /> Edit
                     </button>
-                    <button onClick={() => archive(c.id)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm text-gray-600">
+                    <button onClick={() => archive(c.id)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm text-gray-600 dark:text-gray-300">
                       <Archive className="w-4 h-4" /> Archive
                     </button>
                   </div>

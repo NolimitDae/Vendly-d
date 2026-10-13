@@ -63,8 +63,8 @@ export default function DynamicTable({
   return (
     <div>
       {/* Table Wrapper with Border & Radius */}
-      <div className={`rounded-t-md ${border ? "border border-gray-200" : ""}`}>
-        <div className={` overflow-auto bg-white ${border ? "p-2" : ""}`}>
+      <div className={`rounded-t-md ${border ? "border border-gray-200 dark:border-gray-700" : ""}`}>
+        <div className={` overflow-auto bg-white ${border ? "p-2" : ""} dark:bg-gray-800`}>
           <table
             className={`min-w-[1000px] table-fixed w-full text-left bg-whiteColor  ${border ? "p-2" : ""}`}
           >
@@ -161,7 +161,7 @@ export default function DynamicTable({
                         {error + " " + "please login again"}
                       </p>
                     ) : (
-                      <p className="text-xl text-gray-500 capitalize font-semibold">
+                      <p className="text-xl text-gray-500 capitalize font-semibold dark:text-gray-400">
                         {noDataMessage}
                       </p>
                     )}

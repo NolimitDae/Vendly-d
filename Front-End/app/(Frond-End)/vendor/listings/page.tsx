@@ -92,7 +92,7 @@ export default function VendorListingsPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Listings</h1>
           <Link
             href="/vendor/listings/new"
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 transition text-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition text-sm"
           >
             <Plus className="w-4 h-4" />
             New Listing
@@ -128,7 +128,7 @@ export default function VendorListingsPage() {
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     <div>
                       <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-1">{listing.title}</h3>
-                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
                         <span>${Number(listing.price).toFixed(2)} / {listing.price_unit}</span>
                         {listing.category && <span>• {listing.category.name}</span>}
                         {listing._count && (
@@ -167,7 +167,7 @@ export default function VendorListingsPage() {
 
                     <Link
                       href={`/marketplace/${listing.id}`}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition dark:hover:bg-gray-800"
                     >
                       <EyeOff className="w-3.5 h-3.5" />
                       Preview
@@ -199,7 +199,7 @@ export default function VendorListingsPage() {
                 key={i}
                 onClick={() => setPage(i + 1)}
                 className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
-                  page === i + 1 ? "bg-primary text-white" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600"
+                  page === i + 1 ? "bg-primary text-primary-foreground" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
                 }`}
               >
                 {i + 1}

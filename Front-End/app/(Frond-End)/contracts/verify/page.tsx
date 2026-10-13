@@ -59,7 +59,7 @@ function VerifyContent() {
     <div className="max-w-xl mx-auto px-4 py-10 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Verify a signed contract</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">
           Every executed Vendly contract has a verification code and a recorded SHA-256 fingerprint. Upload a copy to
           confirm it hasn&apos;t been changed.
         </p>
@@ -67,7 +67,7 @@ function VerifyContent() {
 
       <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3">
         <label htmlFor="pdf" className="font-medium text-sm">Check a PDF</label>
-        <label className="flex items-center justify-center gap-2 px-4 py-6 rounded-xl border border-dashed border-gray-300 cursor-pointer text-sm text-gray-500 hover:border-primary">
+        <label className="flex items-center justify-center gap-2 px-4 py-6 rounded-xl border border-dashed border-gray-300 cursor-pointer text-sm text-gray-500 hover:border-primary dark:text-gray-400 dark:border-gray-600">
           <Upload className="w-4 h-4" /> Choose the contract PDF
           <input id="pdf" type="file" accept="application/pdf" className="hidden" onChange={(e) => checkFile(e.target.files?.[0])} />
         </label>
@@ -101,7 +101,7 @@ function VerifyContent() {
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 font-mono"
           />
-          <button type="submit" disabled={busy} className="px-4 py-2 rounded-lg bg-primary text-white text-sm disabled:opacity-60">
+          <button type="submit" disabled={busy} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm disabled:opacity-60">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Look up"}
           </button>
         </div>
@@ -112,7 +112,7 @@ function VerifyContent() {
               {codeResult.status.toLowerCase()}.
             </p>
             {codeResult.executed_pdf_sha256 && (
-              <p className="text-xs text-gray-500 break-all">SHA-256 of the signed PDF: {codeResult.executed_pdf_sha256}</p>
+              <p className="text-xs text-gray-500 break-all dark:text-gray-400">SHA-256 of the signed PDF: {codeResult.executed_pdf_sha256}</p>
             )}
           </div>
         )}

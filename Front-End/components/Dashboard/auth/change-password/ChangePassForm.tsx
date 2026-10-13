@@ -79,7 +79,7 @@ const ChangePassForm = () => {
             />
           ))}
           {strengthLabel && (
-            <span className="text-xs leading-[160%] font-medium text-brand">
+            <span className="text-xs leading-[160%] font-medium text-brand dark:bg-none dark:text-orchid-300">
               {strengthLabel}
             </span>
           )}

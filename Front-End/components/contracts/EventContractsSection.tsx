@@ -62,14 +62,14 @@ export default function EventContractsSection({ eventId }: { eventId: string }) 
       {loading ? (
         <Loader2 className="w-5 h-5 animate-spin text-primary" />
       ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-500">No vendor bookings on this event yet.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">No vendor bookings on this event yet.</p>
       ) : (
         <ul className="divide-y divide-gray-100 dark:divide-gray-700">
           {rows.map((r) => (
             <li key={r.booking_id} className="py-3 flex flex-wrap items-center justify-between gap-2 text-sm">
               <div>
                 <p className="font-medium text-gray-900 dark:text-white">{r.vendor_name}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   {r.listing_title}
                   {r.pending_amendment ? " · amendment waiting for signature" : ""}
                 </p>

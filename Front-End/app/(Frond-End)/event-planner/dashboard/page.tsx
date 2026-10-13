@@ -82,7 +82,7 @@ export default function EventPlannerDashboardPage() {
           </div>
           <Link
             href="/event-planner/events/new"
-            className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition"
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition"
           >
             <Plus className="w-4 h-4" />
             New Event
@@ -191,7 +191,7 @@ export default function EventPlannerDashboardPage() {
                       <span
                         className={cn(
                           "text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0",
-                          STATUS_STYLES[ev.status] ?? "bg-gray-100 text-gray-500",
+                          STATUS_STYLES[ev.status] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
                         )}
                       >
                         {STATUS_LABEL[ev.status] ?? ev.status}

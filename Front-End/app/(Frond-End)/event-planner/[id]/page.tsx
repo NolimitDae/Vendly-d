@@ -86,7 +86,7 @@ export default function EventPlannerDetailPage() {
       <div className="max-w-5xl mx-auto">
         <Link
           href="/event-planner"
-          className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition text-sm"
+          className="flex items-center gap-1 text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition text-sm dark:text-gray-400"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Event Planners
@@ -107,7 +107,7 @@ export default function EventPlannerDetailPage() {
                   unoptimized
                 />
               ) : (
-                <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-white font-bold text-3xl mx-auto">
+                <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-3xl mx-auto">
                   {initials}
                 </div>
               )}

@@ -81,7 +81,7 @@ export default function NewEventPage() {
         {/* Back */}
         <Link
           href="/event-planner/events"
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition"
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition dark:text-gray-400"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Events
@@ -203,7 +203,7 @@ export default function NewEventPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 py-3 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
+              className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {submitting ? "Creating…" : "Create Event"}

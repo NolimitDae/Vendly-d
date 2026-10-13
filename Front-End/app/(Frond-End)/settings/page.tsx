@@ -134,7 +134,7 @@ export default function SettingsPage() {
                 )}>
                   {enabled
                     ? <ShieldCheck className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    : <Shield className="w-5 h-5 text-gray-500" />
+                    : <Shield className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                   }
                 </div>
                 <div>
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                       <button
                         onClick={startEnable}
                         disabled={generatingQr || loadingStatus}
-                        className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
+                        className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
                       >
                         {generatingQr ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
                         {generatingQr ? "Generating…" : "Enable 2FA"}
@@ -212,7 +212,7 @@ export default function SettingsPage() {
 
                   {qrCode && (
                     <div className="flex flex-col items-center gap-4">
-                      <div className="p-3 bg-white rounded-2xl shadow-sm border border-gray-200 inline-block">
+                      <div className="p-3 bg-white rounded-2xl shadow-sm border border-gray-200 inline-block dark:bg-gray-800 dark:border-gray-700">
                         <Image src={qrCode} alt="2FA QR code" width={180} height={180} unoptimized />
                       </div>
                       <details className="text-center">
@@ -235,7 +235,7 @@ export default function SettingsPage() {
                     </button>
                     <button
                       onClick={() => setSetupStep("verify")}
-                      className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition"
+                      className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
                     >
                       Next — Enter Code
                     </button>
@@ -278,7 +278,7 @@ export default function SettingsPage() {
                     <button
                       onClick={handleVerify}
                       disabled={verifying || enabling || verifyCode.length !== 6}
-                      className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
+                      className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
                     >
                       {(verifying || enabling) && <Loader2 className="w-4 h-4 animate-spin" />}
                       {verifying ? "Verifying…" : enabling ? "Enabling…" : "Verify & Enable"}

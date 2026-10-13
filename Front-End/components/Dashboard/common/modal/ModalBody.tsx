@@ -23,8 +23,8 @@ const paddingStyles = {
 
 const backgroundStyles = {
   transparent: "",
-  default: "bg-white",
-  muted: "bg-gray-50",
+  default: "bg-white dark:bg-gray-800",
+  muted: "bg-gray-50 dark:bg-gray-800/50",
   custom: "", // controlled via className
 };
 
@@ -53,7 +53,7 @@ const ModalBody: React.FC<ModalBodyProps> = ({
         scrollStyles[scroll],
         blur && "backdrop-blur-md",
         showDivider && "border-b",
-        dividerClassName || "border-gray-100",
+        dividerClassName || "border-gray-100 dark:border-gray-800",
         className,
       )}
       style={{

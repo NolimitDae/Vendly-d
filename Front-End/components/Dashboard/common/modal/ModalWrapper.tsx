@@ -57,7 +57,7 @@ const ModalWrapper = ({
     >
       <div className="min-h-full flex items-center justify-center p-4 md:p-8">
         <div
-          className={`relative w-full ${sizeClasses[size]} bg-white rounded-3xl shadow-2xl animate-modal overflow-hidden`}
+          className={`relative w-full ${sizeClasses[size]} bg-white rounded-3xl shadow-2xl animate-modal overflow-hidden dark:bg-gray-800`}
         >
           {showCloseButton && (
             <button
@@ -65,7 +65,7 @@ const ModalWrapper = ({
               className="absolute top-1 right-5 z-20 p-2 rounded-full bg-gray-100/50
                              hover:bg-gray-200 transition-all mt-2 cursor-pointer"
             >
-              <X size={22.5} className="text-gray-900 " />
+              <X size={22.5} className="text-gray-900 dark:text-white" />
             </button>
           )}
           {children}

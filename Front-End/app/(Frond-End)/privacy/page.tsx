@@ -167,7 +167,7 @@ export default function PrivacyPolicyPage() {
       <Container>
         <article className="max-w-3xl mx-auto bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-6 sm:p-10">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Privacy Policy</h1>
-          <p className="mt-2 text-sm text-gray-500">Last updated {LAST_UPDATED}</p>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Last updated {LAST_UPDATED}</p>
           <div className="mt-8 space-y-8">
             {sections.map((s) => (
               <section key={s.title} className="space-y-3">

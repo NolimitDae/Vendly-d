@@ -96,7 +96,7 @@ export default function RegisterPage() {
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white leading-tight">
               Create your account
             </h2>
-            <p className="text-gray-500 text-sm">
+            <p className="text-gray-500 text-sm dark:text-gray-400">
               Already have an account?{" "}
               <Link href="/login" className="text-plum-700 dark:text-orchid-300 font-medium hover:underline">
                 Log in
@@ -121,7 +121,7 @@ export default function RegisterPage() {
                   <p className={`font-semibold ${accountType === opt.value ? "text-plum-900 dark:text-white" : "text-gray-900 dark:text-white"}`}>
                     {opt.label}
                   </p>
-                  <p className="text-sm text-gray-500 mt-0.5">{opt.desc}</p>
+                  <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">{opt.desc}</p>
                 </button>
               ))}
               <button

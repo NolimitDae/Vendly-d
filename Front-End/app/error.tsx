@@ -18,8 +18,8 @@ export default function GlobalError({
     <html lang="en">
       <body>
         <div className="h-screen flex flex-col items-center justify-center gap-4 text-center px-4">
-          <h1 className="text-2xl font-bold text-gray-900">Something went wrong</h1>
-          <p className="text-gray-500 text-sm max-w-sm">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Something went wrong</h1>
+          <p className="text-gray-500 text-sm max-w-sm dark:text-gray-400">
             An unexpected error occurred. Please try again or contact support if the problem persists.
           </p>
           <button

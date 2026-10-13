@@ -6,7 +6,7 @@ import StoreBadges from "./StoreBadges";
 
 export default function FinalCta() {
   return (
-    <section aria-labelledby="final-title" className="bg-blush-50 px-5 pb-24 sm:px-8 sm:pb-32">
+    <section aria-labelledby="final-title" className="bg-blush-50 px-5 pb-24 sm:px-8 sm:pb-32 dark:bg-plum-950">
       <div
         data-reveal
         className="relative isolate mx-auto max-w-[1240px] overflow-hidden rounded-[2.5rem] bg-brand px-6 py-20 text-center text-white sm:px-12 sm:py-24"

@@ -20,7 +20,7 @@ interface Template {
 }
 
 const CATEGORIES = ["GENERAL", "PHOTO_VIDEO", "RENTALS", "CATERING", "ENTERTAINMENT", "VENUE", "BEAUTY"];
-const inputCls = "w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary";
+const inputCls = "w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-800 dark:border-gray-700";
 
 function TemplatesTab() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -57,12 +57,12 @@ function TemplatesTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
         Each change creates a new version. Contracts already signed never change. Remove the [LAWYER REVIEW] markers only after a
         lawyer approves the text.
       </p>
       {editing ? (
-        <div className="space-y-3 bg-white rounded-xl p-5 border">
+        <div className="space-y-3 bg-white rounded-xl p-5 border dark:bg-gray-800">
           <select value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} className={inputCls} aria-label="Category">
             {CATEGORIES.map((c) => (
               <option key={c}>{c}</option>
@@ -76,18 +76,18 @@ function TemplatesTab() {
             className={`${inputCls} font-mono text-xs`}
             aria-label="Template body"
           />
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             Use {"{{field}}"} for merge fields and {"{{#field}}…{{/field}}"} for text shown only when the field has a value.
           </p>
           <div className="flex gap-2">
             <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-lg border text-sm">Cancel</button>
-            <button onClick={saveVersion} className="px-4 py-2 rounded-lg bg-primary text-white text-sm">Save as new draft version</button>
+            <button onClick={saveVersion} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">Save as new draft version</button>
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border overflow-x-auto">
+        <div className="bg-white rounded-xl border overflow-x-auto dark:bg-gray-800">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-gray-500">
+            <thead className="bg-gray-50 text-left text-gray-500 dark:bg-gray-800/50 dark:text-gray-400">
               <tr>
                 <th className="p-3">Category</th>
                 <th className="p-3">Version</th>
@@ -114,7 +114,7 @@ function TemplatesTab() {
                       </button>
                     )}
                     {t.status !== "RETIRED" && (
-                      <button onClick={() => act(() => ContractsService.adminRetireTemplate(t.id), "Retired")} className="text-gray-600 underline">
+                      <button onClick={() => act(() => ContractsService.adminRetireTemplate(t.id), "Retired")} className="text-gray-600 underline dark:text-gray-300">
                         Retire
                       </button>
                     )}
@@ -128,7 +128,7 @@ function TemplatesTab() {
       {viewing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setViewing(null)} />
-          <div className="relative bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 z-10">
+          <div className="relative bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 z-10 dark:bg-gray-800">
             <button onClick={() => setViewing(null)} className="float-right text-sm underline">Close</button>
             <ContractBody body={viewing.body} />
           </div>
@@ -173,9 +173,9 @@ function VendorContractsTab() {
         <option value="ARCHIVED">Archived</option>
         <option value="DISABLED">Disabled</option>
       </select>
-      <div className="bg-white rounded-xl border overflow-x-auto">
+      <div className="bg-white rounded-xl border overflow-x-auto dark:bg-gray-800">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-500">
+          <thead className="bg-gray-50 text-left text-gray-500 dark:bg-gray-800/50 dark:text-gray-400">
             <tr>
               <th className="p-3">Vendor</th>
               <th className="p-3">File</th>
@@ -242,18 +242,18 @@ function BookingLookupTab() {
     <div className="space-y-4">
       <form onSubmit={lookup} className="flex gap-2 max-w-xl">
         <input value={bookingId} onChange={(e) => setBookingId(e.target.value)} placeholder="Booking ID" className={inputCls} aria-label="Booking ID" />
-        <button className="px-4 py-2 rounded-lg bg-primary text-white text-sm">Look up</button>
+        <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">Look up</button>
       </form>
-      <p className="text-xs text-gray-500">Admin views are recorded in each contract&apos;s audit log.</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">Admin views are recorded in each contract&apos;s audit log.</p>
       {contracts?.map((c) => (
-        <div key={c.id} className="bg-white rounded-xl border p-5 space-y-3">
+        <div key={c.id} className="bg-white rounded-xl border p-5 space-y-3 dark:bg-gray-800">
           <div className="flex items-center justify-between">
             <p className="font-semibold">
               Version {c.version} · {c.title}
             </p>
             <ContractStatusBadge status={c.status} />
           </div>
-          <div className="text-xs text-gray-500 space-y-0.5 break-all">
+          <div className="text-xs text-gray-500 space-y-0.5 break-all dark:text-gray-400">
             <p>Verification code: {c.verification_code}</p>
             <p>Content hash: {c.content_sha256}</p>
             {c.executed_pdf_sha256 && <p>Executed PDF hash: {c.executed_pdf_sha256}</p>}
@@ -328,7 +328,7 @@ export default function AdminContractsPage() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-4 py-2 rounded-full text-sm ${tab === key ? "bg-primary text-white" : "bg-white border"}`}
+            className={`px-4 py-2 rounded-full text-sm ${tab === key ? "bg-primary text-primary-foreground" : "bg-white border dark:bg-gray-800"}`}
           >
             {label}
           </button>

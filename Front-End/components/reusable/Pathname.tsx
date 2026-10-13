@@ -6,7 +6,7 @@ function Pathname() {
   const sPath = pathname.split("/").filter(Boolean);
   return (
     <div>
-      <div className="flex flex-wrap mt-8 lg:mt-15 items-center gap-2 text-base text-gray-600">
+      <div className="flex flex-wrap mt-8 lg:mt-15 items-center gap-2 text-base text-gray-600 dark:text-gray-300">
             <span className="flex items-center gap-2 ">
               {" "}
               Home <ChevronRight className="w-4 h-4 text-[#737373]" />

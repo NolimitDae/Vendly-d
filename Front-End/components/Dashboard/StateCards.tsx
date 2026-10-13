@@ -36,7 +36,7 @@ export default function StatCards({
         ? Array.from({ length: 8 }).map((_, idx) => (
             <div
               key={idx}
-              className="p-4 rounded-lg bg-white border border-gray-100 flex flex-col gap-4"
+              className="p-4 rounded-lg bg-white border border-gray-100 flex flex-col gap-4 dark:bg-gray-800 dark:border-gray-800"
             >
               <Skeleton className="w-24 h-4" />
               <Skeleton className="w-16 h-8" />

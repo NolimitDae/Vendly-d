@@ -80,7 +80,7 @@ export default function SignContractPanel({
               Open full screen
             </a>
           </div>
-          <iframe src={sourcePdfUrl} title="Vendor contract" className="w-full h-72 bg-white" />
+          <iframe src={sourcePdfUrl} title="Vendor contract" className="w-full h-72 bg-white dark:bg-gray-800" />
         </div>
       )}
 
@@ -150,7 +150,7 @@ export default function SignContractPanel({
           type="button"
           onClick={submit}
           disabled={!canSign}
-          className="flex-1 px-4 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+          className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
           {submitLabel}

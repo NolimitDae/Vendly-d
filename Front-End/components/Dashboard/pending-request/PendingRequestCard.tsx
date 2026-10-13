@@ -82,7 +82,7 @@ const PendingRequestCard = ({
                     {data.submittedDocuments.map((doc, index) => (
                         <span
                             key={index}
-                            className="flex bg-white rounded-lg items-center gap-1.5 px-2.5 py-2 text-xs text-blackColor leading-[160%] font-normal border-[0.5px] border-borderColor"
+                            className="flex bg-white rounded-lg items-center gap-1.5 px-2.5 py-2 text-xs text-blackColor leading-[160%] font-normal border-[0.5px] border-borderColor dark:bg-gray-800"
                         >
                             <DocIcon /> <span>{doc}</span>
                         </span>

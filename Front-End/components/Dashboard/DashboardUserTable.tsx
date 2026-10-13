@@ -38,7 +38,7 @@ function DashboardUserTable() {
           SUSPENDED: "bg-red-100 text-red-700",
         };
         return (
-          <span className={`px-2 py-1 rounded text-xs font-medium ${colors[value] ?? "bg-gray-100 text-gray-700"}`}>
+          <span className={`px-2 py-1 rounded text-xs font-medium ${colors[value] ?? "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200"}`}>
             {value ?? "—"}
           </span>
         );
@@ -50,8 +50,8 @@ function DashboardUserTable() {
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-2xl font-semibold text-gray-800">Vendor List</h2>
-        <p className="text-sm text-gray-500 mt-1">All registered vendors</p>
+        <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Vendor List</h2>
+        <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">All registered vendors</p>
       </div>
       <DynamicTable
         columns={columns}

@@ -62,7 +62,7 @@ export default function SignaturePad({ onChange }: { onChange: (dataUrl: string 
 
   return (
     <div>
-      <div className="relative rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-white">
+      <div className="relative rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
         <canvas
           ref={canvasRef}
           className="w-full h-32 touch-none cursor-crosshair rounded-xl"
@@ -79,7 +79,7 @@ export default function SignaturePad({ onChange }: { onChange: (dataUrl: string 
         )}
       </div>
       {!empty && (
-        <button type="button" onClick={clear} className="mt-1 text-xs text-gray-500 hover:text-gray-800 underline">
+        <button type="button" onClick={clear} className="mt-1 text-xs text-gray-500 hover:text-gray-800 underline dark:text-gray-400">
           Clear
         </button>
       )}

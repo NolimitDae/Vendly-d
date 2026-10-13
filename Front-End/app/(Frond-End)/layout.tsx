@@ -23,7 +23,7 @@ export default function FrontEndLayout({
           <NotificationProvider>
             <Navbar />
             {children}
-            <div className="bg-[#FAFAFA] dark:bg-background">
+            <div className="bg-[#FAFAFA] dark:bg-gray-950">
               <Footer />
             </div>
           </NotificationProvider>

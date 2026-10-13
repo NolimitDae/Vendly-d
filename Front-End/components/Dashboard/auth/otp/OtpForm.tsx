@@ -40,7 +40,7 @@ const OtpForm = ({
       {/* Label + hint */}
       <div className="space-y-1">
         {hint && (
-          <p id={`${formId}-hint`} className="text-sm text-gray-500">
+          <p id={`${formId}-hint`} className="text-sm text-gray-500 dark:text-gray-400">
             {hint}
           </p>
         )}

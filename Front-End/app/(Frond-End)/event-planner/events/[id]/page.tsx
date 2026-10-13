@@ -278,7 +278,7 @@ export default function EventDetailPage() {
         {/* Back */}
         <Link
           href="/event-planner/events"
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition"
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white mb-6 transition dark:text-gray-400"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Events
@@ -297,7 +297,7 @@ export default function EventDetailPage() {
                   <span
                     className={cn(
                       "text-[10px] font-semibold px-2.5 py-1 rounded-full",
-                      STATUS_STYLES[event.status] ?? "bg-gray-100 text-gray-500",
+                      STATUS_STYLES[event.status] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
                     )}
                   >
                     {event.status.replace("_", " ")}
@@ -381,7 +381,7 @@ export default function EventDetailPage() {
               className={cn(
                 "flex-1 py-2 rounded-xl text-sm font-medium capitalize transition",
                 tab === t
-                  ? "bg-primary text-white shadow-sm"
+                  ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700",
               )}
             >
@@ -572,7 +572,7 @@ export default function EventDetailPage() {
                     <p className={cn("text-xl font-bold", color)}>
                       ${Number(value).toLocaleString()}
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{label}</p>
                   </div>
                 ))}
               </div>
@@ -665,7 +665,7 @@ export default function EventDetailPage() {
                 <button
                   type="submit"
                   disabled={addingBudget || !budgetCategory.trim() || !budgetAllocated}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
                 >
                   {addingBudget ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   Add Item
@@ -754,7 +754,7 @@ export default function EventDetailPage() {
                   <button
                     type="submit"
                     disabled={addingTask || !taskTitle.trim()}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60"
                   >
                     {addingTask ? (
                       <Loader2 className="w-4 h-4 animate-spin" />

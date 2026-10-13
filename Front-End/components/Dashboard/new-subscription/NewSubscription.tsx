@@ -21,7 +21,7 @@ const NewSubscription = ({ vendorPending = 0, epPending = 0 }: Props) => {
       <div className="flex flex-col divide-y divide-borderColor mt-4">
         <div className="flex items-center justify-between pb-4">
           <div className="flex items-center gap-1.5">
-            <div className="h-[1.938rem] w-[1.938rem] rounded-full bg-white flex items-center justify-center border-[0.5px] border-borderColor">
+            <div className="h-[1.938rem] w-[1.938rem] rounded-full bg-white flex items-center justify-center border-[0.5px] border-borderColor dark:bg-gray-800">
               <VendorsIcon />
             </div>
             <div>
@@ -37,7 +37,7 @@ const NewSubscription = ({ vendorPending = 0, epPending = 0 }: Props) => {
         </div>
         <div className="flex items-center justify-between pt-4">
           <div className="flex items-center gap-1.5">
-            <div className="h-[1.938rem] w-[1.938rem] rounded-full bg-white flex items-center justify-center border-[0.5px] border-borderColor">
+            <div className="h-[1.938rem] w-[1.938rem] rounded-full bg-white flex items-center justify-center border-[0.5px] border-borderColor dark:bg-gray-800">
               <EventPlannersIcon />
             </div>
             <div>

@@ -54,7 +54,7 @@ const ProfileSettingModal = ({ onClose }: { onClose: () => void }) => {
                       ${
                         active
                           ? "gradient-bg text-white"
-                          : "hover:bg-gray-100 text-descriptionColor"
+                          : "hover:bg-gray-100 text-descriptionColor dark:hover:bg-gray-800"
                       }
                     `}
                   >

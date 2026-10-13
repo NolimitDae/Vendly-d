@@ -52,7 +52,7 @@ const PrivacyPolicyPage = () => {
             Configure cancellation windows and refund policies
           </p>
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
           {cancellationPolicy.map((item, index) => (
             <div key={index} className="py-4">
               <PrivacyCard title={item.title} description={item.description} />
@@ -69,7 +69,7 @@ const PrivacyPolicyPage = () => {
             Configure cancellation windows and refund policies
           </p>
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
           {reviewPolicy.map((item, index) => (
             <div key={index} className="py-4">
               <PrivacyCard
@@ -90,7 +90,7 @@ const PrivacyPolicyPage = () => {
             Configure cancellation windows and refund policies
           </p>
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
           {communicationRules.map((item, index) => (
             <div key={index} className="py-4">
               <PrivacyCard
