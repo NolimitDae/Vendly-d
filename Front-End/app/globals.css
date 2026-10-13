@@ -284,11 +284,6 @@ input:checked~.checkmark {
   backdrop-filter: blur(6px);
 }
 
-.login_right_section_bg {
-  border-radius: 37.444px 0 0 0;
-  background: #000;
-  box-shadow: 0 0 37.444px 0 rgba(0, 0, 0, 0.8);
-}
 
 .search-input-root {
   /* Surface */
