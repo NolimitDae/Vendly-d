@@ -246,12 +246,13 @@ const LoginForm = () => {
           <HorizontalLineIcon />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <CustomButton className="flex-1 flex items-center justify-center gap-2 w-full border border-borderColor rounded-2xl py-2 px-3 h-12">
+        {/* Grid, not flex: CustomButton wraps its <button> in a div, so flex-1 on the button can't stretch it */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <CustomButton fullWidth className="flex items-center justify-center gap-2 w-full border border-borderColor rounded-2xl py-2 px-3 h-12 hover:border-orchid-500 transition-colors">
             <GoogleIcon />
             Google
           </CustomButton>
-          <CustomButton className="flex-1 flex items-center justify-center gap-2 w-full border border-borderColor rounded-2xl py-2 px-3 h-12">
+          <CustomButton fullWidth className="flex items-center justify-center gap-2 w-full border border-borderColor rounded-2xl py-2 px-3 h-12 hover:border-orchid-500 transition-colors">
             <AppleIconBlack />
             Apple
           </CustomButton>

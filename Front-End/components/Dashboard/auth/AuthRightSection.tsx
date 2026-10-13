@@ -39,7 +39,7 @@ const AuthRightSection = () => {
 
         {/* App screens drawn in code (same as the landing page), cropped by the panel's bottom edge */}
         <div className="relative h-[360px]">
-          <div className="absolute left-40 top-0 rotate-6 opacity-90">
+          <div className="absolute left-[290px] top-0 rotate-6">
             <PhoneFrame width={230} label="A confirmed booking in the Vendly app">
               <ConfirmedScreen />
             </PhoneFrame>
@@ -49,7 +49,7 @@ const AuthRightSection = () => {
               <VendorDashboardScreen />
             </PhoneFrame>
           </div>
-          <div className="absolute left-52 top-24 flex items-center gap-2 rounded-2xl border border-white/15 bg-plum-900/95 px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_40px_-12px_rgba(0,0,0,0.6)]">
+          <div className="absolute left-[160px] -top-16 z-10 flex items-center gap-2 rounded-2xl border border-white/15 bg-plum-900/95 px-4 py-3 text-sm font-semibold text-white shadow-[0_20px_40px_-12px_rgba(0,0,0,0.6)]">
             <span className="grid size-7 place-items-center rounded-full bg-brand">
               <ShieldCheck className="size-3.5" />
             </span>
