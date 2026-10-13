@@ -652,7 +652,7 @@ export default function VendorEarningsPage() {
                                 : row.status === "CANCELLED" || row.status === "REJECTED"
                                 ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
                                 : row.status === "IN_PROGRESS"
-                                ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                                ? "bg-blush-100 text-plum-700 dark:bg-plum-900/30 dark:text-orchid-300"
                                 : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
                             )}
                           >

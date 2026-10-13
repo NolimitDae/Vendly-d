@@ -96,8 +96,8 @@ export default function EventPlannerDashboardPage() {
               label: "Total Events",
               value: events.length,
               icon: ClipboardList,
-              color: "text-purple-600 dark:text-purple-400",
-              bg: "bg-purple-50 dark:bg-purple-900/20",
+              color: "text-plum-500 dark:text-orchid-300",
+              bg: "bg-blush-50 dark:bg-plum-900/20",
             },
             {
               label: "Active",

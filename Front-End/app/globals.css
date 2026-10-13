@@ -121,12 +121,13 @@
   --grayColor2: #1D1F2C;
   --bgColor: rgba(243, 243, 244, 0.5);
   --descriptionColor: #4a4c56;
-  --purpleColor: #ad46ff;
-  --purpleOne: #795ff4;
-  --purpleTwo: #8f6cfd;
-  --purpleThree: #8e5ef3;
+  /* Legacy purple tokens now point at the 2026 brand (plum to orchid). */
+  --purpleColor: #a84ab0;
+  --purpleOne: #7a2a82;
+  --purpleTwo: #8f3a99;
+  --purpleThree: #a84ab0;
   --borderColor: #e9e9ea;
-  --bgColorOne: #f8f6ff;
+  --bgColorOne: #fbf4f9;
   --darkBg: #0a0a0c;
   --progressBarBg: #a5a5ab;
   --grayBg: #F6F8FA;
@@ -153,8 +154,8 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #5e1b66;
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -184,6 +185,9 @@
 .dark {
   /* Legacy colour tokens had no dark values, so text and surfaces stayed light-mode colours in dark mode. */
   --blackColor: #f4f4f5;
+  --purpleOne: #a84ab0;
+  --purpleTwo: #c27bca;
+  --purpleThree: #d9a6dd;
   --whiteColor: #18181b;
   --headerColor: #f4f4f5;
   --descriptionColor: #a1a1aa;
@@ -215,8 +219,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: #d9a6dd;
+  --primary-foreground: #1e0822;
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -230,7 +234,7 @@
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: #ad46ff;
+  --chart-4: #a84ab0;
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
@@ -282,12 +286,12 @@ input:checked~.checkmark {
 
 .gradient-bg {
   background: var(--Purple-shade,
-      linear-gradient(90deg, #795ff4 0%, #8f6cfd 50.3%, #8e5ef3 100%));
+      linear-gradient(90deg, #4a1650 0%, #7a2a82 52%, #a84ab0 100%));
 }
 
 .gradient-bg-disabled {
   background: var(--Purple-shade-disabled,
-      linear-gradient(90deg, #795ff4 0%, #8f6cfd 50.3%, #8e5ef3 100%));
+      linear-gradient(90deg, #4a1650 0%, #7a2a82 52%, #a84ab0 100%));
 }
 
 

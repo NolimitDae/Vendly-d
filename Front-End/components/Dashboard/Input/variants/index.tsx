@@ -429,9 +429,9 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
             onChange={(e) => onChange?.(e.target.checked, e)}
             aria-invalid={hasError ? "true" : undefined}
             className={cn(
-              "shrink-0 mt-0.5 rounded border-slate-300 text-violet-600",
-              "focus:ring-2 focus:ring-violet-500/30 focus:ring-offset-1",
-              "dark:border-slate-600 dark:bg-slate-800 dark:checked:bg-violet-500",
+              "shrink-0 mt-0.5 rounded border-slate-300 text-plum-500",
+              "focus:ring-2 focus:ring-orchid-500/30 focus:ring-offset-1",
+              "dark:border-slate-600 dark:bg-slate-800 dark:checked:bg-orchid-500",
               "disabled:cursor-not-allowed transition-colors",
               checkSize,
               inputClassName,
@@ -671,9 +671,9 @@ export const FileInput = forwardRef<HTMLInputElement, FileInputProps>(
             className={cn(
               "block w-full text-sm text-slate-500 dark:text-slate-400",
               "file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0",
-              "file:text-sm file:font-medium file:bg-violet-50 file:text-violet-700",
-              "dark:file:bg-violet-900/30 dark:file:text-violet-300",
-              "hover:file:bg-violet-100 dark:hover:file:bg-violet-900/50",
+              "file:text-sm file:font-medium file:bg-blush-50 file:text-plum-700",
+              "dark:file:bg-plum-900/30 dark:file:text-orchid-300",
+              "hover:file:bg-blush-100 dark:hover:file:bg-plum-900/50",
               "file:cursor-pointer file:transition-colors",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               inputClassName,

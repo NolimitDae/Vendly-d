@@ -81,8 +81,8 @@ const PLANS: PlanDef[] = [
     commission: 8,
     badge: "★ Pro",
     icon: Star,
-    colorClass: "from-violet-50 to-purple-100 dark:from-violet-950/40 dark:to-purple-900/30",
-    ringClass: "border-violet-400 dark:border-violet-500",
+    colorClass: "from-blush-50 to-blush-100 dark:from-plum-950/40 dark:to-plum-900/30",
+    ringClass: "border-orchid-300 dark:border-orchid-500",
     popular: true,
     features: [
       "Unlimited listings",
@@ -399,7 +399,7 @@ function SubscriptionPageInner() {
               >
                 {/* Popular badge */}
                 {plan.popular && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-violet-600 to-purple-500 text-white text-[11px] font-bold px-3 py-0.5 rounded-full whitespace-nowrap shadow">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-plum-500 to-orchid-500 text-white text-[11px] font-bold px-3 py-0.5 rounded-full whitespace-nowrap shadow">
                     Most Popular
                   </span>
                 )}
@@ -494,7 +494,7 @@ function SubscriptionPageInner() {
                       "h-full rounded-full transition-all",
                       plan.tier === 0 && "bg-gray-400",
                       plan.tier === 1 && "bg-blue-400",
-                      plan.tier === 2 && "bg-violet-500",
+                      plan.tier === 2 && "bg-orchid-500",
                       plan.tier === 3 && "bg-amber-400",
                       plan.tier === 4 && "bg-rose-500",
                     )}
@@ -529,7 +529,7 @@ function SubscriptionPageInner() {
                 key={plan.id}
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium",
-                  plan.tier === 2 && "bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300",
+                  plan.tier === 2 && "bg-blush-50 dark:bg-plum-950/30 border-orchid-300 dark:border-plum-700 text-plum-700 dark:text-orchid-300",
                   plan.tier === 3 && "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300",
                   plan.tier === 4 && "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-300",
                 )}

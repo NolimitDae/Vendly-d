@@ -55,14 +55,14 @@ export default function Hero() {
             <Link
               href={VENDOR_SIGNUP_HREF}
               data-magnetic
-              className="group inline-flex w-fit items-center gap-3 rounded-full bg-brand px-7 py-4 text-base font-bold text-white shadow-[0_20px_50px_-15px_rgba(168,74,176,0.8)] transition-shadow hover:shadow-[0_24px_60px_-12px_rgba(168,74,176,1)]"
+              className="group flex w-full items-center justify-center gap-3 rounded-full bg-brand px-7 py-4 sm:inline-flex sm:w-fit text-base font-bold text-white shadow-[0_20px_50px_-15px_rgba(168,74,176,0.8)] transition-shadow hover:shadow-[0_24px_60px_-12px_rgba(168,74,176,1)]"
             >
               {hero.primary}
               <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
             </Link>
             <div>
-              <p className="mb-3 text-sm text-white/60">{hero.secondary}</p>
-              <StoreBadges />
+              <p className="mb-3 text-center text-sm text-white/60 sm:text-left">{hero.secondary}</p>
+              <StoreBadges className="grid grid-cols-2 sm:flex" />
             </div>
           </div>
         </div>

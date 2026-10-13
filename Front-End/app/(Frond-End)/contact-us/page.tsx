@@ -77,7 +77,7 @@ export default function ContactUsPage() {
           ) : (
             <form
               onSubmit={handleSubmit(onSubmit)}
-              className="bg-grayBg dark:bg-gray-900 rounded-2xl p-6 sm:p-10 space-y-6"
+              className="bg-grayBg dark:bg-gray-800 rounded-2xl p-6 sm:p-10 space-y-6"
             >
               {/* Name */}
               <div>

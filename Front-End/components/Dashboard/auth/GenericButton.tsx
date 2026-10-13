@@ -27,7 +27,7 @@ const variantStyles: Record<Variant, string> = {
 
   outline: [
     "border border-purpleOne bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent font-semibold",
-    "disabled:border-indigo-200 disabled:text-indigo-300 disabled:cursor-not-allowed",
+    "disabled:border-orchid-300 disabled:text-orchid-300 disabled:cursor-not-allowed",
   ].join(" "),
   brand: [
     "bg-brand text-white border border-transparent font-medium","disabled:cursor-not-allowed",

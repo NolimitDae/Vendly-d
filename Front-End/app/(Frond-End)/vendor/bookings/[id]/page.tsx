@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
   CONFIRMED: "bg-blue-100 text-blue-700",
-  IN_PROGRESS: "bg-purple-100 text-purple-700",
+  IN_PROGRESS: "bg-blush-100 text-plum-700",
   COMPLETED: "bg-green-100 text-green-700",
   CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
   REJECTED: "bg-red-100 text-red-600",

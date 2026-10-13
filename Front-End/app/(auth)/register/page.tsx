@@ -91,9 +91,10 @@ export default function RegisterPage() {
       {/* Left */}
       <div className="flex justify-center items-start lg:items-center w-full lg:w-1/2 px-4 py-8">
         <div className="w-full max-w-[28rem] space-y-6">
-          <div className="space-y-2">
+          {/* Same rhythm as the login page: logo, then a clear gap, then the heading */}
+          <div>
             <Logo variant="mark" size={34} />
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white leading-tight">
+            <h2 className="mt-6 mb-2 text-2xl sm:text-[2rem] font-semibold text-gray-900 dark:text-white leading-[130%]">
               Create your account
             </h2>
             <p className="text-gray-500 text-sm dark:text-gray-400">

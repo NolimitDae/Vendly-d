@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 /** Not links: the app isn't in the stores yet. */
 export default function StoreBadges({ tone = "dark", className }: { tone?: "dark" | "light"; className?: string }) {
   const badge = cn(
-    "flex items-center gap-3 rounded-2xl px-4 py-2.5",
+    "flex items-center justify-center gap-3 rounded-2xl px-4 py-2.5 sm:justify-start",
     tone === "dark" ? "border border-white/15 bg-white/5 text-white" : "border border-plum-900/10 bg-white text-plum-900",
   );
   return (

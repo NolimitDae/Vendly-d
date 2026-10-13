@@ -26,12 +26,12 @@ export const hero = {
 } as const;
 
 export const categories = [
-  { name: "Beauty & glam", items: ["Bridal makeup", "Hair styling", "Nails", "Lashes"] },
+  { name: "Beauty & Glam", items: ["Bridal makeup", "Hair styling", "Nails", "Lashes"] },
   { name: "Decor", items: ["Balloon art", "Florals", "Table styling", "Backdrops"] },
-  { name: "DJs & entertainment", items: ["DJs", "Live bands", "MCs", "Kids' entertainers"] },
+  { name: "DJs & Entertainment", items: ["DJs", "Live bands", "MCs", "Kids' entertainers"] },
   { name: "Catering", items: ["Private chefs", "Buffets", "Cakes", "Mobile bars"] },
   { name: "Rentals", items: ["Chairs & tables", "Tents", "Lighting", "Linens"] },
-  { name: "Photography & video", items: ["Photographers", "Videographers", "Photo booths", "Drones"] },
+  { name: "Photography & Video", items: ["Photographers", "Videographers", "Photo booths", "Drones"] },
   { name: "Venues", items: ["Halls", "Gardens", "Rooftops", "Studios"] },
 ] as const;
 
@@ -177,7 +177,7 @@ export const sample = {
   user: "Maya",
   vendor: {
     name: "Glow Studio by Ama",
-    category: "Beauty & glam",
+    category: "Beauty & Glam",
     rating: 4.9,
     reviews: 128,
     city: "Atlanta, GA",

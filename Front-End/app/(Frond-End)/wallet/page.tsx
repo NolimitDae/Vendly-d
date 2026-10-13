@@ -399,7 +399,7 @@ export default function WalletPage() {
           {isVendor && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
-                <ArrowUpCircle className="w-5 h-5 text-purple-500" />
+                <ArrowUpCircle className="w-5 h-5 text-orchid-500" />
                 <h2 className="font-semibold text-gray-900 dark:text-white">Withdraw Funds</h2>
               </div>
 
