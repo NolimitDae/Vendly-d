@@ -5,11 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
+import Logo from "@/components/brand/Logo";
+import { nav, VENDOR_SIGNUP_HREF } from "@/components/landing/content";
 import { FileSignature, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
-import { ThemeToggle } from "@/components/landing-page/theme/ThemeToggle";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { CookieHelper } from "@/helper/cookie.helper";
 import { AuthService } from "@/service/auth/auth.service";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -18,12 +20,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 
 dayjs.extend(relativeTime);
 
-const homeItems = [
-  { en: "Home", href: "/", hash: "home" },
-  { en: "About Us", href: "/#about", hash: "about" },
-  { en: "How It Works", href: "/#how-it-works", hash: "how-it-works" },
-  { en: "Services", href: "/#services", hash: "services" },
-] as const;
+const homeItems = nav.map((item) => ({ en: item.label, href: `/#${item.hash}`, hash: item.hash }));
 
 const appLinks = [
   { en: "Marketplace", href: "/marketplace", icon: Store },
@@ -39,6 +36,8 @@ function scrollToSection(hash: string) {
   const el = document.getElementById(hash);
   el?.scrollIntoView({ behavior: "smooth" });
   window.history.replaceState(null, "", `/#${hash}`);
+  // replaceState doesn't fire hashchange; sections like the role tabs listen for it.
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
 
 interface UserInfo {
@@ -50,6 +49,7 @@ interface UserInfo {
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
+  const isHome = pathname === "/";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [hash, setHash] = useState("");
@@ -114,20 +114,17 @@ export default function Navbar() {
 
   return (
     // The home hero is always dark, so the navbar over it uses its dark styling in both themes.
-    <Container className={cn("mt-4 relative z-50", pathname === "/" && "dark")}>
-      <div className={cn("flex justify-between items-center p-3 md:p-4 rounded-full nav_container")}>
+    <Container className={cn("mt-4 relative z-50", isHome && "dark")}>
+      <div
+        className={cn(
+          "flex justify-between items-center p-3 md:p-4 rounded-full",
+          isHome ? "border border-white/10 bg-plum-950/55 backdrop-blur-xl" : "nav_container",
+        )}
+      >
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-          <Image
-            src="/site_logo.png"
-            alt="logo"
-            width={50}
-            height={50}
-            className="w-8 h-8 md:w-12 md:h-12"
-          />
-          <span className="bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent text-lg md:text-2xl font-bold">
-            Vendly
-          </span>
+        <Link href="/" className="flex items-center flex-shrink-0 pl-2">
+          <Logo variant="horizontal" tone={isHome ? "dark" : "light"} size={44} className="dark:hidden" />
+          <Logo variant="horizontal" tone="dark" size={44} className="hidden dark:inline-flex" />
         </Link>
 
         {/* Desktop nav */}
@@ -138,7 +135,7 @@ export default function Navbar() {
               href={item.href}
               onClick={(e) => handleNavClick(e, item.hash)}
               className={cn(
-                "hover:text-purpleColor transition text-base dark:text-white",
+                "hover:text-orchid-500 dark:hover:text-orchid-300 transition text-base dark:text-white",
                 linkIsActive(item.hash)
                   ? "text-blackColor dark:text-white font-medium"
                   : "text-descriptionColor",
@@ -147,8 +144,8 @@ export default function Navbar() {
               {item.en}
             </Link>
           ))}
-          <span className="w-px h-4 bg-gray-300 dark:bg-gray-600" />
-          {appLinks.map((item) => (
+          {!isHome && <span className="w-px h-4 bg-gray-300 dark:bg-gray-600" />}
+          {!isHome && appLinks.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -418,10 +415,13 @@ export default function Navbar() {
                 Log in
               </Link>
               <Link
-                href="/register"
-                className="gradient-bg text-white font-medium px-6 py-2.5 rounded-full text-sm hover:opacity-90 transition"
+                href={isHome ? VENDOR_SIGNUP_HREF : "/register"}
+                className={cn(
+                  "text-white font-medium px-6 py-2.5 rounded-full text-sm hover:opacity-90 transition",
+                  isHome ? "bg-brand" : "gradient-bg",
+                )}
               >
-                Sign up
+                {isHome ? "List your business free" : "Sign up"}
               </Link>
             </>
           )}
@@ -452,11 +452,9 @@ export default function Navbar() {
       >
         <div className="w-[80%] absolute top-0 p-4 right-0 h-full max-w-[320px] bg-white dark:bg-gray-900 overflow-y-auto">
           <div className="flex w-full justify-between items-center mb-4">
-            <Link href="/" className="flex items-center gap-2">
-              <Image src="/site_logo.png" alt="logo" width={40} height={40} />
-              <span className="bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent text-lg font-bold">
-                Vendly
-              </span>
+            <Link href="/" className="flex items-center">
+              <Logo variant="horizontal" size={40} className="dark:hidden" />
+              <Logo variant="horizontal" tone="dark" size={40} className="hidden dark:inline-flex" />
             </Link>
             <button
               aria-label="close-menu"

@@ -41,7 +41,7 @@ jest.mock('@/hooks/useNotifications', () => ({
   useNotifications: jest.fn(),
 }));
 
-jest.mock('@/components/landing-page/theme/ThemeToggle', () => ({
+jest.mock('@/components/theme/ThemeToggle', () => ({
   ThemeToggle: () => <div data-testid="theme-toggle" />,
 }));
 
@@ -107,7 +107,7 @@ describe('Navbar', () => {
     it('renders logo', () => {
       setupLoggedOut();
       render(<Navbar />);
-      const logos = screen.getAllByAltText('logo');
+      const logos = screen.getAllByRole('img', { name: 'Vendly' });
       expect(logos.length).toBeGreaterThan(0);
     });
 

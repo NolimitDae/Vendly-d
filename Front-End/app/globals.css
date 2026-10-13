@@ -3,6 +3,29 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Brand palette from the VM logo (2026 rebrand). Logged-in pages still use the older violet tokens below. */
+@theme {
+  --color-plum-950: #1e0822;
+  --color-plum-900: #3a1040;
+  --color-plum-700: #5e1b66;
+  --color-plum-500: #7a2a82;
+  --color-orchid-500: #a84ab0;
+  --color-orchid-300: #d9a6dd;
+  --color-blush-50: #fbf4f9;
+  --color-blush-100: #f3e6f0;
+  --color-ink-600: #4a3f4d;
+}
+
+@utility bg-brand {
+  background-image: linear-gradient(90deg, #4a1650 0%, #7a2a82 52%, #a84ab0 100%);
+}
+
+@utility text-brand {
+  background-image: linear-gradient(90deg, #4a1650 0%, #7a2a82 52%, #a84ab0 100%);
+  background-clip: text;
+  color: transparent;
+}
+
 .container {
   max-width: 1342px;
   padding: 0 16px;
@@ -239,33 +262,9 @@ input:checked~.checkmark {
       linear-gradient(90deg, #795ff4 0%, #8f6cfd 50.3%, #8e5ef3 100%));
 }
 
-.hero_bg_light {
-  background:
-    linear-gradient(0deg,
-      rgba(255, 255, 255, 0.2) 0%,
-      rgba(255, 255, 255, 0.2) 100%),
-    url(/heroBg.png) lightgray 50% / cover no-repeat;
-}
 
-.hero_bg_dark {
-  background:
-    linear-gradient(0deg, rgba(10, 10, 12, 0.5) 0%, rgba(10, 10, 12, 0.5) 100%),
-    url(/heroDarkBg.png) lightgray 50% / cover no-repeat;
-}
 
-.hero_wrapper {
-  background:
-    linear-gradient(0deg,
-      rgba(255, 255, 255, 0.2) 0%,
-      rgba(255, 255, 255, 0.2) 100%),
-    url(/heroBg.png) lightgray 50% / cover no-repeat;
-}
 
-.dark .hero_wrapper {
-  background:
-    linear-gradient(0deg, rgba(10, 10, 12, 0.5) 0%, rgba(10, 10, 12, 0.5) 100%),
-    url(/heroDarkBg.png) lightgray 50% / cover no-repeat;
-}
 
 .nav_container {
   @apply bg-white;
@@ -365,4 +364,33 @@ input:checked~.checkmark {
   border: 5px solid var(--Error-Red-100, #FBD8DB);
   background: var(--Error-Red-500, #EB3D4D);
   box-shadow: 0 0 0 6px rgba(251, 216, 219, 0.30);
+}
+/* Landing page motion (rebrand). CSS-only effects; GSAP scroll effects live in components/landing/motion. */
+/* Landing decorations use [pointer-events:none], not .pointer-events-none: the legacy rule above forces opacity:1 and display:block on that class. */
+@keyframes landing-rise {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes landing-word {
+  from { transform: translateY(110%); }
+  to { transform: none; }
+}
+@keyframes landing-marquee {
+  to { transform: translateX(-50%); }
+}
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes landing-glow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.08); }
+}
+.landing-rise { animation: landing-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--delay, 0ms); }
+.landing-word { display: inline-block; animation: landing-word 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--delay, 0ms); }
+.landing-marquee { animation: landing-marquee 45s linear infinite; }
+.landing-float { animation: landing-float 6s ease-in-out infinite; animation-delay: var(--delay, 0ms); }
+.landing-glow { animation: landing-glow 9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .landing-rise, .landing-word, .landing-marquee, .landing-float, .landing-glow { animation: none !important; }
 }

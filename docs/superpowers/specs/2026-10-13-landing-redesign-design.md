@@ -1,7 +1,7 @@
 # Vendly brand + landing page redesign — design
 
 Date: 2026-10-13
-Status: awaiting review (prototype files optional)
+Status: approved and implemented (round 1)
 Scope: round 1 of the rebrand. Brand system, landing page, and the shared navbar/footer/favicon. Logged-in web pages and the mobile app are later rounds.
 
 ## Goals

@@ -1,125 +1,71 @@
 "use client";
 import Link from "next/link";
-import {
-  FaFacebookF,
-  FaLinkedinIn,
-  FaLocationDot,
-  FaPhone,
-  FaXTwitter,
-  FaYoutube,
-} from "react-icons/fa6";
-import { IoMdMail } from "react-icons/io";
-import FacebookIcon from "@/icons/FacebookIcon";
-import TwitterIcon from "@/icons/TwitterIcon";
-import InstagramIcon from "@/icons/InstagramIcon";
-import PinterestIcon from "@/icons/PinterestIcon";
-import LinkedInIcon from "@/icons/LinkedInIcon";
-import Container from "@/app/_components/Container";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
+import Container from "@/app/_components/Container";
+import Logo from "@/components/brand/Logo";
+import { nav, VENDOR_SIGNUP_HREF } from "@/components/landing/content";
+import StoreBadges from "@/components/landing/StoreBadges";
 import { cn } from "@/lib/utils";
 
-const footerIcon = [
-  { icon: <FacebookIcon /> },
-  { icon: <TwitterIcon /> },
-  { icon: <InstagramIcon /> },
-  { icon: <LinkedInIcon /> },
-  { icon: <PinterestIcon /> },
-]
-const navigationLinks = [
-  { name: "Home", slug: "/" },
-  { name: "About Us", slug: "/#about" },
-  { name: "How It Works", slug: "/#how-it-works" },
-  { name: "Services", slug: "/#services" },
-]
-
-const partnerLinks = [
-  { name: "My Partners", slug: "#" }, {
-    name: "Community", slug: "#"
-  }, {
-    name: "Clients", slug: "#"
-  }
-]
-
-const supportLinks = [
-  { name: "Contact Us", slug: "/contact-us" }, {
-    name: "Privacy Policy", slug: "/privacy"
-  }, {
-    name: "Terms & Conditions", slug: "/terms"
-  }
-]
+// Social icons are hidden until Vendly has real accounts to link to.
+const columns = [
+  {
+    title: "Explore",
+    links: nav.map((item) => ({ name: item.label, href: `/#${item.hash}` })),
+  },
+  {
+    title: "Vendors",
+    links: [
+      { name: "List your business free", href: VENDOR_SIGNUP_HREF },
+      { name: "Log in", href: "/login" },
+    ],
+  },
+  {
+    title: "Support",
+    links: [
+      { name: "Contact us", href: "/contact-us" },
+      { name: "Privacy policy", href: "/privacy" },
+      { name: "Terms & conditions", href: "/terms" },
+    ],
+  },
+];
 
 export default function Footer() {
-  const pathname = usePathname();
+  const isHome = usePathname() === "/";
 
   return (
-    // Matches the always-dark home hero; other pages keep the theme's footer.
-    <footer className={cn(pathname === "/" && "dark bg-darkBg")}>
-      <Container className="py-10 lg:pt-30 pb-10 lg:pb-20">
-        <div className="flex flex-col lg:flex-row  space-y-10">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Image src="/site_logo.png" alt="logo" width={50} height={50} />
-              <span className=" bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent text-2xl font-bold">Vendly</span>
-            </div>
-            <p className="text-base font-normal text-descriptionColor dark:text-white leading-[160%] max-w-[310px]">An all-in-one marketplace for booking verified beauty, creative, event, and rental services.</p>
-            <div className="flex items-center gap-[1.053rem]">
-              {footerIcon.map((item, index) => (
-                <Link
-                  href="#"
-                  key={index}
-                  className={`w-[2.5rem] h-[2.5rem] rounded-full flex items-center justify-center border-[0.5px] border-borderColor hover:border-purpleOne dark:border-0 transition-all duration-300 
-      ${index === 0 ? "bg-purpleOne text-white" : "bg-white dark:bg-[#CDC1FF1A]  text-blackColor dark:text-white"}`}
-                >
-                  {item.icon}
-                </Link>
-              ))}
-            </div>
+    // On the home page the footer continues the page's deep plum; elsewhere it follows the site theme.
+    <footer className={cn(isHome && "dark bg-plum-950")}>
+      <Container className="py-16 lg:py-24">
+        <div className="grid gap-12 lg:grid-cols-[1.2fr_2fr]">
+          <div className="space-y-6">
+            <Logo variant="stacked" size={56} className="dark:hidden" />
+            <Logo variant="stacked" tone="dark" size={56} className="hidden dark:inline-flex" />
+            <p className="max-w-[320px] text-base leading-relaxed text-ink-600 dark:text-white/70">
+              The marketplace for booking trusted event vendors, with payment held until the job is done.
+            </p>
+            <StoreBadges tone={isHome ? "dark" : "light"} className="dark:[&>div]:border-white/15" />
           </div>
 
-          <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className="space-y-2 sm:space-y-6">
-              <h3 className="text-lg sm:text-2xl font-semibold text-blackColor dark:text-white leading-[130%] capitalize">Navigation</h3>
-              <ul className="space-y-1 sm:space-y-3">
-                {navigationLinks.map((item, index) => (
-                  <li key={index}>
-                    <Link href={item.slug} className="text-sm sm:text-lg font-normal text-descriptionColor dark:text-white leading-[130%] hover:text-purpleOne">{item.name}</Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="space-y-2 sm:space-y-6">
-              <h3 className="text-lg sm:text-2xl font-semibold text-blackColor dark:text-white leading-[130%] capitalize">Partner</h3>
-              <ul className="space-y-1 sm:space-y-3">
-                {partnerLinks.map((item, index) => (
-                  <li key={index}>
-                    <Link href={item.slug} className="text-sm sm:text-lg font-normal text-descriptionColor dark:text-white leading-[130%] hover:text-purpleOne">{item.name}</Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="space-y-2 sm:space-y-6">
-              <h3 className="text-lg sm:text-2xl font-semibold text-blackColor dark:text-white leading-[130%] capitalize">Support</h3>
-              <ul className="space-y-1 sm:space-y-3">
-                {supportLinks.map((item, index) => (
-                  <li key={index}>
-                    <Link href={item.slug} className="text-sm sm:text-lg font-normal text-descriptionColor dark:text-white leading-[130%] hover:text-purpleOne">{item.name}</Link>
-                  </li>
-                ))}
-              </ul>
-            </div></div>
-          <div>
-
-
-
+          <div className="grid grid-cols-2 gap-10 sm:grid-cols-3">
+            {columns.map((col) => (
+              <div key={col.title}>
+                <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-plum-500 dark:text-orchid-300">{col.title}</h3>
+                <ul className="mt-6 space-y-3">
+                  {col.links.map((link) => (
+                    <li key={link.name}>
+                      <Link href={link.href} className="text-base text-plum-900 transition-colors hover:text-orchid-500 dark:text-white dark:hover:text-orchid-300">
+                        {link.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
-
-
       </Container>
-      <p className="text-center text-sm font-normal gradient-bg text-white leading-[130%] px-2.5 py-3.5">Copyright © 2026 Vendly | All Rights Reserved</p>
+      <p className="bg-brand px-2.5 py-4 text-center text-sm text-white">© 2026 Vendly. All rights reserved.</p>
     </footer>
   );
 }

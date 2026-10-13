@@ -1,45 +1,29 @@
-import AppBackground from "../../components/landing-page/AppBackground";
-import HomeScrollToHash from "../../components/landing-page/HomeScrollToHash";
-import GrowBusiness from "../../components/landing-page/GrowBusiness/GrowBusiness";
-import HeroSection from "../../components/landing-page/Hero/HeroSection";
-import ConnectPeople from "../../components/landing-page/connect-people/ConnectPeople";
-import PlatformWork from "../../components/landing-page/platform/PlatformWork";
-import ServiceOverview from "../../components/landing-page/service-overview/ServiceOverview";
-import WhyChoose from "../../components/landing-page/why-choose/WhyChoose";
-import Customers from "../../components/landing-page/customers/Customers";
-import ZeroHassle from "../../components/landing-page/zero-hassle/ZeroHassle";
-
+import HomeScrollToHash from "@/components/landing/HomeScrollToHash";
+import LandingMotion from "@/components/landing/motion/LandingMotion";
+import Hero from "@/components/landing/Hero";
+import Categories from "@/components/landing/Categories";
+import HowItWorks from "@/components/landing/HowItWorks";
+import Pricing from "@/components/landing/Pricing";
+import FoundingVendors from "@/components/landing/FoundingVendors";
+import Roles from "@/components/landing/Roles";
+import Trust from "@/components/landing/Trust";
+import Faq from "@/components/landing/Faq";
+import FinalCta from "@/components/landing/FinalCta";
 
 export default function Home() {
   return (
-    <div className="">
+    <main>
       <HomeScrollToHash />
-      <AppBackground>
-        <div id="home" className="scroll-mt-28">
-          <HeroSection />
-        </div>
-      </AppBackground>
-      <section id="about" className="scroll-mt-28">
-        <ConnectPeople />
-      </section>
-      <div className="bg-[#FAFAFA]">
-        <section id="how-it-works" className="scroll-mt-28">
-          <PlatformWork />
-        </section>
-      </div>
-      <section id="services" className="scroll-mt-28">
-        <ServiceOverview />
-      </section>
-      <div className="bg-darkBg">
-        <WhyChoose />
-      </div>
-      <GrowBusiness />
-      <div className="bg-[#FAFAFA]">
-        <Customers />
-      </div>
-      <div className="bg-darkBg">
-        <ZeroHassle />
-      </div>
-    </div>
+      <LandingMotion />
+      <Hero />
+      <Categories />
+      <HowItWorks />
+      <Pricing />
+      <FoundingVendors />
+      <Roles />
+      <Trust />
+      <Faq />
+      <FinalCta />
+    </main>
   );
 }

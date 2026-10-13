@@ -4,7 +4,7 @@ import { CookieHelper } from "@/helper/cookie.helper";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React, { useState } from "react";
-import SiteLogo from "../landing-page/SiteLogo";
+import SiteLogo from "@/components/brand/SiteLogo";
 import { SidebarIcon } from "@/icons";
 import { ChevronDown } from "lucide-react";
 import { useActiveNav, useModal } from "@/hooks";

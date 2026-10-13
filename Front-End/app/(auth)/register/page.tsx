@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import Logo from "@/components/brand/Logo";
 import Link from "next/link";
 import { AuthService } from "@/service/auth/auth.service";
 import { CookieHelper } from "@/helper/cookie.helper";
@@ -32,6 +32,12 @@ export default function RegisterPage() {
     phone: "",
   });
   const [errors, setErrors] = useState<Partial<typeof form>>({});
+
+  // Landing page links send ?type=VENDOR so vendors start with their account type selected.
+  useEffect(() => {
+    const type = new URLSearchParams(window.location.search).get("type");
+    if (TYPE_OPTIONS.some((o) => o.value === type)) setAccountType(type as AccountType);
+  }, []);
 
   const set = (field: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -86,7 +92,7 @@ export default function RegisterPage() {
       <div className="flex justify-center items-start lg:items-center w-full lg:w-1/2 px-4 py-8">
         <div className="w-full max-w-[28rem] space-y-6">
           <div className="space-y-2">
-            <Image src="/site_logo.png" width={40} height={40} alt="Vendly" />
+            <Logo variant="mark" size={34} />
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white leading-tight">
               Create your account
             </h2>
@@ -256,7 +262,7 @@ export default function RegisterPage() {
       <div className="hidden lg:flex lg:w-1/2 gradient-bg items-center justify-center pl-20 pt-20 rounded-2xl">
         <div>
           <div className="mb-10">
-            <Image src="/site_logo.png" width={50} height={50} alt="Vendly" />
+            <Logo variant="horizontal" tone="dark" size={50} />
           </div>
           <div className="space-y-2 mb-8">
             <h2 className="text-[2rem] leading-[130%] text-white">Join Vendly today</h2>

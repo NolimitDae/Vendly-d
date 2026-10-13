@@ -1,5 +1,5 @@
 import DashboardContainer from "@/components/Dashboard/DashboardContainer";
-import Image from "next/image";
+import Logo from "@/components/brand/Logo";
 import React from "react";
 import AuthRightSection from "../../../components/Dashboard/auth/AuthRightSection";
 import LoginForm from "@/components/Dashboard/auth/login/LoginForm";
@@ -15,12 +15,7 @@ const LoginPage = () => {
 
           {/* Header */}
           <div className="space-y-6">
-            <Image
-              src={"/site_logo.png"}
-              width={40}
-              height={40}
-              alt="login image"
-            />
+            <Logo variant="mark" size={34} />
             <div className="space-y-2">
               <h2 className="text-blackColor text-2xl sm:text-[2rem] font-semibold leading-[130%]">
                 Login to your account

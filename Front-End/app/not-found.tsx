@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Logo from "@/components/brand/Logo";
 import Link from "next/link";
 import { ThemeScript } from "@/providers/ThemeScript";
 import { ThemeProvider } from "@/providers/ThemeProvider";
@@ -25,14 +25,9 @@ export default function NotFound() {
                 404
               </span>
               <div className="absolute inset-0 flex items-center justify-center">
-                <Image
-                  src="/site_logo.png"
-                  alt="Vendly"
-                  width={80}
-                  height={80}
-                  className="w-16 h-16 sm:w-20 sm:h-20 animate-bounce"
-                  style={{ animationDuration: "2.5s" }}
-                />
+                <span className="animate-bounce motion-reduce:animate-none" style={{ animationDuration: "2.5s" }}>
+                  <Logo variant="mark" size={52} />
+                </span>
               </div>
             </div>
 

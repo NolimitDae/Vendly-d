@@ -1,4 +1,4 @@
-import SiteLogo from '@/components/landing-page/SiteLogo'
+import SiteLogo from '@/components/brand/SiteLogo'
 import Image from 'next/image'
 import React from 'react'
 
