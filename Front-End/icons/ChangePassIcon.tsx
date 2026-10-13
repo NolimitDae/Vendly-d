@@ -22,9 +22,9 @@ const ChangePassIcon = () => {
           y2="12"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor="#795FF4" />
-          <stop offset="0.502975" stopColor="#8F6CFD" />
-          <stop offset="1" stopColor="#8E5EF3" />
+          <stop stopColor="#7A2A82" />
+          <stop offset="0.502975" stopColor="#8F3A99" />
+          <stop offset="1" stopColor="#A84AB0" />
         </linearGradient>
       </defs>
     </svg>

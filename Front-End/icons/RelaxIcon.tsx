@@ -8,19 +8,19 @@ const RelaxIcon = () => {
       <path d="M33.4764 23.4996C33.753 24.2805 33.3442 25.1378 32.5633 25.4143C31.7628 25.6978 30.8381 26.3081 29.8585 27.1672C28.8945 28.0127 27.9567 29.0281 27.1261 30.0238C26.2983 31.016 25.5952 31.9666 25.0986 32.6701C24.8509 33.0211 24.4606 33.6067 24.3286 33.8048C24.0387 34.2609 23.5256 34.5261 22.9858 34.4984C22.4459 34.4708 21.9626 34.1548 21.7209 33.6712C21.0598 32.3492 20.4668 31.8227 20.1679 31.6235C20.0415 31.5392 19.956 31.5054 19.9221 31.4939C19.1595 31.4231 18.5625 30.7815 18.5625 30.0004C18.5625 29.172 19.2341 28.5004 20.0625 28.5004C20.4141 28.5004 20.5776 28.5608 20.7324 28.605C21.0442 28.6941 21.4204 28.8529 21.8321 29.1273C22.2435 29.4016 22.6749 29.7808 23.1081 30.2996C23.5809 29.6534 24.1635 28.8919 24.8224 28.102C25.7124 27.0352 26.76 25.8944 27.8805 24.9117C28.9854 23.9427 30.2445 23.053 31.5617 22.5865C32.3426 22.3099 33.1999 22.7187 33.4764 23.4996Z" fill="url(#paint2_linear_5411_6653)" />
       <defs>
         <linearGradient id="paint0_linear_5411_6653" x1="7.3125" y1="4.5" x2="25.3125" y2="4.5" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#795FF4" />
-          <stop offset="0.502975" stopColor="#8F6CFD" />
-          <stop offset="1" stopColor="#8E5EF3" />
+          <stop stopColor="#7A2A82" />
+          <stop offset="0.502975" stopColor="#8F3A99" />
+          <stop offset="1" stopColor="#A84AB0" />
         </linearGradient>
         <linearGradient id="paint1_linear_5411_6653" x1="2.4375" y1="18.75" x2="30.1875" y2="18.75" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#795FF4" />
-          <stop offset="0.502975" stopColor="#8F6CFD" />
-          <stop offset="1" stopColor="#8E5EF3" />
+          <stop stopColor="#7A2A82" />
+          <stop offset="0.502975" stopColor="#8F3A99" />
+          <stop offset="1" stopColor="#A84AB0" />
         </linearGradient>
         <linearGradient id="paint2_linear_5411_6653" x1="18.5625" y1="28.5002" x2="33.5629" y2="28.5002" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#795FF4" />
-          <stop offset="0.502975" stopColor="#8F6CFD" />
-          <stop offset="1" stopColor="#8E5EF3" />
+          <stop stopColor="#7A2A82" />
+          <stop offset="0.502975" stopColor="#8F3A99" />
+          <stop offset="1" stopColor="#A84AB0" />
         </linearGradient>
       </defs>
     </svg>

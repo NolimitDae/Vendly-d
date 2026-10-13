@@ -7,9 +7,9 @@ const ApostropheIcon = () => {
             <path fillRule="evenodd" clipRule="evenodd" d="M38 14L34 26H38V36H28V26L32 14H38Z" fill="url(#paint0_linear_5411_6879)" />
             <defs>
                 <linearGradient id="paint0_linear_5411_6879" x1="28" y1="25" x2="38" y2="25" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#795FF4" />
-                    <stop offset="0.502975" stopColor="#8F6CFD" />
-                    <stop offset="1" stopColor="#8E5EF3" />
+                    <stop stopColor="#7A2A82" />
+                    <stop offset="0.502975" stopColor="#8F3A99" />
+                    <stop offset="1" stopColor="#A84AB0" />
                 </linearGradient>
             </defs>
         </svg>

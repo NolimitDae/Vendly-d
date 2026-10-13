@@ -87,19 +87,19 @@ const ChangePassForm = () => {
 
         <div className="grid grid-cols-2 gap-y-3">
           <div className="flex items-center gap-2">
-            <CircleTickIcon color={hasMinLength ? "#795FF4" : undefined} />
+            <CircleTickIcon color={hasMinLength ? "#7A2A82" : undefined} />
             <p className="text-xs leading-[160%] font-medium text-grayColor1">8 characters minimum</p>
           </div>
           <div className="flex items-center gap-2">
-            <CircleTickIcon color={hasNumber ? "#795FF4" : undefined} />
+            <CircleTickIcon color={hasNumber ? "#7A2A82" : undefined} />
             <p className="text-xs leading-[160%] font-medium text-grayColor1">numbers (0-9)</p>
           </div>
           <div className="flex items-center gap-2">
-            <CircleTickIcon color={hasUppercase ? "#795FF4" : undefined} />
+            <CircleTickIcon color={hasUppercase ? "#7A2A82" : undefined} />
             <p className="text-xs leading-[160%] font-medium text-grayColor1">uppercase letters (A-Z)</p>
           </div>
           <div className="flex items-center gap-2">
-            <CircleTickIcon color={hasSpecial ? "#795FF4" : undefined} />
+            <CircleTickIcon color={hasSpecial ? "#7A2A82" : undefined} />
             <p className="text-xs leading-[160%] font-medium text-grayColor1">special characters (!@#$%^&*)</p>
           </div>
         </div>

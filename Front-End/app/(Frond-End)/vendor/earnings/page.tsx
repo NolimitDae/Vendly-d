@@ -87,7 +87,7 @@ const BarTooltip = ({
     <div className="bg-white dark:bg-gray-800 rounded-xl p-2.5 shadow-lg text-sm border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
       <p className="font-medium pb-2 text-gray-700 dark:text-gray-300">{label}</p>
       <p className="flex items-center gap-1.5 pt-2 text-gray-600 dark:text-gray-400">
-        <span className="w-2.5 h-2.5 rounded-sm bg-[#795FF4] inline-block" />
+        <span className="w-2.5 h-2.5 rounded-sm bg-[#7A2A82] inline-block" />
         Earnings: ${payload[0]?.value?.toLocaleString() ?? 0}
       </p>
     </div>
@@ -271,7 +271,7 @@ export default function VendorEarningsPage() {
       { name: "Completed", value: completed.length, color: "#22c55e" },
       { name: "Cancelled", value: cancelled.length, color: "#ef4444" },
       ...(other > 0
-        ? [{ name: "In Progress", value: other, color: "#795FF4" }]
+        ? [{ name: "In Progress", value: other, color: "#7A2A82" }]
         : []),
     ].filter((d) => d.value > 0);
   }, [bookings, completed, cancelled]);
@@ -476,7 +476,7 @@ export default function VendorEarningsPage() {
                   >
                     <defs>
                       <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#795FF4" stopOpacity={1} />
+                        <stop offset="0%" stopColor="#7A2A82" stopOpacity={1} />
                         <stop offset="100%" stopColor="#9F7AEA" stopOpacity={0.8} />
                       </linearGradient>
                     </defs>

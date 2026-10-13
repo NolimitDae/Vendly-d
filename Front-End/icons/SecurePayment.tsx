@@ -11,9 +11,9 @@ const SecurePayment = () => {
             <path d="M21.1475 13.691L21.9252 14.4689C22.5548 13.8395 23.5785 13.8396 24.2079 14.4689L24.9856 13.691C23.9276 12.633 22.2058 12.6328 21.1475 13.691Z" fill="#1D1F2C" />
             <defs>
                 <linearGradient id="paint0_linear_5411_6808" x1="14.6357" y1="28.7381" x2="40.1577" y2="28.7381" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#795FF4" />
-                    <stop offset="0.502975" stopColor="#8F6CFD" />
-                    <stop offset="1" stopColor="#8E5EF3" />
+                    <stop stopColor="#7A2A82" />
+                    <stop offset="0.502975" stopColor="#8F3A99" />
+                    <stop offset="1" stopColor="#A84AB0" />
                 </linearGradient>
             </defs>
         </svg>

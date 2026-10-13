@@ -27,9 +27,9 @@ const SimpleAreaChart = ({ data }: { data?: MonthPoint[] }) => {
         >
           <defs>
             <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#795FF4" stopOpacity={0.9} />
-              <stop offset="50%" stopColor="#795FF4" stopOpacity={0.4} />
-              <stop offset="95%" stopColor="#795FF4" stopOpacity={0} />
+              <stop offset="5%" stopColor="#7A2A82" stopOpacity={0.9} />
+              <stop offset="50%" stopColor="#7A2A82" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#7A2A82" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -45,7 +45,7 @@ const SimpleAreaChart = ({ data }: { data?: MonthPoint[] }) => {
           <Area
             type="monotone"
             dataKey="amount"
-            stroke="#795FF4"
+            stroke="#7A2A82"
             fill="url(#colorRevenue)"
           />
         </AreaChart>

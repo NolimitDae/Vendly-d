@@ -17,24 +17,24 @@ const MultiServiceIcon = () => {
             </g>
             <defs>
                 <linearGradient id="paint0_linear_5411_6772" x1="21.7266" y1="26.1905" x2="28.2742" y2="26.1905" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#795FF4" />
-                    <stop offset="0.502975" stopColor="#8F6CFD" />
-                    <stop offset="1" stopColor="#8E5EF3" />
+                    <stop stopColor="#7A2A82" />
+                    <stop offset="0.502975" stopColor="#8F3A99" />
+                    <stop offset="1" stopColor="#A84AB0" />
                 </linearGradient>
                 <linearGradient id="paint1_linear_5411_6772" x1="10.252" y1="26.1903" x2="39.7476" y2="26.1903" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#795FF4" />
-                    <stop offset="0.502975" stopColor="#8F6CFD" />
-                    <stop offset="1" stopColor="#8E5EF3" />
+                    <stop stopColor="#7A2A82" />
+                    <stop offset="0.502975" stopColor="#8F3A99" />
+                    <stop offset="1" stopColor="#A84AB0" />
                 </linearGradient>
                 <linearGradient id="paint2_linear_5411_6772" x1="14.2842" y1="47.9168" x2="35.7157" y2="47.9168" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#795FF4" />
-                    <stop offset="0.502975" stopColor="#8F6CFD" />
-                    <stop offset="1" stopColor="#8E5EF3" />
+                    <stop stopColor="#7A2A82" />
+                    <stop offset="0.502975" stopColor="#8F3A99" />
+                    <stop offset="1" stopColor="#A84AB0" />
                 </linearGradient>
                 <linearGradient id="paint3_linear_5411_6772" x1="0.636719" y1="6.08804" x2="49.3308" y2="6.08804" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#795FF4" />
-                    <stop offset="0.502975" stopColor="#8F6CFD" />
-                    <stop offset="1" stopColor="#8E5EF3" />
+                    <stop stopColor="#7A2A82" />
+                    <stop offset="0.502975" stopColor="#8F3A99" />
+                    <stop offset="1" stopColor="#A84AB0" />
                 </linearGradient>
                 <clipPath id="clip0_5411_6772">
                     <rect width="50" height="50" fill="white" />

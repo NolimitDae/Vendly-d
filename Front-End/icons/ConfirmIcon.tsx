@@ -7,9 +7,9 @@ const ConfirmIcon = () => {
       <path d="M30 0C13.4625 0 0 13.4625 0 30C0 46.5375 13.4625 60 30 60C46.5375 60 60 46.5375 60 30C60 13.4625 46.5375 0 30 0ZM30 53.75C16.9037 53.75 6.25 43.0962 6.25 30C6.25 16.9037 16.9037 6.25 30 6.25C43.0962 6.25 53.75 16.9037 53.75 30C53.75 43.0962 43.0962 53.75 30 53.75Z" fill="url(#paint1_linear_5320_6633)" fillOpacity="0.2" />
       <defs>
         <linearGradient id="paint0_linear_5320_6633" x1="8.75391" y1="30.0002" x2="51.2539" y2="30.0002" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#795FF4" />
-          <stop offset="0.502975" stopColor="#8F6CFD" />
-          <stop offset="1" stopColor="#8E5EF3" />
+          <stop stopColor="#7A2A82" />
+          <stop offset="0.502975" stopColor="#8F3A99" />
+          <stop offset="1" stopColor="#A84AB0" />
         </linearGradient>
         <linearGradient id="paint1_linear_5320_6633" x1="30" y1="-35.4167" x2="30" y2="76.6667" gradientUnits="userSpaceOnUse">
           <stop stopColor="#62B1BA" />
