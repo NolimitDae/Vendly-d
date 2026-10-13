@@ -30,4 +30,4 @@ Owner's instructions: build the **mobile app** (Mobile/, Expo SDK 54) from the F
 - Figma file key `nTJ0HtuOFRbWuwWe7tDtVq`, page "Design" (node 16:2). Use the newer section copies: Customer Flow `5512:11236`, Vendor Flow `5442:6473`, Event Planner `5532:18660`.
 - Brand: plum-950 #1E0822, plum-900 #3A1040, plum-700 #5E1B66, plum-500 #7A2A82, orchid-500 #A84AB0, orchid-300 #D9A6DD, blush-50 #FBF4F9, blush-100 #F3E6F0, gradient #4A1650 → #7A2A82 → #A84AB0, font Plus Jakarta Sans, VM logo (see Front-End/components/brand/Logo.tsx for the mark path).
 - Section order: 1) customer onboarding + home (splash, welcome, sign up, choose role, log in, home) ← next; 2) browse to booking; 3) vendor flow; 4) planner flow. Then back to backend phases B–G above.
-- Known follow-ups: legal texts (contract templates, Terms page) still say "Vendly service fee"; Phase A web/mobile type-checks and the full backend test suite should be re-run before pushing.
+- Known follow-ups: legal texts (contract templates, Terms page) still say "Vendly service fee"; Full backend suite passed after phase A (55 suites, 592 tests); re-run web/mobile type-checks and web tests before pushing.
