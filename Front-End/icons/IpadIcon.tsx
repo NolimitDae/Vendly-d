@@ -22,9 +22,9 @@ const IpadIcon = () => {
           y2="10"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stop-color="#795FF4" />
-          <stop offset="0.502975" stop-color="#8F6CFD" />
-          <stop offset="1" stop-color="#8E5EF3" />
+          <stop stopColor="#795FF4" />
+          <stop offset="0.502975" stopColor="#8F6CFD" />
+          <stop offset="1" stopColor="#8E5EF3" />
         </linearGradient>
       </defs>
     </svg>
