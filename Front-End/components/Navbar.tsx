@@ -150,7 +150,7 @@ export default function Navbar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "hover:text-purpleColor transition text-base dark:text-white flex items-center gap-1.5",
+                "hover:text-orchid-500 dark:hover:text-orchid-300 transition text-base dark:text-white flex items-center gap-1.5",
                 pathname.startsWith(item.href)
                   ? "text-primary font-medium"
                   : "text-descriptionColor",
@@ -416,10 +416,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href={isHome ? VENDOR_SIGNUP_HREF : "/register"}
-                className={cn(
-                  "text-white font-medium px-6 py-2.5 rounded-full text-sm hover:opacity-90 transition",
-                  isHome ? "bg-brand" : "gradient-bg",
-                )}
+                className="bg-brand text-white font-medium px-6 py-2.5 rounded-full text-sm hover:opacity-90 transition"
               >
                 {isHome ? "List your business free" : "Sign up"}
               </Link>
@@ -435,9 +432,9 @@ export default function Navbar() {
             className="text-2xl cursor-pointer"
           >
             {menuOpen ? (
-              <HiX className="text-violet-500" />
+              <HiX className="text-orchid-500 dark:text-orchid-300" />
             ) : (
-              <HiOutlineMenu className="text-violet-500" />
+              <HiOutlineMenu className="text-orchid-500 dark:text-orchid-300" />
             )}
           </button>
         </div>
@@ -458,7 +455,7 @@ export default function Navbar() {
             </Link>
             <button
               aria-label="close-menu"
-              className="text-violet-500"
+              className="text-orchid-500 dark:text-orchid-300"
               onClick={() => setMenuOpen(false)}
             >
               <HiX className="text-2xl" />
@@ -635,7 +632,7 @@ export default function Navbar() {
                 <Link
                   href="/register"
                   onClick={() => setMenuOpen(false)}
-                  className="w-full text-center py-2.5 rounded-xl gradient-bg text-white text-sm font-medium"
+                  className="w-full text-center py-2.5 rounded-xl bg-brand text-white text-sm font-medium"
                 >
                   Sign up
                 </Link>

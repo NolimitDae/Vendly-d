@@ -11,8 +11,8 @@ export function ThemeToggle() {
       onClick={toggleTheme}
       aria-label={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode `}
     >
-      {resolvedTheme === 'dark' ? <SunIcon className="text-violet-500  cursor-pointer" />
-        : <MoonIcon className="text-violet-500 cursor-pointer" />}
+      {resolvedTheme === 'dark' ? <SunIcon className="text-orchid-500 dark:text-orchid-300 cursor-pointer" />
+        : <MoonIcon className="text-orchid-500 dark:text-orchid-300 cursor-pointer" />}
     </button>
   );
 }

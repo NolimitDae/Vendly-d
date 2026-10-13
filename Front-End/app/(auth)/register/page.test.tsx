@@ -83,7 +83,15 @@ describe('RegisterPage', () => {
       render(<RegisterPage />);
       // CLIENT is selected by default; click Vendor
       await user.click(screen.getByText('Vendor'));
-      expect(screen.getByText('Vendor').closest('button')).toHaveClass('border-primary');
+      expect(screen.getByText('Vendor').closest('button')).toHaveClass('border-orchid-500');
+    });
+
+    it('preselects the account type from ?type= (landing page vendor links)', () => {
+      window.history.replaceState(null, '', '/register?type=VENDOR');
+      render(<RegisterPage />);
+      expect(screen.getByText('Vendor').closest('button')).toHaveClass('border-orchid-500');
+      expect(screen.getByText('Customer').closest('button')).not.toHaveClass('border-orchid-500');
+      window.history.replaceState(null, '', '/');
     });
 
     it('advances to step 2 when Continue is clicked', async () => {

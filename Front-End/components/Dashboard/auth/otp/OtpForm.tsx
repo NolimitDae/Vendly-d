@@ -121,7 +121,7 @@ const OtpForm = ({
 
       {/* Submit */}
       <GenericButton
-        variant="primary"
+        variant="brand"
         size="md"
         fullWidth
         rounded="2xl"

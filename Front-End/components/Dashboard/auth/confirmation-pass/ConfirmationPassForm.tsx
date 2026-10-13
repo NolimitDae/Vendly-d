@@ -14,7 +14,7 @@ const ConfirmationPassForm = () => {
     return (
         <div className="space-y-8">
 
-            <GenericButton variant="primary" size="md" rounded="2xl" fullWidth height="lg" onClick={() => router.push("/login")}>
+            <GenericButton variant="brand" size="md" rounded="2xl" fullWidth height="lg" onClick={() => router.push("/login")}>
                 Proceed to login
             </GenericButton>
         </div>

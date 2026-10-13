@@ -74,12 +74,12 @@ const ChangePassForm = () => {
             <div
               key={level}
               className={`w-1/4 h-1 rounded-lg transition-colors ${
-                strengthCount >= level ? "gradient-bg" : "bg-gray-200 dark:bg-gray-600"
+                strengthCount >= level ? "bg-brand" : "bg-gray-200 dark:bg-gray-600"
               }`}
             />
           ))}
           {strengthLabel && (
-            <span className="text-xs leading-[160%] font-medium bg-linear-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent">
+            <span className="text-xs leading-[160%] font-medium text-brand">
               {strengthLabel}
             </span>
           )}
@@ -119,7 +119,7 @@ const ChangePassForm = () => {
 
       <div className="space-y-5">
         <GenericButton
-          variant="primary"
+          variant="brand"
           size="md"
           rounded="2xl"
           onClick={handleSubmit}
@@ -131,7 +131,7 @@ const ChangePassForm = () => {
         </GenericButton>
 
         <GenericButton
-          variant="outline"
+          variant="brandOutline"
           size="md"
           rounded="2xl"
           onClick={() => router.push("/login")}

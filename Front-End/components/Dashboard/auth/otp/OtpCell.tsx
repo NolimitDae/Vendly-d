@@ -46,7 +46,7 @@ export const OtpCell = ({
         "outline-none border-2 border-transparent",
         "transition-all duration-150",
         // Focus ring
-        "focus:border-primary focus:bg-white focus:shadow-[0_0_0_4px_rgba(var(--color-primary-rgb),0.12)]",
+        "focus:border-orchid-500 focus:bg-white focus:shadow-[0_0_0_4px_rgba(var(--color-primary-rgb),0.12)]",
         // States
         isError && "border-red-400 bg-red-50 text-red-700",
         isSuccess && "border-green-400 bg-green-50 text-green-700",

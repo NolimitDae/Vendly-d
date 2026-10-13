@@ -1,6 +1,7 @@
 import React from "react";
 
-type Variant = "primary" | "outline" |"plain";
+// brand / brandOutline use the 2026 plum palette; primary / outline keep the older violet for dashboards.
+type Variant = "primary" | "outline" | "plain" | "brand" | "brandOutline";
 type Size = "xsm" | "sm" | "md" | "xl" | "lg" | "xll" | "xlg";
 type Rounded = "full" | "lg" | "xl" | "2xl";
 type IconPosition = "left" | "right";
@@ -27,6 +28,14 @@ const variantStyles: Record<Variant, string> = {
   outline: [
     "border border-purpleOne bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent font-semibold",
     "disabled:border-indigo-200 disabled:text-indigo-300 disabled:cursor-not-allowed",
+  ].join(" "),
+  brand: [
+    "bg-brand text-white border border-transparent font-medium","disabled:cursor-not-allowed",
+  ].join(" "),
+
+  brandOutline: [
+    "border border-orchid-500 text-plum-700 dark:text-orchid-300 font-semibold",
+    "disabled:opacity-50 disabled:cursor-not-allowed",
   ].join(" "),
   plain: [
     " bg-white font-semibold text-descriptionColor cursor-pointer",

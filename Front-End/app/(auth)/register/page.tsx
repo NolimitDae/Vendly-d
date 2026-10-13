@@ -98,7 +98,7 @@ export default function RegisterPage() {
             </h2>
             <p className="text-gray-500 text-sm">
               Already have an account?{" "}
-              <Link href="/login" className="text-primary hover:underline">
+              <Link href="/login" className="text-plum-700 dark:text-orchid-300 font-medium hover:underline">
                 Log in
               </Link>
             </p>
@@ -114,11 +114,11 @@ export default function RegisterPage() {
                   onClick={() => setAccountType(opt.value)}
                   className={`w-full text-left p-4 rounded-2xl border-2 transition ${
                     accountType === opt.value
-                      ? "border-primary bg-primary/5"
+                      ? "border-orchid-500 bg-blush-50 dark:bg-plum-900/40"
                       : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
                   }`}
                 >
-                  <p className={`font-semibold ${accountType === opt.value ? "text-primary" : "text-gray-900 dark:text-white"}`}>
+                  <p className={`font-semibold ${accountType === opt.value ? "text-plum-900 dark:text-white" : "text-gray-900 dark:text-white"}`}>
                     {opt.label}
                   </p>
                   <p className="text-sm text-gray-500 mt-0.5">{opt.desc}</p>
@@ -127,7 +127,7 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setStep("details")}
-                className="w-full py-3 rounded-2xl bg-primary text-white font-semibold hover:bg-primary/90 transition"
+                className="w-full py-3 rounded-2xl bg-brand text-white font-semibold hover:opacity-90 transition"
               >
                 Continue
               </button>
@@ -142,7 +142,7 @@ export default function RegisterPage() {
                 ← Change account type
               </button>
 
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blush-100 text-plum-700 rounded-full text-sm font-medium">
                 {TYPE_OPTIONS.find((o) => o.value === accountType)?.label}
               </div>
 
@@ -241,7 +241,7 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-2xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-2xl bg-brand text-white font-semibold hover:opacity-90 transition disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Create Account
@@ -249,9 +249,9 @@ export default function RegisterPage() {
 
               <p className="text-xs text-gray-400 text-center">
                 By registering you agree to our{" "}
-                <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>
+                <Link href="/terms" className="text-plum-700 dark:text-orchid-300 font-medium hover:underline">Terms of Service</Link>
                 {" "}and{" "}
-                <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+                <Link href="/privacy" className="text-plum-700 dark:text-orchid-300 font-medium hover:underline">Privacy Policy</Link>.
               </p>
             </form>
           )}
@@ -259,7 +259,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Right — gradient panel */}
-      <div className="hidden lg:flex lg:w-1/2 gradient-bg items-center justify-center pl-20 pt-20 rounded-2xl">
+      <div className="hidden lg:flex lg:w-1/2 bg-linear-to-br from-plum-950 via-plum-900 to-plum-500 items-center justify-center pl-20 pt-20 rounded-2xl">
         <div>
           <div className="mb-10">
             <Logo variant="horizontal" tone="dark" size={50} />

@@ -103,8 +103,8 @@ const LoginForm = () => {
     return (
       <div className="space-y-6">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-            <ShieldCheck className="w-7 h-7 text-primary" />
+          <div className="w-14 h-14 rounded-full bg-blush-100 flex items-center justify-center">
+            <ShieldCheck className="w-7 h-7 text-plum-700" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -135,7 +135,7 @@ const LoginForm = () => {
 
         <GenericButton
           type="button"
-          variant="primary"
+          variant="brand"
           size="md"
           rounded="2xl"
           fullWidth
@@ -206,7 +206,7 @@ const LoginForm = () => {
           </div>
           <Link
             href="/forget-password"
-            className="text-sm bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent cursor-pointer"
+            className="text-sm text-brand cursor-pointer"
           >
             Forgot your password?
           </Link>
@@ -216,7 +216,7 @@ const LoginForm = () => {
       {/* Submit */}
       <GenericButton
         type="submit"
-        variant="primary"
+        variant="brand"
         size="md"
         rounded="2xl"
         fullWidth
@@ -230,7 +230,7 @@ const LoginForm = () => {
         Don&apos;t have an account?{" "}
         <Link
           href="/register"
-          className="bg-gradient-to-r from-purpleOne via-purpleTwo to-purpleThree bg-clip-text text-transparent font-medium"
+          className="text-brand font-medium"
         >
           Sign up
         </Link>

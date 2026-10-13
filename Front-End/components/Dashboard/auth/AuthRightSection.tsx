@@ -4,7 +4,7 @@ import React from 'react'
 
 const AuthRightSection = () => {
   return (
-    <div className="hidden lg:flex lg:w-1/2 gradient-bg items-center justify-center pl-20 pt-20 rounded-2xl">
+    <div className="hidden lg:flex lg:w-1/2 bg-linear-to-br from-plum-950 via-plum-900 to-plum-500 items-center justify-center pl-20 pt-20 rounded-2xl">
       <div className="">
 
         <div className="mb-10">

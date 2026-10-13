@@ -50,7 +50,7 @@ const ForgetPassForm = () => {
       </div>
 
       <GenericButton
-        variant="primary"
+        variant="brand"
         size="md"
         fullWidth
         rounded="2xl"
