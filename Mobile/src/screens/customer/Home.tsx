@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -34,15 +34,9 @@ interface Listing {
   category?: string;
 }
 
-const CATEGORIES = [
-  { label: 'All', value: '' },
-  { label: 'Wedding', value: 'Wedding' },
-  { label: 'Photography', value: 'Photography' },
-  { label: 'Music', value: 'Music' },
-  { label: 'Catering', value: 'Catering' },
-  { label: 'Decoration', value: 'Decoration' },
-  { label: 'Video', value: 'Video' },
-];
+// Category pills come from the API so each carries its id: the listings endpoint filters by
+// category_id and rejects unknown params (the old hard-coded names returned a 400 and an empty list).
+const ALL_CATEGORIES = { label: 'All', value: '' };
 
 export default function CustomerHome() {
   const nav = useNavigation<Nav>();
@@ -51,6 +45,17 @@ export default function CustomerHome() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [categories, setCategories] = useState([ALL_CATEGORIES]);
+
+  useEffect(() => {
+    api
+      .get('/marketplace/categories')
+      .then((res) => {
+        const list: { id: string; name: string }[] = res.data?.data ?? [];
+        setCategories([ALL_CATEGORIES, ...list.map((c) => ({ label: c.name, value: c.id }))]);
+      })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async (resetLoading = false) => {
     if (resetLoading) setLoading(true);
@@ -58,7 +63,7 @@ export default function CustomerHome() {
       const res = await api.get('/marketplace/listings', {
         params: {
           q: search || undefined,
-          category: selectedCategory || undefined,
+          category_id: selectedCategory || undefined,
           limit: 20,
         },
       });
@@ -143,7 +148,7 @@ export default function CustomerHome() {
       {/* Category pills */}
       <FlatList
         horizontal
-        data={CATEGORIES}
+        data={categories}
         keyExtractor={(c) => c.value}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={s.categoryList}

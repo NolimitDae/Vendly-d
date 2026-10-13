@@ -153,13 +153,13 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
                 ${Number(listing.price).toFixed(2)} / {listing.price_unit}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">A Vendly service fee is added. You&apos;ll see the total in the contract.</p>
+            <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">A Vendly Protection fee is added. You&apos;ll see the total in the contract.</p>
           </div>
         )}
         {step === "contract" && preview?.pricing && (
           <div className="mb-4 p-4 bg-primary/5 rounded-xl text-sm space-y-1">
             <div className="flex justify-between"><span>Vendor price</span><span>{preview.pricing.price}</span></div>
-            <div className="flex justify-between"><span>Vendly service fee</span><span>{preview.pricing.service_fee}</span></div>
+            <div className="flex justify-between"><span>Vendly Protection fee</span><span>{preview.pricing.service_fee}</span></div>
             <div className="flex justify-between font-bold"><span>Total</span><span>{preview.pricing.total}</span></div>
             <p className="text-xs text-gray-500 pt-1 dark:text-gray-400">You pay after the vendor accepts and signs.</p>
           </div>

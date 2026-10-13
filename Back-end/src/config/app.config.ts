@@ -58,6 +58,8 @@ export default () => ({
   fees: {
     // Vendly's fee charged to customers on top of the vendor's price; vendors pay no fee for now
     customer_service_fee_percent: Number(process.env.CUSTOMER_SERVICE_FEE_PERCENT ?? 5),
+    // Minimum Vendly Protection fee per booking, in dollars.
+    customer_service_fee_minimum: Number(process.env.CUSTOMER_SERVICE_FEE_MINIMUM ?? 3),
   },
 
   security: {

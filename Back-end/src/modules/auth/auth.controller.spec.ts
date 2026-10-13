@@ -106,10 +106,7 @@ describe('AuthController', () => {
   });
 
   it('should refresh token', async () => {
-    const result = await controller.refreshToken(
-      { user: { userId: 1 } } as any,
-      { refresh_token: 'refresh' },
-    );
+    const result = await controller.refreshToken({ refresh_token: 'refresh' });
     expect(result.authorization.access_token).toBe('new_access');
   });
 

@@ -1,0 +1,33 @@
+# Vendly build plan (from the App Development Brief)
+
+_Written 2026-10-13 from a gap analysis of the brief (Oct 2026 revision with vendor payment schedules) against the code. Update the status column as phases land._
+
+## Where things stand
+
+- **Built:** contracts (signing, signed PDFs, amendments, admin templates), listings, request → accept → pay-in-full via hosted Stripe Checkout, proof photos and deliverable uploads, customer reviews, account deletion, booking push notifications, admin vendor/planner verification, Stripe Connect Express onboarding with manual vendor withdrawals.
+- **Payments are the main gap:** no saved cards, no charge on accept, no payment schedules, no retries, no pay-after-service holds, no automatic release, no refunds on cancel/decline, no disputes, no early deposit release, no per-booking payouts.
+- **Not started:** rentals, event group chat, custom quotes, run of show, shared event files, client view, saved vendor teams, promo codes, feature flags, DB-backed fee settings, most notifications.
+- **Mobile:** ~21 of ~40 screens. No sign-up, no Apple/Google sign-in, one account cannot both book and sell.
+
+## Phases
+
+| Phase | Scope | Status |
+|---|---|---|
+| A | Live bugs and risks (DONE, committed, not pushed): refunds on vendor cancel/decline of paid bookings; chat `all-user` endpoint leaks every user's email; mobile chat calls wrong endpoints; mobile category filter 400s; mobile pause/resume broken; suspended users can still authenticate; planners can create client events without verification; fee has no $3 minimum, wrong label ("Vendly Protection fee"), admin fee setting is ignored. Also fixed: access tokens never expired (now expire + refresh with rotation on web and mobile), deleted accounts kept access, mobile login always failed, admin logout didn't sign out, web live-chat socket never authenticated | Done (not pushed) |
+| B | Payment engine: saved cards (SetupIntent), off-session charge on accept, per-booking payment schedule snapshot + installment table, four presets with category defaults and constraints, due-dates-passed rule, scheduled charges with 3 retries over 48h, pay-after-service authorization holds, held funds with per-booking transfers (transfer_group), release rules (customer confirm / 48h after proof / delivery approval / 3-day auto-approve), machine-readable cancellation tiers and refunds, disputes (funds stay held), early deposit release + recovery from future payouts, payment timeline | Not started |
+| C | Admin: fee settings in the database (fee %, minimum, vendor commission, per-category overrides), promo codes, feature flags, plan/entitlement tables, dispute queue with refund / partial refund / release, revenue report (bookings, fees, refunds), user suspend/restore | Not started |
+| D | Rentals: rental items, date-based availability with turnaround buffer, reservations inside a DB transaction, multi-item requests, security deposits, return photos, damage reports, late fees, inventory dashboard | Not started |
+| E | Planner tools and chat: event group chat (auto-created, members follow bookings), read receipts, pinned messages, custom quote cards, contact-sharing warning, run of show, shared event details/files, budget from real bookings, client read-only view, saved vendor teams | Not started |
+| F | Mobile: splash/welcome/sign-up/choose role/verification, Apple + Google sign-in, multi-role accounts with mode switch, Explore + filters (date, price, rating, distance), vendor profile (packages, video, response time, verified badge), favorites, vendor calendar + working hours, earnings/payouts + Connect onboarding, native Payment Sheet, payment timeline, in-app camera proof with GPS/time, delivery gallery, notifications screen, dark mode, skeletons, Reanimated/haptics | Not started |
+| G | Sentry, analytics, EAS Update, EAS Submit config | Not started |
+
+Each phase ships behind passing type-checks and tests, and is pushed to `main` only after the owner approves.
+
+## Current work (2026-10-13): mobile app screens from Figma
+
+Owner's instructions: build the **mobile app** (Mobile/, Expo SDK 54) from the Figma designs, **in the plum brand colours used on the website** (not Figma's old violet), **one section at a time, checking in with the owner after each section**. Push to `main` only with the owner's approval.
+
+- Figma file key `nTJ0HtuOFRbWuwWe7tDtVq`, page "Design" (node 16:2). Use the newer section copies: Customer Flow `5512:11236`, Vendor Flow `5442:6473`, Event Planner `5532:18660`.
+- Brand: plum-950 #1E0822, plum-900 #3A1040, plum-700 #5E1B66, plum-500 #7A2A82, orchid-500 #A84AB0, orchid-300 #D9A6DD, blush-50 #FBF4F9, blush-100 #F3E6F0, gradient #4A1650 → #7A2A82 → #A84AB0, font Plus Jakarta Sans, VM logo (see Front-End/components/brand/Logo.tsx for the mark path).
+- Section order: 1) customer onboarding + home (splash, welcome, sign up, choose role, log in, home) ← next; 2) browse to booking; 3) vendor flow; 4) planner flow. Then back to backend phases B–G above.
+- Known follow-ups: legal texts (contract templates, Terms page) still say "Vendly service fee"; Phase A web/mobile type-checks and the full backend test suite should be re-run before pushing.

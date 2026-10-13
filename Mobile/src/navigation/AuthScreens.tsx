@@ -28,9 +28,12 @@ export default function AuthScreens() {
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
-      if (res.data?.success) {
-        const { token, user } = res.data.data;
-        await login(token, user);
+      // The API returns { authorization: { access_token, refresh_token }, type } — not { data: { token, user } },
+      // which is why mobile sign-in always failed before. Load the profile with the new token.
+      const auth = res.data?.authorization;
+      if (res.data?.success && auth?.access_token) {
+        const me = await api.get('/auth/me', { headers: { Authorization: `Bearer ${auth.access_token}` } });
+        await login(auth.access_token, me.data?.data, auth.refresh_token);
       } else {
         Alert.alert('Login failed', res.data?.message ?? 'Invalid credentials');
       }

@@ -191,17 +191,7 @@ export class AuthService {
       const accessToken = this.jwtService.sign(payload, {
         expiresIn: (process.env.JWT_ACCESS_EXPIRY ?? '1h') as any,
       });
-      const refreshToken = this.jwtService.sign(payload, {
-        expiresIn: (process.env.JWT_REFRESH_EXPIRY ?? '7d') as any,
-      });
-
-      // store refreshToken
-      await this.redis.set(
-        `refresh_token:${user.id}`,
-        refreshToken,
-        'EX',
-        60 * 60 * 24 * 7, // 7 days in seconds
-      );
+      const refreshToken = await this.issueRefreshToken(payload);
 
       return {
         success: true,
@@ -682,30 +672,47 @@ export class AuthService {
 
   // ---------------------------------(end)---------------------------------------
 
-  async refreshToken(user_id: string, refreshToken: string) {
-    try {
-      const storedToken = await this.redis.get(`refresh_token:${user_id}`);
+  /** Signs a refresh token (marked `typ: 'refresh'` so it can't be used as an access token) and stores it. */
+  private async issueRefreshToken(payload: { email: string; sub: string; type: unknown }) {
+    const refreshToken = this.jwtService.sign(
+      { ...payload, typ: 'refresh' },
+      { expiresIn: (process.env.JWT_REFRESH_EXPIRY ?? '7d') as any },
+    );
+    await this.redis.set(
+      `refresh_token:${payload.sub}`,
+      refreshToken,
+      'EX',
+      60 * 60 * 24 * 7, // 7 days in seconds
+    );
+    return refreshToken;
+  }
 
-      if (!storedToken || storedToken != refreshToken) {
-        return {
-          success: false,
-          message: 'Refresh token is required',
-        };
+  /**
+   * Exchanges a refresh token for a new access token. Authenticates with the refresh token itself
+   * (signature, expiry, `typ`, and a match against the stored copy), so it works after the access
+   * token has expired. Rotates the refresh token, so active sessions slide and idle ones end.
+   */
+  async refreshToken(refreshToken: string) {
+    try {
+      let claims: { sub?: string; typ?: string };
+      try {
+        claims = this.jwtService.verify(refreshToken);
+      } catch {
+        return { success: false, message: 'Invalid or expired refresh token' };
+      }
+      const user_id = claims?.sub;
+      if (!user_id || claims.typ !== 'refresh') {
+        return { success: false, message: 'Invalid or expired refresh token' };
       }
 
-      if (!user_id) {
-        return {
-          success: false,
-          message: 'User not found',
-        };
+      const storedToken = await this.redis.get(`refresh_token:${user_id}`);
+      if (!storedToken || storedToken !== refreshToken) {
+        return { success: false, message: 'Invalid or expired refresh token' };
       }
 
       const userDetails = await this.userRepository.getUserDetails(user_id);
-      if (!userDetails) {
-        return {
-          success: false,
-          message: 'User not found',
-        };
+      if (!userDetails || userDetails.deleted_at || userDetails.status === 0) {
+        return { success: false, message: 'User not found' };
       }
 
       const payload = {
@@ -713,13 +720,17 @@ export class AuthService {
         sub: userDetails.id,
         type: userDetails.type,
       };
-      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+      const accessToken = this.jwtService.sign(payload, {
+        expiresIn: (process.env.JWT_ACCESS_EXPIRY ?? '1h') as any,
+      });
+      const newRefreshToken = await this.issueRefreshToken(payload);
 
       return {
         success: true,
         authorization: {
           type: 'bearer',
           access_token: accessToken,
+          refresh_token: newRefreshToken,
         },
       };
     } catch (error) {

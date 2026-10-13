@@ -154,7 +154,8 @@ export class BookingContractsService {
   // ─── Building contracts ─────────────────────────────────────────────────
 
   private serviceFee(price: unknown) {
-    return serviceFeeFor(price, appConfig().fees.customer_service_fee_percent);
+    const { customer_service_fee_percent, customer_service_fee_minimum } = appConfig().fees;
+    return serviceFeeFor(price, customer_service_fee_percent, customer_service_fee_minimum);
   }
 
   private async loadBookingContext(userId: string, dto: BookingContractFieldsDto) {

@@ -28,6 +28,9 @@ const mockPrisma = {
   user: {
     findMany: jest.fn(),
   },
+  booking: {
+    findMany: jest.fn(),
+  },
 };
 
 const mockMessageGateway = {
@@ -190,28 +193,33 @@ describe('ConversationService', () => {
   });
 
   describe('findAllUserInfo', () => {
-    it('should return all users except the requesting user', async () => {
-      const users = [
-        { id: 'user-2', name: 'User 2', email: 'u2@test.com', avatar: null, type: 'CUSTOMER' },
-        { id: 'user-3', name: 'User 3', email: 'u3@test.com', avatar: null, type: 'VENDOR' },
-      ];
-      mockPrisma.user.findMany.mockResolvedValue(users);
+    it('returns only the other party of the user bookings, without emails', async () => {
+      mockPrisma.booking.findMany.mockResolvedValue([
+        { customer_id: 'user-1', vendor_id: 'vendor-a' },
+        { customer_id: 'user-1', vendor_id: 'vendor-a' },
+        { customer_id: 'cust-b', vendor_id: 'user-1' },
+      ]);
+      mockPrisma.user.findMany.mockResolvedValue([
+        { id: 'vendor-a', name: 'Vendor A', avatar: null, type: 'VENDOR' },
+        { id: 'cust-b', name: 'Customer B', avatar: null, type: 'CLIENT' },
+      ]);
 
       const result = await service.findAllUserInfo('user-1');
 
-      expect(result.success).toBe(true);
+      const where = mockPrisma.user.findMany.mock.calls[0][0].where;
+      expect(where.id.in.sort()).toEqual(['cust-b', 'vendor-a']);
+      expect(mockPrisma.user.findMany.mock.calls[0][0].select.email).toBeUndefined();
       expect(result.data).toHaveLength(2);
-      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: { not: 'user-1' } } }),
-      );
+      result.data.forEach((u: Record<string, unknown>) => expect(u).not.toHaveProperty('email'));
     });
 
-    it('should return an empty data array when no other users exist', async () => {
+    it('returns nobody when the user has no bookings', async () => {
+      mockPrisma.booking.findMany.mockResolvedValue([]);
       mockPrisma.user.findMany.mockResolvedValue([]);
 
-      const result = await service.findAllUserInfo('only-user');
+      const result = await service.findAllUserInfo('new-user');
 
-      expect(result.success).toBe(true);
+      expect(mockPrisma.user.findMany.mock.calls[0][0].where.id.in).toEqual([]);
       expect(result.data).toHaveLength(0);
     });
   });

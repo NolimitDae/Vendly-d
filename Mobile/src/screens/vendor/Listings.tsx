@@ -82,10 +82,13 @@ export default function VendorListings() {
     if (togglingId === listing.id) return;
     setTogglingId(listing.id);
     try {
-      const res = await api.patch(`/vendor/listings/${listing.id}/publish`);
+      // Listing statuses are DRAFT / ACTIVE / PAUSED / ARCHIVED ('PUBLISHED' never existed, so this
+      // toggle could only ever publish). Live listings pause; drafts and paused listings go live.
+      const live = listing.status === 'ACTIVE';
+      const res = await api.patch(`/vendor/listings/${listing.id}/${live ? 'pause' : 'publish'}`);
       if (res.data?.success) {
         setListings((prev) =>
-          prev.map((l) => (l.id === listing.id ? { ...l, status: res.data.data?.status ?? (l.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED') } : l)),
+          prev.map((l) => (l.id === listing.id ? { ...l, status: res.data.data?.status ?? (live ? 'PAUSED' : 'ACTIVE') } : l)),
         );
       }
     } catch {
@@ -96,7 +99,7 @@ export default function VendorListings() {
   };
 
   const renderItem = ({ item }: { item: Listing }) => {
-    const isPublished = item.status === 'PUBLISHED';
+    const isPublished = item.status === 'ACTIVE';
     return (
       <TouchableOpacity
         style={s.card}
@@ -114,7 +117,7 @@ export default function VendorListings() {
           <Text style={s.cardTitle} numberOfLines={2}>{item.title}</Text>
           <View style={[s.badge, isPublished ? s.badgePublished : s.badgeDraft]}>
             <Text style={[s.badgeText, isPublished ? s.badgePublishedText : s.badgeDraftText]}>
-              {isPublished ? 'Published' : 'Draft'}
+              {isPublished ? 'Live' : item.status === 'PAUSED' ? 'Paused' : 'Draft'}
             </Text>
           </View>
         </View>
@@ -156,7 +159,7 @@ export default function VendorListings() {
                   color={COLORS.gray[600]}
                 />
                 <Text style={[s.actionBtnText, { color: COLORS.gray[600] }]}>
-                  {isPublished ? 'Unpublish' : 'Publish'}
+                  {isPublished ? 'Pause' : item.status === 'PAUSED' ? 'Resume' : 'Publish'}
                 </Text>
               </>
             )}

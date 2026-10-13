@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useReducer } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api, TOKEN_KEY, USER_KEY } from '../services/api';
+import { api, TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ export interface AuthState {
 
 export interface AuthContextValue extends AuthState {
   /** Store token, persist user from the caller (e.g. freshly received login response). */
-  login: (token: string, user: AuthUser) => Promise<void>;
+  login: (token: string, user: AuthUser, refreshToken?: string) => Promise<void>;
   logout: () => Promise<void>;
   /** Re-fetch /auth/me and update stored user (e.g. after profile edit). */
   refreshUser: () => Promise<void>;
@@ -125,10 +125,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  const login = useCallback(async (token: string, user: AuthUser) => {
+  const login = useCallback(async (token: string, user: AuthUser, refreshToken?: string) => {
     await Promise.all([
       AsyncStorage.setItem(TOKEN_KEY, token),
       AsyncStorage.setItem(USER_KEY, JSON.stringify(user)),
+      refreshToken ? AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken) : Promise.resolve(),
     ]);
     dispatch({ type: 'LOGIN', user, token });
   }, []);
@@ -167,8 +168,5 @@ export function useAuth(): AuthContextValue {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function clearStorage() {
-  await Promise.all([
-    AsyncStorage.removeItem(TOKEN_KEY),
-    AsyncStorage.removeItem(USER_KEY),
-  ]);
+  await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
 }

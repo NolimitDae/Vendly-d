@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MessageGateway } from './message.gateway';
+import * as jwt from 'jsonwebtoken';
 
 // Suppress filesystem side-effects in the constructor
 jest.mock('fs', () => ({
@@ -50,6 +51,47 @@ describe('MessageGateway', () => {
     it('should complete without throwing', () => {
       const mockServer: any = {};
       expect(() => gateway.afterInit(mockServer)).not.toThrow();
+    });
+  });
+
+  describe('handleConnection', () => {
+    it('accepts a token sent in the handshake auth payload (browsers)', async () => {
+      jest.spyOn(jwt, 'verify').mockReturnValue({ sub: 'user-1' } as any);
+      const client = makeSocket({ handshake: { headers: {}, auth: { token: 'browser.jwt' } } });
+
+      await gateway.handleConnection(client);
+
+      expect(jwt.verify).toHaveBeenCalledWith('browser.jwt', expect.anything());
+      expect(client.disconnect).not.toHaveBeenCalled();
+      expect(client.join).toHaveBeenCalledWith('user_user-1');
+    });
+
+    it('still accepts the Authorization header (native clients)', async () => {
+      jest.spyOn(jwt, 'verify').mockReturnValue({ sub: 'user-2' } as any);
+      const client = makeSocket();
+
+      await gateway.handleConnection(client);
+
+      expect(jwt.verify).toHaveBeenCalledWith('valid.jwt.token', expect.anything());
+      expect(client.join).toHaveBeenCalledWith('user_user-2');
+    });
+
+    it('rejects refresh tokens', async () => {
+      jest.spyOn(jwt, 'verify').mockReturnValue({ sub: 'user-1', typ: 'refresh' } as any);
+      const client = makeSocket();
+
+      await gateway.handleConnection(client);
+
+      expect(client.disconnect).toHaveBeenCalled();
+      expect(client.join).not.toHaveBeenCalled();
+    });
+
+    it('disconnects when no token is sent', async () => {
+      const client = makeSocket({ handshake: { headers: {} } });
+
+      await gateway.handleConnection(client);
+
+      expect(client.disconnect).toHaveBeenCalled();
     });
   });
 

@@ -15,6 +15,7 @@ import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { BookingContractsService, RequestMeta } from 'src/modules/contracts/booking-contracts.service';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
+import { settleCancellation, Settlement } from './cancellation';
 
 @Injectable()
 export class BookingService {
@@ -186,8 +187,23 @@ export class BookingService {
     const outcome = await this.prisma.$transaction(async (tx) => {
       const seen = await tx.paymentTransaction.findFirst({ where: { reference_number: session.id } });
       if (seen) return 'retry' as const;
-      const booking = await tx.booking.findUnique({ where: { id: bookingId }, select: { customer_id: true, currency: true } });
+      const booking = await tx.booking.findUnique({ where: { id: bookingId }, select: { customer_id: true, currency: true, status: true } });
       if (!booking) return 'unknown' as const;
+      // Paid on a checkout page opened before the booking was cancelled or declined: refund it all.
+      if (booking.status === BookingStatus.CANCELLED || booking.status === BookingStatus.REJECTED) {
+        await tx.paymentTransaction.create({
+          data: {
+            user_id: booking.customer_id,
+            type: 'booking_payment_after_cancel',
+            provider: 'stripe',
+            reference_number: session.id,
+            status: 'refund_pending',
+            amount: (session.amount_total ?? 0) / 100,
+            currency: booking.currency ?? session.currency ?? 'usd',
+          },
+        });
+        return 'late' as const;
+      }
       // row lock: a concurrent delivery waits here until the other transaction commits
       const claimed = await tx.booking.updateMany({ where: { id: bookingId, paid_at: null }, data: { paid_at: new Date() } });
       if (claimed.count === 0) {
@@ -209,8 +225,8 @@ export class BookingService {
       return claimed.count === 1 ? ('paid' as const) : ('duplicate' as const);
     });
 
-    if (outcome === 'duplicate' && paymentIntentId) {
-      await StripePayment.refundPaymentIntent(paymentIntentId, `duplicate-${session.id}`);
+    if ((outcome === 'duplicate' || outcome === 'late') && paymentIntentId) {
+      await StripePayment.refundPaymentIntent(paymentIntentId, `${outcome}-${session.id}`);
       await this.prisma.paymentTransaction.updateMany({
         where: { reference_number: session.id },
         data: { status: 'refunded' },
@@ -255,22 +271,23 @@ export class BookingService {
     const isVendor = booking.vendor_id === userId;
     if (!isCustomer && !isVendor) throw new ForbiddenException('Access denied');
 
-    if (
-      booking.status === BookingStatus.COMPLETED ||
-      booking.status === BookingStatus.CANCELLED
-    )
+    const cancellable: BookingStatus[] = [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS];
+    if (!cancellable.includes(booking.status))
       throw new BadRequestException(`Cannot cancel a booking in ${booking.status} status`);
 
-    const updated = await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: BookingStatus.CANCELLED,
-        cancelled_at: new Date(),
-        cancel_reason: dto.reason,
-      },
-      include: this.bookingIncludes(),
+    // Claim the cancellation atomically so two simultaneous cancels can't both refund.
+    const cancelledAt = new Date();
+    const claimed = await this.prisma.booking.updateMany({
+      where: { id: bookingId, status: { in: cancellable } },
+      data: { status: BookingStatus.CANCELLED, cancelled_at: cancelledAt, cancel_reason: dto.reason },
     });
+    if (claimed.count !== 1) throw new BadRequestException('This booking has already been cancelled or completed');
     await this.contracts.voidPendingForBooking(bookingId, 'Booking cancelled', userId);
+
+    const settlement = booking.paid_at
+      ? await this.settlePaidCancellation(booking, isCustomer ? 'CUSTOMER' : 'VENDOR', cancelledAt)
+      : null;
+    const updated = await this.getBookingOrFail(bookingId);
 
     // notify the other party
     const notifyUser = isCustomer ? booking.vendor : booking.customer;
@@ -279,7 +296,11 @@ export class BookingService {
       to: notifyUser.email,
       recipientName: notifyUser.name,
       subject: `Booking cancelled — ${booking.listing?.title}`,
-      message: `The booking has been cancelled by the ${isCustomer ? 'customer' : 'vendor'}.`,
+      message: `The booking has been cancelled by the ${isCustomer ? 'customer' : 'vendor'}.${
+        settlement && settlement.refundTotal > 0
+          ? ` A refund of $${settlement.refundTotal.toFixed(2)} is on its way to the customer.`
+          : ''
+      }`,
       status: 'CANCELLED',
       listingTitle: booking.listing?.title ?? 'Service',
       reason: dto.reason,
@@ -292,7 +313,86 @@ export class BookingService {
       `${booking.listing?.title ?? 'A booking'} was cancelled by the ${isCustomer ? 'customer' : 'vendor'}`,
     );
 
-    return { success: true, data: this.formatBooking(updated) };
+    return { success: true, data: { ...this.formatBooking(updated), refund: settlement } };
+  }
+
+  /**
+   * Refunds a paid booking that was just cancelled and credits the vendor what they keep
+   * (rules in ./cancellation.ts). A failed Stripe refund is recorded as `refund_failed` for follow-up
+   * rather than undoing the cancellation.
+   */
+  private async settlePaidCancellation(
+    booking: Awaited<ReturnType<BookingService['getBookingOrFail']>>,
+    cancelledBy: 'CUSTOMER' | 'VENDOR',
+    cancelledAt: Date,
+  ): Promise<Settlement> {
+    const contract = await this.prisma.bookingContract.findFirst({
+      where: { booking_id: booking.id, status: 'EXECUTED' },
+      orderBy: { version: 'desc' },
+      select: { merge_data: true },
+    });
+    const policy = (contract?.merge_data as Record<string, unknown> | null)?.cancellation_policy as string | undefined;
+    const settlement = settleCancellation({
+      cancelledBy,
+      amount: Number(booking.amount ?? 0),
+      serviceFee: Number(booking.service_fee ?? 0),
+      policy,
+      eventStart: booking.event_start_at ?? booking.scheduled_at,
+      cancelledAt,
+    });
+    const currency = booking.currency ?? 'usd';
+
+    if (settlement.refundTotal > 0) {
+      let status = 'refunded';
+      let reference = `cancel-${booking.id}`;
+      try {
+        const session = booking.payment_transaction_id?.startsWith('cs_')
+          ? await StripePayment.retrieveCheckoutSession(booking.payment_transaction_id)
+          : null;
+        const paymentIntentId =
+          typeof session?.payment_intent === 'string' ? session.payment_intent : session?.payment_intent?.id;
+        if (!paymentIntentId) throw new Error('No payment found to refund');
+        const refund = await StripePayment.refundPaymentIntent(paymentIntentId, `cancel-${booking.id}`, settlement.refundTotal);
+        reference = refund.id;
+      } catch (err) {
+        status = 'refund_failed';
+        console.error(`Refund for cancelled booking ${booking.id} failed:`, err);
+      }
+      await this.prisma.paymentTransaction.create({
+        data: {
+          user_id: booking.customer_id,
+          type: 'booking_refund',
+          provider: 'stripe',
+          reference_number: reference,
+          status,
+          amount: settlement.refundTotal,
+          currency,
+        },
+      });
+    }
+
+    if (settlement.vendorKeeps > 0) {
+      await this.prisma.$transaction(async (tx) => {
+        const claimed = await tx.booking.updateMany({
+          where: { id: booking.id, payout_credited_at: null },
+          data: { payout_credited_at: new Date() },
+        });
+        if (claimed.count !== 1) return;
+        await tx.user.update({ where: { id: booking.vendor_id }, data: { balance: { increment: settlement.vendorKeeps } } });
+        await tx.paymentTransaction.create({
+          data: {
+            user_id: booking.vendor_id,
+            type: 'booking_cancellation_earning',
+            provider: 'stripe',
+            reference_number: booking.id,
+            status: 'succeeded',
+            amount: settlement.vendorKeeps,
+            currency,
+          },
+        });
+      });
+    }
+    return settlement;
   }
 
   async getMyBookingsAsCustomer(

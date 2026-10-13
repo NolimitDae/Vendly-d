@@ -52,13 +52,10 @@ export class MessageGateway
 
   async handleConnection(client: Socket) {
     try {
+      // Browsers send the token in the handshake `auth` payload (WebSockets can't carry custom
+      // headers); native clients may still use the Authorization header.
       const authHeader = client.handshake.headers.authorization;
-      if (!authHeader) {
-        client.disconnect();
-        return;
-      }
-
-      const token = authHeader.split(' ')[1];
+      const token = client.handshake.auth?.token ?? authHeader?.split(' ')[1];
       if (!token) {
         client.disconnect();
         return;
@@ -67,7 +64,8 @@ export class MessageGateway
       const decoded: any = jwt.verify(token, appConfig().jwt.secret);
       const { sub: userId } = decoded;
 
-      if (!userId) {
+      // Refresh tokens are not session credentials.
+      if (!userId || decoded.typ === 'refresh') {
         client.disconnect();
         return;
       }

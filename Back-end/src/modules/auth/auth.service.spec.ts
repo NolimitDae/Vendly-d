@@ -154,21 +154,53 @@ describe('AuthService', () => {
   });
 
   describe('refreshToken', () => {
-    it('should issue new access token with valid refresh token', async () => {
+    it('authenticates with the refresh token alone and rotates it', async () => {
+      mockJwt.verify.mockReturnValueOnce({ sub: 'user-1', typ: 'refresh' });
       mockRedis.get.mockResolvedValue('valid-refresh');
       mockUserRepo.getUserDetails.mockResolvedValue(mockUser);
 
-      const result: any = await service.refreshToken('user-1', 'valid-refresh');
+      const result: any = await service.refreshToken('valid-refresh');
       expect(result.success).toBe(true);
       expect(result.authorization.access_token).toBe('mock-token');
+      expect(result.authorization.refresh_token).toBe('mock-token');
+      // new refresh token is stored (rotation) and marked as a refresh token
+      expect(mockRedis.set).toHaveBeenCalledWith('refresh_token:user-1', 'mock-token', 'EX', expect.any(Number));
+      expect(mockJwt.sign).toHaveBeenCalledWith(expect.objectContaining({ typ: 'refresh' }), expect.anything());
     });
 
-    it('should reject a refresh token that does not match the stored one', async () => {
+    it('rejects a refresh token that does not match the stored one', async () => {
+      mockJwt.verify.mockReturnValueOnce({ sub: 'user-1', typ: 'refresh' });
       mockRedis.get.mockResolvedValue('stored-token');
 
-      const result: any = await service.refreshToken('user-1', 'wrong-token');
+      const result: any = await service.refreshToken('wrong-token');
       expect(result.success).toBe(false);
       expect(mockJwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('rejects an access token presented as a refresh token', async () => {
+      mockJwt.verify.mockReturnValueOnce({ sub: 'user-1' });
+
+      const result: any = await service.refreshToken('an-access-token');
+      expect(result.success).toBe(false);
+      expect(mockRedis.get).not.toHaveBeenCalled();
+    });
+
+    it('rejects an expired or forged refresh token', async () => {
+      mockJwt.verify.mockImplementationOnce(() => {
+        throw new Error('jwt expired');
+      });
+
+      const result: any = await service.refreshToken('expired');
+      expect(result.success).toBe(false);
+    });
+
+    it('refuses to refresh a deleted account', async () => {
+      mockJwt.verify.mockReturnValueOnce({ sub: 'user-1', typ: 'refresh' });
+      mockRedis.get.mockResolvedValue('valid-refresh');
+      mockUserRepo.getUserDetails.mockResolvedValue({ ...mockUser, deleted_at: new Date() });
+
+      const result: any = await service.refreshToken('valid-refresh');
+      expect(result.success).toBe(false);
     });
   });
 

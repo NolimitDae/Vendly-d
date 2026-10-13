@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { clearSession } from "@/lib/session";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiOutlineMenu, HiX } from "react-icons/hi";
@@ -98,7 +99,7 @@ export default function Navbar() {
     try {
       await AuthService.logout();
     } catch {}
-    CookieHelper.destroy({ key: "token" });
+    clearSession();
     setUser(null);
     setUserMenuOpen(false);
     router.push("/");

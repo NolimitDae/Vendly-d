@@ -31,10 +31,12 @@ interface Conversation {
 interface ChatUser {
   id: string;
   name: string;
-  email: string;
   avatar?: string | null;
   type: string;
 }
+
+// The contacts endpoint no longer returns emails, so show each person's role instead.
+const ROLE_LABEL: Record<string, string> = { VENDOR: "Vendor", CLIENT: "Customer", EVENT_PLANNER: "Event planner" };
 
 export default function ConversationSidebar() {
   const router = useRouter();
@@ -96,11 +98,7 @@ export default function ConversationSidebar() {
     c.opponent?.name?.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const filteredUsers = users.filter(
-    (u) =>
-      u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-      u.email.toLowerCase().includes(userSearch.toLowerCase()),
-  );
+  const filteredUsers = users.filter((u) => (u.name ?? "").toLowerCase().includes(userSearch.toLowerCase()));
 
   return (
     <div className="flex flex-col h-full">
@@ -247,7 +245,7 @@ export default function ConversationSidebar() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search users..."
+                  placeholder="Search your contacts..."
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
                   className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -261,7 +259,7 @@ export default function ConversationSidebar() {
                     <Loader2 className="w-5 h-5 animate-spin text-primary" />
                   </div>
                 ) : filteredUsers.length === 0 ? (
-                  <p className="text-center text-sm text-gray-400 py-8">No users found</p>
+                  <p className="text-center text-sm text-gray-400 py-8">No contacts yet. You can message anyone you have a booking with.</p>
                 ) : (
                   <ul className="space-y-0.5">
                     {filteredUsers.map((u) => (
@@ -289,7 +287,7 @@ export default function ConversationSidebar() {
                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                               {u.name}
                             </p>
-                            <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                            <p className="text-xs text-gray-400 truncate">{ROLE_LABEL[u.type] ?? ""}</p>
                           </div>
                           {starting === u.id && (
                             <Loader2 className="w-4 h-4 animate-spin text-primary flex-shrink-0" />

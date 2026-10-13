@@ -210,7 +210,7 @@ export default function BookingDetail() {
               label="Total"
               value={
                 Number(booking.service_fee ?? 0) > 0
-                  ? `$${(Number(booking.amount) + Number(booking.service_fee)).toFixed(2)} (incl. $${Number(booking.service_fee).toFixed(2)} Vendly fee)`
+                  ? `$${(Number(booking.amount) + Number(booking.service_fee)).toFixed(2)} (incl. $${Number(booking.service_fee).toFixed(2)} Vendly Protection fee)`
                   : `$${Number(booking.amount).toLocaleString()}`
               }
             />

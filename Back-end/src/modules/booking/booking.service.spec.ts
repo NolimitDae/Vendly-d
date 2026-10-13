@@ -43,6 +43,7 @@ const mockPrisma = {
     update: jest.fn(),
   },
   paymentTransaction: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn() },
+  bookingContract: { findFirst: jest.fn() },
   $transaction: jest.fn((fn: any) => fn(mockPrisma)),
   bookingProof: {
     create: jest.fn(),
@@ -188,27 +189,95 @@ describe('BookingService', () => {
   });
 
   describe('cancel', () => {
-    it('should allow customer to cancel', async () => {
-      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
-      mockPrisma.booking.update.mockResolvedValue({
-        ...mockBooking,
-        status: BookingStatus.CANCELLED,
-      });
-
-      const result = await service.cancel('booking-1', 'customer-1', { reason: 'Changed mind' });
-      expect(result.success).toBe(true);
-      expect(mockContracts.voidPendingForBooking).toHaveBeenCalledWith('booking-1', 'Booking cancelled', 'customer-1');
+    const DAY = 24 * 3600 * 1000;
+    const paidBooking = (overrides: Record<string, unknown> = {}) => ({
+      ...mockBooking,
+      status: BookingStatus.CONFIRMED,
+      amount: 450,
+      service_fee: 22.5,
+      currency: 'usd',
+      paid_at: new Date(),
+      payment_transaction_id: 'cs_paid',
+      event_start_at: new Date(Date.now() + 3 * DAY),
+      ...overrides,
     });
 
-    it('should allow vendor to cancel', async () => {
-      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
-      mockPrisma.booking.update.mockResolvedValue({
-        ...mockBooking,
-        status: BookingStatus.CANCELLED,
-      });
+    beforeEach(() => {
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      (StripePayment.retrieveCheckoutSession as jest.Mock).mockResolvedValue({ payment_intent: 'pi_paid' });
+      (StripePayment.refundPaymentIntent as jest.Mock).mockResolvedValue({ id: 're_1' });
+      mockPrisma.bookingContract.findFirst.mockResolvedValue({ merge_data: { cancellation_policy: 'flexible' } });
+    });
 
+    it('lets the customer cancel an unpaid booking without touching Stripe', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+
+      const result = await service.cancel('booking-1', 'customer-1', { reason: 'Changed mind' });
+
+      expect(result.success).toBe(true);
+      expect(result.data.refund).toBeNull();
+      expect(mockContracts.voidPendingForBooking).toHaveBeenCalledWith('booking-1', 'Booking cancelled', 'customer-1');
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+    });
+
+    it('lets the vendor cancel', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
       const result = await service.cancel('booking-1', 'vendor-1', {});
       expect(result.success).toBe(true);
+    });
+
+    it('vendor cancels a paid booking: refunds everything, including the Vendly Protection fee', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(paidBooking());
+
+      const result = await service.cancel('booking-1', 'vendor-1', {});
+
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_paid', 'cancel-booking-1', 472.5);
+      expect(result.data.refund).toMatchObject({ refundTotal: 472.5, vendorKeeps: 0 });
+      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ type: 'booking_refund', status: 'refunded', amount: 472.5 }) }),
+      );
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('customer cancels inside the 50% window: half the price back, fee kept, vendor credited the rest', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(paidBooking());
+
+      const result = await service.cancel('booking-1', 'customer-1', {});
+
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_paid', 'cancel-booking-1', 225);
+      expect(result.data.refund).toMatchObject({ refundTotal: 225, refundFee: 0, vendorKeeps: 225, percent: 50 });
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 225 } } });
+    });
+
+    it('uses the policy from the signed contract', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(paidBooking());
+      mockPrisma.bookingContract.findFirst.mockResolvedValue({ merge_data: { cancellation_policy: 'strict' } });
+
+      const result = await service.cancel('booking-1', 'customer-1', {});
+
+      expect(result.data.refund).toMatchObject({ refundTotal: 0, vendorKeeps: 450 });
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+    });
+
+    it('records a failed refund instead of losing it', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(paidBooking());
+      (StripePayment.refundPaymentIntent as jest.Mock).mockRejectedValue(new Error('card network down'));
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      const result = await service.cancel('booking-1', 'vendor-1', {});
+
+      expect(result.success).toBe(true);
+      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ type: 'booking_refund', status: 'refund_failed' }) }),
+      );
+    });
+
+    it('refuses a second, simultaneous cancellation', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(paidBooking());
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.cancel('booking-1', 'vendor-1', {})).rejects.toThrow(BadRequestException);
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException for unrelated user', async () => {
@@ -257,7 +326,7 @@ describe('BookingService', () => {
 
     it('pushes the other party on cancellation', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
-      mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.CANCELLED });
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
 
       await service.cancel('booking-1', 'customer-1', {} as any);
 
@@ -422,6 +491,14 @@ describe('BookingService', () => {
       await service.recordPayment(session);
       expect(mockPrisma.paymentTransaction.create).not.toHaveBeenCalled();
       expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+    });
+
+    it('refunds in full a payment that lands on an already-cancelled booking', async () => {
+      mockPrisma.booking.findUnique.mockResolvedValueOnce({ customer_id: 'customer-1', currency: 'usd', status: BookingStatus.CANCELLED });
+      await service.recordPayment({ ...session, id: 'cs_late', payment_intent: 'pi_late' });
+      expect(mockPrisma.booking.updateMany).not.toHaveBeenCalled();
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_late', 'late-cs_late');
+      expect(mockPrisma.paymentTransaction.updateMany).toHaveBeenCalledWith({ where: { reference_number: 'cs_late' }, data: { status: 'refunded' } });
     });
 
     it('refunds a second payment for an already-paid booking', async () => {

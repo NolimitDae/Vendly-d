@@ -35,6 +35,7 @@ export const UserService = {
 
   logout: (context = null) => {
     CookieHelper.destroy({ key: "token", context });
+    CookieHelper.destroy({ key: "refresh_token", context });
   },
   // get user details
   getUserDetails: async ({ token = "", context = null }) => {

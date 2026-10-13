@@ -200,7 +200,7 @@ export default function CustomerBookingsPageContent() {
                         <span className="font-medium text-gray-700 dark:text-gray-300">
                           ${(Number(booking.amount) + Number(booking.service_fee ?? 0)).toFixed(2)}
                           {Number(booking.service_fee ?? 0) > 0 && (
-                            <span className="font-normal text-gray-400"> incl. ${Number(booking.service_fee).toFixed(2)} service fee</span>
+                            <span className="font-normal text-gray-400"> incl. ${Number(booking.service_fee).toFixed(2)} Vendly Protection fee</span>
                           )}
                         </span>
                       )}

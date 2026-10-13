@@ -176,8 +176,13 @@ export function contentHash(renderedBody: string, sourcePdfSha256?: string | nul
   return sha256(`${renderedBody}\n--source-pdf:${sourcePdfSha256 ?? 'none'}`);
 }
 
-/** Customer service fee for a vendor price, rounded to cents. */
-export function serviceFeeFor(price: unknown, percent: number) {
+/**
+ * Vendly Protection fee for a vendor price, rounded to cents: `percent` of the price, but never less
+ * than `minimum` (brief: 5%, $3 minimum, so small bookings still cover card processing). Free
+ * bookings carry no fee.
+ */
+export function serviceFeeFor(price: unknown, percent: number, minimum = 0) {
   const p = Number(price ?? 0);
-  return Math.round(p * percent) / 100;
+  if (!(p > 0)) return 0;
+  return Math.max(Math.round(p * percent) / 100, minimum);
 }

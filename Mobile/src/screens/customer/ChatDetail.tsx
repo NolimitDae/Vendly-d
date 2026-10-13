@@ -13,7 +13,7 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { ChatService, Message } from '../../services/chat.service';
+import { ChatService, Message, toMessage } from '../../services/chat.service';
 import { SocketService } from '../../services/socket.service';
 import { useAuth } from '../../context/AuthContext';
 
@@ -53,8 +53,10 @@ export default function ChatDetail() {
       await SocketService.joinRoom(conversationId);
 
       messageHandler = (data: any) => {
-        const incoming: Message = data?.data ?? data;
-        if (!incoming?.id) return;
+        // Socket events carry the raw API message ({ from, data }); translate like the REST responses.
+        const raw = data?.data ?? data;
+        const incoming: Message | null = raw?.id ? toMessage(raw, conversationId) : null;
+        if (!incoming) return;
         setMessages((prev) => {
           if (prev.some((m) => m.id === incoming.id)) return prev;
           return [incoming, ...prev];

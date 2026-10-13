@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EventStatus } from 'prisma/generated/client';
+import { ADMIN_APPROVE_STATUS, EventStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
   CreateBudgetItemDto,
@@ -51,6 +51,17 @@ export class EventsService {
   }
 
   async create(plannerId: string, dto: CreateEventDto) {
+    // Brief: planners are verified by Vendly before they can create client events.
+    const profile = await this.prisma.eventPlannerProfile.findUnique({
+      where: { user_id: plannerId },
+      select: { license_status: true },
+    });
+    if (profile?.license_status !== ADMIN_APPROVE_STATUS.APPROVED) {
+      throw new ForbiddenException(
+        'Your planner account must be verified by Vendly before you can create client events.',
+      );
+    }
+
     const event = await this.prisma.event.create({
       data: {
         event_planner_id: plannerId,

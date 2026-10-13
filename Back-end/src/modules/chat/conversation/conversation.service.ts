@@ -311,17 +311,22 @@ export class ConversationService {
   }
 
 
-  // user information
+  // People this user can start a chat with: only the other party of their own bookings.
+  // (Previously returned every user's name and email to any logged-in user.)
   async findAllUserInfo(userId: string) {
-    
+    const bookings = await this.prisma.booking.findMany({
+      where: { deleted_at: null, OR: [{ customer_id: userId }, { vendor_id: userId }] },
+      select: { customer_id: true, vendor_id: true },
+    });
+    const contactIds = [
+      ...new Set(bookings.map((b) => (b.customer_id === userId ? b.vendor_id : b.customer_id))),
+    ].filter((id) => id !== userId);
+
     const users = await this.prisma.user.findMany({
-      where: {
-        id: {not: userId},
-      },
+      where: { id: { in: contactIds }, deleted_at: null },
       select: {
         id: true,
         name: true,
-        email: true,
         avatar: true,
         type: true,
       },
@@ -333,7 +338,6 @@ export class ConversationService {
     const formattedUsers = users.map((user) => ({
       id: user.id,
       name: user.name,
-      email: user.email,
       avatar: user.avatar
         ? TanvirStorage.url(
             `${appConfig().storageUrl.avatar}/${user.avatar}`,

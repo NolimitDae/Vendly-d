@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { saveSession } from "@/lib/session";
 import { useForm } from "react-hook-form";
 import CustomButton from "@/components/reusable/CustomButton";
 import ReusableInput from "@/components/reusable/InputFiled/ReusableInput";
@@ -45,7 +46,7 @@ const LoginForm = () => {
       const accessToken = res.data.authorization?.access_token;
       const userType = res.data.type;
       if (accessToken) {
-        CookieHelper.set({ key: "token", value: accessToken });
+        saveSession(accessToken, res.data.authorization?.refresh_token);
       }
       toast.success("Welcome back!");
       if (userType === "ADMIN") {

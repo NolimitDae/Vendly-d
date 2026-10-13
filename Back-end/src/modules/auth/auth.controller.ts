@@ -649,19 +649,12 @@ export class AuthController {
     status: 401,
     description: 'Invalid or expired refresh token.',
   })
-  @UseGuards(JwtAuthGuard)
+  // No JwtAuthGuard: this must work after the access token has expired. The refresh token itself
+  // is the credential (verified in AuthService.refreshToken).
   @Post('refresh-token')
-  async refreshToken(
-    @Req() req: Request,
-    @Body() body: { refresh_token: string },
-  ) {
+  async refreshToken(@Body() body: { refresh_token: string }) {
     try {
-      const user_id = req.user.userId;
-
-      const response = await this.authService.refreshToken(
-        user_id,
-        body.refresh_token,
-      );
+      const response = await this.authService.refreshToken(body?.refresh_token ?? '');
 
       return response;
     } catch (error) {

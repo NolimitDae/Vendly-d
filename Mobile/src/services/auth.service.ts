@@ -9,10 +9,12 @@ export interface AuthUser {
   avatar?: string;
 }
 
+/** Shape returned by POST /auth/login (load the profile separately with GET /auth/me). */
 export interface LoginResponse {
   success: boolean;
-  token: string;
-  user: AuthUser;
+  message?: string;
+  authorization?: { type: 'bearer'; access_token: string; refresh_token: string };
+  type?: string;
 }
 
 export interface RegisterData {

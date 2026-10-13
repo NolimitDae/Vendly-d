@@ -150,7 +150,7 @@ export default function CustomerBookingDetailPage() {
               </p>
               {Number(booking.service_fee ?? 0) > 0 && (
                 <p className="text-xs text-gray-400">
-                  ${Number(booking.amount).toFixed(2)} + ${Number(booking.service_fee).toFixed(2)} Vendly service fee
+                  ${Number(booking.amount).toFixed(2)} + ${Number(booking.service_fee).toFixed(2)} Vendly Protection fee
                 </p>
               )}
             </div>

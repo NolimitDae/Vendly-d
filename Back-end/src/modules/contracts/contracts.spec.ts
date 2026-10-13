@@ -130,6 +130,11 @@ describe('contract merge fields', () => {
   it('computes the customer service fee to the cent', () => {
     expect(serviceFeeFor(1500, 5)).toBe(75);
     expect(serviceFeeFor(99.99, 5)).toBe(5);
+    // $3 minimum (brief): small bookings pay the minimum, larger ones the percentage, free ones nothing
+    expect(serviceFeeFor(40, 5, 3)).toBe(3);
+    expect(serviceFeeFor(1000, 5, 3)).toBe(50);
+    expect(serviceFeeFor(60, 5, 3)).toBe(3);
+    expect(serviceFeeFor(0, 5, 3)).toBe(0);
     expect(serviceFeeFor(0, 5)).toBe(0);
   });
 

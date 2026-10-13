@@ -13,7 +13,9 @@ export function useSocket(): Socket | null {
     if (!token) return;
 
     const sock = io(API_URL, {
-      extraHeaders: { authorization: `Bearer ${token}` },
+      // Browsers can't send custom headers on a WebSocket, so the token goes in the handshake `auth`
+      // payload. It's a function so every (re)connection reads the latest, possibly refreshed, token.
+      auth: (cb) => cb({ token: CookieHelper.get({ key: "token" }) }),
       transports: ["websocket"],
       reconnectionAttempts: 5,
     });

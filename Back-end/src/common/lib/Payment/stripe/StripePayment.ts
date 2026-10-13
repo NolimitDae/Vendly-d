@@ -489,9 +489,15 @@ export class StripePayment {
     return getStripe().checkout.sessions.retrieve(id);
   }
 
-  /** Full refund of a payment; the idempotency key makes webhook retries safe. */
-  static refundPaymentIntent(paymentIntentId: string, idempotencyKey: string): Promise<stripe.Refund> {
-    return getStripe().refunds.create({ payment_intent: paymentIntentId }, { idempotencyKey });
+  /**
+   * Refunds a payment, in full or (with `amount`, in dollars) in part. The idempotency key makes
+   * retries safe: the same key never refunds twice.
+   */
+  static refundPaymentIntent(paymentIntentId: string, idempotencyKey: string, amount?: number): Promise<stripe.Refund> {
+    return getStripe().refunds.create(
+      { payment_intent: paymentIntentId, ...(amount !== undefined ? { amount: Math.round(amount * 100) } : {}) },
+      { idempotencyKey },
+    );
   }
 
   static async createCheckoutSessionForBooking({
@@ -528,7 +534,7 @@ export class StripePayment {
               {
                 price_data: {
                   currency,
-                  product_data: { name: 'Vendly service fee' },
+                  product_data: { name: 'Vendly Protection fee' },
                   unit_amount: Math.round(serviceFee * 100),
                 },
                 quantity: 1,
