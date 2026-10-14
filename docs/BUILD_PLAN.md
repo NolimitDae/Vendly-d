@@ -9,6 +9,8 @@ _Written 2026-10-13 from a gap analysis of the brief (Oct 2026 revision with ven
 - **Not started:** rentals, event group chat, custom quotes, run of show, shared event files, client view, saved vendor teams, promo codes, feature flags, DB-backed fee settings, most notifications.
 - **Mobile:** ~21 of ~40 screens. No sign-up, no Apple/Google sign-in, one account cannot both book and sell.
 
+> Step-by-step plan for finishing everything that is left: **docs/HANDOFF_PLAN.md** (written 2026-10-14).
+
 ## Phases
 
 | Phase | Scope | Status |
