@@ -23,7 +23,7 @@ export const toSummary = (l: Listing): ListingSummary => ({
 });
 
 export default function ListingDetail({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'ListingDetail'>) {
-  const { listingId } = route.params;
+  const { listingId, eventId } = route.params;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [listing, setListing] = useState<Listing | null>(null);
@@ -148,7 +148,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
         <View style={{ alignItems: 'flex-end', marginBottom: 14 }}>
           <ChatBubble onPress={() => openChatWith(navigation, listing.vendor.id, vendor)} />
         </View>
-        <GradientButton title="Book Service" onPress={() => navigation.navigate('SelectDate', { listing: toSummary(listing) })} />
+        <GradientButton title={eventId ? 'Book for this event' : 'Book Service'} onPress={() => navigation.navigate('SelectDate', { listing: { ...toSummary(listing), eventId } })} />
       </View>
     </View>
   );

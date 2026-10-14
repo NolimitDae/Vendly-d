@@ -8,7 +8,8 @@ import { DARK, FONTS } from '../../constants/colors';
 import { MarketplaceService, type Category } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 
-export default function FindVendors({ navigation }: NativeStackScreenProps<CustomerHomeStackParams, 'FindVendors'>) {
+export default function FindVendors({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'FindVendors'>) {
+  const eventId = route.params?.eventId;
   const insets = useSafeAreaInsets();
   const [categories, setCategories] = useState<Category[]>([]);
   const [q, setQ] = useState('');
@@ -25,6 +26,7 @@ export default function FindVendors({ navigation }: NativeStackScreenProps<Custo
       categoryId: category?.id,
       categoryName: category?.name,
       location: location.trim() || undefined,
+      eventId,
     });
 
   return (

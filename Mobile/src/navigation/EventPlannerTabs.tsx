@@ -1,120 +1,123 @@
 import React from 'react';
-import { View, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../constants/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DARK, FONTS } from '../constants/colors';
+import { BrandGradient } from '../components/brand';
 
 import EPHome from '../screens/eventplanner/Home';
 import MyEvents from '../screens/eventplanner/Events';
 import CreateEvent from '../screens/eventplanner/CreateEvent';
 import EventDetail from '../screens/eventplanner/EventDetail';
-import Discover from '../screens/eventplanner/Discover';
 import EPProfile from '../screens/eventplanner/Profile';
+import PlannerProfile from '../screens/eventplanner/PlannerProfile';
+import FindVendors from '../screens/customer/FindVendors';
+import SearchResults from '../screens/customer/SearchResults';
+import ListingDetail from '../screens/customer/ListingDetail';
+import VendorProfile from '../screens/customer/VendorProfile';
+import SelectDate from '../screens/customer/SelectDate';
+import BookingDetails from '../screens/customer/BookingDetails';
+import BookingSummary from '../screens/customer/BookingSummary';
+import Reviews from '../screens/customer/Reviews';
+import CustomerBookings from '../screens/customer/Bookings';
+import BookingDetail from '../screens/customer/BookingDetail';
 import ChatList from '../screens/customer/ChatList';
 import ChatDetail from '../screens/customer/ChatDetail';
+import EditProfile from '../screens/customer/EditProfile';
+import ChangePassword from '../screens/customer/ChangePassword';
+import NotificationSettings from '../screens/customer/NotificationSettings';
 
-import type {
-  DiscoverStackParams,
-  EventPlannerStackParams,
-  CustomerMessagesStackParams,
-  EPTabParams,
-} from './types';
+import type { EPTabParams } from './types';
 
 const Tab = createBottomTabNavigator<EPTabParams>();
-const Stack = createNativeStackNavigator<EventPlannerStackParams>();
-const MsgStack = createNativeStackNavigator<CustomerMessagesStackParams>();
-const DiscStack = createNativeStackNavigator<DiscoverStackParams>();
+// The home stack mixes planner screens with the customer booking screens, so it is typed loosely.
+const HomeStack = createNativeStackNavigator<any>();
+const BookStack = createNativeStackNavigator<any>();
+const MsgStack = createNativeStackNavigator<any>();
+const ProfileStack = createNativeStackNavigator<any>();
 
-const HEADER = {
-  headerStyle: { backgroundColor: COLORS.primary },
-  headerTintColor: COLORS.white,
-  headerTitleStyle: { fontWeight: '700' as const },
-};
+const STACK = { headerShown: false, contentStyle: { backgroundColor: DARK.bg } };
 
-function EventsStack() {
+function HomeNavigator() {
   return (
-    <Stack.Navigator screenOptions={HEADER}>
-      <Stack.Screen name="EPHome" component={EPHome} options={{ title: 'Dashboard' }} />
-      <Stack.Screen name="MyEvents" component={MyEvents} options={{ title: 'My Events' }} />
-      <Stack.Screen name="CreateEvent" component={CreateEvent} options={{ title: 'New Event' }} />
-      <Stack.Screen
-        name="EventDetail"
-        component={EventDetail}
-        options={({ route }) => ({ title: route.params.eventName })}
-      />
-    </Stack.Navigator>
+    <HomeStack.Navigator screenOptions={STACK}>
+      <HomeStack.Screen name="EPHome" component={EPHome} />
+      <HomeStack.Screen name="MyEvents" component={MyEvents} />
+      <HomeStack.Screen name="CreateEvent" component={CreateEvent} />
+      <HomeStack.Screen name="EventDetail" component={EventDetail} />
+      <HomeStack.Screen name="FindVendors" component={FindVendors as React.ComponentType<any>} />
+      <HomeStack.Screen name="SearchResults" component={SearchResults as React.ComponentType<any>} />
+      <HomeStack.Screen name="ListingDetail" component={ListingDetail as React.ComponentType<any>} />
+      <HomeStack.Screen name="VendorProfile" component={VendorProfile as React.ComponentType<any>} />
+      <HomeStack.Screen name="SelectDate" component={SelectDate as React.ComponentType<any>} />
+      <HomeStack.Screen name="BookingDetails" component={BookingDetails as React.ComponentType<any>} />
+      <HomeStack.Screen name="BookingSummary" component={BookingSummary as React.ComponentType<any>} />
+      <HomeStack.Screen name="Reviews" component={Reviews as React.ComponentType<any>} />
+    </HomeStack.Navigator>
   );
 }
 
-function DiscoverStack() {
+function BookingsNavigator() {
   return (
-    <DiscStack.Navigator screenOptions={HEADER}>
-      <DiscStack.Screen name="Discover" component={Discover} options={{ title: 'Find Vendors' }} />
-    </DiscStack.Navigator>
+    <BookStack.Navigator screenOptions={STACK}>
+      <BookStack.Screen name="CustomerBookings" component={CustomerBookings} />
+      <BookStack.Screen name="BookingDetail" component={BookingDetail} />
+    </BookStack.Navigator>
   );
 }
 
-function MessagesStack() {
+function MessagesNavigator() {
   return (
-    <MsgStack.Navigator screenOptions={HEADER}>
-      <MsgStack.Screen name="ChatList" component={ChatList} options={{ title: 'Messages' }} />
-      <MsgStack.Screen name="ChatDetail" component={ChatDetail} options={{ title: 'Chat' }} />
+    <MsgStack.Navigator screenOptions={STACK}>
+      <MsgStack.Screen name="ChatList" component={ChatList} />
+      <MsgStack.Screen name="ChatDetail" component={ChatDetail} />
     </MsgStack.Navigator>
   );
 }
 
-function ProfileStack() {
+function ProfileNavigator() {
   return (
-    <Stack.Navigator screenOptions={HEADER}>
-      <Stack.Screen name="EPProfile" component={EPProfile} options={{ title: 'My Profile' }} />
-    </Stack.Navigator>
+    <ProfileStack.Navigator screenOptions={STACK}>
+      <ProfileStack.Screen name="EPProfile" component={EPProfile} />
+      <ProfileStack.Screen name="PlannerProfile" component={PlannerProfile} />
+      <ProfileStack.Screen name="EditProfile" component={EditProfile} />
+      <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
+      <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
+    </ProfileStack.Navigator>
   );
 }
 
-function NotificationsScreen() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name="notifications-outline" size={48} color={COLORS.gray[300]} />
-      <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: COLORS.gray[500] }}>
-        Notifications
-      </Text>
-      <Text style={{ marginTop: 4, fontSize: 13, color: COLORS.gray[400] }}>Coming soon</Text>
-    </View>
-  );
-}
+const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  HomeTab: 'home-outline',
+  MessagesTab: 'chatbubble-ellipses-outline',
+  BookingsTab: 'calendar-outline',
+  ProfileTab: 'ellipsis-vertical',
+};
+const ROOTS: Record<string, string> = { HomeTab: 'EPHome', MessagesTab: 'ChatList', BookingsTab: 'CustomerBookings', ProfileTab: 'EPProfile' };
 
 export default function EventPlannerTabs() {
+  const insets = useSafeAreaInsets();
+  const tabBarStyle = { backgroundColor: DARK.card, borderTopWidth: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: 64 + insets.bottom, paddingTop: 8 };
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.gray[400],
-        tabBarStyle: {
-          backgroundColor: COLORS.white,
-          borderTopColor: COLORS.gray[200],
-          paddingBottom: 4,
-          height: 60,
-        },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-        tabBarIcon: ({ color, size }) => {
-          const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
-            EventsTab: 'calendar',
-            DiscoverTab: 'search',
-            MessagesTab: 'chatbubbles',
-            NotificationsTab: 'notifications',
-            ProfileTab: 'person',
-          };
-          return <Ionicons name={icons[route.name] ?? 'ellipse'} size={size} color={color} />;
+        tabBarActiveTintColor: '#fff',
+        tabBarInactiveTintColor: DARK.muted,
+        tabBarStyle: [tabBarStyle, { display: [ROOTS[route.name], undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' }],
+        tabBarLabelStyle: { fontSize: 12, fontFamily: FONTS.medium, marginTop: 4 },
+        tabBarIcon: ({ color, focused }) => {
+          const icon = <Ionicons name={TAB_ICONS[route.name] ?? 'ellipse'} size={22} color={color} />;
+          return focused ? <BrandGradient style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }}>{icon}</BrandGradient> : icon;
         },
       })}
     >
-      <Tab.Screen name="EventsTab" component={EventsStack} options={{ title: 'Events' }} />
-      <Tab.Screen name="DiscoverTab" component={DiscoverStack} options={{ title: 'Discover' }} />
-      <Tab.Screen name="MessagesTab" component={MessagesStack} options={{ title: 'Messages' }} />
-      <Tab.Screen name="NotificationsTab" component={NotificationsScreen} options={{ title: 'Alerts' }} />
-      <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: 'Profile' }} />
+      <Tab.Screen name="HomeTab" component={HomeNavigator} options={{ title: 'Home' }} />
+      <Tab.Screen name="MessagesTab" component={MessagesNavigator} options={{ title: 'Message' }} />
+      <Tab.Screen name="BookingsTab" component={BookingsNavigator} options={{ title: 'Booking' }} />
+      <Tab.Screen name="ProfileTab" component={ProfileNavigator} options={{ title: 'More' }} />
     </Tab.Navigator>
   );
 }

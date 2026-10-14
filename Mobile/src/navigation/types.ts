@@ -7,18 +7,13 @@ export type EventPlannerStackParams = {
   MyEvents: undefined;
   CreateEvent: undefined;
   EventDetail: { eventId: string; eventName: string };
-  EPProfile: undefined;
-};
-
-export type DiscoverStackParams = {
-  Discover: { eventId?: string } | undefined;
+  PlannerProfile: undefined;
 };
 
 export type EPTabParams = {
-  EventsTab: undefined;
-  DiscoverTab: undefined;
+  HomeTab: undefined;
   MessagesTab: undefined;
-  NotificationsTab: undefined;
+  BookingsTab: undefined;
   ProfileTab: undefined;
 };
 
@@ -35,6 +30,8 @@ export type ListingSummary = {
   vendorName: string;
   rating?: number | null;
   reviewCount?: number;
+  /** Event planners book on behalf of one of their events. */
+  eventId?: string;
 };
 
 export type BookingDraft = {
@@ -52,9 +49,9 @@ export type BookingDraft = {
 export type CustomerHomeStackParams = {
   CustomerHome: undefined;
   Notifications: undefined;
-  FindVendors: undefined;
-  SearchResults: { q?: string; categoryId?: string; categoryName?: string; location?: string };
-  ListingDetail: { listingId: string };
+  FindVendors: { eventId?: string } | undefined;
+  SearchResults: { q?: string; categoryId?: string; categoryName?: string; location?: string; eventId?: string };
+  ListingDetail: { listingId: string; eventId?: string };
   VendorProfile: { vendorId: string };
   SelectDate: { listing: ListingSummary };
   BookingDetails: { listing: ListingSummary; date: string };

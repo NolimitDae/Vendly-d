@@ -43,6 +43,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
     venue_address: draft.venue,
     guest_count: draft.guests,
     message: draft.notes,
+    event_id: listing.eventId,
     timezone: deviceTimezone(),
   };
 

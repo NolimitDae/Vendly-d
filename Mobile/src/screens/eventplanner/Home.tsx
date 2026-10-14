@@ -1,341 +1,163 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StyleSheet,
-} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { format, isPast, isWithinInterval, addDays } from 'date-fns';
-import { COLORS } from '../../constants/colors';
-import { EventsService, Event, EventTask } from '../../services/events.service';
+import { format, parseISO } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { EventPlannerStackParams } from '../../navigation/types';
+import { BrandGradient, Card } from '../../components/brand';
+import { DARK, FONTS } from '../../constants/colors';
+import { useAuth } from '../../context/AuthContext';
+import { BookingService, type Booking } from '../../services/booking.service';
+import { EventsService, type Event, type EventStatus } from '../../services/events.service';
 
-type Nav = NativeStackNavigationProp<EventPlannerStackParams>;
-
-const STATUS_LABELS: Record<string, string> = {
-  PLANNING: 'Planning',
-  CONFIRMED: 'Confirmed',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
+export const EVENT_STATUS: Record<EventStatus, { label: string; color: string }> = {
+  PLANNING: { label: 'Planning', color: '#fcd34d' },
+  CONFIRMED: { label: 'Active', color: '#6ee7c7' },
+  IN_PROGRESS: { label: 'In progress', color: DARK.accent },
+  COMPLETED: { label: 'Completed', color: '#6ee7c7' },
+  CANCELLED: { label: 'Cancelled', color: DARK.muted },
 };
 
+export function EventCard({ event, onPress }: { event: Event; onPress: () => void }) {
+  const st = EVENT_STATUS[event.status] ?? EVENT_STATUS.PLANNING;
+  return (
+    <Pressable style={s.event} onPress={onPress} accessibilityRole="button" accessibilityLabel={event.name}>
+      <View style={s.eventIcon}>
+        <Ionicons name={event.type === 'WEDDING' ? 'heart-outline' : event.type === 'BIRTHDAY' ? 'gift-outline' : event.type === 'CORPORATE' || event.type === 'CONFERENCE' ? 'briefcase-outline' : event.type === 'CONCERT' ? 'musical-notes-outline' : 'sparkles-outline'} size={34} color={DARK.accent} />
+      </View>
+      <View style={{ flex: 1, gap: 8 }}>
+        <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
+        <View style={s.meta}>
+          <Ionicons name="calendar-outline" size={18} color="#fff" />
+          <Text style={s.metaText} numberOfLines={1}>{event.date ? format(parseISO(event.date), 'MMM d') : 'No date'}{event.venue ? `  •  ${event.venue}` : ''}</Text>
+        </View>
+      </View>
+      <View style={s.pill}>
+        <View style={[s.dot, { backgroundColor: st.color }]} />
+        <Text style={s.pillText}>{st.label}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export default function EPHome() {
-  const nav = useNavigation<Nav>();
+  const nav = useNavigation<NativeStackNavigationProp<any>>();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
-  const [upcomingTasks, setUpcomingTasks] = useState<{ task: EventTask; eventName: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const res = await EventsService.list({ limit: 50 });
-      if (res.data?.success) {
-        const all = res.data.data;
-        setEvents(all.filter((e) => e.status !== 'CANCELLED' && e.status !== 'COMPLETED'));
-
-        // Gather tasks due within next 7 days across all events
-        const taskPromises = all
-          .filter((e) => e.status !== 'CANCELLED' && e.status !== 'COMPLETED')
-          .slice(0, 10)
-          .map((e) =>
-            EventsService.findOne(e.id).then((r) => ({
-              event: e,
-              tasks: r.data?.data?.tasks ?? [],
-            })),
-          );
-
-        const results = await Promise.allSettled(taskPromises);
-        const now = new Date();
-        const soon = addDays(now, 7);
-        const taskList: { task: EventTask; eventName: string }[] = [];
-        results.forEach((r) => {
-          if (r.status === 'fulfilled') {
-            r.value.tasks
-              .filter((t) => !t.completed && t.due_date)
-              .filter((t) => {
-                const d = new Date(t.due_date!);
-                return isWithinInterval(d, { start: now, end: soon }) || isPast(d);
-              })
-              .forEach((t) => taskList.push({ task: t, eventName: r.value.event.name }));
-          }
-        });
-        setUpcomingTasks(taskList.slice(0, 6));
-      }
+      const [e, b] = await Promise.all([EventsService.list({ limit: 50 }), BookingService.getMyBookingsAsCustomer({ limit: 100 })]);
+      if (e.data?.success) setEvents(e.data.data ?? []);
+      if (b.data?.success) setBookings(b.data.data ?? []);
     } catch {
-      // ignore
+      // keep what we have
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   }, []);
-
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onRefresh = () => { setRefreshing(true); load(); };
-
-  const totalBudget = events.reduce((s, e) => s + (e.total_budget ?? 0), 0);
-  const activeCount = events.filter((e) => e.status === 'IN_PROGRESS').length;
-  const planningCount = events.filter((e) => e.status === 'PLANNING' || e.status === 'CONFIRMED').length;
-
-  if (loading) {
-    return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
+  const active = events.filter((e) => e.status !== 'COMPLETED' && e.status !== 'CANCELLED');
+  const pending = bookings.filter((b) => b.status === 'PENDING').length;
+  const booked = bookings.filter((b) => ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'].includes(b.status)).length;
+  const budget = events.reduce((sum, e) => sum + Number(e.total_budget ?? 0), 0);
+  const firstName = (user?.name ?? '').split(' ')[0];
+  const stats = [
+    { label: 'Active Events', value: String(active.length).padStart(2, '0') },
+    { label: 'Pending Requests', value: String(pending).padStart(2, '0') },
+    { label: 'Booked Services', value: String(booked).padStart(2, '0') },
+    { label: 'Total Budget', value: `$${budget.toLocaleString()}` },
+  ];
 
   return (
     <ScrollView
       style={s.root}
-      contentContainerStyle={{ paddingBottom: 32 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 32, paddingHorizontal: 20, gap: 24 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
     >
-      {/* Hero greeting */}
-      <View style={s.hero}>
-        <Text style={s.heroTitle}>Event Dashboard</Text>
-        <Text style={s.heroSub}>Manage all your events in one place</Text>
-      </View>
-
-      {/* Stats row */}
-      <View style={s.statsRow}>
-        <StatCard icon="calendar" label="Active" value={String(activeCount)} color={COLORS.primary} />
-        <StatCard icon="time" label="Planning" value={String(planningCount)} color="#f59e0b" />
-        <StatCard
-          icon="cash"
-          label="Total Budget"
-          value={`$${totalBudget.toLocaleString()}`}
-          color="#10b981"
-        />
-      </View>
-
-      {/* Quick actions */}
-      <View style={s.section}>
-        <Text style={s.sectionTitle}>Quick Actions</Text>
-        <View style={s.actionsRow}>
-          <ActionBtn
-            icon="add-circle"
-            label="New Event"
-            onPress={() => nav.navigate('CreateEvent')}
-          />
-          <ActionBtn
-            icon="list"
-            label="My Events"
-            onPress={() => nav.navigate('MyEvents')}
-          />
-          <ActionBtn
-            icon="search"
-            label="Find Vendors"
-            onPress={() => nav.getParent()?.navigate('DiscoverTab')}
-          />
+      <View style={s.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.hello}>Hello {firstName || 'there'}!</Text>
+          <Text style={s.sub}>{active.length ? `${active.length} event${active.length === 1 ? '' : 's'} in the works` : 'Plan your first event'}</Text>
         </View>
+        <Pressable style={s.avatar} onPress={() => nav.navigate('ProfileTab')} accessibilityRole="button" accessibilityLabel="Settings">
+          {user?.avatar_url ? <Image source={{ uri: user.avatar_url }} style={StyleSheet.absoluteFill} /> : <Text style={s.avatarText}>{(firstName[0] ?? 'P').toUpperCase()}</Text>}
+        </Pressable>
       </View>
 
-      {/* Active events */}
-      {events.length > 0 && (
-        <View style={s.section}>
-          <View style={s.rowBetween}>
-            <Text style={s.sectionTitle}>Active Events</Text>
-            <TouchableOpacity onPress={() => nav.navigate('MyEvents')}>
-              <Text style={s.seeAll}>See all →</Text>
-            </TouchableOpacity>
-          </View>
-          {events.slice(0, 3).map((event) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              onPress={() => nav.navigate('EventDetail', { eventId: event.id, eventName: event.name })}
-            />
+      <View style={{ gap: 12 }}>
+        <Text style={s.sectionTitle}>Analytics</Text>
+        <View style={s.grid}>
+          {stats.map((st) => (
+            <BrandGradient key={st.label} style={s.stat}>
+              <Text style={s.statLabel}>{st.label}</Text>
+              <Text style={s.statValue}>{st.value}</Text>
+            </BrandGradient>
           ))}
         </View>
-      )}
+      </View>
 
-      {/* Upcoming deadlines */}
-      {upcomingTasks.length > 0 && (
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Upcoming Deadlines</Text>
-          {upcomingTasks.map(({ task, eventName }) => (
-            <View key={task.id} style={s.taskRow}>
-              <View style={[s.taskDot, isPast(new Date(task.due_date!)) && { backgroundColor: '#ef4444' }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.taskTitle} numberOfLines={1}>{task.title}</Text>
-                <Text style={s.taskMeta}>{eventName} · {task.due_date ? format(new Date(task.due_date), 'MMM d') : 'No date'}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
+      <View style={s.grid}>
+        <Pressable style={s.action} onPress={() => nav.navigate('CreateEvent')} accessibilityRole="button">
+          <Ionicons name="add-circle-outline" size={26} color={DARK.accent} />
+          <Text style={s.actionText}>New event</Text>
+        </Pressable>
+        <Pressable style={s.action} onPress={() => nav.navigate('FindVendors')} accessibilityRole="button">
+          <Ionicons name="search-outline" size={26} color={DARK.accent} />
+          <Text style={s.actionText}>Find vendors</Text>
+        </Pressable>
+      </View>
 
-      {events.length === 0 && (
-        <View style={s.emptyState}>
-          <Ionicons name="calendar-outline" size={56} color={COLORS.gray[300]} />
-          <Text style={s.emptyTitle}>No active events</Text>
-          <Text style={s.emptyText}>Create your first event to get started</Text>
-          <TouchableOpacity style={s.emptyBtn} onPress={() => nav.navigate('CreateEvent')}>
-            <Text style={s.emptyBtnText}>Create Event</Text>
-          </TouchableOpacity>
+      <View style={{ gap: 12 }}>
+        <View style={s.rowBetween}>
+          <Text style={s.sectionTitle}>Recent Events</Text>
+          <Pressable onPress={() => nav.navigate('MyEvents')} hitSlop={8}><Text style={s.link}>See all</Text></Pressable>
         </View>
-      )}
+        {events.length === 0 ? (
+          <Card style={s.empty}>
+            <Ionicons name="calendar-outline" size={40} color={DARK.accent} />
+            <Text style={s.emptyText}>Events Not Found</Text>
+            <Pressable style={s.emptyBtn} onPress={() => nav.navigate('CreateEvent')} accessibilityRole="button"><Text style={s.emptyBtnText}>Add your first event</Text></Pressable>
+          </Card>
+        ) : (
+          events.slice(0, 4).map((e) => <EventCard key={e.id} event={e} onPress={() => nav.navigate('EventDetail', { eventId: e.id, eventName: e.name })} />)
+        )}
+      </View>
     </ScrollView>
   );
 }
 
-function StatCard({ icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
-  return (
-    <View style={[s.statCard, { borderTopColor: color }]}>
-      <Ionicons name={icon} size={20} color={color} />
-      <Text style={s.statValue}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function ActionBtn({ icon, label, onPress }: { icon: any; label: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={s.actionBtn} onPress={onPress}>
-      <View style={s.actionIcon}>
-        <Ionicons name={icon} size={22} color={COLORS.primary} />
-      </View>
-      <Text style={s.actionLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function EventCard({ event, onPress }: { event: Event; onPress: () => void }) {
-  const statusColor = COLORS.status[event.status as keyof typeof COLORS.status] ?? COLORS.status.PLANNING;
-  return (
-    <TouchableOpacity style={s.eventCard} onPress={onPress}>
-      <View style={s.rowBetween}>
-        <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
-        <View style={[s.badge, { backgroundColor: statusColor.bg, borderColor: statusColor.border }]}>
-          <Text style={[s.badgeText, { color: statusColor.text }]}>{STATUS_LABELS[event.status]}</Text>
-        </View>
-      </View>
-      <View style={s.eventMeta}>
-        {event.date && (
-          <View style={s.metaItem}>
-            <Ionicons name="calendar-outline" size={13} color={COLORS.gray[400]} />
-            <Text style={s.metaText}>{format(new Date(event.date), 'MMM d, yyyy')}</Text>
-          </View>
-        )}
-        {event.venue && (
-          <View style={s.metaItem}>
-            <Ionicons name="location-outline" size={13} color={COLORS.gray[400]} />
-            <Text style={s.metaText} numberOfLines={1}>{event.venue}</Text>
-          </View>
-        )}
-        {event._count && (
-          <View style={s.metaItem}>
-            <Ionicons name="briefcase-outline" size={13} color={COLORS.gray[400]} />
-            <Text style={s.metaText}>{event._count.bookings} vendors</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  hero: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 28,
-  },
-  heroTitle: { fontSize: 24, fontWeight: '800', color: COLORS.white },
-  heroSub: { fontSize: 14, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    gap: 10,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-    borderTopWidth: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statValue: { fontSize: 17, fontWeight: '800', color: COLORS.gray[900], marginTop: 6 },
-  statLabel: { fontSize: 11, color: COLORS.gray[500], marginTop: 2 },
-  section: { paddingHorizontal: 16, marginTop: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: COLORS.gray[800], marginBottom: 12 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  seeAll: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
-  actionsRow: { flexDirection: 'row', gap: 12 },
-  actionBtn: { flex: 1, alignItems: 'center', gap: 8 },
-  actionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: COLORS.primaryBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionLabel: { fontSize: 12, fontWeight: '600', color: COLORS.gray[700] },
-  eventCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  eventName: { fontSize: 15, fontWeight: '700', color: COLORS.gray[900], flex: 1, marginRight: 8 },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  eventMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, color: COLORS.gray[500] },
-  taskRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: COLORS.white,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    gap: 10,
-  },
-  taskDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-    marginTop: 5,
-  },
-  taskTitle: { fontSize: 14, fontWeight: '600', color: COLORS.gray[800] },
-  taskMeta: { fontSize: 12, color: COLORS.gray[500], marginTop: 2 },
-  emptyState: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 32 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.gray[700], marginTop: 16 },
-  emptyText: { fontSize: 14, color: COLORS.gray[400], marginTop: 6, textAlign: 'center' },
-  emptyBtn: {
-    marginTop: 20,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-  },
-  emptyBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 15 },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  hello: { color: '#fff', fontSize: 22, fontFamily: FONTS.semibold },
+  sub: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular },
+  avatar: { width: 52, height: 52, borderRadius: 26, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontSize: 20, fontFamily: FONTS.semibold },
+  sectionTitle: { color: '#fff', fontSize: 20, fontFamily: FONTS.medium },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  stat: { width: '47.5%', borderRadius: 16, paddingVertical: 20, alignItems: 'center', gap: 6 },
+  statLabel: { color: '#fff', fontSize: 15, fontFamily: FONTS.regular },
+  statValue: { color: '#fff', fontSize: 28, fontFamily: FONTS.semibold },
+  action: { flex: 1, borderRadius: 16, backgroundColor: DARK.card, paddingVertical: 18, alignItems: 'center', gap: 8 },
+  actionText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
+  empty: { alignItems: 'center', paddingVertical: 40, gap: 14 },
+  emptyText: { color: '#fff', fontSize: 20, fontFamily: FONTS.medium },
+  emptyBtn: { height: 48, paddingHorizontal: 22, borderRadius: 24, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
+  emptyBtnText: { color: DARK.accent, fontSize: 16, fontFamily: FONTS.medium },
+  event: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 12, borderRadius: 18, backgroundColor: DARK.card },
+  eventIcon: { width: 80, height: 80, borderRadius: 14, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  eventName: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metaText: { color: '#fff', fontSize: 14, fontFamily: FONTS.regular, flexShrink: 1 },
+  pill: { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100, backgroundColor: DARK.field },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  pillText: { color: '#fff', fontSize: 12, fontFamily: FONTS.medium },
 });

@@ -10,7 +10,7 @@ import { MarketplaceService, vendorName, type Category, type Listing } from '../
 import type { CustomerHomeStackParams } from '../../navigation/types';
 
 export default function SearchResults({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'SearchResults'>) {
-  const { categoryId, categoryName, location } = route.params;
+  const { categoryId, categoryName, location, eventId } = route.params;
   const insets = useSafeAreaInsets();
   const [q, setQ] = useState(route.params.q ?? '');
   const [query, setQuery] = useState(route.params.q ?? '');
@@ -98,7 +98,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
             item={item}
             saved={saved.has(item.id)}
             onSave={() => saved.toggle(item.id)}
-            onPress={() => navigation.navigate('ListingDetail', { listingId: item.id })}
+            onPress={() => navigation.navigate('ListingDetail', { listingId: item.id, eventId })}
           />
         )}
       />

@@ -11,10 +11,12 @@ import {
   RefreshControl,
   Modal,
 } from 'react-native';
-import { useRoute, useFocusEffect } from '@react-navigation/native';
+import { useRoute, useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { COLORS } from '../../constants/colors';
+import { COLORS, DARK, FONTS } from '../../constants/colors';
+import { GradientButton } from '../../components/brand';
 import EventContractsCard from '../../components/contracts/EventContractsCard';
 import {
   EventsService,
@@ -36,6 +38,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function EventDetail() {
+  const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const route = useRoute<EventDetailProps['route']>();
   const { eventId } = route.params;
 
@@ -62,7 +65,7 @@ export default function EventDetail() {
   if (loading) {
     return (
       <View style={s.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={DARK.accent} />
       </View>
     );
   }
@@ -78,8 +81,11 @@ export default function EventDetail() {
       {/* Event header */}
       <View style={s.header}>
         <View style={s.headerRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" hitSlop={8} style={s.backBtn}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
           <Text style={s.headerName} numberOfLines={2}>{event.name}</Text>
-          <View style={[s.badge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
+          <View style={s.badge}>
             <Text style={[s.badgeText, { color: sc.text }]}>{STATUS_LABELS[event.status]}</Text>
           </View>
         </View>
@@ -117,7 +123,7 @@ export default function EventDetail() {
         )}
         {tab === 'vendors' && (
           <>
-            <VendorsTab event={event} />
+            <VendorsTab event={event} onFind={() => navigation.navigate('FindVendors', { eventId: event.id })} />
             <EventContractsCard eventId={event.id} />
           </>
         )}
@@ -184,7 +190,7 @@ function OverviewTab({ event, completedTasks, totalTasks }: { event: EventDetail
           { icon: 'cash-outline', label: 'Budget', value: event.total_budget ? `$${Number(event.total_budget).toLocaleString()}` : '—' },
         ].map(({ icon, label, value }) => (
           <View key={label} style={s.detailRow}>
-            <Ionicons name={icon as any} size={16} color={COLORS.gray[400]} />
+            <Ionicons name={icon as any} size={16} color={DARK.muted} />
             <Text style={s.detailLabel}>{label}</Text>
             <Text style={s.detailValue} numberOfLines={1}>{value}</Text>
           </View>
@@ -195,18 +201,20 @@ function OverviewTab({ event, completedTasks, totalTasks }: { event: EventDetail
 }
 
 // ─── Vendors Tab ─────────────────────────────────────────────────────────────
-function VendorsTab({ event }: { event: EventDetailType }) {
+function VendorsTab({ event, onFind }: { event: EventDetailType; onFind: () => void }) {
   if (event.bookings.length === 0) {
     return (
       <View style={s.emptyCard}>
-        <Ionicons name="briefcase-outline" size={40} color={COLORS.gray[300]} />
+        <Ionicons name="briefcase-outline" size={40} color={DARK.accent} />
         <Text style={s.emptyText}>No vendors booked yet</Text>
-        <Text style={s.emptyHint}>Discover vendors in the Discover tab and add them to this event</Text>
+        <Text style={s.emptyHint}>Find vendors and book them for this event. Their bookings show up here.</Text>
+        <GradientButton title="Find Vendor" onPress={onFind} style={{ alignSelf: 'stretch', marginTop: 8 }} />
       </View>
     );
   }
   return (
     <View style={{ gap: 12 }}>
+      <GradientButton title="Find another vendor" onPress={onFind} />
       {event.bookings.map((eb) => {
         const b = eb.booking;
         return (
@@ -220,7 +228,7 @@ function VendorsTab({ event }: { event: EventDetailType }) {
                 <Text style={s.vendorService} numberOfLines={1}>{b.listing.title}</Text>
               </View>
               <View style={[s.badge, s.badgeSmall]}>
-                <Text style={[s.badgeText, { color: COLORS.gray[600] }]}>{b.status}</Text>
+                <Text style={[s.badgeText, { color: '#fff' }]}>{b.status}</Text>
               </View>
             </View>
             <View style={s.vendorFooter}>
@@ -350,13 +358,13 @@ function BudgetTab({ event, onRefresh }: { event: EventDetailType; onRefresh: ()
               <Text style={s.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleAdd} disabled={saving}>
-              {saving ? <ActivityIndicator color={COLORS.white} /> : <Text style={s.saveBtnText}>Add</Text>}
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Add</Text>}
             </TouchableOpacity>
           </View>
         </View>
       ) : (
         <TouchableOpacity style={s.addBtn} onPress={() => setShowAdd(true)}>
-          <Ionicons name="add" size={18} color={COLORS.primary} />
+          <Ionicons name="add" size={18} color={DARK.accent} />
           <Text style={s.addBtnText}>Add Budget Item</Text>
         </TouchableOpacity>
       )}
@@ -421,7 +429,7 @@ function TasksTab({ event, onRefresh }: { event: EventDetailType; onRefresh: () 
     <View style={{ gap: 10 }}>
       {incomplete.length === 0 && complete.length === 0 && (
         <View style={s.emptyCard}>
-          <Ionicons name="checkbox-outline" size={40} color={COLORS.gray[300]} />
+          <Ionicons name="checkbox-outline" size={40} color={DARK.muted} />
           <Text style={s.emptyText}>No tasks yet</Text>
         </View>
       )}
@@ -455,9 +463,9 @@ function TasksTab({ event, onRefresh }: { event: EventDetailType; onRefresh: () 
           disabled={!newTitle.trim() || adding}
         >
           {adding ? (
-            <ActivityIndicator color={COLORS.white} size="small" />
+            <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Ionicons name="add" size={20} color={COLORS.white} />
+            <Ionicons name="add" size={20} color="#fff" />
           )}
         </TouchableOpacity>
       </View>
@@ -471,11 +479,11 @@ function TaskRow({ task, toggling, onToggle }: { task: EventTask; toggling: bool
     <TouchableOpacity style={[s.taskCard, task.completed && s.taskCardDone]} onPress={onToggle}>
       <View style={s.taskCheckbox}>
         {toggling ? (
-          <ActivityIndicator size="small" color={COLORS.primary} />
+          <ActivityIndicator size="small" color={DARK.accent} />
         ) : task.completed ? (
-          <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} />
+          <Ionicons name="checkmark-circle" size={22} color={DARK.accent} />
         ) : (
-          <Ionicons name="ellipse-outline" size={22} color={COLORS.gray[300]} />
+          <Ionicons name="ellipse-outline" size={22} color={DARK.muted} />
         )}
       </View>
       <View style={{ flex: 1 }}>
@@ -511,81 +519,77 @@ function Chip({ icon, label }: { icon: any; label: string }) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { backgroundColor: COLORS.primary, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20 },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
-  headerName: { fontSize: 20, fontWeight: '800', color: COLORS.white, flex: 1, marginRight: 8 },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
+  emptyText: { color: '#fff', fontSize: 18, fontFamily: FONTS.medium, textAlign: 'center' },
+  emptyHint: { color: DARK.muted, fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular, textAlign: 'center' },
+  emptyCard: { alignItems: 'center', gap: 10, padding: 24, borderRadius: 20, backgroundColor: DARK.card },
+  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, gap: 8, backgroundColor: DARK.bg },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  backBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  headerName: { flex: 1, color: '#fff', fontSize: 24, fontFamily: FONTS.semibold },
   headerMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
-  badgeSmall: { backgroundColor: COLORS.gray[100], borderColor: COLORS.gray[200] },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  chipText: { fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: '500' },
-  tabBar: { flexDirection: 'row', backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.gray[100] },
-  tabBtn: { flex: 1, paddingVertical: 13, alignItems: 'center' },
-  tabBtnActive: { borderBottomWidth: 2, borderBottomColor: COLORS.primary },
-  tabText: { fontSize: 12, fontWeight: '600', color: COLORS.gray[500] },
-  tabTextActive: { color: COLORS.primary },
-  // Overview
-  progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  progressLabel: { fontSize: 13, color: COLORS.gray[600] },
-  progressPct: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
-  progressBar: { height: 8, backgroundColor: COLORS.gray[100], borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: 8, backgroundColor: COLORS.primary, borderRadius: 4 },
-  budgetNote: { fontSize: 12, color: COLORS.gray[400], marginTop: 6 },
-  infoCard: { backgroundColor: COLORS.white, borderRadius: 14, padding: 16, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
-  infoCardTitle: { fontSize: 14, fontWeight: '700', color: COLORS.gray[700], marginBottom: 12 },
-  noteText: { fontSize: 14, color: COLORS.gray[600], lineHeight: 20 },
-  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  detailLabel: { fontSize: 13, color: COLORS.gray[500], width: 60 },
-  detailValue: { fontSize: 13, fontWeight: '600', color: COLORS.gray[800], flex: 1 },
-  // Vendors
-  vendorCard: { backgroundColor: COLORS.white, borderRadius: 14, padding: 14 },
+  badge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, backgroundColor: DARK.field },
+  badgeSmall: { paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText: { color: '#fff', fontSize: 12, fontFamily: FONTS.semibold },
+  tabBar: { flexDirection: 'row', marginHorizontal: 20, padding: 4, borderRadius: 100, backgroundColor: DARK.card, marginBottom: 16 },
+  tabBtn: { flex: 1, height: 40, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  tabBtnActive: { backgroundColor: COLORS.primary },
+  tabText: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium },
+  tabTextActive: { color: '#fff' },
+  infoCard: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 10, marginBottom: 12 },
+  infoCardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressLabel: { color: '#fff', fontSize: 14, fontFamily: FONTS.regular, flex: 1 },
+  progressPct: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold },
+  progressBar: { height: 8, borderRadius: 4, backgroundColor: DARK.field, overflow: 'hidden' },
+  progressFill: { height: 8, borderRadius: 4, backgroundColor: COLORS.primaryLight },
+  budgetNote: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailLabel: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular, width: 70 },
+  detailValue: { flex: 1, color: '#fff', fontSize: 14, fontFamily: FONTS.medium, textAlign: 'right' },
+  vendorCard: { backgroundColor: DARK.card, borderRadius: 16, padding: 14, gap: 12 },
   vendorHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  vendorAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primaryBg, alignItems: 'center', justifyContent: 'center' },
-  vendorInitial: { fontSize: 16, fontWeight: '700', color: COLORS.primary },
-  vendorName: { fontSize: 15, fontWeight: '700', color: COLORS.gray[900] },
-  vendorService: { fontSize: 12, color: COLORS.gray[500], marginTop: 2 },
-  vendorFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.gray[100] },
-  vendorPrice: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  vendorAmount: { fontSize: 13, color: COLORS.gray[500] },
-  // Budget
-  budgetSummary: { backgroundColor: COLORS.white, borderRadius: 14, padding: 16 },
-  budgetSumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  budgetSumLabel: { fontSize: 14, color: COLORS.gray[600] },
-  budgetSumValue: { fontSize: 14, fontWeight: '700', color: COLORS.gray[800] },
-  overBudgetWarn: { fontSize: 12, color: '#ef4444', marginTop: 8 },
-  budgetItemCard: { backgroundColor: COLORS.white, borderRadius: 12, padding: 14 },
-  budgetItemHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  budgetItemCategory: { fontSize: 14, fontWeight: '700', color: COLORS.gray[800] },
-  budgetItemAmt: { fontSize: 13, color: COLORS.gray[600] },
-  budgetItemNote: { fontSize: 12, color: COLORS.gray[400], marginTop: 4 },
-  addCard: { backgroundColor: COLORS.white, borderRadius: 14, padding: 16 },
-  addCardTitle: { fontSize: 15, fontWeight: '700', color: COLORS.gray[800], marginBottom: 12 },
+  vendorAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  vendorInitial: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  vendorName: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  vendorService: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular },
+  vendorFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTopWidth: 1, borderTopColor: DARK.field },
+  vendorPrice: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  vendorAmount: { color: DARK.accent, fontSize: 13, fontFamily: FONTS.medium },
+  budgetSummary: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 8, marginBottom: 12 },
+  budgetSumRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  budgetSumLabel: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular },
+  budgetSumValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  overBudgetWarn: { color: '#fca5a5', fontSize: 13, fontFamily: FONTS.medium },
+  budgetItemCard: { backgroundColor: DARK.card, borderRadius: 16, padding: 14, gap: 6, marginBottom: 10 },
+  budgetItemHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  budgetItemCategory: { color: '#fff', fontSize: 15, fontFamily: FONTS.semibold },
+  budgetItemAmt: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
+  budgetItemNote: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular },
+  addBtn: { height: 50, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 },
+  addBtnText: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
+  addCard: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 10, marginBottom: 12 },
+  addCardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  label: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
+  input: { height: 50, borderRadius: 25, paddingHorizontal: 16, fontSize: 15, color: '#fff', backgroundColor: DARK.field, fontFamily: FONTS.regular },
   addActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: COLORS.gray[200], alignItems: 'center' },
-  cancelBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.gray[600] },
-  saveBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: COLORS.primary, alignItems: 'center' },
-  saveBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12, borderWidth: 2, borderColor: COLORS.primaryLight, borderStyle: 'dashed' },
-  addBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  // Tasks
-  taskGroupLabel: { fontSize: 12, fontWeight: '600', color: COLORS.gray[400], textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 },
-  taskCard: { backgroundColor: COLORS.white, borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  saveBtn: { flex: 1, height: 48, borderRadius: 24, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  saveBtnText: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
+  cancelBtn: { flex: 1, height: 48, borderRadius: 24, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
+  cancelBtnText: { color: DARK.accent, fontSize: 15, fontFamily: FONTS.medium },
+  taskGroupLabel: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.semibold, letterSpacing: 1, marginTop: 8, marginBottom: 6 },
+  taskCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, backgroundColor: DARK.card, marginBottom: 8 },
   taskCardDone: { opacity: 0.6 },
-  taskCheckbox: { width: 22, alignItems: 'center', justifyContent: 'center' },
-  taskTitle: { fontSize: 14, fontWeight: '600', color: COLORS.gray[800] },
-  taskTitleDone: { textDecorationLine: 'line-through', color: COLORS.gray[400] },
-  taskDue: { fontSize: 12, color: COLORS.gray[400], marginTop: 2 },
-  taskDueOverdue: { color: '#ef4444' },
-  addTaskRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  addTaskInput: { flex: 1, backgroundColor: COLORS.white, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, borderWidth: 1, borderColor: COLORS.gray[200] },
-  addTaskBtn: { width: 44, height: 44, borderRadius: 10, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end' },
-  // Shared
-  emptyCard: { backgroundColor: COLORS.white, borderRadius: 14, padding: 32, alignItems: 'center', gap: 8 },
-  emptyText: { fontSize: 15, color: COLORS.gray[500], fontWeight: '600' },
-  emptyHint: { fontSize: 13, color: COLORS.gray[400], textAlign: 'center' },
-  input: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
-  label: { fontSize: 12, fontWeight: '600', color: COLORS.gray[600], marginBottom: 4 },
+  taskCheckbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: DARK.accent, alignItems: 'center', justifyContent: 'center' },
+  taskTitle: { flex: 1, color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
+  taskTitleDone: { textDecorationLine: 'line-through', color: DARK.muted },
+  taskDue: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular },
+  taskDueOverdue: { color: '#fca5a5' },
+  addTaskRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  addTaskInput: { flex: 1, height: 50, borderRadius: 25, paddingHorizontal: 16, fontSize: 15, color: '#fff', backgroundColor: DARK.field, fontFamily: FONTS.regular },
+  addTaskBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, backgroundColor: DARK.field },
+  chipText: { color: '#fff', fontSize: 12, fontFamily: FONTS.medium },
+  noteText: { color: '#fff', fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular },
 });
