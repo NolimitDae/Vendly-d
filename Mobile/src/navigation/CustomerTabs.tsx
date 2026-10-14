@@ -16,6 +16,7 @@ import VendorProfile from '../screens/customer/VendorProfile';
 import SelectDate from '../screens/customer/SelectDate';
 import BookingDetails from '../screens/customer/BookingDetails';
 import BookingSummary from '../screens/customer/BookingSummary';
+import Reviews from '../screens/customer/Reviews';
 import CustomerBookings from '../screens/customer/Bookings';
 import BookingDetail from '../screens/customer/BookingDetail';
 import PaymentScreen from '../screens/customer/PaymentScreen';
@@ -55,15 +56,16 @@ function HomeNavigator() {
       <HomeStack.Screen name="SelectDate" component={SelectDate} options={{ headerShown: false }} />
       <HomeStack.Screen name="BookingDetails" component={BookingDetails} options={{ headerShown: false }} />
       <HomeStack.Screen name="BookingSummary" component={BookingSummary} options={{ headerShown: false }} />
+      <HomeStack.Screen name="Reviews" component={Reviews} options={{ headerShown: false }} />
     </HomeStack.Navigator>
   );
 }
 
 function BookingsNavigator() {
   return (
-    <BookingsStack.Navigator screenOptions={HEADER}>
-      <BookingsStack.Screen name="CustomerBookings" component={CustomerBookings} options={{ title: 'My Bookings' }} />
-      <BookingsStack.Screen name="BookingDetail" component={BookingDetail} options={{ title: 'Booking Details' }} />
+    <BookingsStack.Navigator screenOptions={{ ...HEADER, contentStyle: { backgroundColor: DARK.bg } }}>
+      <BookingsStack.Screen name="CustomerBookings" component={CustomerBookings} options={{ headerShown: false }} />
+      <BookingsStack.Screen name="BookingDetail" component={BookingDetail} options={{ headerShown: false }} />
       <BookingsStack.Screen name="Payment" component={PaymentScreen} options={{ title: 'Secure Payment' }} />
     </BookingsStack.Navigator>
   );
@@ -141,7 +143,14 @@ export default function CustomerTabs() {
         })}
       />
       <Tab.Screen name="MessagesTab" component={MessagesNavigator} options={{ title: 'Message' }} />
-      <Tab.Screen name="BookingsTab" component={BookingsNavigator} options={{ title: 'Booking' }} />
+      <Tab.Screen
+        name="BookingsTab"
+        component={BookingsNavigator}
+        options={({ route }) => ({
+          title: 'Booking',
+          tabBarStyle: [tabBarStyle, { display: ['CustomerBookings', undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' }],
+        })}
+      />
       <Tab.Screen name="ProfileTab" component={ProfileNavigator} options={{ title: 'More' }} />
     </Tab.Navigator>
   );

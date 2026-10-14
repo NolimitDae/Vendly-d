@@ -1,86 +1,50 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Alert,
-  Modal,
-  TextInput,
-  Linking,
-  RefreshControl,
-  Image,
-} from 'react-native';
-import { useRoute, useFocusEffect } from '@react-navigation/native';
+import { ActivityIndicator, Alert, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { format } from 'date-fns';
-import { COLORS } from '../../constants/colors';
-import { BookingService, Booking, BookingStatus } from '../../services/booking.service';
-import { api } from '../../services/api';
+import { format, parseISO } from 'date-fns';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
-import type { RouteProp } from '@react-navigation/native';
+import { DARK, FONTS } from '../../constants/colors';
+import { openChatWith } from '../../navigation/openChat';
+import { api } from '../../services/api';
+import { BookingService, type Booking } from '../../services/booking.service';
+import type { CustomerBookingsStackParams } from '../../navigation/types';
+import { bookingWhen } from './Bookings';
 
-interface Proof {
-  id: string;
-  photos: string[];
-  notes?: string;
-  created_at: string;
-}
+interface Proof { id: string; photos: string[]; notes?: string; created_at: string }
+interface Deliverable { id: string; title: string; message?: string; files: string[]; links: string[]; created_at: string }
 
-interface Deliverable {
-  id: string;
-  title: string;
-  message?: string;
-  files: string[];
-  links: string[];
-  created_at: string;
-}
-
-type RouteParams = { bookingId: string };
-
-const STATUS_LABELS: Record<BookingStatus, string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-};
-
-function statusColor(status: BookingStatus) {
-  return COLORS.status[status as keyof typeof COLORS.status] ?? COLORS.status.COMPLETED;
-}
+const money = (n: unknown) => `$${Number(n ?? 0).toFixed(2)}`;
 
 export default function BookingDetail() {
-  const route = useRoute<RouteProp<Record<string, RouteParams>, string>>();
-  const { bookingId } = route.params;
-
+  const { bookingId } = useRoute<RouteProp<CustomerBookingsStackParams, 'BookingDetail'>>().params;
+  const nav = useNavigation<NativeStackNavigationProp<any>>();
+  const insets = useSafeAreaInsets();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [proofs, setProofs] = useState<Proof[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
-
-  // Review modal state
-  const [reviewVisible, setReviewVisible] = useState(false);
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewComment, setReviewComment] = useState('');
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [reviewed, setReviewed] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [bookingRes, proofsRes, delivRes] = await Promise.all([
+      const [b, p, d] = await Promise.all([
         BookingService.getBooking(bookingId),
         BookingService.getProofs(bookingId).catch(() => null),
         BookingService.getDeliverables(bookingId).catch(() => null),
       ]);
-      if (bookingRes.data?.success) setBooking(bookingRes.data.data);
-      if (proofsRes?.data?.success) setProofs(proofsRes.data.data ?? []);
-      if (delivRes?.data?.success) setDeliverables(delivRes.data.data ?? []);
+      if (b.data?.success) setBooking(b.data.data);
+      if (p?.data?.success) setProofs(p.data.data ?? []);
+      if (d?.data?.success) setDeliverables(d.data.data ?? []);
     } catch {
-      Alert.alert('Error', 'Failed to load booking');
+      Alert.alert('Error', 'Could not load this booking');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -89,466 +53,289 @@ export default function BookingDetail() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onRefresh = () => { setRefreshing(true); load(); };
-
-  const handleCancel = () => {
-    Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking?', [
-      { text: 'No', style: 'cancel' },
+  const cancel = () =>
+    Alert.alert('Cancel this booking?', 'The vendor will be told. Any payment is refunded under the contract’s cancellation terms.', [
+      { text: 'Keep it', style: 'cancel' },
       {
-        text: 'Yes, Cancel',
+        text: 'Cancel booking',
         style: 'destructive',
         onPress: async () => {
-          setActionLoading(true);
+          setBusy(true);
           try {
             await BookingService.cancelBooking(bookingId);
             load();
           } catch (err: any) {
-            Alert.alert('Error', err?.response?.data?.message ?? 'Failed to cancel booking');
+            Alert.alert('Could not cancel', err?.response?.data?.message ?? 'Try again in a moment.');
           } finally {
-            setActionLoading(false);
+            setBusy(false);
           }
         },
       },
     ]);
-  };
 
-  const handlePayNow = async () => {
-    setActionLoading(true);
+  const payNow = async () => {
+    setBusy(true);
     try {
       const res = await BookingService.createCheckout(bookingId);
       const url = res.data?.data?.checkout_url ?? res.data?.url ?? res.data?.data?.url;
-      if (url) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert('Info', 'Checkout initiated successfully');
-      }
+      if (url) await Linking.openURL(url);
+      else Alert.alert('Payment', 'Checkout started. Pull down to refresh once you have paid.');
     } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message ?? 'Failed to initiate payment');
+      Alert.alert('Could not start payment', err?.response?.data?.message ?? 'Try again in a moment.');
     } finally {
-      setActionLoading(false);
+      setBusy(false);
     }
   };
 
-  const handleSubmitReview = async () => {
-    if (!booking) return;
-    setReviewSubmitting(true);
+  const submitReview = async () => {
+    if (!booking || !rating) return Alert.alert('Rating', 'Tap the stars to rate the service.');
+    setBusy(true);
     try {
-      await api.post('/reviews', {
-        booking_id: booking.id,
-        vendor_id: booking.vendor?.id,
-        rating: reviewRating,
-        comment: reviewComment,
-      });
-      setReviewVisible(false);
-      setReviewComment('');
-      setReviewRating(5);
-      Alert.alert('Thank you!', 'Your review has been submitted.');
+      await api.post('/reviews', { booking_id: booking.id, rating, comment: comment.trim() || undefined });
+      setReviewed(true);
     } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message ?? 'Failed to submit review');
+      Alert.alert('Could not send review', err?.response?.data?.message ?? 'Try again in a moment.');
     } finally {
-      setReviewSubmitting(false);
+      setBusy(false);
     }
   };
 
-  if (loading) {
-    return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
-
+  if (loading) return <ActivityIndicator color={DARK.accent} style={s.center} />;
   if (!booking) {
     return (
-      <View style={s.center}>
-        <Text style={s.errorText}>Booking not found</Text>
+      <View style={[s.center, { paddingTop: insets.top }]}>
+        <Text style={s.body}>Booking not found</Text>
       </View>
     );
   }
 
-  const sc = statusColor(booking.status);
+  const st = booking.status;
+  const paid = !!booking.paid_at;
+  const vendor = booking.vendor?.name ?? 'Vendor';
+  const hero =
+    st === 'PENDING'
+      ? { title: 'Pending Confirmation', body: `We have sent your request to ${vendor}. You'll be told as soon as they accept.`, icon: 'spinner' as const }
+      : st === 'CONFIRMED' && !paid
+        ? { title: 'Accepted — payment due', body: `${vendor} accepted and signed. Pay now to lock in your date. Vendly holds the money until the service is done.`, icon: 'card-outline' as const }
+        : st === 'CONFIRMED'
+          ? { title: 'Booking Confirmed', body: 'Paid and protected by Vendly. See you on the day!', icon: 'checkmark' as const }
+          : st === 'IN_PROGRESS'
+            ? { title: 'Service in Progress', body: `${vendor} has started on your booking.`, icon: 'flash-outline' as const }
+            : st === 'COMPLETED'
+              ? { title: 'Booking Completed Successfully', body: 'Thank you for using Vendly!', icon: 'checkmark' as const }
+              : st === 'REJECTED'
+                ? { title: 'Request Declined', body: `${vendor} couldn't take this booking. Nothing has been charged.`, icon: 'close' as const }
+                : { title: 'Booking Cancelled', body: paid ? 'Your refund follows the contract’s cancellation terms.' : 'Nothing was charged.', icon: 'close' as const };
+  const headerTitle = st === 'PENDING' ? 'Booking Request' : st === 'COMPLETED' ? 'Completed Booking' : st === 'CANCELLED' || st === 'REJECTED' ? 'Booking' : 'Upcoming Booking';
+  const total = Number(booking.amount ?? 0) + Number(booking.service_fee ?? 0);
+  const start = booking.event_start_at ?? booking.scheduled_at;
 
   return (
     <View style={s.root}>
       <ScrollView
-        contentContainerStyle={s.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
-        }
+        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
       >
-        {/* Status badge */}
-        <View style={s.statusWrap}>
-          <View style={[s.statusBadge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
-            <Text style={[s.statusText, { color: sc.text }]}>
-              {STATUS_LABELS[booking.status]}
-            </Text>
-          </View>
-        </View>
+        <ScreenHeader title={headerTitle} onBack={() => nav.goBack()} />
 
-        {/* Detail card */}
-        <View style={s.card}>
-          <DetailRow
-            icon="pricetag-outline"
-            label="Service"
-            value={booking.listing?.title ?? '—'}
-          />
-          <DetailRow
-            icon="person-outline"
-            label="Vendor"
-            value={booking.vendor?.name ?? '—'}
-          />
-          {booking.scheduled_at && (
-            <DetailRow
-              icon="calendar-outline"
-              label="Scheduled"
-              value={format(new Date(booking.scheduled_at), 'EEEE, MMMM d yyyy')}
-            />
+        <View style={{ paddingHorizontal: 20, gap: 20 }}>
+          <Card style={s.hero}>
+            {hero.icon === 'spinner' ? (
+              <ActivityIndicator size="large" color={DARK.accent} style={{ transform: [{ scale: 1.8 }], marginVertical: 24 }} />
+            ) : (
+              <View style={s.ring}>
+                <BrandGradient style={s.ringInner}>
+                  <Ionicons name={hero.icon} size={44} color="#fff" />
+                </BrandGradient>
+              </View>
+            )}
+            <Text style={s.heroTitle}>{hero.title}</Text>
+            <Text style={s.heroBody}>{hero.body}</Text>
+          </Card>
+
+          <Card style={{ gap: 16 }}>
+            <View style={s.row}>
+              <View style={s.avatar}>
+                {booking.vendor?.avatar_url ? <Image source={{ uri: booking.vendor.avatar_url }} style={StyleSheet.absoluteFill} /> : <Text style={s.avatarText}>{vendor[0]?.toUpperCase()}</Text>}
+              </View>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={s.h2}>{vendor}</Text>
+                <View style={s.meta}>
+                  <Ionicons name="storefront-outline" size={18} color="#fff" />
+                  <Text style={s.body} numberOfLines={1}>{booking.listing?.title ?? 'Service'}</Text>
+                </View>
+              </View>
+            </View>
+            <Pressable onPress={() => openChatWith(nav, booking.vendor.id, vendor)} accessibilityRole="button">
+              <BrandGradient style={s.msgBtn}>
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" />
+                <Text style={s.msgText}>Message {vendor.split(' ')[0]}</Text>
+              </BrandGradient>
+            </Pressable>
+          </Card>
+
+          <Card style={{ gap: 14, borderWidth: 1, borderColor: DARK.field }}>
+            <Text style={s.h2}>Booking Details</Text>
+            <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />
+            <Row icon="storefront-outline" label="Vendor" value={vendor} />
+            {!!booking.venue_address && <Row icon="location-outline" label="Location" value={booking.venue_address} />}
+            {!!start && <Row icon="calendar-outline" label="Date" value={format(parseISO(start), 'EEE, dd MMM yyyy')} />}
+            {!!start && <Row icon="time-outline" label="Time" value={bookingWhen(booking).split('•')[1]?.trim() ?? format(parseISO(start), 'h:mm a')} />}
+            {booking.guest_count != null && <Row icon="people-outline" label="Guests" value={String(booking.guest_count)} />}
+            {!!booking.message && <Row icon="chatbox-ellipses-outline" label="Notes" value={booking.message} />}
+
+            <View style={s.dashed} />
+            <Text style={s.h2}>Price Details</Text>
+            <Row label="Service price" value={money(booking.amount)} />
+            <Row label="Vendly Protection fee" value={money(booking.service_fee)} />
+            <View style={s.line} />
+            <Row label="Total" value={money(total)} bold />
+            <Text style={s.paidNote}>{paid ? `Paid on ${format(parseISO(booking.paid_at!), 'dd MMM yyyy')} · held by Vendly until the service is done` : st === 'PENDING' ? 'Nothing is charged until the vendor accepts' : ''}</Text>
+          </Card>
+
+          <BookingContractCard bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
+
+          {proofs.length > 0 && (
+            <Card>
+              <Text style={s.h2}>Photo Proof</Text>
+              {proofs.map((p) => (
+                <View key={p.id} style={{ gap: 8 }}>
+                  <Text style={s.muted}>{format(parseISO(p.created_at), 'MMM d, yyyy')}</Text>
+                  {!!p.notes && <Text style={s.body}>{p.notes}</Text>}
+                  <View style={s.photoRow}>
+                    {p.photos.map((url, i) => (
+                      <Pressable key={i} onPress={() => Linking.openURL(url)}>
+                        <Image source={{ uri: url }} style={s.thumb} />
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </Card>
           )}
-          {booking.amount != null && (
-            <DetailRow
-              icon="cash-outline"
-              label="Total"
-              value={
-                Number(booking.service_fee ?? 0) > 0
-                  ? `$${(Number(booking.amount) + Number(booking.service_fee)).toFixed(2)} (incl. $${Number(booking.service_fee).toFixed(2)} Vendly Protection fee)`
-                  : `$${Number(booking.amount).toLocaleString()}`
-              }
-            />
-          )}
-          <DetailRow
-            icon="time-outline"
-            label="Created"
-            value={format(new Date(booking.created_at), 'MMM d, yyyy')}
-          />
-        </View>
 
-        <BookingContractCard bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
-
-        {/* Message */}
-        {booking.message && (
-          <View style={s.messageCard}>
-            <Text style={s.messageLabel}>Your Message</Text>
-            <Text style={s.messageText}>{booking.message}</Text>
-          </View>
-        )}
-
-        {/* Photo Proof */}
-        {proofs.length > 0 && (
-          <View style={s.card}>
-            <Text style={s.sectionTitle}>Photo Proof</Text>
-            {proofs.map((proof) => (
-              <View key={proof.id} style={s.proofItem}>
-                <Text style={s.proofDate}>{format(new Date(proof.created_at), 'MMM d, yyyy')}</Text>
-                {proof.notes ? <Text style={s.messageText}>{proof.notes}</Text> : null}
-                <View style={s.photoRow}>
-                  {proof.photos.map((url, i) => (
-                    <TouchableOpacity key={i} onPress={() => Linking.openURL(url)}>
-                      <Image source={{ uri: url }} style={s.proofThumb} />
-                    </TouchableOpacity>
+          {deliverables.length > 0 && (
+            <Card>
+              <Text style={s.h2}>Deliverables</Text>
+              {deliverables.map((d) => (
+                <View key={d.id} style={{ gap: 4 }}>
+                  <Text style={s.body}>{d.title}</Text>
+                  <Text style={s.muted}>{format(parseISO(d.created_at), 'MMM d, yyyy')}</Text>
+                  {!!d.message && <Text style={s.body}>{d.message}</Text>}
+                  {[...d.links, ...d.files].map((url, i) => (
+                    <Pressable key={i} onPress={() => Linking.openURL(url)}>
+                      <Text style={s.link} numberOfLines={1}>{i < d.links.length ? url : `File ${i - d.links.length + 1}`}</Text>
+                    </Pressable>
                   ))}
                 </View>
-              </View>
-            ))}
-          </View>
-        )}
+              ))}
+            </Card>
+          )}
 
-        {/* Deliverables */}
-        {deliverables.length > 0 && (
-          <View style={s.card}>
-            <Text style={s.sectionTitle}>Deliverables</Text>
-            {deliverables.map((d) => (
-              <View key={d.id} style={s.proofItem}>
-                <Text style={s.detailValue}>{d.title}</Text>
-                <Text style={s.proofDate}>{format(new Date(d.created_at), 'MMM d, yyyy')}</Text>
-                {d.message ? <Text style={s.messageText}>{d.message}</Text> : null}
-                {d.links.map((link, i) => (
-                  <TouchableOpacity key={i} onPress={() => Linking.openURL(link)}>
-                    <Text style={s.link}>{link}</Text>
-                  </TouchableOpacity>
-                ))}
-                {d.files.map((url, i) => (
-                  <TouchableOpacity key={i} onPress={() => Linking.openURL(url)}>
-                    <Text style={s.link}>File {i + 1}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ))}
-          </View>
-        )}
+          {st === 'COMPLETED' && (
+            <Card style={{ alignItems: 'center', gap: 12, borderWidth: 1, borderColor: DARK.field }}>
+              {reviewed ? (
+                <>
+                  <Ionicons name="heart" size={32} color={DARK.accent} />
+                  <Text style={s.h2}>Thanks for your review!</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={s.h2}>How was your experience?</Text>
+                  <Text style={s.muted}>Your feedback helps {vendor} and other customers</Text>
+                  <View style={{ flexDirection: 'row', gap: 12, marginVertical: 4 }}>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Pressable key={i} onPress={() => setRating(i)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`${i} star${i > 1 ? 's' : ''}`}>
+                        <Ionicons name="star" size={36} color={i <= rating ? '#F28C28' : '#fff'} />
+                      </Pressable>
+                    ))}
+                  </View>
+                  <TextInput
+                    style={s.reviewInput}
+                    placeholder="Write a quick review (optional)..."
+                    placeholderTextColor={DARK.muted}
+                    value={comment}
+                    onChangeText={setComment}
+                    multiline
+                  />
+                  <GradientButton title="Send review" onPress={submitReview} loading={busy} style={{ alignSelf: 'stretch' }} />
+                </>
+              )}
+            </Card>
+          )}
+        </View>
       </ScrollView>
 
-      {/* Action buttons */}
-      {booking.status !== 'CANCELLED' && !(booking.status === 'IN_PROGRESS' && booking.paid_at) && (
-        <View style={s.footer}>
-          {booking.status === 'PENDING' && (
-            <TouchableOpacity
-              style={[s.cancelBtn, actionLoading && s.btnDisabled]}
-              onPress={handleCancel}
-              disabled={actionLoading}
-            >
-              {actionLoading ? (
-                <ActivityIndicator color={COLORS.gray[700]} />
-              ) : (
-                <Text style={s.cancelBtnText}>Cancel Booking</Text>
-              )}
-            </TouchableOpacity>
+      {(st === 'PENDING' || st === 'CONFIRMED' || st === 'COMPLETED') && (
+        <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
+          {st === 'PENDING' && (
+            <Pressable style={s.outline} onPress={cancel} disabled={busy} accessibilityRole="button">
+              <Text style={s.outlineText}>Cancel Request</Text>
+            </Pressable>
           )}
-
-          {booking.status === 'CONFIRMED' && (
-            <View style={s.actionRow}>
-              {booking.paid_at ? (
-                <View style={[s.payBtn, { backgroundColor: '#16a34a' }]}>
-                  <Text style={s.payBtnText}>Paid</Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={[s.payBtn, actionLoading && s.btnDisabled]}
-                  onPress={handlePayNow}
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? (
-                    <ActivityIndicator color={COLORS.white} />
-                  ) : (
-                    <Text style={s.payBtnText}>Pay Now</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[s.cancelBtnSmall, actionLoading && s.btnDisabled]}
-                onPress={handleCancel}
-                disabled={actionLoading}
-              >
-                <Text style={s.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
+          {st === 'CONFIRMED' && !paid && (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Pressable style={[s.outline, { flex: 1 }]} onPress={cancel} disabled={busy} accessibilityRole="button">
+                <Text style={s.outlineText}>Cancel</Text>
+              </Pressable>
+              <GradientButton title={`Pay ${money(total)}`} onPress={payNow} loading={busy} style={{ flex: 2 }} />
             </View>
           )}
-
-          {(booking.status === 'IN_PROGRESS' || booking.status === 'COMPLETED') && !booking.paid_at && (
-            <TouchableOpacity
-              style={[s.payBtn, { marginBottom: 10 }, actionLoading && s.btnDisabled]}
-              onPress={handlePayNow}
-              disabled={actionLoading}
-            >
-              {actionLoading ? <ActivityIndicator color={COLORS.white} /> : <Text style={s.payBtnText}>Pay Now</Text>}
-            </TouchableOpacity>
+          {st === 'CONFIRMED' && paid && (
+            <Pressable style={s.outline} onPress={cancel} disabled={busy} accessibilityRole="button">
+              <Text style={s.outlineText}>Cancel booking</Text>
+            </Pressable>
           )}
-
-          {booking.status === 'COMPLETED' && (
-            <TouchableOpacity
-              style={s.reviewBtn}
-              onPress={() => setReviewVisible(true)}
-            >
-              <Ionicons name="star-outline" size={18} color={COLORS.white} />
-              <Text style={s.reviewBtnText}>Leave a Review</Text>
-            </TouchableOpacity>
+          {st === 'COMPLETED' && booking.listing?.id && (
+            <GradientButton title="Book Again" onPress={() => nav.navigate('HomeTab', { screen: 'ListingDetail', params: { listingId: booking.listing.id }, initial: false })} />
           )}
         </View>
       )}
-
-      {/* Review modal */}
-      <Modal
-        visible={reviewVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setReviewVisible(false)}
-      >
-        <View style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Leave a Review</Text>
-              <TouchableOpacity onPress={() => setReviewVisible(false)}>
-                <Ionicons name="close" size={24} color={COLORS.gray[600]} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={s.label}>Rating</Text>
-            <View style={s.starsRow}>
-              {[1, 2, 3, 4, 5].map((n) => (
-                <TouchableOpacity key={n} onPress={() => setReviewRating(n)}>
-                  <Ionicons
-                    name={n <= reviewRating ? 'star' : 'star-outline'}
-                    size={32}
-                    color="#f59e0b"
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={s.label}>Comment (optional)</Text>
-            <TextInput
-              style={[s.input, s.textarea]}
-              value={reviewComment}
-              onChangeText={setReviewComment}
-              placeholder="Share your experience..."
-              placeholderTextColor={COLORS.gray[400]}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-
-            <TouchableOpacity
-              style={[s.submitBtn, reviewSubmitting && s.btnDisabled]}
-              onPress={handleSubmitReview}
-              disabled={reviewSubmitting}
-            >
-              {reviewSubmitting ? (
-                <ActivityIndicator color={COLORS.white} />
-              ) : (
-                <Text style={s.submitBtnText}>Submit Review</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
 
-function DetailRow({ icon, label, value }: { icon: any; label: string; value: string }) {
+function Row({ icon, label, value, bold }: { icon?: keyof typeof Ionicons.glyphMap; label: string; value: string; bold?: boolean }) {
   return (
     <View style={s.detailRow}>
-      <Ionicons name={icon} size={16} color={COLORS.gray[400]} />
-      <Text style={s.detailLabel}>{label}</Text>
-      <Text style={s.detailValue} numberOfLines={2}>{value}</Text>
+      <View style={[s.meta, { flexShrink: 0 }]}>
+        {icon && <Ionicons name={icon} size={20} color={DARK.muted} />}
+        <Text style={[s.rowLabel, bold && s.rowBold]}>{label}</Text>
+      </View>
+      <Text style={[s.rowValue, bold && s.rowBold]} numberOfLines={3}>{value}</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorText: { fontSize: 16, color: COLORS.gray[500] },
-  scrollContent: { padding: 16, paddingBottom: 100, gap: 12 },
-  statusWrap: { alignItems: 'center', paddingVertical: 8 },
-  statusBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  statusText: { fontSize: 14, fontWeight: '700' },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 16,
-    gap: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray[50],
-  },
-  detailLabel: { fontSize: 13, color: COLORS.gray[500], width: 72 },
-  detailValue: { fontSize: 13, fontWeight: '600', color: COLORS.gray[800], flex: 1 },
-  messageCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 16,
-    gap: 6,
-  },
-  messageLabel: { fontSize: 13, fontWeight: '700', color: COLORS.gray[700] },
-  messageText: { fontSize: 14, color: COLORS.gray[600], lineHeight: 20 },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray[100],
-  },
-  actionRow: { flexDirection: 'row', gap: 12 },
-  payBtn: {
-    flex: 1,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  payBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
-  cancelBtn: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.gray[300],
-    backgroundColor: COLORS.white,
-  },
-  cancelBtnSmall: {
-    flex: 0.45,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.gray[300],
-    backgroundColor: COLORS.white,
-  },
-  cancelBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.gray[700] },
-  reviewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#f59e0b',
-    borderRadius: 12,
-    paddingVertical: 14,
-  },
-  reviewBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
-  btnDisabled: { opacity: 0.6 },
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    gap: 12,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: COLORS.gray[900] },
-  starsRow: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.gray[600] },
-  input: {
-    backgroundColor: COLORS.gray[50],
-    borderWidth: 1,
-    borderColor: COLORS.gray[200],
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: COLORS.gray[900],
-  },
-  textarea: { height: 100 },
-  submitBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  submitBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.gray[700], marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
-  proofItem: { borderTopWidth: 1, borderTopColor: COLORS.gray[50], paddingTop: 8, marginTop: 4 },
-  proofDate: { fontSize: 11, color: COLORS.gray[400], marginBottom: 2 },
-  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  proofThumb: { width: 64, height: 64, borderRadius: 8 },
-  link: { fontSize: 12, color: COLORS.primary, textDecorationLine: 'underline', marginTop: 2 },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
+  hero: { alignItems: 'center', gap: 8, paddingVertical: 28 },
+  ring: { width: 116, height: 116, borderRadius: 58, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  ringInner: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },
+  heroTitle: { color: '#fff', fontSize: 20, fontFamily: FONTS.semibold, textAlign: 'center' },
+  heroBody: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.regular, textAlign: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatar: { width: 64, height: 64, borderRadius: 32, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold },
+  h2: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
+  body: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.regular },
+  muted: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular, textAlign: 'center' },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  msgBtn: { height: 50, borderRadius: 100, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  msgText: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
+  detailRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  rowLabel: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.regular },
+  rowValue: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium, flex: 1, textAlign: 'right' },
+  rowBold: { color: '#fff', fontFamily: FONTS.semibold, fontSize: 16 },
+  dashed: { borderTopWidth: 1, borderStyle: 'dashed', borderColor: DARK.field, marginVertical: 4 },
+  line: { height: 1, backgroundColor: DARK.field },
+  paidNote: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  thumb: { width: 88, height: 88, borderRadius: 10, backgroundColor: DARK.field },
+  link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
+  reviewInput: { alignSelf: 'stretch', minHeight: 110, borderRadius: 16, backgroundColor: DARK.field, padding: 14, color: '#fff', fontSize: 15, fontFamily: FONTS.regular, textAlignVertical: 'top' },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
+  outline: { height: 56, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  outlineText: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
 });

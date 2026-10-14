@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, Touchabl
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { COLORS } from '../../constants/colors';
+import { COLORS, DARK, FONTS } from '../../constants/colors';
 import { BookingService } from '../../services/booking.service';
 import { ContractsService, SignaturePayload, apiError, openSignedLink } from '../../services/contracts.service';
 import ContractBody from './ContractBody';
@@ -165,7 +165,7 @@ export default function BookingContractCard({ bookingId, role, bookingStatus, on
   if (loading) {
     return (
       <View style={s.card}>
-        <ActivityIndicator color={COLORS.primary} />
+        <ActivityIndicator color={DARK.accent} />
       </View>
     );
   }
@@ -175,7 +175,7 @@ export default function BookingContractCard({ bookingId, role, bookingStatus, on
     <View style={s.card}>
       <View style={s.headerRow}>
         <View style={s.titleRow}>
-          <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+          <Ionicons name="document-text-outline" size={18} color={DARK.accent} />
           <Text style={s.title}>Contract</Text>
         </View>
         <ContractStatusBadge status={current.status} />
@@ -232,7 +232,7 @@ export default function BookingContractCard({ bookingId, role, bookingStatus, on
         <View style={s.viewRoot}>
           <View style={s.viewHeader}>
             <TouchableOpacity onPress={() => setViewing(null)} accessibilityLabel="Close" hitSlop={12}>
-              <Ionicons name="close" size={26} color={COLORS.gray[700]} />
+              <Ionicons name="close" size={26} color="#fff" />
             </TouchableOpacity>
             <Text style={s.viewTitle} numberOfLines={1}>{viewing?.title}</Text>
             <View style={{ width: 26 }} />
@@ -264,27 +264,21 @@ export default function BookingContractCard({ bookingId, role, bookingStatus, on
 }
 
 const s = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.white, borderRadius: 14, padding: 16, gap: 6, marginBottom: 12,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2,
-  },
+  card: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 6 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  title: { fontSize: 15, fontWeight: '700', color: COLORS.gray[900] },
-  meta: { fontSize: 13, color: COLORS.gray[600] },
-  small: { fontSize: 12, color: COLORS.gray[500] },
-  notice: { fontSize: 13, color: '#92400e', backgroundColor: '#fffbeb', padding: 10, borderRadius: 10, marginTop: 4 },
+  title: { fontSize: 16, fontFamily: FONTS.semibold, color: '#fff' },
+  meta: { fontSize: 13, color: DARK.muted, fontFamily: FONTS.regular },
+  small: { fontSize: 12, color: DARK.muted, fontFamily: FONTS.regular },
+  notice: { fontSize: 13, color: '#fff', backgroundColor: DARK.field, padding: 12, borderRadius: 12, marginTop: 4, fontFamily: FONTS.medium, lineHeight: 19 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  primary: { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 16 },
-  primaryText: { color: COLORS.white, fontWeight: '700' },
-  secondary: { borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
-  secondaryText: { color: COLORS.gray[800], fontWeight: '600' },
-  danger: { borderWidth: 1, borderColor: '#fecaca', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
-  dangerText: { color: '#dc2626', fontWeight: '600' },
-  viewRoot: { flex: 1, backgroundColor: COLORS.white },
-  viewHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: 54, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.gray[100],
-  },
-  viewTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: COLORS.gray[900] },
+  primary: { backgroundColor: COLORS.primary, borderRadius: 100, paddingVertical: 11, paddingHorizontal: 18 },
+  primaryText: { color: '#fff', fontFamily: FONTS.semibold },
+  secondary: { borderWidth: 1, borderColor: DARK.border, borderRadius: 100, paddingVertical: 10, paddingHorizontal: 16 },
+  secondaryText: { color: DARK.accent, fontFamily: FONTS.medium },
+  danger: { borderWidth: 1, borderColor: '#7f1d1d', borderRadius: 100, paddingVertical: 10, paddingHorizontal: 16 },
+  dangerText: { color: '#fca5a5', fontFamily: FONTS.medium },
+  viewRoot: { flex: 1, backgroundColor: DARK.bg },
+  viewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 54, paddingBottom: 12 },
+  viewTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontFamily: FONTS.semibold, color: '#fff' },
 });

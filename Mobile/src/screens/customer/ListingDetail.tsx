@@ -99,12 +99,18 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
                 <Text style={s.unit}>{unit}</Text>
               </Text>
             </View>
-            <View style={s.meta}>
+            <Pressable
+              style={s.meta}
+              onPress={() => navigation.navigate('Reviews', { listingId: listing.id, title: listing.title })}
+              accessibilityRole="link"
+              accessibilityLabel={`${reviews} reviews`}
+              hitSlop={8}
+            >
               <Ionicons name="star" size={16} color="#F5B700" />
               <Text style={s.muted}>
                 {listing.avg_rating != null ? Number(listing.avg_rating).toFixed(1) : 'New'} ({reviews} Reviews)
               </Text>
-            </View>
+            </Pressable>
           </View>
 
           {!!listing.description && (

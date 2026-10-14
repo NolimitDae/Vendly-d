@@ -2,15 +2,15 @@ import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 
 const STYLES: Record<string, { bg: string; fg: string; label: string }> = {
-  AWAITING_VENDOR: { bg: '#fef3c7', fg: '#92400e', label: 'Awaiting vendor signature' },
-  AWAITING_CUSTOMER: { bg: '#fef3c7', fg: '#92400e', label: 'Awaiting customer signature' },
-  EXECUTED: { bg: '#dcfce7', fg: '#166534', label: 'Signed' },
-  VOID: { bg: '#f3f4f6', fg: '#4b5563', label: 'Void' },
-  SUPERSEDED: { bg: '#f3f4f6', fg: '#4b5563', label: 'Superseded' },
+  AWAITING_VENDOR: { bg: '#3a2a0a', fg: '#fcd34d', label: 'Awaiting vendor signature' },
+  AWAITING_CUSTOMER: { bg: '#3a2a0a', fg: '#fcd34d', label: 'Awaiting your signature' },
+  EXECUTED: { bg: '#0c2a25', fg: '#6ee7c7', label: 'Signed' },
+  VOID: { bg: '#34183B', fg: '#B7A6BA', label: 'Void' },
+  SUPERSEDED: { bg: '#34183B', fg: '#B7A6BA', label: 'Superseded' },
 };
 
 export default function ContractStatusBadge({ status }: { status: string }) {
-  const st = STYLES[status] ?? { bg: '#f3f4f6', fg: '#4b5563', label: status };
+  const st = STYLES[status] ?? { bg: '#34183B', fg: '#B7A6BA', label: status };
   return <Text style={[s.badge, { backgroundColor: st.bg, color: st.fg }]}>{st.label}</Text>;
 }
 

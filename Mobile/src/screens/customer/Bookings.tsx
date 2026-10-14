@@ -1,192 +1,187 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  RefreshControl,
-} from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { format } from 'date-fns';
-import { COLORS } from '../../constants/colors';
-import { BookingService, Booking, BookingStatus } from '../../services/booking.service';
+import { format, parseISO } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BrandGradient } from '../../components/brand';
+import { DARK, FONTS } from '../../constants/colors';
+import { BookingService, type Booking, type BookingStatus } from '../../services/booking.service';
+import type { CustomerBookingsStackParams } from '../../navigation/types';
 
-type Nav = NativeStackNavigationProp<any>;
-
-const FILTERS: { label: string; value: BookingStatus | '' }[] = [
-  { label: 'All', value: '' },
-  { label: 'Pending', value: 'PENDING' },
-  { label: 'Confirmed', value: 'CONFIRMED' },
-  { label: 'In Progress', value: 'IN_PROGRESS' },
-  { label: 'Completed', value: 'COMPLETED' },
-  { label: 'Cancelled', value: 'CANCELLED' },
+type Tab = 'previous' | 'pending' | 'upcoming';
+const TABS: { key: Tab; label: string; statuses: BookingStatus[] }[] = [
+  { key: 'previous', label: 'Previous', statuses: ['COMPLETED', 'CANCELLED', 'REJECTED'] },
+  { key: 'pending', label: 'Pending', statuses: ['PENDING'] },
+  { key: 'upcoming', label: 'Upcoming', statuses: ['CONFIRMED', 'IN_PROGRESS'] },
 ];
 
-const STATUS_LABELS: Record<BookingStatus, string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
+export const bookingWhen = (b: Booking) => {
+  const start = b.event_start_at ?? b.scheduled_at;
+  if (!start) return 'Date to be confirmed';
+  const s = parseISO(start);
+  const day = format(s, 'EEE, MMM d');
+  if (!b.event_end_at) return `${day}  •  ${format(s, 'h:mm a')}`;
+  return `${day}  •  ${format(s, 'h:mm a')} – ${format(parseISO(b.event_end_at), 'h:mm a')}`;
 };
 
-function statusColor(status: BookingStatus) {
-  return COLORS.status[status as keyof typeof COLORS.status] ?? COLORS.status.COMPLETED;
-}
-
 export default function CustomerBookings() {
-  const nav = useNavigation<Nav>();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [filter, setFilter] = useState<BookingStatus | ''>('');
+  const nav = useNavigation<NativeStackNavigationProp<CustomerBookingsStackParams>>();
+  const insets = useSafeAreaInsets();
+  const [tab, setTab] = useState<Tab>('upcoming');
+  const [all, setAll] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // One fetch, filtered locally: the API filters by a single status and the tabs group several.
   const load = useCallback(async () => {
     try {
-      const res = await BookingService.getMyBookingsAsCustomer({
-        status: filter || undefined,
-      });
-      if (res.data?.success) {
-        setBookings(res.data.data ?? []);
-      }
+      const res = await BookingService.getMyBookingsAsCustomer({ limit: 100 });
+      if (res.data?.success) setAll(res.data.data ?? []);
     } catch {
-      // ignore
+      // keep what we have
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter]);
+  }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [filter]));
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onRefresh = () => { setRefreshing(true); load(); };
+  const current = TABS.find((t) => t.key === tab)!;
+  const items = all
+    .filter((b) => current.statuses.includes(b.status))
+    .sort((a, b) => (a.event_start_at ?? a.scheduled_at ?? a.created_at).localeCompare(b.event_start_at ?? b.scheduled_at ?? b.created_at) * (tab === 'previous' ? -1 : 1));
 
-  const renderItem = ({ item }: { item: Booking }) => {
-    const sc = statusColor(item.status);
-    return (
-      <TouchableOpacity
-        style={s.card}
-        onPress={() => nav.navigate('BookingDetail', { bookingId: item.id })}
-      >
-        <View style={s.cardHeader}>
-          <Text style={s.cardTitle} numberOfLines={1}>{item.listing?.title ?? 'Booking'}</Text>
-          <View style={[s.badge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
-            <Text style={[s.badgeText, { color: sc.text }]}>{STATUS_LABELS[item.status]}</Text>
-          </View>
-        </View>
-
-        <View style={s.metaRow}>
-          <View style={s.metaItem}>
-            <Ionicons name="person-outline" size={12} color={COLORS.gray[400]} />
-            <Text style={s.metaText}>{item.vendor?.name ?? 'Vendor'}</Text>
-          </View>
-          {item.scheduled_at && (
-            <View style={s.metaItem}>
-              <Ionicons name="calendar-outline" size={12} color={COLORS.gray[400]} />
-              <Text style={s.metaText}>
-                {format(new Date(item.scheduled_at), 'MMM d, yyyy')}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {item.amount != null && (
-          <Text style={s.amount}>${Number(item.amount).toLocaleString()}</Text>
-        )}
-      </TouchableOpacity>
-    );
-  };
+  const cancel = (b: Booking) =>
+    Alert.alert('Cancel booking?', 'The vendor will be told and any payment is refunded under the contract’s cancellation terms.', [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Cancel booking',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await BookingService.cancelBooking(b.id);
+            load();
+          } catch (err: any) {
+            Alert.alert('Could not cancel', err?.response?.data?.message ?? 'Try again in a moment.');
+          }
+        },
+      },
+    ]);
 
   return (
     <View style={s.root}>
-      {/* Filter tabs */}
       <FlatList
-        horizontal
-        data={FILTERS}
-        keyExtractor={(f) => f.value}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.filterList}
-        renderItem={({ item: f }) => (
-          <TouchableOpacity
-            style={[s.filterPill, filter === f.value && s.filterPillActive]}
-            onPress={() => setFilter(f.value)}
-          >
-            <Text style={[s.filterText, filter === f.value && s.filterTextActive]}>
-              {f.label}
-            </Text>
-          </TouchableOpacity>
+        data={items}
+        keyExtractor={(b) => b.id}
+        contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 32, paddingHorizontal: 20, gap: 20 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
+        ListHeaderComponent={
+          <View style={{ gap: 24 }}>
+            <Text style={s.title}>Booking</Text>
+            <View style={s.segment}>
+              {TABS.map((t) => {
+                const on = t.key === tab;
+                const count = all.filter((b) => t.statuses.includes(b.status)).length;
+                const label = <Text style={[s.segmentText, on && { color: '#fff' }]}>{t.label}{count && t.key !== 'previous' ? ` (${count})` : ''}</Text>;
+                return (
+                  <Pressable key={t.key} onPress={() => setTab(t.key)} style={{ flex: 1 }} accessibilityRole="tab" accessibilityState={{ selected: on }}>
+                    {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        }
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
+          ) : (
+            <View style={s.empty}>
+              <Ionicons name="calendar-outline" size={44} color={DARK.muted} />
+              <Text style={s.emptyTitle}>{tab === 'pending' ? 'No requests waiting' : tab === 'upcoming' ? 'Nothing booked yet' : 'No past bookings'}</Text>
+              <Text style={s.emptyText}>{tab === 'upcoming' ? 'Find a vendor on the Home tab to make your first booking.' : ''}</Text>
+            </View>
+          )
+        }
+        renderItem={({ item }) => (
+          <View style={s.card}>
+            <View style={s.when}>
+              <Ionicons name="time-outline" size={20} color="#fff" />
+              <Text style={s.whenText}>{bookingWhen(item)}</Text>
+            </View>
+            <View style={s.body}>
+              <View style={s.row}>
+                <View style={s.avatar}>
+                  {item.vendor?.avatar_url ? <Image source={{ uri: item.vendor.avatar_url }} style={StyleSheet.absoluteFill} /> : <Text style={s.avatarText}>{item.vendor?.name?.[0]?.toUpperCase() ?? 'V'}</Text>}
+                </View>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={s.vendor} numberOfLines={1}>{item.vendor?.name ?? 'Vendor'}</Text>
+                  <Text style={s.service} numberOfLines={1}>{item.listing?.title ?? 'Service'}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <StatusPill booking={item} />
+                  {item.amount != null && <Text style={s.price}>${Number(item.amount).toFixed(2)}</Text>}
+                </View>
+              </View>
+              <View style={s.actions}>
+                {(item.status === 'PENDING' || item.status === 'CONFIRMED') && (
+                  <Pressable style={s.outline} onPress={() => cancel(item)} accessibilityRole="button">
+                    <Text style={s.outlineText}>{item.status === 'PENDING' ? 'Cancel request' : 'Cancel booking'}</Text>
+                  </Pressable>
+                )}
+                <Pressable style={{ flex: 1 }} onPress={() => nav.navigate('BookingDetail', { bookingId: item.id })} accessibilityRole="button">
+                  <BrandGradient style={s.primary}>
+                    <Text style={s.primaryText}>{item.status === 'CONFIRMED' && !item.paid_at ? 'Pay now' : item.status === 'COMPLETED' ? 'View & review' : 'View Details'}</Text>
+                  </BrandGradient>
+                </Pressable>
+              </View>
+            </View>
+          </View>
         )}
       />
-
-      {loading ? (
-        <View style={s.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      ) : (
-        <FlatList
-          data={bookings}
-          keyExtractor={(b) => b.id}
-          renderItem={renderItem}
-          contentContainerStyle={[s.list, bookings.length === 0 && s.listEmpty]}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
-          }
-          ListEmptyComponent={
-            <View style={s.emptyWrap}>
-              <Ionicons name="receipt-outline" size={52} color={COLORS.gray[300]} />
-              <Text style={s.emptyText}>No bookings yet</Text>
-            </View>
-          }
-        />
-      )}
     </View>
   );
 }
 
+function StatusPill({ booking }: { booking: Booking }) {
+  const map: Record<BookingStatus, { label: string; color: string }> = {
+    PENDING: { label: 'Awaiting vendor', color: '#fcd34d' },
+    CONFIRMED: { label: booking.paid_at ? 'Confirmed' : 'Payment due', color: booking.paid_at ? '#6ee7c7' : '#fcd34d' },
+    IN_PROGRESS: { label: 'In progress', color: DARK.accent },
+    COMPLETED: { label: 'Completed', color: '#6ee7c7' },
+    CANCELLED: { label: 'Cancelled', color: DARK.muted },
+    REJECTED: { label: 'Declined', color: '#fca5a5' },
+  };
+  const st = map[booking.status] ?? map.PENDING;
+  return <Text style={[s.pill, { color: st.color }]}>{st.label}</Text>;
+}
+
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  filterList: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  filterPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.gray[200],
-  },
-  filterPillActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterText: { fontSize: 13, fontWeight: '600', color: COLORS.gray[600] },
-  filterTextActive: { color: COLORS.white },
-  list: { paddingHorizontal: 16, paddingBottom: 32 },
-  listEmpty: { flex: 1 },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: COLORS.gray[900], flex: 1, marginRight: 8 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, color: COLORS.gray[500] },
-  amount: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 64 },
-  emptyText: { fontSize: 16, color: COLORS.gray[500], marginTop: 12 },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  title: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold, textAlign: 'center' },
+  segment: { flexDirection: 'row', padding: 4, borderRadius: 100, backgroundColor: DARK.card },
+  segmentItem: { height: 44, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  segmentText: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.medium },
+  empty: { alignItems: 'center', paddingVertical: 48, gap: 8 },
+  emptyTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  emptyText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular, textAlign: 'center' },
+  card: { borderRadius: 20, backgroundColor: DARK.card, overflow: 'hidden' },
+  when: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: DARK.field },
+  whenText: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
+  body: { padding: 16, gap: 16 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: { width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontSize: 20, fontFamily: FONTS.semibold },
+  vendor: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  service: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular },
+  pill: { fontSize: 12, fontFamily: FONTS.semibold },
+  price: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  actions: { flexDirection: 'row', gap: 12 },
+  outline: { flex: 1, height: 50, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
+  outlineText: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
+  primary: { height: 50, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  primaryText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
 });

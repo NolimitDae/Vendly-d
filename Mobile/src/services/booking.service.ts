@@ -6,12 +6,17 @@ export type BookingStatus =
   | 'CONFIRMED'
   | 'IN_PROGRESS'
   | 'COMPLETED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'REJECTED';
 
 export interface Booking {
   id: string;
   status: BookingStatus;
   scheduled_at?: string;
+  event_start_at?: string | null;
+  event_end_at?: string | null;
+  venue_address?: string | null;
+  guest_count?: number | null;
   message?: string;
   amount?: number;
   service_fee?: number | string | null;
@@ -27,6 +32,7 @@ export interface Booking {
     id: string;
     name: string;
     avatar?: string;
+    avatar_url?: string | null;
   };
   customer?: {
     id: string;

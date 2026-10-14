@@ -59,6 +59,7 @@ export type CustomerHomeStackParams = {
   SelectDate: { listing: ListingSummary };
   BookingDetails: { listing: ListingSummary; date: string };
   BookingSummary: { listing: ListingSummary; draft: BookingDraft };
+  Reviews: { listingId: string; title: string };
 };
 
 export type CustomerBookingsStackParams = {
