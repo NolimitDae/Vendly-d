@@ -10,6 +10,7 @@ import Image from "next/image";
 import { Star, Search, SlidersHorizontal, MapPin, Heart } from "lucide-react";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
+import BrowseSwitch from "@/components/rentals/BrowseSwitch";
 
 interface Listing {
   id: string;
@@ -123,6 +124,7 @@ export default function MarketplacePage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
+        <BrowseSwitch active="services" />
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Browse Services</h1>

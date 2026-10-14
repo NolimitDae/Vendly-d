@@ -16,6 +16,7 @@ import { BookingService } from "@/service/booking/booking.service";
 import { toast } from "react-toastify";
 import PaymentTimeline from "@/components/payments/PaymentTimeline";
 import BookingContractSection from "@/components/contracts/BookingContractSection";
+import RentalReturnPanel, { type RentalBookingFields } from "@/components/rentals/RentalReturnPanel";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +58,10 @@ interface Booking {
   created_at: string;
   listing?: { id: string; title: string; images: string[] };
   vendor?: { id: string; name: string; avatar_url?: string };
+  is_rental?: boolean;
+  security_deposit?: number | string | null;
+  rental_reservations?: RentalBookingFields["rental_reservations"];
+  rental_return?: RentalBookingFields["rental_return"];
 }
 
 export default function CustomerBookingDetailPage() {
@@ -165,6 +170,8 @@ export default function CustomerBookingDetailPage() {
           )}
         </div>
       </div>
+
+      <RentalReturnPanel booking={booking} role="CUSTOMER" />
 
       <PaymentTimeline bookingId={booking.id} bookingStatus={booking.status} />
 
