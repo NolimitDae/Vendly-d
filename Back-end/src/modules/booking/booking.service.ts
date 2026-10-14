@@ -14,6 +14,7 @@ import appConfig from 'src/config/app.config';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { rentalTitle } from 'src/modules/rentals/rentals.service';
 import { ChatExtrasService } from 'src/modules/chat/extras/chat-extras.service';
+import { EventToolsService } from 'src/modules/events/tools/event-tools.service';
 import { BookingContractsService, RequestMeta } from 'src/modules/contracts/booking-contracts.service';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
@@ -33,6 +34,7 @@ export class BookingService {
     private pushService: PushService,
     private contracts: BookingContractsService,
     private chatExtras: ChatExtrasService,
+    private eventTools: EventToolsService,
     private payments: PaymentsService,
   ) {}
 
@@ -92,6 +94,8 @@ export class BookingService {
     // the vendor joins the group chat of any event this booking is for
     const events = await this.prisma.eventBooking.findMany({ where: { booking_id: bookingId }, select: { event_id: true } });
     for (const e of events) await this.chatExtras.syncEventChat(e.event_id).catch((err) => console.error(`Event chat for ${e.event_id} failed:`, err));
+    // and it gets its own line in the event budget
+    if (events.length) await this.eventTools.syncBookingBudget(bookingId).catch((err) => console.error(`Event budget for ${bookingId} failed:`, err));
     const updated = await this.getBookingOrFail(bookingId);
 
     const clientUrl = appConfig().app.client_app_url;

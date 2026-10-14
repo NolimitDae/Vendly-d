@@ -10,6 +10,7 @@ import { ContractsModule } from './modules/contracts/contracts.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { RentalsModule } from './modules/rentals/rentals.module';
+import { EventToolsModule } from './modules/events/tools/event-tools.module';
 
 // internal imports
 import appConfig from './config/app.config';
@@ -101,6 +102,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     PaymentsModule,
     PlatformModule,
     RentalsModule,
+    EventToolsModule,
   ],
   controllers: [AppController],
   providers: [

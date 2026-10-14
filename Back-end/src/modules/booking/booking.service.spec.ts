@@ -7,6 +7,7 @@ import { PushService } from 'src/modules/push/push.service';
 import { BookingContractsService } from 'src/modules/contracts/booking-contracts.service';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { ChatExtrasService } from 'src/modules/chat/extras/chat-extras.service';
+import { EventToolsService } from 'src/modules/events/tools/event-tools.service';
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
@@ -117,6 +118,7 @@ describe('BookingService', () => {
         { provide: BookingContractsService, useValue: mockContracts },
         { provide: PaymentsService, useValue: mockPayments },
         { provide: ChatExtrasService, useValue: { syncEventChat: jest.fn().mockResolvedValue(null) } },
+        { provide: EventToolsService, useValue: { syncBookingBudget: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 

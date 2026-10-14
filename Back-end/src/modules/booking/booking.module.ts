@@ -5,11 +5,12 @@ import { PushModule } from 'src/modules/push/push.module';
 import { ContractsModule } from 'src/modules/contracts/contracts.module';
 import { PaymentsModule } from 'src/modules/payments/payments.module';
 import { ChatExtrasModule } from 'src/modules/chat/extras/chat-extras.module';
+import { EventToolsModule } from 'src/modules/events/tools/event-tools.module';
 import { BookingController } from './booking.controller';
 import { BookingService } from './booking.service';
 
 @Module({
-  imports: [PrismaModule, MailModule, PushModule, ContractsModule, PaymentsModule, ChatExtrasModule],
+  imports: [PrismaModule, MailModule, PushModule, ContractsModule, PaymentsModule, ChatExtrasModule, EventToolsModule],
   controllers: [BookingController],
   providers: [BookingService],
   exports: [BookingService],
