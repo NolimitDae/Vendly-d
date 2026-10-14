@@ -66,6 +66,8 @@ export default function MonthCalendar({
               accessibilityLabel={`${format(d, 'EEEE d MMMM')}${blocked ? ', unavailable' : ''}${note ? `, ${note}` : ''}`}
             >
               {inside && <View style={s.band} />}
+              {/* half bands join the range ends to the days between */}
+              {edge && !!rangeEnd && !!value && !isSameDay(value, rangeEnd) && <View style={[s.band, isSameDay(d, value) ? { left: '50%' } : { right: '50%' }]} />}
               {edge ? <BrandGradient style={s.circle}>{label}</BrandGradient> : <View style={[s.circle, !off && !inside && { backgroundColor: '#2A1536' }, inside && { backgroundColor: 'transparent' }]}>{label}</View>}
               {!!note && <Text style={s.badge}>{note}</Text>}
             </Pressable>

@@ -106,12 +106,12 @@ export default function RentalReturnCard({ booking, role, onDone }: { booking: B
       </View>
       <Text style={s.muted}>When everything is back, record it here. You are paid once the return is in{deposit ? `, and the customer’s ${money(deposit)} deposit hold is released unless you add fees` : ''}.</Text>
       {!open ? (
-        <View style={s.buttons}>
-          <Pressable style={[s.outline, { flex: 1 }]} onPress={() => setOpen(true)} accessibilityRole="button">
+        <View style={{ gap: 10 }}>
+          <GradientButton title="Everything came back OK" onPress={submit} loading={busy} />
+          <Pressable style={s.outline} onPress={() => setOpen(true)} accessibilityRole="button">
             <Ionicons name="alert-circle-outline" size={18} color={DARK.accent} />
-            <Text style={s.outlineText}>Report an issue</Text>
+            <Text style={s.outlineText}>Report damage or a late return</Text>
           </Pressable>
-          <GradientButton title="All returned OK" onPress={submit} loading={busy} style={{ flex: 1 }} />
         </View>
       ) : (
         <>
@@ -151,7 +151,6 @@ const s = StyleSheet.create({
   h2: { color: '#fff', fontSize: 17, fontFamily: FONTS.semibold },
   body: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
   muted: { color: DARK.muted, fontSize: 13, lineHeight: 19, fontFamily: FONTS.regular },
-  buttons: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   outline: { height: 52, borderRadius: 26, borderWidth: 1, borderColor: DARK.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12 },
   outlineText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
   pair: { flexDirection: 'row', gap: 12 },

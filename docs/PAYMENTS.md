@@ -52,6 +52,14 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 - **Revenue report:** Admin → Revenue: collected, Vendly fees, commission, refunds and payouts by day, with CSV export.
 - **Suspend / restore:** Admin → Vendors, `PATCH /admin/users/:id/status`. Suspended users are rejected on their next request.
 
+## Rentals (Phase D)
+
+- Rental bookings (`POST /rentals/book`) have no package: `listing_id` is null and the booking holds one `RentalReservation` per item. Price = daily rate × days × quantity, charged in full when the vendor accepts (the usual engine). The Vendly Protection fee uses the first item's category.
+- **Security deposit:** Σ(deposit per unit × quantity) is stored on `Booking.security_deposit` and scheduled as an installment with `kind = security_deposit`, `capture_manually = true`, due the day before pickup. Completion never captures it.
+- **Return** (`POST /rentals/bookings/:id/return`, vendor): no fees voids the hold; damage / late fees are captured from the hold (partial capture) and anything above it is charged as a `kind = extra` installment. Fees need photos or a note; the customer gets 48h to dispute before payout.
+- Payouts wait until every reservation on the booking is returned.
+- Card holds lapse after about 7 days, so a deposit on a rental longer than ~6 days may expire before the return. If capture fails the fees are charged to the saved card instead (and can fail like any charge).
+
 ## Still to do
 
 - Legacy bookings paid through hosted Checkout before this engine keep the old path: no installments, vendor credited to balance on completion.

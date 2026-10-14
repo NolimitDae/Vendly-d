@@ -134,7 +134,7 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
           <Text style={s.h2}>Delivery & notes</Text>
           <View style={ui.field}>
             <Ionicons name="location-outline" size={20} color={DARK.muted} />
-            <TextInput style={ui.input} placeholder="Event or delivery address (optional)" placeholderTextColor={DARK.muted} value={venue} onChangeText={setVenue} />
+            <TextInput style={ui.input} placeholder="Delivery address (optional)" placeholderTextColor={DARK.muted} value={venue} onChangeText={setVenue} />
           </View>
           <View style={[ui.field, { height: undefined, paddingVertical: 12, alignItems: 'flex-start' }]}>
             <Ionicons name="chatbox-ellipses-outline" size={20} color={DARK.muted} style={{ marginTop: 2 }} />

@@ -8,7 +8,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { RentalsService, type RentalItem } from '../../services/rentals.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 
-const money = (n: number) => `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const money = (n: number) => `${Number(n) % 1 ? Number(n).toFixed(2) : Number(n).toLocaleString()}`;
 
 /** Rentals marketplace: decor, furniture, AV and equipment rented by the day. */
 export default function Rentals({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'Rentals'>) {

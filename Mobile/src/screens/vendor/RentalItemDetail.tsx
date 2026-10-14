@@ -101,13 +101,16 @@ export default function RentalItemDetail({ navigation, route }: NativeStackScree
         <Card style={{ gap: 12 }}>
           <Text style={s.h2}>Stock, next 60 days</Text>
           <View style={s.heat}>
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((w, i) => <Text key={`w${i}`} style={s.weekday}>{w}</Text>)}
+            {/* line the first day up under its weekday */}
+            {Array.from({ length: item.calendar?.length ? parseISO(item.calendar[0].date).getDay() : 0 }, (_, i) => <View key={`pad${i}`} style={[s.cell, { backgroundColor: 'transparent' }]} />)}
             {(item.calendar ?? []).map((c) => {
               const ratio = item.quantity ? c.available / item.quantity : 0;
               const bg = ratio >= 1 ? DARK.field : ratio > 0 ? '#7A2A82' : '#C0486B';
               const isSel = selected === c.date;
               return (
                 <Pressable key={c.date} onPress={() => setSelected(isSel ? null : c.date)} style={[s.cell, { backgroundColor: bg }, isSel && s.cellSel]} accessibilityLabel={`${day(c.date)}: ${c.available} of ${item.quantity} free`}>
-                  <Text style={s.cellText}>{parseISO(c.date).getDate()}</Text>
+                  <Text style={s.cellText}>{parseISO(c.date).getDate() === 1 ? format(parseISO(c.date), 'MMM') : parseISO(c.date).getDate()}</Text>
                 </Pressable>
               );
             })}
@@ -177,8 +180,9 @@ const s = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 10 },
   action: { flex: 1, height: 48, borderRadius: 24, borderWidth: 1, borderColor: DARK.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   actionText: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
-  heat: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  cell: { width: 37, height: 37, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  heat: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 5 },
+  weekday: { width: `${100 / 7}%`, textAlign: 'center', color: DARK.muted, fontSize: 11, fontFamily: FONTS.medium, marginBottom: 2 },
+  cell: { width: `${100 / 7 - 1.5}%`, marginHorizontal: '0.75%', aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   cellSel: { borderWidth: 2, borderColor: '#fff' },
   cellText: { color: '#fff', fontSize: 11, fontFamily: FONTS.medium },
   legend: { flexDirection: 'row', gap: 14, flexWrap: 'wrap' },

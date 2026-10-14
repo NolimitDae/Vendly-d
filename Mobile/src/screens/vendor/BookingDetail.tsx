@@ -230,7 +230,7 @@ export default function VendorBookingDetail() {
             <Text style={s.muted}>Deposit of {money(booking.early_released_amount)} released early · it comes off your final payout.</Text>
           )}
 
-          {(st === 'IN_PROGRESS' || st === 'CONFIRMED') && paid && (
+          {(st === 'IN_PROGRESS' || st === 'CONFIRMED') && paid && !booking.is_rental && (
             <Card style={{ gap: 12 }}>
               <Text style={s.h2}>Proof of work</Text>
               <Text style={s.muted}>Photos of the finished work protect you if there's a dispute.</Text>
@@ -269,7 +269,7 @@ export default function VendorBookingDetail() {
             </Card>
           )}
 
-          {(st === 'IN_PROGRESS' || st === 'COMPLETED') && (
+          {(st === 'IN_PROGRESS' || st === 'COMPLETED') && !booking.is_rental && (
             <Card style={{ gap: 12 }}>
               <Text style={s.h2}>Send a deliverable</Text>
               <Text style={s.muted}>Share final files or a gallery link with {customer.split(' ')[0]}.</Text>
