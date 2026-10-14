@@ -150,7 +150,7 @@ export const BaseInput = forwardRef<HTMLInputElement, TextInputProps>(
           {hasPrefix && (
             <span
               className={cn(
-                "absolute left-0 flex items-center justify-center text-slate-400 dark:text-slate-500 pointer-events-none ",
+                "absolute left-0 flex items-center justify-center text-slate-400 dark:text-gray-500 pointer-events-none ",
                 s.icon,
                 "ml-3",
                 prefixClassName,
@@ -185,7 +185,7 @@ export const BaseInput = forwardRef<HTMLInputElement, TextInputProps>(
           {hasSuffix && (
             <span
               className={cn(
-                "absolute right-0 flex items-center justify-center text-slate-400 dark:text-slate-500",
+                "absolute right-0 flex items-center justify-center text-slate-400 dark:text-gray-500",
                 s.icon,
                 "mr-3",
                 suffixClassName,

@@ -90,7 +90,7 @@ export const InputWrapper = memo<InputWrapperProps>(function InputWrapper({
       {!hasError && !successText && helperText && (
         <span
           className={cn(
-            "text-slate-500 dark:text-slate-400",
+            "text-slate-500 dark:text-gray-400",
             s.helper,
             helperClassName,
           )}

@@ -183,22 +183,37 @@
 }
 
 .dark {
+  /* Tailwind's default greys are blue-tinted, which made dark mode look navy. In dark mode the whole
+     gray scale shifts to plum-tinted neutrals so every dark:bg-gray-* / text-gray-* follows the brand. */
+  --color-gray-50: #f8f5f9;
+  --color-gray-100: #eee9ef;
+  --color-gray-200: #ddd6e0;
+  --color-gray-300: #c2bac6;
+  --color-gray-400: #9b91a0;
+  --color-gray-500: #776b7c;
+  --color-gray-600: #574a5d;
+  --color-gray-700: #3b2c42;
+  --color-gray-800: #27192d;
+  --color-gray-900: #1a0e1f;
+  --color-gray-950: #130816;
+  --darkBg: #130816;
+
   /* Legacy colour tokens had no dark values, so text and surfaces stayed light-mode colours in dark mode. */
   --blackColor: #f4f4f5;
   --purpleOne: #a84ab0;
   --purpleTwo: #c27bca;
   --purpleThree: #d9a6dd;
-  --whiteColor: #18181b;
+  --whiteColor: #1a0e1f;
   --headerColor: #f4f4f5;
-  --descriptionColor: #a1a1aa;
-  --grayColor1: #a1a1aa;
-  --grayColor2: #e4e4e7;
+  --descriptionColor: #9b91a0;
+  --grayColor1: #9b91a0;
+  --grayColor2: #ddd6e0;
   --borderColor: rgba(255, 255, 255, 0.1);
   --bgColor: rgba(255, 255, 255, 0.04);
-  --bgColorOne: #1f1a2b;
-  --grayBg: #1f1f23;
-  --tableHeaderBg: #26262b;
-  --progressBarBg: #52525b;
+  --bgColorOne: #27192d;
+  --grayBg: #221526;
+  --tableHeaderBg: #2e1f34;
+  --progressBarBg: #574a5d;
   --warningBg: #2e2508;
   --warningBorder: #5c4a10;
   --greenBg: #0c2a25;

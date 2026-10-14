@@ -157,7 +157,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           {showCount && (
             <span
               className={cn(
-                "absolute bottom-2 right-3 text-slate-400 dark:text-slate-500 pointer-events-none",
+                "absolute bottom-2 right-3 text-slate-400 dark:text-gray-500 pointer-events-none",
                 sizeConfig[size].helper,
               )}
             >
@@ -431,7 +431,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
             className={cn(
               "shrink-0 mt-0.5 rounded border-slate-300 text-plum-500",
               "focus:ring-2 focus:ring-orchid-500/30 focus:ring-offset-1",
-              "dark:border-slate-600 dark:bg-slate-800 dark:checked:bg-orchid-500",
+              "dark:border-gray-600 dark:bg-gray-800 dark:checked:bg-orchid-500",
               "disabled:cursor-not-allowed transition-colors",
               checkSize,
               inputClassName,
@@ -441,7 +441,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           {label && (
             <span
               className={cn(
-                "text-slate-700 dark:text-slate-300 leading-snug",
+                "text-slate-700 dark:text-gray-300 leading-snug",
                 s.label
                   .replace("mb-1", "")
                   .replace("mb-0.5", "")
@@ -542,7 +542,7 @@ export const RadioGroup = memo<RadioGroupProps>(function RadioGroup({
                 className={cn(
                   "shrink-0 mt-0.5 border-slate-300 text-purpleOne",
                   "focus:ring-2 focus:ring-purpleOne/30 focus:ring-offset-1",
-                  "dark:border-slate-600 dark:bg-slate-800 dark:checked:bg-purpleOne",
+                  "dark:border-gray-600 dark:bg-gray-800 dark:checked:bg-purpleOne",
                   "transition-colors disabled:cursor-not-allowed",
                   radioSize,
                   inputClassName,
@@ -551,7 +551,7 @@ export const RadioGroup = memo<RadioGroupProps>(function RadioGroup({
               <span className="flex flex-col">
                 <span
                   className={cn(
-                    "text-slate-700 dark:text-slate-300 leading-snug",
+                    "text-slate-700 dark:text-gray-300 leading-snug",
                     s.label.replace(/mb-\S+/, ""),
                   )}
                 >
@@ -560,7 +560,7 @@ export const RadioGroup = memo<RadioGroupProps>(function RadioGroup({
                 {opt.helperText && (
                   <span
                     className={cn(
-                      "text-slate-500 dark:text-slate-400",
+                      "text-slate-500 dark:text-gray-400",
                       s.helper,
                     )}
                   >
@@ -669,7 +669,7 @@ export const FileInput = forwardRef<HTMLInputElement, FileInputProps>(
             multiple={multiple}
             onChange={(e) => e.target.files && handleFiles(e.target.files)}
             className={cn(
-              "block w-full text-sm text-slate-500 dark:text-slate-400",
+              "block w-full text-sm text-slate-500 dark:text-gray-400",
               "file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0",
               "file:text-sm file:font-medium file:bg-blush-50 file:text-plum-700",
               "dark:file:bg-plum-900/30 dark:file:text-orchid-300",
@@ -710,7 +710,7 @@ export const FileInput = forwardRef<HTMLInputElement, FileInputProps>(
               ? "border-purpleOne bg-purpleOne/5 dark:bg-purpleOne/20"
               : hasError
                 ? "border-red-400 bg-red-50/50 dark:bg-red-900/10"
-                : "border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/50 hover:border-purpleOne/50",
+                : "border-slate-300 bg-slate-50 dark:border-gray-600 dark:bg-gray-800/50 hover:border-purpleOne/50",
             disabled && "opacity-50 cursor-not-allowed pointer-events-none",
             inputClassName
           )}
@@ -730,14 +730,14 @@ export const FileInput = forwardRef<HTMLInputElement, FileInputProps>(
           />
           <span
             className={cn(
-              "text-slate-800 dark:text-slate-200",
+              "text-slate-800 dark:text-gray-200",
               isDragging && "text-purpleOne",
             )}
           >
             <UploadIcon />
           </span>
           <div className="text-center pointer-events-none">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            <p className="text-sm font-medium text-slate-700 dark:text-gray-300">
               {isDragging ? (
                 "Drop files here"
               ) : (
