@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import { toast } from "react-toastify";
+import PaymentTimeline from "@/components/payments/PaymentTimeline";
 import BookingContractSection from "@/components/contracts/BookingContractSection";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,7 @@ interface Booking {
   amount?: number;
   service_fee?: number | string | null;
   paid_at?: string | null;
+  payment_plan?: string | null;
   scheduled_at?: string;
   message?: string;
   created_at: string;
@@ -164,7 +166,9 @@ export default function CustomerBookingDetailPage() {
         </div>
       </div>
 
-      {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
+      <PaymentTimeline bookingId={booking.id} bookingStatus={booking.status} />
+
+      {!booking.payment_plan && ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
         <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
           {booking.paid_at ? (
             <p className="text-sm text-green-700">Paid on {dayjs(booking.paid_at).format("MMM D, YYYY")}</p>

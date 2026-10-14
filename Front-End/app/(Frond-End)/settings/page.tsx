@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Shield, ShieldCheck, QrCode, KeyRound, ChevronRight, Loader2, X } from "lucide-react";
+import { Shield, ShieldCheck, QrCode, KeyRound, ChevronRight, Loader2, X, CreditCard } from "lucide-react";
+import Link from "next/link";
 import Image from "next/image";
 import Container from "@/app/_components/Container";
 import { TwoFAService } from "@/service/twofa/twofa.service";
@@ -122,6 +123,23 @@ export default function SettingsPage() {
           <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">
             Manage your security preferences
           </p>
+
+          {/* Payment methods */}
+          <Link
+            href="/settings/payment-methods"
+            className="flex items-center justify-between p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:border-primary/40 transition"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/10">
+                <CreditCard className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">Payment methods</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Cards used when vendors accept your bookings</p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-gray-400" />
+          </Link>
 
           {/* 2FA card */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">

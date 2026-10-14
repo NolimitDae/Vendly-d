@@ -18,6 +18,15 @@ jest.mock('@/service/contracts/contracts.service', () => {
   };
 });
 
+jest.mock('@/components/payments/SavedCards', () => ({
+  __esModule: true,
+  default: ({ selected, onSelect }: { selected: string | null; onSelect: (id: string) => void }) => {
+    const React = require('react');
+    React.useEffect(() => { if (!selected) onSelect('pm_default'); }, [selected, onSelect]);
+    return <p>Visa •••• 4242</p>;
+  },
+}));
+
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() },
 }));
@@ -42,7 +51,16 @@ const preview = {
   source_pdf_url: null,
   consent_text: 'I agree to sign electronically and receive this contract electronically.',
   missing_message: null,
-  pricing: { price: '$500.00', service_fee: '$25.00', total: '$525.00' },
+  pricing: {
+    price: 500,
+    service_fee: 25,
+    total: 525,
+    plan: 'DEPOSIT_50',
+    schedule: [
+      { label: '50% deposit', amount: 275, due_at: '2030-05-01T00:00:00Z', capture_manually: false },
+      { label: 'Balance', amount: 250, due_at: '2030-05-25T00:00:00Z', capture_manually: false },
+    ],
+  },
 };
 
 async function fillDetails(user: ReturnType<typeof userEvent.setup>) {
@@ -136,6 +154,7 @@ describe('BookingModal', () => {
       venue_address: 'Grand Hall',
       guest_count: 120,
       event_id: 'event-1',
+      payment_method_id: 'pm_default',
       preview_token: 'token-1',
       signature: { legal_name: 'Jane Customer', consent: true, content_sha256: preview.content_sha256 },
     });
@@ -172,5 +191,7 @@ describe('BookingModal', () => {
     expect(await screen.findByText('$25.00')).toBeInTheDocument();
     expect(screen.getByText('$525.00')).toBeInTheDocument();
     expect(screen.getByText(/you pay after the vendor accepts and signs/i)).toBeInTheDocument();
+    expect(screen.getByText(/50% deposit when the vendor accepts/i)).toBeInTheDocument();
+    expect(screen.getByText('$275.00')).toBeInTheDocument();
   });
 });

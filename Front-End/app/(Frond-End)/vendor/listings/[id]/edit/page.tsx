@@ -50,6 +50,7 @@ export default function EditListingPage() {
     description: "",
     price: "",
     price_unit: "fixed",
+    payment_plan: "FULL_ON_ACCEPT",
     location: "",
     availability: "",
     delivery_time: "",
@@ -80,6 +81,7 @@ export default function EditListingPage() {
           description: l.description ?? "",
           price: String(l.price ?? ""),
           price_unit: l.price_unit ?? "fixed",
+          payment_plan: l.payment_plan ?? l.effective_payment_plan ?? "FULL_ON_ACCEPT",
           location: l.location ?? "",
           availability: l.availability ?? "",
           delivery_time: l.delivery_time ? String(l.delivery_time) : "",
@@ -359,6 +361,20 @@ export default function EditListingPage() {
                   <option value="person">Person</option>
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">How customers pay</label>
+              <select
+                value={form.payment_plan}
+                onChange={(e) => set("payment_plan", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none text-gray-900 dark:text-white"
+              >
+                <option value="FULL_ON_ACCEPT">Full payment when you accept</option>
+                <option value="DEPOSIT_50">50% deposit, balance 7 days before</option>
+                <option value="DEPOSIT_25">25% deposit, balance 14 days before</option>
+                <option value="PAY_AFTER_SERVICE">Pay after the service</option>
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Vendly holds the money until the job is done, then pays you.</p>
             </div>
           </div>
 

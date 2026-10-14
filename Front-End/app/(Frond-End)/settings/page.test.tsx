@@ -28,6 +28,12 @@ import { toast } from 'react-toastify';
 describe('SettingsPage', () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it('links to payment methods', async () => {
+    (TwoFAService.getStatus as jest.Mock).mockResolvedValue({ data: { data: { enabled: false } } });
+    render(<SettingsPage />);
+    expect(screen.getByRole('link', { name: /payment methods/i })).toHaveAttribute('href', '/settings/payment-methods');
+  });
+
   describe('loading state', () => {
     it('shows spinner while fetching 2FA status', () => {
       (TwoFAService.getStatus as jest.Mock).mockReturnValue(new Promise(() => {}));

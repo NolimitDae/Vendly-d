@@ -10,6 +10,8 @@ import {
   browserTimezone,
 } from "@/service/contracts/contracts.service";
 import SignContractPanel from "@/components/contracts/SignContractPanel";
+import SavedCards from "@/components/payments/SavedCards";
+import { PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
 import { toast } from "react-toastify";
 
 interface Props {
@@ -36,13 +38,15 @@ interface Preview {
   source_pdf_url: string | null;
   consent_text: string;
   missing_message: string | null;
-  pricing: { price: string; service_fee: string; total: string };
+  pricing: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: ScheduleLine[] };
 }
 
 const inputCls =
   "w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary text-gray-900 dark:text-white";
 
 /** Combines a date (YYYY-MM-DD) and time (HH:mm) in the browser's time zone into an ISO string. */
+const money = (n: number | string) => "$" + Number(n).toFixed(2);
+
 function toIso(date: string, time?: string) {
   if (!date) return undefined;
   return new Date(`${date}T${time || "00:00"}`).toISOString();
@@ -59,6 +63,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
+  const [card, setCard] = useState<string | null>(null);
 
   const fields = () => {
     const end = endTime ? toIso(date, endTime) : undefined;
@@ -76,6 +81,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
       message: message.trim() || undefined,
       event_id: eventId,
       timezone: browserTimezone(),
+      payment_method_id: card ?? undefined,
     };
   };
 
@@ -83,6 +89,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
     e?.preventDefault();
     if (!listing.vendor) return;
     if (!date) return toast.error("Choose the event date");
+    if (!card) return toast.error("Add a card first. It is only charged once the vendor accepts.");
     setLoading(true);
     try {
       const res = await ContractsService.bookingPreview(fields());
@@ -158,10 +165,17 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
         )}
         {step === "contract" && preview?.pricing && (
           <div className="mb-4 p-4 bg-primary/5 rounded-xl text-sm space-y-1">
-            <div className="flex justify-between"><span>Vendor price</span><span>{preview.pricing.price}</span></div>
-            <div className="flex justify-between"><span>Vendly Protection fee</span><span>{preview.pricing.service_fee}</span></div>
-            <div className="flex justify-between font-bold"><span>Total</span><span>{preview.pricing.total}</span></div>
-            <p className="text-xs text-gray-500 pt-1 dark:text-gray-400">You pay after the vendor accepts and signs.</p>
+            <div className="flex justify-between"><span>Vendor price</span><span>{money(preview.pricing.price)}</span></div>
+            <div className="flex justify-between"><span>Vendly Protection fee</span><span>{money(preview.pricing.service_fee)}</span></div>
+            <div className="flex justify-between font-bold"><span>Total</span><span>{money(preview.pricing.total)}</span></div>
+            {preview.pricing.plan && <p className="text-xs text-primary pt-2">{PLAN_LABELS[preview.pricing.plan]}</p>}
+            {preview.pricing.schedule?.map((line, i) => (
+              <div key={i} className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span>{line.label} · {i === 0 && !line.capture_manually ? "when the vendor accepts" : new Date(line.due_at).toLocaleDateString()}</span>
+                <span>{money(line.amount)}</span>
+              </div>
+            ))}
+            <p className="text-xs text-gray-500 pt-1 dark:text-gray-400">You pay after the vendor accepts and signs. Vendly holds the money until the service is done.</p>
           </div>
         )}
 
@@ -226,8 +240,12 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
                 className={`${inputCls} resize-none`}
               />
             </div>
+            <div>
+              <p className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Payment method</p>
+              <SavedCards selected={card} onSelect={setCard} />
+            </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Next you&apos;ll review and sign the vendor&apos;s contract. You pay only after the vendor accepts and signs.
+              Next you&apos;ll review and sign the vendor&apos;s contract. Your card is charged only after the vendor accepts and signs.
             </p>
 
             <div className="flex gap-3 pt-2">
@@ -271,7 +289,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
               <span>Contract signed and request sent. The vendor will review it and Accept &amp; Sign.</span>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Once the vendor signs, you&apos;ll get a notification and can pay securely from your bookings page.
+              Once the vendor signs, your saved card is charged under the payment plan and you&apos;ll see each payment on the booking page.
             </p>
             <div className="flex gap-3 pt-2">
               {bookingId && (
