@@ -9,10 +9,18 @@ import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
+import { PLAN_LABELS, type PaymentPlan } from '../../services/payments.service';
 import type { VendorDashboardStackParams } from '../../navigation/types';
 
 interface Category { id: string; name: string }
 interface PickedImage { uri: string; type: string; name: string }
+
+const PLANS: { value: PaymentPlan; label: string }[] = [
+  { value: 'FULL_ON_ACCEPT', label: 'Full on accept' },
+  { value: 'DEPOSIT_50', label: '50% deposit' },
+  { value: 'DEPOSIT_25', label: '25% deposit' },
+  { value: 'PAY_AFTER_SERVICE', label: 'Pay after service' },
+];
 
 const PRICE_UNITS = [
   { value: 'fixed', label: 'Fixed price' },
@@ -38,6 +46,7 @@ export default function ListingForm() {
   const [priceUnit, setPriceUnit] = useState('fixed');
   const [categoryId, setCategoryId] = useState('');
   const [location, setLocation] = useState('');
+  const [plan, setPlan] = useState<PaymentPlan>('FULL_ON_ACCEPT');
 
   useEffect(() => {
     (async () => {
@@ -54,6 +63,7 @@ export default function ListingForm() {
             setPriceUnit(l.price_unit ?? 'fixed');
             setCategoryId(l.category_id ?? l.category?.id ?? '');
             setLocation(l.location ?? '');
+            setPlan(l.payment_plan ?? l.effective_payment_plan ?? 'FULL_ON_ACCEPT');
             setExisting(l.images ?? []);
           }
         }
@@ -87,6 +97,7 @@ export default function ListingForm() {
       fd.append('price_unit', priceUnit);
       if (categoryId) fd.append('category_id', categoryId);
       if (location.trim()) fd.append('location', location.trim());
+      fd.append('payment_plan', plan);
       images.forEach((img) => fd.append('images', img as unknown as Blob));
       const config = { headers: { 'Content-Type': 'multipart/form-data' } };
       const res = isEdit ? await api.patch(`/vendor/listings/${listingId}`, fd, config) : await api.post('/vendor/listings', fd, config);
@@ -160,6 +171,12 @@ export default function ListingForm() {
           </View>
 
           <View style={{ gap: 8 }}>
+            <Text style={ui.label}>How customers pay</Text>
+            <View style={s.chips}>{PLANS.map((p) => <Chip key={p.value} label={p.label} active={plan === p.value} onPress={() => setPlan(p.value)} />)}</View>
+            <Text style={s.hint}>{PLAN_LABELS[plan]}. Vendly holds the money until the job is done.</Text>
+          </View>
+
+          <View style={{ gap: 8 }}>
             <Text style={ui.label}>Location</Text>
             <View style={ui.field}>
               <Ionicons name="location-outline" size={20} color={DARK.muted} />
@@ -195,4 +212,5 @@ const s = StyleSheet.create({
   textarea: { height: undefined, paddingVertical: 14, alignItems: 'flex-start' },
   currency: { color: DARK.muted, fontSize: 18, fontFamily: FONTS.medium },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  hint: { color: DARK.muted, fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
 });

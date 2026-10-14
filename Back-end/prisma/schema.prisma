@@ -77,6 +77,23 @@ enum BookingStatus {
   REJECTED
 }
 
+// How a booking is paid: the vendor picks a preset per listing, snapshotted onto each booking.
+enum PaymentPlan {
+  FULL_ON_ACCEPT
+  DEPOSIT_50
+  DEPOSIT_25
+  PAY_AFTER_SERVICE
+}
+
+enum InstallmentStatus {
+  SCHEDULED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
 enum ListingStatus {
   DRAFT
   ACTIVE
@@ -366,6 +383,7 @@ model ServiceCategory {
 
   // Relationships with  service
   services       Service[]            @relation("ServiceCategoryRelation")
+  default_payment_plan PaymentPlan?
   // Many-to-Many relationship with sub-categories
   sub_categories ServiceSubCategory[] @relation("ServiceCategoryToSubCategory")
   // Vendor listings
@@ -674,6 +692,9 @@ model VendorListing {
   sub_category_id String?
   sub_category   ServiceSubCategory? @relation(fields: [sub_category_id], references: [id])
 
+  // null = use the category default, else FULL_ON_ACCEPT
+  payment_plan   PaymentPlan?
+
   bookings       Booking[]
   reviews        Review[]
   savedBy        SavedListing[]        @relation("ListingSavedBy")
@@ -769,6 +790,20 @@ model Booking {
 
   payment_transaction_id String?
 
+  // Phase B payment engine
+  payment_plan       PaymentPlan?
+  // Stripe PaymentMethod the customer chose when requesting; charged off-session on accept
+  payment_method_id  String?
+  // when held funds may be released to the vendor (set on completion, pulled earlier by approval/proof)
+  release_at         DateTime?
+  released_at        DateTime?
+  transfer_id        String?
+  customer_approved_at DateTime?
+  dispute_opened_at  DateTime?
+  dispute_reason     String?   @db.Text
+  dispute_resolved_at DateTime?
+  installments       BookingInstallment[]
+
   event_start_at DateTime?
   event_end_at   DateTime?
   venue_address  String?  @db.VarChar(500)
@@ -781,6 +816,38 @@ model Booking {
   deliverables  BookingDeliverable[]
 
   @@map("bookings")
+}
+
+/// One scheduled charge of a booking's payment plan (deposit, balance, full amount).
+model BookingInstallment {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  booking_id String
+  booking    Booking  @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+
+  sequence   Int
+  label      String   @db.VarChar(100)
+  amount     Decimal  @db.Decimal(10, 2)
+  // portion of amount that is the Vendly Protection fee (never paid out to the vendor)
+  fee_amount Decimal  @default(0) @db.Decimal(10, 2)
+  currency   String   @default("usd")
+  due_at     DateTime
+  status     InstallmentStatus @default(SCHEDULED)
+  // PAY_AFTER_SERVICE holds the authorization and captures on completion
+  capture_manually Boolean @default(false)
+
+  payment_intent_id String?
+  attempts          Int       @default(0)
+  next_attempt_at   DateTime?
+  last_error        String?   @db.Text
+  paid_at           DateTime?
+  refunded_amount   Decimal   @default(0) @db.Decimal(10, 2)
+
+  @@index([booking_id])
+  @@index([status, next_attempt_at])
+  @@map("booking_installments")
 }
 
 model BookingProof {

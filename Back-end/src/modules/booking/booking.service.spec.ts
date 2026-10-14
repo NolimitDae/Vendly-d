@@ -5,6 +5,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
 import { BookingContractsService } from 'src/modules/contracts/booking-contracts.service';
+import { PaymentsService } from 'src/modules/payments/payments.service';
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
@@ -44,6 +45,7 @@ const mockPrisma = {
   },
   paymentTransaction: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn() },
   bookingContract: { findFirst: jest.fn() },
+  bookingInstallment: { count: jest.fn().mockResolvedValue(0) },
   $transaction: jest.fn((fn: any) => fn(mockPrisma)),
   bookingProof: {
     create: jest.fn(),
@@ -56,6 +58,13 @@ const mockPrisma = {
 };
 
 const mockPush = { sendToUser: jest.fn().mockResolvedValue(undefined) };
+
+const mockPayments = {
+  scheduleForBooking: jest.fn().mockResolvedValue([]),
+  onBookingCompleted: jest.fn().mockResolvedValue(undefined),
+  onProofUploaded: jest.fn().mockResolvedValue(undefined),
+  refundBooking: jest.fn().mockResolvedValue(0),
+};
 
 const mockContracts = {
   createSignedBooking: jest.fn(),
@@ -104,6 +113,7 @@ describe('BookingService', () => {
         { provide: MailService, useValue: mockMail },
         { provide: PushService, useValue: mockPush },
         { provide: BookingContractsService, useValue: mockContracts },
+        { provide: PaymentsService, useValue: mockPayments },
       ],
     }).compile();
 
@@ -432,18 +442,15 @@ describe('BookingService', () => {
       );
     });
 
-    it('credits the vendor price (not the fee) to the vendor once on completion of a paid booking', async () => {
+    it('holds the money on completion and starts the release clock instead of paying the vendor at once', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.IN_PROGRESS });
-      mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.COMPLETED });
-      mockPrisma.booking.findUnique.mockResolvedValue({ status: BookingStatus.COMPLETED, paid_at: new Date(), payout_credited_at: null, amount: 100, currency: 'usd', vendor_id: 'vendor-1' });
-      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      const completedAt = new Date();
+      mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.COMPLETED, completed_at: completedAt });
 
       await service.complete('booking-1', 'vendor-1');
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 100 } } });
-      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ type: 'booking_earning', amount: 100, user_id: 'vendor-1' }) }),
-      );
+      expect(mockPayments.onBookingCompleted).toHaveBeenCalledWith('booking-1', completedAt);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
     });
 
     it('does not credit unpaid or already-credited bookings', async () => {

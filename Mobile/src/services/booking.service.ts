@@ -21,6 +21,7 @@ export interface Booking {
   amount?: number;
   service_fee?: number | string | null;
   paid_at?: string | null;
+  payment_plan?: string | null;
   created_at: string;
   listing: {
     id: string;

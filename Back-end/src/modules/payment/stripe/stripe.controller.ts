@@ -15,6 +15,7 @@ import { Stripe } from 'stripe';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 import { BookingService } from '../../booking/booking.service';
+import { PaymentsService } from '../../payments/payments.service';
 
 @ApiExcludeController()
 @Controller('payment/stripe')
@@ -27,6 +28,7 @@ export class StripeController {
     private readonly prisma: PrismaService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly bookingService: BookingService,
+    private readonly payments: PaymentsService,
   ) {}
 
   @Post('webhook')
@@ -72,9 +74,17 @@ export class StripeController {
           break;
         }
 
+        case 'payment_intent.payment_failed':
+        case 'payment_intent.canceled':
+        case 'payment_intent.amount_capturable_updated': {
+          await this.payments.reconcilePaymentIntent(event.data.object as Stripe.PaymentIntent);
+          break;
+        }
+
         case 'payment_intent.succeeded': {
           const pi = event.data.object as Stripe.PaymentIntent;
           const meta = pi.metadata || {};
+          if (meta.installment_id) await this.payments.reconcilePaymentIntent(pi);
 
           // credit a deposit only on its first successful delivery; Stripe may deliver events more than once
           if (meta.type === 'deposit' && meta.userId) {

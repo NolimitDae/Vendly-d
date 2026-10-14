@@ -7,6 +7,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ContractsModule } from './modules/contracts/contracts.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 // internal imports
 import appConfig from './config/app.config';
@@ -95,6 +96,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     EventsModule,
     SubscriptionsModule,
     ContractsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [

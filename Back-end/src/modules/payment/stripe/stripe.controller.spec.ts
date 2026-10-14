@@ -6,6 +6,7 @@ import { TransactionRepository } from '../../../common/repository/transaction/tr
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 import { BookingService } from '../../booking/booking.service';
+import { PaymentsService } from '../../payments/payments.service';
 
 const mockStripeService = {
   handleWebhook: jest.fn(),
@@ -55,6 +56,7 @@ describe('StripeController', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: SubscriptionsService, useValue: mockSubscriptionsService },
         { provide: BookingService, useValue: mockBookingService },
+        { provide: PaymentsService, useValue: { reconcilePaymentIntent: jest.fn() } },
       ],
     }).compile();
 

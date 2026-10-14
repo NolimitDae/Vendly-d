@@ -7,6 +7,7 @@ import { format, parseISO } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
+import PaymentTimeline from '../../components/PaymentTimeline';
 import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { api } from '../../services/api';
@@ -193,6 +194,8 @@ export default function BookingDetail() {
             <Text style={s.paidNote}>{paid ? `Paid on ${format(parseISO(booking.paid_at!), 'dd MMM yyyy')} · held by Vendly until the service is done` : st === 'PENDING' ? 'Nothing is charged until the vendor accepts' : ''}</Text>
           </Card>
 
+          <PaymentTimeline bookingId={booking.id} bookingStatus={booking.status} onChanged={load} />
+
           <BookingContractCard bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
 
           {proofs.length > 0 && (
@@ -273,7 +276,7 @@ export default function BookingDetail() {
               <Text style={s.outlineText}>Cancel Request</Text>
             </Pressable>
           )}
-          {st === 'CONFIRMED' && !paid && (
+          {st === 'CONFIRMED' && !paid && !booking.payment_plan && (
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <Pressable style={[s.outline, { flex: 1 }]} onPress={cancel} disabled={busy} accessibilityRole="button">
                 <Text style={s.outlineText}>Cancel</Text>
@@ -281,7 +284,7 @@ export default function BookingDetail() {
               <GradientButton title={`Pay ${money(total)}`} onPress={payNow} loading={busy} style={{ flex: 2 }} />
             </View>
           )}
-          {st === 'CONFIRMED' && paid && (
+          {st === 'CONFIRMED' && (paid || !!booking.payment_plan) && (
             <Pressable style={s.outline} onPress={cancel} disabled={busy} accessibilityRole="button">
               <Text style={s.outlineText}>Cancel booking</Text>
             </Pressable>

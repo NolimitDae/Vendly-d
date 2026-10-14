@@ -10,6 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { PaymentPlan } from 'prisma/generated/enums';
 import { ListingStatus } from 'prisma/generated/client';
 import { Type } from 'class-transformer';
 
@@ -71,4 +72,9 @@ export class CreateVendorListingDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  @ApiPropertyOptional({ enum: PaymentPlan, description: 'How customers pay; defaults to the category setting, else full payment on accept' })
+  @IsOptional()
+  @IsEnum(PaymentPlan)
+  payment_plan?: PaymentPlan;
 }

@@ -70,6 +70,7 @@ export type CustomerProfileStackParams = {
   EditProfile: undefined;
   ChangePassword: undefined;
   Notifications: undefined;
+  PaymentMethods: undefined;
 };
 
 export type CustomerMessagesStackParams = {

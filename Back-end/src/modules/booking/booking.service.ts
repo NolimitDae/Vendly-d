@@ -16,6 +16,7 @@ import { BookingContractsService, RequestMeta } from 'src/modules/contracts/book
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 import { settleCancellation, Settlement } from './cancellation';
+import { PaymentsService } from 'src/modules/payments/payments.service';
 
 @Injectable()
 export class BookingService {
@@ -24,6 +25,7 @@ export class BookingService {
     private mailService: MailService,
     private pushService: PushService,
     private contracts: BookingContractsService,
+    private payments: PaymentsService,
   ) {}
 
   private pushBooking(userId: string, bookingId: string, title: string, body: string) {
@@ -77,6 +79,8 @@ export class BookingService {
     if (!executed) {
       await this.prisma.booking.update({ where: { id: bookingId }, data: { status: BookingStatus.CONFIRMED } });
     }
+    // Phase B: snapshot the payment plan and charge the customer's saved card for what is due now
+    await this.payments.scheduleForBooking(bookingId).catch((err) => console.error(`Payment schedule for ${bookingId} failed:`, err));
     const updated = await this.getBookingOrFail(bookingId);
 
     const clientUrl = appConfig().app.client_app_url;
@@ -158,7 +162,7 @@ export class BookingService {
       data: { status: BookingStatus.COMPLETED, completed_at: new Date() },
       include: this.bookingIncludes(),
     });
-    await this.creditVendorEarnings(bookingId);
+    await this.payments.onBookingCompleted(bookingId, updated.completed_at ?? new Date()).catch((err) => console.error(`Completion payments for ${bookingId} failed:`, err));
 
     const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
@@ -342,7 +346,18 @@ export class BookingService {
     });
     const currency = booking.currency ?? 'usd';
 
-    if (settlement.refundTotal > 0) {
+    const installmentCount = await this.prisma.bookingInstallment.count({ where: { booking_id: booking.id } });
+    if (settlement.refundTotal > 0 && installmentCount > 0) {
+      try {
+        const refunded = await this.payments.refundBooking(booking.id, settlement.refundTotal, `cancel-${booking.id}`);
+        if (refunded < settlement.refundTotal) console.error(`Refund for cancelled booking ${booking.id}: only ${refunded} of ${settlement.refundTotal} could be refunded`);
+      } catch (err) {
+        console.error(`Refund for cancelled booking ${booking.id} failed:`, err);
+        await this.prisma.paymentTransaction.create({
+          data: { user_id: booking.customer_id, type: 'booking_refund', provider: 'stripe', reference_number: `cancel-${booking.id}`, status: 'refund_failed', amount: settlement.refundTotal, currency },
+        });
+      }
+    } else if (settlement.refundTotal > 0) {
       let status = 'refunded';
       let reference = `cancel-${booking.id}`;
       try {
@@ -495,6 +510,7 @@ export class BookingService {
         notes,
       },
     });
+    if (userId === booking.vendor_id) await this.payments.onProofUploaded(bookingId, proof.created_at).catch(() => null);
 
     return {
       success: true,

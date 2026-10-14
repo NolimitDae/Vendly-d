@@ -22,13 +22,18 @@ import type { Request } from 'express';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { requestMeta } from 'src/modules/contracts/request-meta';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
+import { DisputeBookingDto, RetryInstallmentDto } from './dto/payments.dto';
+import { PaymentsService } from 'src/modules/payments/payments.service';
 
 @ApiTags('bookings')
 @ApiBearerAuth('customer-token')
 @UseGuards(JwtAuthGuard)
 @Controller('bookings')
 export class BookingController {
-  constructor(private readonly service: BookingService) {}
+  constructor(
+    private readonly service: BookingService,
+    private readonly payments: PaymentsService,
+  ) {}
 
   @Post()
   @Throttle({ short: { limit: 2, ttl: 1000 }, medium: { limit: 30, ttl: 60_000 } })
@@ -141,5 +146,32 @@ export class BookingController {
   @Get(':id/deliverables')
   getDeliverables(@GetUser() user: any, @Param('id') id: string) {
     return this.service.getDeliverables(id, user.id);
+  }
+
+  // ─── Phase B payments ──────────────────────────────────────────────────────
+
+  /** Payment plan, installments, what is paid and when the vendor is paid. */
+  @Get(':id/payments')
+  paymentTimeline(@GetUser() user: any, @Param('id') id: string) {
+    return this.payments.timeline(id, user.id);
+  }
+
+  /** Customer confirms the work was done; the vendor is paid right away. */
+  @Post(':id/approve')
+  approve(@GetUser() user: any, @Param('id') id: string) {
+    return this.payments.approveBooking(id, user.id);
+  }
+
+  /** Customer raises a problem; the money stays held until it is resolved. */
+  @Post(':id/dispute')
+  dispute(@GetUser() user: any, @Param('id') id: string, @Body() dto: DisputeBookingDto) {
+    return this.payments.openDispute(id, user.id, dto.reason);
+  }
+
+  /** Customer retries a failed charge, optionally with another saved card. */
+  @Post(':id/installments/:installmentId/retry')
+  @Throttle({ short: { limit: 3, ttl: 60_000 } })
+  retryInstallment(@GetUser() user: any, @Param('id') id: string, @Param('installmentId') installmentId: string, @Body() dto: RetryInstallmentDto) {
+    return this.payments.retryInstallment(id, installmentId, user.id, dto.payment_method_id);
   }
 }

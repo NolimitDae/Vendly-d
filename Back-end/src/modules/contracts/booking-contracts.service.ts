@@ -7,6 +7,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { PaymentPlan } from 'prisma/generated/enums';
+import { buildSchedule } from 'src/modules/payments/payment-schedule';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
 import {
@@ -238,6 +240,15 @@ export class BookingContractsService {
     return { consent_text: CONSENT_TEXT, consent_text_version: CONSENT_TEXT_VERSION };
   }
 
+  /** Numbers (not the formatted strings the contract uses) plus the charge schedule the customer will be on. */
+  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null) {
+    const fee = this.serviceFee(price);
+    const l = await this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { payment_plan: true, category: { select: { default_payment_plan: true } } } });
+    const plan = l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
+    const schedule = buildSchedule({ plan, price, serviceFee: fee, eventStart: eventStart ? new Date(eventStart) : null }).map((i) => ({ label: i.label, amount: i.amount, due_at: i.due_at, capture_manually: i.capture_manually }));
+    return { price, service_fee: fee, total: Math.round((price + fee) * 100) / 100, plan, schedule };
+  }
+
   /** Step 1 of a booking request: the filled contract for the customer to review. */
   async previewForBooking(userId: string, dto: BookingContractFieldsDto) {
     const bookingId = randomUUID();
@@ -252,7 +263,7 @@ export class BookingContractsService {
         vendor_contract_version: p.vc.version,
         missing_fields: p.missing,
         missing_message: p.missing.length ? missingFieldsMessage(p.missing) : null,
-        pricing: { price: p.data.vendor_price, service_fee: p.data.service_fee, total: p.data.total_price },
+        pricing: await this.pricingFor(dto.listing_id, Number(p.listing.price), dto.event_start_at),
         preview_token: signPreview({ bid: bookingId, lid: dto.listing_id, uid: userId }),
         source_pdf_url: p.vc.file_key
           ? this.vendorContracts.downloadUrl(p.vc.file_key, userId, p.vc.id, p.vc.file_name || 'contract.pdf')
@@ -349,6 +360,7 @@ export class BookingContractsService {
           amount: p.listing.price,
           service_fee: this.serviceFee(p.listing.price),
           currency: 'usd',
+          payment_method_id: dto.payment_method_id,
           status: BookingStatus.PENDING,
         },
       });

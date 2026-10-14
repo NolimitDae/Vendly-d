@@ -39,6 +39,7 @@ export default function EPProfile() {
       items: [
         { icon: 'briefcase-outline', label: 'Planner profile', note: st.label, noteColor: st.color, onPress: () => nav.navigate('PlannerProfile') },
         { icon: 'person-outline', label: 'Profile', onPress: () => nav.navigate('EditProfile') },
+        { icon: 'wallet-outline', label: 'Payments & Payouts', onPress: () => nav.navigate('PaymentMethods') },
       ],
     },
     { title: 'Manage Requests', items: [{ icon: 'notifications-outline', label: 'Notifications', onPress: () => nav.navigate('Notifications') }] },

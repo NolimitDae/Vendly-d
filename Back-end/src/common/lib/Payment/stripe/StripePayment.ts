@@ -548,6 +548,90 @@ export class StripePayment {
     });
   }
 
+  /*-----------------------------------------
+         Phase B payment engine
+  -----------------------------------------*/
+
+  /** Lets a customer save a card for later off-session charges. */
+  static createSetupIntent(customerId: string): Promise<stripe.SetupIntent> {
+    return getStripe().setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      usage: 'off_session',
+    });
+  }
+
+  static async listCards(customerId: string): Promise<stripe.PaymentMethod[]> {
+    const res = await getStripe().paymentMethods.list({ customer: customerId, type: 'card' });
+    return res.data;
+  }
+
+  static retrievePaymentMethod(id: string): Promise<stripe.PaymentMethod> {
+    return getStripe().paymentMethods.retrieve(id);
+  }
+
+  static detachPaymentMethod(id: string): Promise<stripe.PaymentMethod> {
+    return getStripe().paymentMethods.detach(id);
+  }
+
+  /**
+   * Charges a saved card without the customer present. Funds stay on the platform balance
+   * (no destination) until the booking is released; `transfer_group` ties later transfers back.
+   */
+  static chargeSavedCard(opts: {
+    amount: number;
+    currency: string;
+    customerId: string;
+    paymentMethodId: string;
+    bookingId: string;
+    installmentId: string;
+    captureManually: boolean;
+    idempotencyKey: string;
+    description: string;
+  }): Promise<stripe.PaymentIntent> {
+    return getStripe().paymentIntents.create(
+      {
+        amount: Math.round(opts.amount * 100),
+        currency: opts.currency,
+        customer: opts.customerId,
+        payment_method: opts.paymentMethodId,
+        off_session: true,
+        confirm: true,
+        capture_method: opts.captureManually ? 'manual' : 'automatic',
+        transfer_group: `booking_${opts.bookingId}`,
+        description: opts.description,
+        metadata: { booking_id: opts.bookingId, installment_id: opts.installmentId },
+      },
+      { idempotencyKey: opts.idempotencyKey },
+    );
+  }
+
+  static capturePaymentIntent(id: string, idempotencyKey: string): Promise<stripe.PaymentIntent> {
+    return getStripe().paymentIntents.capture(id, {}, { idempotencyKey });
+  }
+
+  static cancelPaymentIntent(id: string): Promise<stripe.PaymentIntent> {
+    return getStripe().paymentIntents.cancel(id);
+  }
+
+  static retrievePaymentIntent(id: string): Promise<stripe.PaymentIntent> {
+    return getStripe().paymentIntents.retrieve(id);
+  }
+
+  /** Pays the vendor for one booking out of the held funds. */
+  static transferForBooking(opts: { amount: number; currency: string; accountId: string; bookingId: string; idempotencyKey: string }): Promise<stripe.Transfer> {
+    return getStripe().transfers.create(
+      {
+        amount: Math.round(opts.amount * 100),
+        currency: opts.currency,
+        destination: opts.accountId,
+        transfer_group: `booking_${opts.bookingId}`,
+        metadata: { booking_id: opts.bookingId },
+      },
+      { idempotencyKey: opts.idempotencyKey },
+    );
+  }
+
   static handleWebhook(rawBody: string, sig: string | string[]): stripe.Event {
     const event = getStripe().webhooks.constructEvent(
       rawBody,

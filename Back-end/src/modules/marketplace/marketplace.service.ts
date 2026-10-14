@@ -51,7 +51,7 @@ export class MarketplaceService {
         take: sortByRating ? undefined : limit,
         orderBy,
         include: {
-          category: { select: { id: true, name: true } },
+          category: { select: { id: true, name: true, default_payment_plan: true } },
           sub_category: { select: { id: true, name: true } },
           vendor: {
             select: {
@@ -89,7 +89,7 @@ export class MarketplaceService {
     const listing = await this.prisma.vendorListing.findFirst({
       where: { id, status: ListingStatus.ACTIVE, deleted_at: null },
       include: {
-        category: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true, default_payment_plan: true } },
         sub_category: { select: { id: true, name: true } },
         vendor: {
           select: {
@@ -152,7 +152,7 @@ export class MarketplaceService {
           where: { status: ListingStatus.ACTIVE, deleted_at: null },
           take: 6,
           include: {
-            category: { select: { id: true, name: true } },
+            category: { select: { id: true, name: true, default_payment_plan: true } },
             _count: { select: { reviews: true } },
           },
         },
@@ -215,7 +215,7 @@ export class MarketplaceService {
       take: 8,
       orderBy: { created_at: 'desc' },
       include: {
-        category: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true, default_payment_plan: true } },
         vendor: {
           select: {
             id: true,
@@ -254,6 +254,8 @@ export class MarketplaceService {
   private formatListingCard(listing: any) {
     return {
       ...listing,
+      // what the customer will be asked to pay and when (vendor's choice, else the category default)
+      effective_payment_plan: listing.payment_plan ?? listing.category?.default_payment_plan ?? 'FULL_ON_ACCEPT',
       images: (listing.images ?? []).map((img: string) =>
         TanvirStorage.url(`listings/${img}`),
       ),

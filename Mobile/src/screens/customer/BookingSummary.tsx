@@ -7,6 +7,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import SignContractView from '../../components/contracts/SignContractView';
 import { DARK, FONTS } from '../../constants/colors';
+import AddCardSheet from '../../components/AddCardSheet';
+import { CardRow } from './PaymentMethods';
+import { PaymentsService, PLAN_LABELS, type PaymentPlan, type SavedCard } from '../../services/payments.service';
 import { openChatWith } from '../../navigation/openChat';
 import { BookingService } from '../../services/booking.service';
 import { ContractsService, apiError, deviceTimezone, type BookingFields, type SignaturePayload } from '../../services/contracts.service';
@@ -20,7 +23,7 @@ interface Preview {
   source_pdf_url: string | null;
   consent_text: string;
   missing_message: string | null;
-  pricing?: { price: number; service_fee: number; total: number };
+  pricing?: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean }[] };
 }
 
 const money = (n: number | undefined) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
@@ -33,6 +36,19 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
   const [signing, setSigning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [cards, setCards] = useState<SavedCard[]>([]);
+  const [card, setCard] = useState<string | null>(null);
+  const [addingCard, setAddingCard] = useState(false);
+
+  useEffect(() => {
+    PaymentsService.cards()
+      .then((r) => {
+        const list = r.data?.data ?? [];
+        setCards(list);
+        setCard((list.find((c) => c.is_default) ?? list[0])?.id ?? null);
+      })
+      .catch(() => {});
+  }, []);
 
   const fields: BookingFields = {
     listing_id: listing.id,
@@ -45,6 +61,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
     message: draft.notes,
     event_id: listing.eventId,
     timezone: deviceTimezone(),
+    payment_method_id: card ?? undefined,
   };
 
   // The contract preview is also where the real price breakdown comes from.
@@ -66,6 +83,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
   }, [loadPreview]);
 
   const review = () => {
+    if (!card) return Alert.alert('Payment method', 'Add a card first. It is only charged once the vendor accepts.');
     if (!preview) return loadPreview();
     if (preview.missing_message) return Alert.alert('More details needed', preview.missing_message);
     setSigning(true);
@@ -141,11 +159,33 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
               <Row label="Total" value={money(price?.total ?? listing.price)} bold />
             </>
           )}
+          {price?.schedule && price.schedule.length > 0 && (
+            <View style={{ gap: 6, marginTop: 4 }}>
+              {price.plan && <Text style={s.planText}>{PLAN_LABELS[price.plan]}</Text>}
+              {price.schedule.map((i, idx) => (
+                <View key={idx} style={s.row}>
+                  <Text style={s.rowLabel}>{i.label} · {idx === 0 && !i.capture_manually ? 'when the vendor accepts' : format(parseISO(i.due_at), 'dd MMM yyyy')}</Text>
+                  <Text style={s.rowValue}>{money(i.amount)}</Text>
+                </View>
+              ))}
+            </View>
+          )}
           <View style={s.note}>
             <Ionicons name="shield-checkmark-outline" size={16} color={DARK.accent} />
-            <Text style={s.noteText}>Nothing is charged now. You pay once {listing.vendorName} accepts, and Vendly holds the money until the service is done.</Text>
+            <Text style={s.noteText}>Nothing is charged now. Your card is charged once {listing.vendorName} accepts, and Vendly holds the money until the service is done.</Text>
           </View>
         </Card>
+
+        <Card style={{ gap: 12 }}>
+          <Text style={s.h2}>Payment method</Text>
+          {cards.length === 0 && <Text style={s.noteText}>No saved cards yet. Add one to send your request.</Text>}
+          {cards.map((c) => <CardRow key={c.id} card={c} selected={card === c.id} onPress={() => setCard(c.id)} />)}
+          <Pressable onPress={() => setAddingCard(true)} style={s.addCard} accessibilityRole="button">
+            <Ionicons name="add-circle-outline" size={22} color={DARK.accent} />
+            <Text style={s.addCardText}>Add a card</Text>
+          </Pressable>
+        </Card>
+        <AddCardSheet visible={addingCard} onClose={() => setAddingCard(false)} onSaved={(id) => { setCard(id); PaymentsService.cards().then((r) => setCards(r.data?.data ?? [])).catch(() => {}); }} />
       </ScrollView>
 
       <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
@@ -222,6 +262,9 @@ const s = StyleSheet.create({
   line: { height: 1, backgroundColor: DARK.field },
   note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 4 },
   noteText: { flex: 1, color: DARK.muted, fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
+  planText: { color: DARK.accent, fontSize: 13, fontFamily: FONTS.medium },
+  addCard: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  addCardText: { color: DARK.accent, fontSize: 15, fontFamily: FONTS.semibold },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
   sheet: { backgroundColor: DARK.card, borderRadius: 24, padding: 32, alignItems: 'center', gap: 16 },

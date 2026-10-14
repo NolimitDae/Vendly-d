@@ -16,6 +16,8 @@ export interface SignaturePayload {
 export interface BookingFields {
   listing_id: string;
   vendor_id: string;
+  /** Saved Stripe card (pm_…) charged when the vendor accepts */
+  payment_method_id?: string;
   scheduled_at?: string;
   event_start_at?: string;
   event_end_at?: string;

@@ -159,6 +159,12 @@ export class BookingContractFieldsDto {
   @IsString()
   @MaxLength(64)
   timezone?: string;
+
+  @ApiPropertyOptional({ description: 'Saved Stripe card (pm_…) to charge when the vendor accepts' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  payment_method_id?: string;
 }
 
 export class SignedBookingRequestDto extends BookingContractFieldsDto {
