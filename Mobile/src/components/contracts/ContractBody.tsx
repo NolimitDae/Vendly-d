@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, View, StyleSheet } from 'react-native';
-import { COLORS } from '../../constants/colors';
+import { DARK, FONTS } from '../../constants/colors';
 
 /** Renders contract text (# title, ## heading, - bullet, paragraphs) as readable native text. */
 export default function ContractBody({ body }: { body: string }) {
@@ -13,7 +13,7 @@ export default function ContractBody({ body }: { body: string }) {
         if (line.startsWith('- '))
           return (
             <View key={i} style={s.bulletRow}>
-              <Text style={s.p}>•</Text>
+              <Text style={s.tick}>✓</Text>
               <Text style={[s.p, { flex: 1 }]}>{line.slice(2)}</Text>
             </View>
           );
@@ -25,8 +25,9 @@ export default function ContractBody({ body }: { body: string }) {
 }
 
 const s = StyleSheet.create({
-  h1: { fontSize: 20, fontWeight: '800', color: COLORS.gray[900], marginBottom: 6 },
-  h2: { fontSize: 15, fontWeight: '700', color: COLORS.gray[900], marginTop: 14, marginBottom: 4 },
-  p: { fontSize: 15, lineHeight: 22, color: COLORS.gray[800] },
+  h1: { fontSize: 20, fontFamily: FONTS.semibold, color: '#fff', marginBottom: 6 },
+  h2: { fontSize: 16, fontFamily: FONTS.semibold, color: '#fff', marginTop: 16, marginBottom: 6 },
+  p: { fontSize: 15, lineHeight: 23, color: '#fff', fontFamily: FONTS.regular },
+  tick: { fontSize: 15, lineHeight: 23, color: DARK.accent, fontFamily: FONTS.semibold },
   bulletRow: { flexDirection: 'row', gap: 8, paddingLeft: 4 },
 });

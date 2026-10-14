@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
-import { COLORS } from '../../constants/colors';
+import { COLORS, DARK, FONTS } from '../../constants/colors';
+import { GradientButton } from '../brand';
 import { SignaturePayload, signerDevice } from '../../services/contracts.service';
 import ContractBody from './ContractBody';
 
@@ -90,11 +91,13 @@ export default function SignContractView({
   return (
     <View style={s.root}>
       <View style={s.header}>
-        <TouchableOpacity onPress={onCancel} accessibilityLabel="Close" hitSlop={12}>
-          <Ionicons name="close" size={26} color={COLORS.gray[700]} />
+        <TouchableOpacity onPress={onCancel} accessibilityLabel="Close" hitSlop={12} style={s.close}>
+          <Ionicons name="close" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
-        <View style={{ width: 26 }} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
+          <Text style={s.headerSub}>Please review and accept the contract to continue your booking</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -108,7 +111,7 @@ export default function SignContractView({
       >
         {sourcePdfUrl ? (
           <TouchableOpacity style={s.pdfBtn} onPress={() => Linking.openURL(sourcePdfUrl)}>
-            <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+            <Ionicons name="document-text-outline" size={18} color={DARK.accent} />
             <Text style={s.pdfBtnText}>Open the vendor&apos;s contract (PDF)</Text>
           </TouchableOpacity>
         ) : null}
@@ -126,7 +129,7 @@ export default function SignContractView({
           {!readToEnd && <Text style={s.hint}>Scroll to the end of the contract to sign.</Text>}
 
           <Pressable style={s.checkRow} onPress={() => setConsent(!consent)} accessibilityRole="checkbox" accessibilityState={{ checked: consent }}>
-            <Ionicons name={consent ? 'checkbox' : 'square-outline'} size={22} color={COLORS.primary} />
+            <Ionicons name={consent ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
             <Text style={s.checkText}>{consentText}</Text>
           </Pressable>
 
@@ -138,12 +141,12 @@ export default function SignContractView({
             autoCapitalize="words"
             autoComplete="name"
             placeholder="Type your full legal name"
-            placeholderTextColor={COLORS.gray[400]}
+            placeholderTextColor={DARK.muted}
           />
 
           {vendor?.hasSavedSignature && (
             <Pressable style={s.checkRow} onPress={() => setUseSaved(!useSaved)}>
-              <Ionicons name={useSaved ? 'checkbox' : 'square-outline'} size={22} color={COLORS.primary} />
+              <Ionicons name={useSaved ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
               <Text style={s.checkText}>Use my saved signature</Text>
             </Pressable>
           )}
@@ -159,22 +162,21 @@ export default function SignContractView({
                 </View>
               ) : (
                 <TouchableOpacity style={s.drawBtn} onPress={() => setPadOpen(true)}>
-                  <Ionicons name="create-outline" size={18} color={COLORS.gray[600]} />
-                  <Text style={s.drawText}>Draw signature (optional)</Text>
+                  <Ionicons name="create-outline" size={28} color="#fff" />
+                  <Text style={s.drawText}>Tap to sign here</Text>
+                  <Text style={s.drawSub}>Use your finger (optional)</Text>
                 </TouchableOpacity>
               )}
               {vendor && !vendor.hasSavedSignature && image && (
                 <Pressable style={s.checkRow} onPress={() => setSaveForLater(!saveForLater)}>
-                  <Ionicons name={saveForLater ? 'checkbox' : 'square-outline'} size={22} color={COLORS.primary} />
+                  <Ionicons name={saveForLater ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
                   <Text style={s.checkText}>Save this signature for future bookings</Text>
                 </Pressable>
               )}
             </>
           )}
 
-          <TouchableOpacity style={[s.submit, !canSign && s.disabled]} onPress={submit} disabled={!canSign}>
-            {busy ? <ActivityIndicator color={COLORS.white} /> : <Text style={s.submitText}>{submitLabel}</Text>}
-          </TouchableOpacity>
+          <GradientButton title={submitLabel} onPress={submit} disabled={!canSign} loading={busy} />
         </View>
       </ScrollView>
 
@@ -193,7 +195,7 @@ export default function SignContractView({
               clearText="Clear"
               confirmText="Use signature"
               imageType="image/png"
-              webStyle={`.m-signature-pad--footer .button { background-color: ${COLORS.primary}; color: #fff; }`}
+              webStyle={`.m-signature-pad { box-shadow: none; border: 0; } .m-signature-pad--footer .button { background-color: ${COLORS.primary}; color: #fff; border-radius: 12px; }`}
             />
           </View>
           <TouchableOpacity onPress={() => setPadOpen(false)} style={s.padCancel}>
@@ -206,39 +208,29 @@ export default function SignContractView({
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.white },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: 54, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.gray[100],
-  },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: COLORS.gray[900], marginHorizontal: 8 },
-  scroll: { padding: 20, paddingBottom: 48 },
-  pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: 12, backgroundColor: COLORS.primaryBg, marginBottom: 12 },
-  pdfBtnText: { color: COLORS.primary, fontWeight: '600' },
-  addendumLabel: { fontSize: 11, color: COLORS.gray[400], letterSpacing: 1, marginBottom: 6 },
-  controls: { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: COLORS.gray[100], gap: 12 },
-  hint: { color: '#b45309', fontSize: 13 },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16 },
+  close: { width: 48, height: 48, borderRadius: 24, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { color: '#fff', fontSize: 20, fontFamily: FONTS.semibold },
+  headerSub: { color: DARK.muted, fontSize: 12, lineHeight: 17, fontFamily: FONTS.medium },
+  scroll: { padding: 20, paddingBottom: 48, backgroundColor: DARK.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, flexGrow: 1 },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderRadius: 12, backgroundColor: DARK.field, marginBottom: 12 },
+  pdfBtnText: { color: '#fff', fontFamily: FONTS.medium },
+  addendumLabel: { fontSize: 11, color: DARK.muted, letterSpacing: 1, marginBottom: 6, fontFamily: FONTS.medium },
+  controls: { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: DARK.field, gap: 14 },
+  hint: { color: '#F5B700', fontSize: 13, fontFamily: FONTS.medium },
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  checkText: { flex: 1, fontSize: 14, color: COLORS.gray[700], lineHeight: 20 },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.gray[600] },
-  input: {
-    borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 16, color: COLORS.gray[900], backgroundColor: COLORS.gray[50],
-  },
-  drawBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16,
-    borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.gray[300],
-  },
-  drawText: { color: COLORS.gray[600] },
-  sigPreview: { alignItems: 'center', gap: 6, padding: 8, borderRadius: 12, borderWidth: 1, borderColor: COLORS.gray[200] },
+  checkText: { flex: 1, fontSize: 14, color: '#fff', lineHeight: 20, fontFamily: FONTS.medium },
+  label: { fontSize: 16, color: '#fff', fontFamily: FONTS.medium },
+  input: { height: 56, borderRadius: 24, paddingHorizontal: 16, fontSize: 16, color: '#fff', backgroundColor: DARK.field, fontFamily: FONTS.regular },
+  drawBtn: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 36, borderRadius: 20, backgroundColor: DARK.field, borderWidth: 1, borderColor: DARK.border },
+  drawText: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  drawSub: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular },
+  sigPreview: { alignItems: 'center', gap: 6, padding: 8, borderRadius: 20, backgroundColor: '#fff' },
   sigImage: { width: '100%', height: 90 },
-  link: { color: COLORS.primary, fontWeight: '600' },
-  submit: { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
-  submitText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
-  disabled: { opacity: 0.45 },
-  padRoot: { flex: 1, paddingTop: 60, paddingHorizontal: 16, backgroundColor: COLORS.white },
-  padTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12, color: COLORS.gray[900] },
-  padBox: { height: 320, borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 12, overflow: 'hidden' },
+  link: { color: DARK.accent, fontFamily: FONTS.semibold },
+  padRoot: { flex: 1, paddingTop: 60, paddingHorizontal: 20, backgroundColor: DARK.bg },
+  padTitle: { fontSize: 20, fontFamily: FONTS.semibold, marginBottom: 12, color: '#fff' },
+  padBox: { height: 320, borderRadius: 20, overflow: 'hidden', backgroundColor: '#fff' },
   padCancel: { alignItems: 'center', padding: 20 },
 });

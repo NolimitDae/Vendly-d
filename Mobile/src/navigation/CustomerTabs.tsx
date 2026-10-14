@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,12 @@ import { BrandGradient } from '../components/brand';
 
 import CustomerHome from '../screens/customer/Home';
 import ListingDetail from '../screens/customer/ListingDetail';
+import FindVendors from '../screens/customer/FindVendors';
+import SearchResults from '../screens/customer/SearchResults';
+import VendorProfile from '../screens/customer/VendorProfile';
+import SelectDate from '../screens/customer/SelectDate';
+import BookingDetails from '../screens/customer/BookingDetails';
+import BookingSummary from '../screens/customer/BookingSummary';
 import CustomerBookings from '../screens/customer/Bookings';
 import BookingDetail from '../screens/customer/BookingDetail';
 import PaymentScreen from '../screens/customer/PaymentScreen';
@@ -38,10 +45,16 @@ const HEADER = {
 
 function HomeNavigator() {
   return (
-    <HomeStack.Navigator screenOptions={HEADER}>
+    <HomeStack.Navigator screenOptions={{ ...HEADER, contentStyle: { backgroundColor: DARK.bg } }}>
       <HomeStack.Screen name="CustomerHome" component={CustomerHome} options={{ headerShown: false }} />
       <HomeStack.Screen name="Notifications" component={NotificationsPlaceholder} options={{ title: 'Notifications' }} />
-      <HomeStack.Screen name="ListingDetail" component={ListingDetail} options={{ title: 'Listing Details' }} />
+      <HomeStack.Screen name="FindVendors" component={FindVendors} options={{ headerShown: false }} />
+      <HomeStack.Screen name="SearchResults" component={SearchResults} options={{ headerShown: false }} />
+      <HomeStack.Screen name="ListingDetail" component={ListingDetail} options={{ headerShown: false }} />
+      <HomeStack.Screen name="VendorProfile" component={VendorProfile} options={{ headerShown: false }} />
+      <HomeStack.Screen name="SelectDate" component={SelectDate} options={{ headerShown: false }} />
+      <HomeStack.Screen name="BookingDetails" component={BookingDetails} options={{ headerShown: false }} />
+      <HomeStack.Screen name="BookingSummary" component={BookingSummary} options={{ headerShown: false }} />
     </HomeStack.Navigator>
   );
 }
@@ -96,20 +109,21 @@ const tabStyles = { active: { width: 40, height: 40, borderRadius: 20, alignItem
 
 export default function CustomerTabs() {
   const insets = useSafeAreaInsets();
+  const tabBarStyle = {
+    backgroundColor: DARK.card,
+    borderTopWidth: 0,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    height: 64 + insets.bottom,
+    paddingTop: 8,
+  };
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: '#fff',
         tabBarInactiveTintColor: DARK.muted,
-        tabBarStyle: {
-          backgroundColor: DARK.card,
-          borderTopWidth: 0,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          height: 64 + insets.bottom,
-          paddingTop: 8,
-        },
+        tabBarStyle,
         tabBarLabelStyle: { fontSize: 12, fontFamily: FONTS.medium, marginTop: 4 },
         tabBarIcon: ({ color, focused }) => {
           const icon = <Ionicons name={TAB_ICONS[route.name] ?? 'ellipse'} size={22} color={color} />;
@@ -117,7 +131,15 @@ export default function CustomerTabs() {
         },
       })}
     >
-      <Tab.Screen name="HomeTab" component={HomeNavigator} options={{ title: 'Home' }} />
+      <Tab.Screen
+        name="HomeTab"
+        component={HomeNavigator}
+        options={({ route }) => ({
+          title: 'Home',
+          // Browse and booking screens have their own footer buttons, so the tab bar hides past the home screen.
+          tabBarStyle: [tabBarStyle, { display: ['CustomerHome', undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' }],
+        })}
+      />
       <Tab.Screen name="MessagesTab" component={MessagesNavigator} options={{ title: 'Message' }} />
       <Tab.Screen name="BookingsTab" component={BookingsNavigator} options={{ title: 'Booking' }} />
       <Tab.Screen name="ProfileTab" component={ProfileNavigator} options={{ title: 'More' }} />

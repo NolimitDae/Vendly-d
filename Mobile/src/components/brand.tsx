@@ -130,7 +130,98 @@ export function BackButton({ onPress }: { onPress: () => void }) {
   );
 }
 
+/** Figma's screen header: 48px round back button, centred 18/600 title, optional right-hand slot. */
+export function ScreenHeader({
+  title,
+  onBack,
+  right,
+  light,
+}: {
+  title: string;
+  onBack: () => void;
+  right?: React.ReactNode;
+  /** White back button for use over photos. */
+  light?: boolean;
+}) {
+  return (
+    <View style={ui.header}>
+      <Pressable
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        hitSlop={8}
+        style={[ui.back, light && { backgroundColor: '#fff' }]}
+      >
+        <Ionicons name="arrow-back" size={22} color={light ? DARK.bg : '#fff'} />
+      </Pressable>
+      <Text style={ui.headerTitle} numberOfLines={1}>{title}</Text>
+      <View style={{ width: 48, alignItems: 'flex-end' }}>{right}</View>
+    </View>
+  );
+}
+
+/** Selectable pill: category chips, sub-category tabs and filter options. */
+export function Chip({
+  label,
+  active,
+  onPress,
+  icon,
+}: {
+  label: string;
+  active?: boolean;
+  onPress: () => void;
+  icon?: React.ReactNode;
+}) {
+  const inner = (
+    <>
+      {icon}
+      <Text style={[ui.chipText, active && { color: '#fff' }]}>{label}</Text>
+    </>
+  );
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: !!active }}>
+      {active ? <BrandGradient style={ui.chip}>{inner}</BrandGradient> : <View style={[ui.chip, { backgroundColor: DARK.card }]}>{inner}</View>}
+    </Pressable>
+  );
+}
+
+/** Floating "Do you have any question?" bubble that opens a chat with the vendor. */
+export function ChatBubble({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Message the vendor" style={ui.bubble}>
+      <BrandGradient style={ui.bubbleIcon}>
+        <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
+      </BrandGradient>
+      <Text style={ui.bubbleText}>Do you have any{'\n'}question?</Text>
+    </Pressable>
+  );
+}
+
+/** Dark card used for grouped details, summaries and notes. */
+export function Card({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  return <View style={[ui.card, style]}>{children}</View>;
+}
+
 export const ui = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, gap: 8 },
+  headerTitle: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 43, paddingHorizontal: 20, borderRadius: 100 },
+  chipText: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
+  bubble: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    paddingRight: 14,
+    borderRadius: 100,
+    backgroundColor: DARK.field,
+    borderWidth: 1,
+    borderColor: DARK.border,
+  },
+  bubbleIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  bubbleText: { color: '#fff', fontSize: 12, lineHeight: 17, fontFamily: FONTS.semibold },
+  card: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 8 },
   button: { height: 56, borderRadius: 24, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   buttonText: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
   outline: {

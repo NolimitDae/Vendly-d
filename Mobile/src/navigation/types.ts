@@ -24,10 +24,41 @@ export type EPTabParams = {
 
 // ─── Customer ────────────────────────────────────────────────────────────────
 
+/** Enough of a listing to render the booking screens without refetching. */
+export type ListingSummary = {
+  id: string;
+  title: string;
+  price: number;
+  priceUnit?: string;
+  image?: string;
+  vendorId: string;
+  vendorName: string;
+  rating?: number | null;
+  reviewCount?: number;
+};
+
+export type BookingDraft = {
+  /** yyyy-MM-dd */
+  date: string;
+  /** ISO datetime */
+  startAt: string;
+  endAt: string;
+  durationLabel: string;
+  venue: string;
+  guests?: number;
+  notes?: string;
+};
+
 export type CustomerHomeStackParams = {
   CustomerHome: undefined;
   Notifications: undefined;
+  FindVendors: undefined;
+  SearchResults: { q?: string; categoryId?: string; categoryName?: string; location?: string };
   ListingDetail: { listingId: string };
+  VendorProfile: { vendorId: string };
+  SelectDate: { listing: ListingSummary };
+  BookingDetails: { listing: ListingSummary; date: string };
+  BookingSummary: { listing: ListingSummary; draft: BookingDraft };
 };
 
 export type CustomerBookingsStackParams = {

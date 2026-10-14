@@ -62,8 +62,6 @@ export default function CustomerHome() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('');
 
   useEffect(() => {
     api
@@ -72,12 +70,9 @@ export default function CustomerHome() {
       .catch(() => {});
   }, []);
 
-  // Search runs on submit, not per keystroke, so typing doesn't fire a request per letter.
   const load = useCallback(async () => {
     try {
-      const res = await api.get('/marketplace/listings', {
-        params: { q: query || undefined, category_id: category || undefined, sort: query || category ? undefined : 'rating', limit: 10 },
-      });
+      const res = await api.get('/marketplace/listings', { params: { sort: 'rating', limit: 10 } });
       if (res.data?.success) setListings(res.data.data ?? []);
     } catch {
       // keep what we have
@@ -85,7 +80,7 @@ export default function CustomerHome() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [query, category]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -95,7 +90,6 @@ export default function CustomerHome() {
 
   const firstName = (user?.name ?? '').split(' ')[0];
   const tiles = showAll ? categories : categories.slice(0, MAX_TILES);
-  const filtered = !!(query || category);
 
   return (
     <ScrollView
@@ -139,18 +133,13 @@ export default function CustomerHome() {
           placeholder="Search services & vendors"
           placeholderTextColor={DARK.muted}
           value={search}
-          onChangeText={(t) => {
-            setSearch(t);
-            if (!t) setQuery('');
-          }}
-          onSubmitEditing={() => setQuery(search.trim())}
+          onChangeText={setSearch}
+          onSubmitEditing={() => search.trim() && nav.navigate('SearchResults', { q: search.trim() })}
           returnKeyType="search"
         />
-        {search.length > 0 && (
-          <Pressable onPress={() => { setSearch(''); setQuery(''); }} hitSlop={8} accessibilityLabel="Clear search">
-            <Ionicons name="close-circle" size={20} color={DARK.muted} />
-          </Pressable>
-        )}
+        <Pressable onPress={() => nav.navigate('FindVendors')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Search filters">
+          <Ionicons name="options-outline" size={22} color="#fff" />
+        </Pressable>
       </View>
 
       {/* Banner: brand promise rather than Figma's $20-off promo, since there are no promo codes yet */}
@@ -172,22 +161,17 @@ export default function CustomerHome() {
           <Text style={s.sectionTitle}>Categories</Text>
           <View style={s.grid}>
             {tiles.map((c) => {
-              const on = c.id === category;
-              const inner = (
-                <>
-                  <Ionicons name={iconFor(c.name)} size={30} color={on ? '#fff' : DARK.accent} />
-                  <Text style={[s.tileText, on && { color: '#fff' }]} numberOfLines={3}>{c.name}</Text>
-                </>
-              );
               return (
                 <Pressable
                   key={c.id}
-                  onPress={() => setCategory(on ? '' : c.id)}
+                  onPress={() => nav.navigate('SearchResults', { categoryId: c.id, categoryName: c.name })}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
                   style={s.tileWrap}
                 >
-                  {on ? <BrandGradient style={s.tile}>{inner}</BrandGradient> : <View style={s.tile}>{inner}</View>}
+                  <View style={s.tile}>
+                    <Ionicons name={iconFor(c.name)} size={30} color={DARK.accent} />
+                    <Text style={s.tileText} numberOfLines={3}>{c.name}</Text>
+                  </View>
                 </Pressable>
               );
             })}
@@ -203,13 +187,18 @@ export default function CustomerHome() {
 
       {/* Services */}
       <View style={s.section}>
-        <Text style={s.sectionTitle}>{filtered ? 'Results' : 'Popular Services'}</Text>
+        <View style={s.sectionRow}>
+          <Text style={s.sectionTitle}>Popular Services</Text>
+          <Pressable onPress={() => nav.navigate('SearchResults', {})} hitSlop={8} accessibilityRole="link">
+            <Text style={s.seeAll}>See all</Text>
+          </Pressable>
+        </View>
         {loading ? (
           <ActivityIndicator color={DARK.accent} style={{ marginVertical: 32 }} />
         ) : listings.length === 0 ? (
           <View style={s.empty}>
             <Ionicons name="storefront-outline" size={40} color={DARK.muted} />
-            <Text style={s.emptyText}>{filtered ? 'No services match yet' : 'No services listed yet'}</Text>
+            <Text style={s.emptyText}>No services listed yet</Text>
           </View>
         ) : (
           <FlatList
@@ -303,6 +292,8 @@ const s = StyleSheet.create({
   bannerPhotoImg: { position: 'absolute', top: 0, left: '-8%', width: '271%', height: '100%' },
   section: { marginTop: 24, paddingHorizontal: 20, gap: 16 },
   sectionTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  seeAll: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, rowGap: 12 },
   tileWrap: { width: '33.333%', paddingHorizontal: 6 },
   tile: {

@@ -1,326 +1,184 @@
-import React, { useCallback, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Alert,
-  Modal,
-  TextInput,
-  Image,
-  FlatList,
-  Dimensions,
-} from 'react-native';
-
-const { width: SCREEN_W } = Dimensions.get('window');
-import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../constants/colors';
-import { api } from '../../services/api';
-import RequestBookingSheet from '../../components/contracts/RequestBookingSheet';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { BrandGradient, Card, ChatBubble, GradientButton, ScreenHeader } from '../../components/brand';
+import { DARK, FONTS } from '../../constants/colors';
+import { useSaved } from '../../hooks/useSaved';
+import { openChatWith } from '../../navigation/openChat';
+import { MarketplaceService, vendorName, type Listing } from '../../services/marketplace.service';
+import type { CustomerHomeStackParams, ListingSummary } from '../../navigation/types';
 
-type RouteParams = { listingId: string };
-type Nav = NativeStackNavigationProp<any>;
+export const toSummary = (l: Listing): ListingSummary => ({
+  id: l.id,
+  title: l.title,
+  price: Number(l.price),
+  priceUnit: l.price_unit,
+  image: l.images?.[0],
+  vendorId: l.vendor.id,
+  vendorName: vendorName(l.vendor),
+  rating: l.avg_rating ?? null,
+  reviewCount: l._count?.reviews ?? l.reviews?.length ?? 0,
+});
 
-interface ListingDetail {
-  id: string;
-  title: string;
-  description?: string;
-  price: number;
-  price_unit?: string;
-  avg_rating?: number;
-  review_count?: number;
-  images?: string[];
-  vendor?: {
-    id: string;
-    name: string;
-    avatar?: string;
-  };
-  category?: string;
-}
-
-export default function ListingDetail() {
-  const route = useRoute<RouteProp<Record<string, RouteParams>, string>>();
-  const nav = useNavigation<Nav>();
+export default function ListingDetail({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'ListingDetail'>) {
   const { listingId } = route.params;
-
-  const [listing, setListing] = useState<ListingDetail | null>(null);
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeImage, setActiveImage] = useState(0);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [blockedDates, setBlockedDates] = useState<{ id: string; start_date: string; end_date: string; reason?: string }[]>([]);
+  const [slide, setSlide] = useState(0);
+  const saved = useSaved();
 
-  const load = useCallback(async () => {
-    try {
-      const [listingRes, datesRes] = await Promise.all([
-        api.get(`/marketplace/listings/${listingId}`),
-        api.get(`/marketplace/listings/${listingId}/availability`).catch(() => null),
-      ]);
-      if (listingRes.data?.success) setListing(listingRes.data.data);
-      if (datesRes?.data?.success) setBlockedDates(datesRes.data.data ?? []);
-    } catch {
-      Alert.alert('Error', 'Failed to load listing');
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    MarketplaceService.getListing(listingId)
+      .then((r) => setListing(r.data?.data ?? null))
+      .catch(() => setListing(null))
+      .finally(() => setLoading(false));
   }, [listingId]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const handleBookNow = () => setModalVisible(true);
-
-  const handleBookingCreated = () => {
-    setModalVisible(false);
-    Alert.alert('Request sent', 'You signed the contract. Once the vendor accepts and signs, you can pay from your bookings.', [
-      { text: 'View Bookings', onPress: () => nav.navigate('BookingsTab', { screen: 'CustomerBookings' }) },
-      { text: 'OK' },
-    ]);
-  };
-
-  if (loading) {
-    return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
-
+  if (loading) return <ActivityIndicator color={DARK.accent} style={s.center} />;
   if (!listing) {
     return (
-      <View style={s.center}>
-        <Text style={s.errorText}>Listing not found</Text>
+      <View style={[s.center, { paddingTop: insets.top }]}>
+        <Text style={s.body}>This service is no longer available</Text>
       </View>
     );
   }
+
+  const images = listing.images ?? [];
+  const reviews = listing._count?.reviews ?? listing.reviews?.length ?? 0;
+  const vendor = vendorName(listing.vendor);
+  const unit = listing.price_unit && listing.price_unit !== 'fixed' ? ` / ${listing.price_unit}` : '';
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={s.scrollContent}>
-        {/* Image gallery */}
-        {listing.images && listing.images.length > 0 ? (
-          <View>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}>
+        <View style={s.hero}>
+          {images.length > 0 ? (
             <FlatList
-              data={listing.images}
+              data={images}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               keyExtractor={(_, i) => String(i)}
-              onMomentumScrollEnd={(e) =>
-                setActiveImage(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))
-              }
-              renderItem={({ item }) => (
-                <Image source={{ uri: item }} style={s.galleryImage} resizeMode="cover" />
-              )}
+              onMomentumScrollEnd={(e) => setSlide(Math.round(e.nativeEvent.contentOffset.x / width))}
+              renderItem={({ item }) => <Image source={{ uri: item }} style={{ width, height: 315 }} resizeMode="cover" />}
             />
-            {listing.images.length > 1 && (
-              <View style={s.dotRow}>
-                {listing.images.map((_, i) => (
-                  <View key={i} style={[s.dot, i === activeImage && s.dotActive]} />
-                ))}
-              </View>
-            )}
+          ) : (
+            <View style={[StyleSheet.absoluteFill, s.center]}>
+              <Ionicons name="image-outline" size={48} color={DARK.muted} />
+            </View>
+          )}
+          <View style={[s.heroBar, { top: insets.top + 12 }]} pointerEvents="box-none">
+            <ScreenHeader
+              title="Details"
+              onBack={() => navigation.goBack()}
+              light
+              right={
+                <Pressable onPress={() => saved.toggle(listing.id)} style={s.heart} accessibilityRole="button" accessibilityLabel="Save">
+                  <Ionicons name={saved.has(listing.id) ? 'heart' : 'heart-outline'} size={20} color={saved.has(listing.id) ? '#E0479E' : DARK.bg} />
+                </Pressable>
+              }
+            />
           </View>
-        ) : (
-          <View style={s.imagePlaceholder}>
-            <Ionicons name="image-outline" size={60} color={COLORS.gray[400]} />
-          </View>
-        )}
-
-        <View style={s.content}>
-          {/* Title & category */}
-          {listing.category && (
-            <View style={s.categoryBadge}>
-              <Text style={s.categoryText}>{listing.category}</Text>
-            </View>
-          )}
-          <Text style={s.title}>{listing.title}</Text>
-
-          {/* Vendor row */}
-          {listing.vendor && (
-            <View style={s.vendorRow}>
-              <View style={s.vendorAvatar}>
-                <Text style={s.vendorInitial}>
-                  {listing.vendor.name[0]?.toUpperCase() ?? 'V'}
-                </Text>
-              </View>
-              <Text style={s.vendorName}>{listing.vendor.name}</Text>
-            </View>
-          )}
-
-          {/* Price */}
-          <View style={s.priceRow}>
-            <Text style={s.price}>${Number(listing.price).toLocaleString()}</Text>
-            {listing.price_unit && (
-              <Text style={s.priceUnit}> / {listing.price_unit}</Text>
-            )}
-          </View>
-
-          {/* Rating */}
-          {listing.avg_rating != null && (
-            <View style={s.ratingRow}>
-              <Ionicons name="star" size={16} color="#f59e0b" />
-              <Text style={s.ratingText}>
-                {Number(listing.avg_rating).toFixed(1)}
-              </Text>
-              {listing.review_count != null && (
-                <Text style={s.reviewCount}>({listing.review_count} reviews)</Text>
-              )}
-            </View>
-          )}
-
-          {/* Description */}
-          {listing.description && (
-            <View style={s.section}>
-              <Text style={s.sectionTitle}>About this service</Text>
-              <Text style={s.description}>{listing.description}</Text>
-            </View>
-          )}
-
-          {/* Blocked dates */}
-          {blockedDates.length > 0 && (
-            <View style={s.section}>
-              <Text style={s.sectionTitle}>Unavailable Dates</Text>
-              {blockedDates.map((b) => (
-                <View key={b.id} style={s.blockedItem}>
-                  <Ionicons name="close-circle-outline" size={14} color="#ef4444" />
-                  <Text style={s.blockedText}>
-                    {new Date(b.start_date).toLocaleDateString()} – {new Date(b.end_date).toLocaleDateString()}
-                    {b.reason ? `  (${b.reason})` : ''}
-                  </Text>
-                </View>
-              ))}
+          {images.length > 1 && (
+            <View style={s.dots}>
+              {images.map((_, i) => (i === slide ? <BrandGradient key={i} style={s.dot} /> : <View key={i} style={[s.dot, { backgroundColor: '#fff' }]} />))}
             </View>
           )}
         </View>
+
+        <View style={s.content}>
+          <View style={s.rowBetween}>
+            <View style={{ flex: 1, gap: 8 }}>
+              <Text style={s.h1}>{listing.title}</Text>
+              <Text style={s.price}>
+                ${Number(listing.price).toLocaleString()}
+                <Text style={s.unit}>{unit}</Text>
+              </Text>
+            </View>
+            <View style={s.meta}>
+              <Ionicons name="star" size={16} color="#F5B700" />
+              <Text style={s.muted}>
+                {listing.avg_rating != null ? Number(listing.avg_rating).toFixed(1) : 'New'} ({reviews} Reviews)
+              </Text>
+            </View>
+          </View>
+
+          {!!listing.description && (
+            <Card>
+              <Text style={s.cardTitle}>Description</Text>
+              <Text style={s.body}>{listing.description}</Text>
+            </Card>
+          )}
+
+          <Card>
+            {!!listing.category && <Row label="Category" value={[listing.category.name, listing.sub_category?.name].filter(Boolean).join(' · ')} />}
+            {listing.delivery_time != null && <Row label="Delivery time" value={`${listing.delivery_time} day${listing.delivery_time === 1 ? '' : 's'}`} />}
+            {!!listing.location && <Row label="Location" value={listing.location} />}
+            <Row label="Payment" value="Held by Vendly until done" />
+          </Card>
+
+          <Pressable style={s.vendorRow} onPress={() => navigation.push('VendorProfile', { vendorId: listing.vendor.id })} accessibilityRole="button">
+            <View style={s.avatar}>
+              {listing.vendor.avatar_url ? (
+                <Image source={{ uri: listing.vendor.avatar_url }} style={StyleSheet.absoluteFill} />
+              ) : (
+                <Text style={s.avatarText}>{vendor[0]?.toUpperCase() ?? 'V'}</Text>
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.vendorName}>{vendor}</Text>
+              <Text style={s.muted}>View vendor profile</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color="#fff" />
+          </Pressable>
+        </View>
       </ScrollView>
 
-      {/* Book Now button */}
-      <View style={s.footer}>
-        <TouchableOpacity style={s.bookBtn} onPress={handleBookNow}>
-          <Text style={s.bookBtnText}>Book Now</Text>
-        </TouchableOpacity>
+      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={{ alignItems: 'flex-end', marginBottom: 14 }}>
+          <ChatBubble onPress={() => openChatWith(navigation, listing.vendor.id, vendor)} />
+        </View>
+        <GradientButton title="Book Service" onPress={() => navigation.navigate('SelectDate', { listing: toSummary(listing) })} />
       </View>
+    </View>
+  );
+}
 
-      {listing.vendor && (
-        <RequestBookingSheet
-          visible={modalVisible}
-          listing={{ id: listing.id, title: listing.title, vendorId: listing.vendor.id }}
-          onClose={() => setModalVisible(false)}
-          onCreated={handleBookingCreated}
-        />
-      )}
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={s.rowBetween}>
+      <Text style={s.rowLabel}>{label}</Text>
+      <Text style={s.rowValue} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorText: { fontSize: 16, color: COLORS.gray[500] },
-  scrollContent: { paddingBottom: 100 },
-  galleryImage: { width: SCREEN_W, height: 260 },
-  dotRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: 8, backgroundColor: COLORS.white },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.gray[300] },
-  dotActive: { backgroundColor: COLORS.primary, width: 18 },
-  imagePlaceholder: {
-    height: 260,
-    backgroundColor: COLORS.gray[200],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  content: { padding: 20, gap: 12 },
-  categoryBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.primaryBg,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  categoryText: { fontSize: 12, fontWeight: '600', color: COLORS.primary },
-  title: { fontSize: 22, fontWeight: '800', color: COLORS.gray[900] },
-  vendorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  vendorAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.primaryBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  vendorInitial: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
-  vendorName: { fontSize: 14, fontWeight: '600', color: COLORS.gray[700] },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline' },
-  price: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
-  priceUnit: { fontSize: 14, color: COLORS.gray[500] },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ratingText: { fontSize: 15, fontWeight: '700', color: COLORS.gray[800] },
-  reviewCount: { fontSize: 13, color: COLORS.gray[500] },
-  section: { gap: 6 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.gray[800] },
-  description: { fontSize: 14, color: COLORS.gray[600], lineHeight: 22 },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray[100],
-  },
-  bookBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  bookBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    gap: 12,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: COLORS.gray[900] },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.gray[600] },
-  input: {
-    backgroundColor: COLORS.gray[50],
-    borderWidth: 1,
-    borderColor: COLORS.gray[200],
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: COLORS.gray[900],
-  },
-  textarea: { height: 100 },
-  submitBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  btnDisabled: { opacity: 0.6 },
-  submitBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
-  blockedItem: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
-  blockedText: { fontSize: 13, color: '#ef4444' },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
+  hero: { height: 315, backgroundColor: DARK.card },
+  heroBar: { position: 'absolute', left: 0, right: 0 },
+  heart: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  dots: { position: 'absolute', bottom: 16, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  content: { paddingHorizontal: 20, paddingTop: 20, gap: 20 },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  h1: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
+  price: { color: DARK.accent, fontSize: 18, fontFamily: FONTS.semibold },
+  unit: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 2 },
+  muted: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium },
+  body: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.regular },
+  cardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  rowLabel: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.medium },
+  rowValue: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.semibold, flexShrink: 1 },
+  vendorRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, backgroundColor: DARK.card },
+  avatar: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
+  vendorName: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
 });
