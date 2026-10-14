@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PaymentPlan } from 'prisma/generated/enums';
+import { PaymentPlan, QuoteStatus } from 'prisma/generated/enums';
 import { buildSchedule } from 'src/modules/payments/payment-schedule';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { PromoService } from 'src/modules/platform/promo.service';
@@ -218,9 +218,21 @@ export class BookingContractsService {
     };
   }
 
+  /** An open quote for this customer, vendor and package; its amount replaces the package price. */
+  private async quoteFor(userId: string, dto: BookingContractFieldsDto) {
+    if (!dto.quote_id) return null;
+    const q = await this.prisma.quote.findUnique({ where: { id: dto.quote_id } });
+    if (!q || q.customer_id !== userId) throw new NotFoundException('Quote not found');
+    if (q.listing_id !== dto.listing_id || q.vendor_id !== dto.vendor_id) throw new BadRequestException('This quote is for a different package.');
+    if (q.status !== QuoteStatus.PENDING) throw new BadRequestException('This quote is no longer open.');
+    if (q.expires_at < new Date()) throw new BadRequestException('This quote has expired. Ask the vendor for a new one.');
+    return q;
+  }
+
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {
     const ctx = await this.loadBookingContext(userId, dto);
-    const priced = await this.priceAfterPromo(ctx.listing.price, dto.promo_code);
+    const quote = await this.quoteFor(userId, dto);
+    const priced = await this.priceAfterPromo(quote ? quote.amount : ctx.listing.price, dto.promo_code);
     const data = buildMergeData({
       booking: {
         id: bookingId,
@@ -244,7 +256,7 @@ export class BookingContractsService {
       timezone: dto.timezone,
     });
     const rendered = this.renderFor(ctx.vc, data);
-    return { ...ctx, priced, data, rendered, missing: missingFields(rendered.required, data) };
+    return { ...ctx, quote, priced, data, rendered, missing: missingFields(rendered.required, data) };
   }
 
   private consentInfo() {
@@ -274,7 +286,7 @@ export class BookingContractsService {
         vendor_contract_version: p.vc.version,
         missing_fields: p.missing,
         missing_message: p.missing.length ? missingFieldsMessage(p.missing) : null,
-        pricing: await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced),
+        pricing: { ...(await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced)), quote: p.quote ? { id: p.quote.id, title: p.quote.title, amount: Number(p.quote.amount) } : null },
         preview_token: signPreview({ bid: bookingId, lid: dto.listing_id, uid: userId }),
         source_pdf_url: p.vc.file_key
           ? this.vendorContracts.downloadUrl(p.vc.file_key, userId, p.vc.id, p.vc.file_name || 'contract.pdf')
@@ -379,6 +391,11 @@ export class BookingContractsService {
       });
       if (p.event) await tx.eventBooking.create({ data: { event_id: p.event.id, booking_id: b.id } });
       if (p.priced.code) await this.promos.redeem(tx, p.priced.code);
+      if (p.quote) {
+        // claim the quote: two requests can't both use it
+        const claimed = await tx.quote.updateMany({ where: { id: p.quote.id, status: QuoteStatus.PENDING }, data: { status: QuoteStatus.ACCEPTED, booking_id: b.id } });
+        if (claimed.count !== 1) throw new BadRequestException('This quote is no longer open.');
+      }
 
       const contract = await tx.bookingContract.create({
         data: {

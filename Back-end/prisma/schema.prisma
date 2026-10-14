@@ -224,6 +224,8 @@ model User {
   // Vendor listings
   vendorListings VendorListing[] @relation("VendorListingOwner")
   rentalItems    RentalItem[]    @relation("RentalItemOwner")
+  quotesSent     Quote[]         @relation("QuoteVendor")
+  quotesReceived Quote[]         @relation("QuoteCustomer")
 
   // Bookings as customer
   customerBookings Booking[] @relation("BookingCustomer")
@@ -445,6 +447,14 @@ model Conversation {
   updatedAt    DateTime      @updatedAt
   messages     Message[]
   participants Participant[]
+
+  // group chats (event chats): a title and is_group; 1:1 chats leave these empty
+  is_group          Boolean @default(false)
+  title             String? @db.VarChar(255)
+  event_id          String? @unique
+  event             Event?  @relation(fields: [event_id], references: [id], onDelete: SetNull)
+  pinned_message_id String?
+  quotes            Quote[]
 }
 
 model Participant {
@@ -479,8 +489,54 @@ model Message {
 
   attachments String[] @db.Text
 
+  // "text" | "quote" (a custom price card) | "system" (joined / pinned notices)
+  kind     String  @default("text") @db.VarChar(20)
+  quote_id String?
+  quote    Quote?  @relation(fields: [quote_id], references: [id], onDelete: SetNull)
+  // a phone number or email was detected (shown to admins; never blocks the message)
+  contact_flagged Boolean @default(false)
+
   @@index([conversationId])
   @@index([senderId])
+}
+
+enum QuoteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED
+}
+
+/// A custom price a vendor offers in chat; accepting it starts a booking request at that price.
+model Quote {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  conversation_id String
+  conversation    Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  vendor_id       String
+  vendor          User         @relation("QuoteVendor", fields: [vendor_id], references: [id], onDelete: Cascade)
+  // who the quote is for (the customer or planner in the chat)
+  customer_id     String
+  customer        User         @relation("QuoteCustomer", fields: [customer_id], references: [id], onDelete: Cascade)
+  listing_id      String
+  listing         VendorListing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+  event_id        String?
+
+  title       String      @db.VarChar(255)
+  description String?     @db.Text
+  amount      Decimal     @db.Decimal(10, 2)
+  expires_at  DateTime
+  status      QuoteStatus @default(PENDING)
+  booking_id  String?     @unique
+
+  messages Message[]
+
+  @@index([conversation_id])
+  @@index([customer_id, status])
+  @@map("quotes")
 }
 
 /**
@@ -703,6 +759,7 @@ model VendorListing {
   savedBy        SavedListing[]        @relation("ListingSavedBy")
   blockedDates   ListingAvailability[]
   contractAssignments VendorContractListing[]
+  quotes         Quote[]
 
   @@map("vendor_listings")
 }
@@ -1049,6 +1106,7 @@ model Event {
   bookings     EventBooking[]
   budget_items BudgetItem[]
   tasks        EventTask[]
+  conversation Conversation?
 
   @@map("events")
 }

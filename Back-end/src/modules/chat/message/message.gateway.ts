@@ -7,7 +7,8 @@ import {
   OnGatewayDisconnect,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger, OnModuleInit } from '@nestjs/common';
+import { Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { PrismaService } from '../../../prisma/prisma.service';
 import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
 import * as path from 'path';
@@ -38,7 +39,7 @@ export class MessageGateway
   public clients = new Map<string, string>();
   private activeUsers = new Map<string, string>();
 
-  constructor() {
+  constructor(@Optional() private readonly prisma?: PrismaService) {
     if (!fs.existsSync(this.uploadsDir)) {
       fs.mkdirSync(this.uploadsDir, { recursive: true });
     }
@@ -71,6 +72,7 @@ export class MessageGateway
       }
 
       this.clients.set(userId, client.id);
+      client.data.userId = userId;
       client.join(`user_${userId}`);
       this.logger.log(`User ${userId} connected`);
     } catch (error) {
@@ -96,10 +98,19 @@ export class MessageGateway
     }
   }
 
+  /** Only participants may listen to a conversation (rooms are named by conversation id). */
   @SubscribeMessage('joinroom')
-  handleRoomJoin(client: Socket, body: { room_id: string }) {
-    client.join(body.room_id);
-    client.emit('joinedRoom', { room_id: body.room_id });
+  async handleRoomJoin(client: Socket, body: { room_id: string }) {
+    const userId = client.data?.userId;
+    const roomId = body?.room_id;
+    if (!userId || !roomId || !this.prisma) return;
+    const member = await this.prisma.participant.findFirst({ where: { conversationId: roomId, userId }, select: { id: true } });
+    if (!member) {
+      client.emit('joinRefused', { room_id: roomId });
+      return;
+    }
+    client.join(roomId);
+    client.emit('joinedRoom', { room_id: roomId });
   }
 
   @SubscribeMessage('sendMessage')

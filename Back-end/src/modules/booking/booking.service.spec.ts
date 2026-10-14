@@ -6,6 +6,7 @@ import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
 import { BookingContractsService } from 'src/modules/contracts/booking-contracts.service';
 import { PaymentsService } from 'src/modules/payments/payments.service';
+import { ChatExtrasService } from 'src/modules/chat/extras/chat-extras.service';
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
@@ -26,6 +27,7 @@ jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
 }));
 
 const mockPrisma = {
+  eventBooking: { findMany: jest.fn().mockResolvedValue([]) },
   vendorListing: {
     findFirst: jest.fn(),
   },
@@ -114,6 +116,7 @@ describe('BookingService', () => {
         { provide: PushService, useValue: mockPush },
         { provide: BookingContractsService, useValue: mockContracts },
         { provide: PaymentsService, useValue: mockPayments },
+        { provide: ChatExtrasService, useValue: { syncEventChat: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
 

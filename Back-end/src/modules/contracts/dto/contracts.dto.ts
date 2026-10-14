@@ -166,6 +166,11 @@ export class BookingContractFieldsDto {
   @MaxLength(50)
   promo_code?: string;
 
+  @ApiPropertyOptional({ description: 'A vendor quote from chat: the booking uses its price instead of the package price' })
+  @IsOptional()
+  @IsString()
+  quote_id?: string;
+
   @ApiPropertyOptional({ description: 'Saved Stripe card (pm_…) to charge when the vendor accepts' })
   @IsOptional()
   @IsString()

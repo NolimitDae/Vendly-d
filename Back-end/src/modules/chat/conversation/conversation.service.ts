@@ -30,6 +30,7 @@ export class ConversationService {
     // check if conversation already exists between the two users
     const existingConversation = await this.prisma.conversation.findFirst({
       where: {
+        is_group: false,
         AND: [
           { participants: { some: { userId: sender } } },
           { participants: { some: { userId: participant_id } } },
@@ -144,8 +145,10 @@ export class ConversationService {
           take: 1,
           select: {
             text: true,
+            kind: true,
             attachments: true,
             createdAt: true,
+            sender: { select: { id: true, name: true } },
           },
         },
       },
@@ -154,11 +157,24 @@ export class ConversationService {
       },
     });
 
+    // unread = messages from others since this user last read the chat
+    const unread = new Map<string, number>();
+    await Promise.all(
+      conversations.map(async (conv) => {
+        const me = conv.participants.find((p) => p.userId === userId);
+        const n = await this.prisma.message.count({
+          where: { conversationId: conv.id, senderId: { not: userId }, createdAt: { gt: me?.lastReadAt ?? new Date(0) } },
+        });
+        unread.set(conv.id, n);
+      }),
+    );
+
     const formattedConversations = conversations.map((conv) => {
 
-      const opponentParticipant = conv.participants.find(
-        (p) => p.userId !== userId,
-      );
+      const me = conv.participants.find((p) => p.userId === userId);
+      const opponentParticipant = conv.is_group
+        ? null
+        : conv.participants.find((p) => p.userId !== userId);
 
       const opponentData = opponentParticipant ? {
         userId: opponentParticipant.user.id,
@@ -174,9 +190,20 @@ export class ConversationService {
 
       return {
         conversation_id: conv.id,
+        is_group: conv.is_group,
+        title: conv.is_group ? conv.title : opponentData?.name ?? null,
+        event_id: conv.event_id,
+        member_count: conv.participants.length,
+        members: conv.is_group
+          ? conv.participants.map((p) => ({ userId: p.user.id, name: p.user.name, role: p.role }))
+          : undefined,
+        unread: unread.get(conv.id) ?? 0,
+        last_read_at: me?.lastReadAt ?? null,
         opponent: opponentData,
         lastMessage: conv.messages[0] ? {
           text: conv.messages[0].text,
+          kind: conv.messages[0].kind,
+          sender_name: conv.messages[0].sender?.name ?? null,
           createdAt: conv.messages[0].createdAt,
           attachments: conv.messages[0].attachments,
           attachment_urls: conv.messages[0].attachments

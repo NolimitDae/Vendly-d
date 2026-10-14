@@ -31,6 +31,9 @@ const mockPrisma = {
   booking: {
     findMany: jest.fn(),
   },
+  message: {
+    count: jest.fn().mockResolvedValue(0),
+  },
 };
 
 const mockMessageGateway = {

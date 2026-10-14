@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MessageGateway } from './message.gateway';
+import { PrismaService } from '../../../prisma/prisma.service';
 import * as jwt from 'jsonwebtoken';
 
 // Suppress filesystem side-effects in the constructor
@@ -16,9 +17,12 @@ const makeSocket = (overrides: Partial<any> = {}): any => ({
   },
   disconnect: jest.fn(),
   join: jest.fn(),
+  data: {},
   emit: jest.fn(),
   ...overrides,
 });
+
+const prisma = { participant: { findFirst: jest.fn() } };
 
 describe('MessageGateway', () => {
   let gateway: MessageGateway;
@@ -26,7 +30,7 @@ describe('MessageGateway', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [MessageGateway],
+      providers: [MessageGateway, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     gateway = module.get<MessageGateway>(MessageGateway);
@@ -119,24 +123,31 @@ describe('MessageGateway', () => {
   });
 
   describe('handleRoomJoin', () => {
-    it('should join the room and emit joinedRoom event', () => {
-      const client = makeSocket();
+    it('joins a conversation the user is part of', async () => {
+      prisma.participant.findFirst.mockResolvedValue({ id: 'p1' });
+      const client = makeSocket({ data: { userId: 'user-1' } });
 
-      gateway.handleRoomJoin(client, { room_id: 'room-42' });
+      await gateway.handleRoomJoin(client, { room_id: 'room-42' });
 
+      expect(prisma.participant.findFirst).toHaveBeenCalledWith({ where: { conversationId: 'room-42', userId: 'user-1' }, select: { id: true } });
       expect(client.join).toHaveBeenCalledWith('room-42');
       expect(client.emit).toHaveBeenCalledWith('joinedRoom', { room_id: 'room-42' });
     });
 
-    it('should join different rooms independently', () => {
-      const client1 = makeSocket({ id: 'socket-1' });
-      const client2 = makeSocket({ id: 'socket-2' });
+    it('refuses a conversation the user is not in', async () => {
+      prisma.participant.findFirst.mockResolvedValue(null);
+      const client = makeSocket({ data: { userId: 'intruder' } });
 
-      gateway.handleRoomJoin(client1, { room_id: 'room-A' });
-      gateway.handleRoomJoin(client2, { room_id: 'room-B' });
+      await gateway.handleRoomJoin(client, { room_id: 'room-42' });
 
-      expect(client1.join).toHaveBeenCalledWith('room-A');
-      expect(client2.join).toHaveBeenCalledWith('room-B');
+      expect(client.join).not.toHaveBeenCalled();
+      expect(client.emit).toHaveBeenCalledWith('joinRefused', { room_id: 'room-42' });
+    });
+
+    it('ignores sockets that never authenticated', async () => {
+      const client = makeSocket({ data: {} });
+      await gateway.handleRoomJoin(client, { room_id: 'room-42' });
+      expect(client.join).not.toHaveBeenCalled();
     });
   });
 

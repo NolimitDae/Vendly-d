@@ -11,6 +11,8 @@ import { MessageGateway } from "./message.gateway";
 import { StringHelper } from "src/common/helper/string.helper";
 import { paginateResponse, PaginationDto } from "src/common/pagination";
 import { ChatRepository } from "../../../common/repository/chat/chat.repository";
+import { contactReasons, CONTACT_WARNING } from "../extras/contact-warning";
+import { avatarUrl, formatMessage, messageInclude } from "../extras/format";
 
 // Temporary enum until Prisma generates it
 enum MessageStatus {
@@ -67,6 +69,7 @@ export class MessageService {
       }
     }
 
+    const reasons = contactReasons(text);
     const message = await this.prisma.message.create({
       data: {
         text,
@@ -74,17 +77,9 @@ export class MessageService {
         senderId: sender,
         status: MessageStatus.SENT,
         attachments: savedFileNames.length > 0 ? savedFileNames : [],
+        contact_flagged: reasons.length > 0,
       },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            avatar: true,
-          },
-        },
-      },
+      include: messageInclude,
     });
 
     await this.prisma.conversation.update({
@@ -92,27 +87,7 @@ export class MessageService {
       data: { updatedAt: new Date() },
     });
 
-    const formatted = {
-      id: message.id,
-      text: message.text,
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
-      status: message.status,
-      attchment: message.attachments,
-      attachments_url: (message.attachments || []).map((f) =>
-        TanvirStorage.url(`${appConfig().storageUrl.attachment}/${f}`),
-      ),
-      sender: {
-        id: message.sender.id,
-        name: message.sender.name,
-        email: message.sender.email,
-        avatar: message.sender.avatar
-          ? TanvirStorage.url(
-            `${appConfig().storageUrl.avatar}/${message.sender.avatar}`,
-          )
-          : null,
-      },
-    };
+    const formatted = formatMessage(message);
 
     // note: socket implementation for message sending
     const senderSocketId = this.messageGateway.clients.get(sender);
@@ -142,6 +117,8 @@ export class MessageService {
       message: "Message sent successfully",
       success: true,
       data: formatted,
+      // non-blocking: the apps show this as a reminder under the message
+      warning: reasons.length ? { reasons, text: CONTACT_WARNING } : null,
     };
   }
 
@@ -182,9 +159,9 @@ export class MessageService {
       );
     }
 
-    const receiverParticipant = conversation.participants.find(
-      (p) => p.userId !== userId,
-    );
+    const receiverParticipant = conversation.is_group
+      ? null
+      : conversation.participants.find((p) => p.userId !== userId);
 
     let formattedReceiver = null;
     if (receiverParticipant) {
@@ -204,45 +181,43 @@ export class MessageService {
       this.prisma.message.count({ where: whereClause }),
       this.prisma.message.findMany({
         where: whereClause,
-        include: {
-          sender: {
-            select: { id: true, name: true, email: true, avatar: true },
-          },
-        },
+        include: messageInclude,
         orderBy: { createdAt: "asc" },
         skip,
         take,
       }),
     ]);
 
+    // who has read up to when (read receipts), plus group details and the pinned message
+    const pinned = conversation.pinned_message_id
+      ? await this.prisma.message.findFirst({ where: { id: conversation.pinned_message_id, conversationId }, include: messageInclude })
+      : null;
+    const conversationInfo = {
+      id: conversation.id,
+      is_group: conversation.is_group,
+      title: conversation.title,
+      event_id: conversation.event_id,
+      pinned: pinned ? formatMessage(pinned) : null,
+      participants: conversation.participants.map((p) => ({
+        id: p.user.id,
+        name: p.user.name,
+        role: p.role,
+        avatar_url: avatarUrl(p.user.avatar),
+        last_read_at: p.lastReadAt,
+      })),
+    };
+
     if (totalMessages === 0) {
       return {
         message: "No messages found",
         success: true,
+        conversation: conversationInfo,
         data: paginateResponse([], page, perPage, totalMessages),
       };
     }
 
     const formattedMessages = messages.map((msg) => ({
-      id: msg.id,
-      text: msg.text,
-      attachments: msg.attachments,
-      attachments_url: (msg.attachments || []).map((f) =>
-        TanvirStorage.url(`${appConfig().storageUrl.attachment}/${f}`),
-      ),
-      createdAt: msg.createdAt,
-      sender: {
-        id: msg.sender.id,
-        name: msg.sender.name,
-        email: msg.sender.email,
-        avater: msg.sender.avatar,
-        avatar_url: msg.sender.avatar
-          ? TanvirStorage.url(
-            `${appConfig().storageUrl.avatar}/${msg.sender.avatar}`,
-          )
-          : null,
-      },
-
+      ...formatMessage(msg),
       receiver: formattedReceiver,
     }));
 
@@ -256,6 +231,7 @@ export class MessageService {
     return {
       message: "Messages retrieved successfully",
       success: true,
+      conversation: conversationInfo,
       ...paginationResult,
     };
   }
@@ -367,6 +343,7 @@ export class MessageService {
     }
 
     const lastReadAt = participant.lastReadAt || new Date(0);
+    const readAt = new Date();
 
     await this.prisma.$transaction(async (tx) => {
       await tx.message.updateMany({
@@ -381,9 +358,11 @@ export class MessageService {
 
       await tx.participant.update({
         where: { id: participant.id },
-        data: { lastReadAt: new Date() },
+        data: { lastReadAt: readAt },
       });
     });
+    // read receipts: everyone in the chat learns how far this user has read
+    this.messageGateway.server?.to(conversationId).emit("conversationRead", { conversation_id: conversationId, user_id: userId, read_at: readAt });
 
     return {
       message: "Messages marked as read successfully",
