@@ -91,7 +91,7 @@ const OFF_PLATFORM = /\b(whats\s?app|telegram|signal app|wechat|venmo|cash\s?app
 
 export function sharesContact(text: string): boolean {
   if (EMAIL.test(text) || OFF_PLATFORM.test(text)) return true;
-  return (text.match(PHONE_CANDIDATE) ?? []).some((m) => {
+  return (text.match(PHONE_CANDIDATE) ?? ([] as string[])).some((m) => {
     const digits = m.replace(/\D/g, "");
     return digits.length >= 10 && digits.length <= 15 && !DATE_LIKE.test(m.trim());
   });
