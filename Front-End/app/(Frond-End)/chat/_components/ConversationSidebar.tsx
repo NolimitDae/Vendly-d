@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { MessageSquare, Search, Loader2, Plus, X } from "lucide-react";
+import { MessageSquare, Search, Loader2, Plus, X, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -20,8 +20,14 @@ interface Opponent {
 
 interface Conversation {
   conversation_id: string;
+  is_group?: boolean;
+  title?: string | null;
+  member_count?: number;
+  unread?: number;
   opponent: Opponent | null;
   lastMessage: {
+    kind?: string;
+    sender_name?: string | null;
     text?: string;
     createdAt: string;
     attachments?: string[];
@@ -94,8 +100,9 @@ export default function ConversationSidebar() {
     }
   };
 
+  const nameOf = (c: Conversation) => (c.is_group ? c.title ?? "Event chat" : c.opponent?.name ?? "Unknown");
   const filtered = conversations.filter((c) =>
-    c.opponent?.name?.toLowerCase().includes(search.toLowerCase()),
+    nameOf(c).toLowerCase().includes(search.toLowerCase()),
   );
 
   const filteredUsers = users.filter((u) => (u.name ?? "").toLowerCase().includes(userSearch.toLowerCase()));
@@ -160,11 +167,13 @@ export default function ConversationSidebar() {
           <ul className="divide-y divide-gray-100 dark:divide-gray-700">
             {filtered.map((conv) => {
               const isActive = pathname === `/chat/${conv.conversation_id}`;
-              const name = conv.opponent?.name ?? "Unknown";
+              const name = nameOf(conv);
               const initial = name[0]?.toUpperCase() ?? "?";
-              const preview =
-                conv.lastMessage?.text ??
-                (conv.lastMessage?.attachments?.length ? "📎 Attachment" : "No messages yet");
+              const body =
+                conv.lastMessage?.kind === "quote"
+                  ? `💬 ${conv.lastMessage.text ?? "Quote"}`
+                  : conv.lastMessage?.text ?? (conv.lastMessage?.attachments?.length ? "📎 Attachment" : conv.is_group ? `${conv.member_count ?? 0} members` : "No messages yet");
+              const preview = conv.is_group && conv.lastMessage?.sender_name ? `${conv.lastMessage.sender_name.split(" ")[0]}: ${body}` : body;
               const time = conv.lastMessage?.createdAt
                 ? dayjs(conv.lastMessage.createdAt).fromNow()
                 : "";
@@ -180,7 +189,11 @@ export default function ConversationSidebar() {
                         : "hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-transparent",
                     )}
                   >
-                    {conv.opponent?.avatar_url ? (
+                    {conv.is_group ? (
+                      <div className="w-11 h-11 rounded-full bg-primary/15 flex items-center justify-center text-primary flex-shrink-0">
+                        <Users className="w-5 h-5" />
+                      </div>
+                    ) : conv.opponent?.avatar_url ? (
                       <Image
                         src={conv.opponent.avatar_url}
                         alt={name}
@@ -211,9 +224,16 @@ export default function ConversationSidebar() {
                           <span className="text-[11px] text-gray-400 flex-shrink-0">{time}</span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                        {preview}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className={cn("text-xs truncate flex-1", conv.unread ? "text-gray-900 dark:text-white font-medium" : "text-gray-500 dark:text-gray-400")}>
+                          {preview}
+                        </p>
+                        {!!conv.unread && (
+                          <span className="min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center" aria-label={`${conv.unread} unread`}>
+                            {conv.unread > 99 ? "99+" : conv.unread}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </Link>
                 </li>

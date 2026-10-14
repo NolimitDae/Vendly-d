@@ -19,6 +19,7 @@ import {
   Loader2,
 } from "lucide-react";
 import BookingModal from "@/components/marketplace/BookingModal";
+import { ChatService } from "@/service/chat/chat.service";
 import ReviewList from "@/components/marketplace/ReviewList";
 import { CookieHelper } from "@/helper/cookie.helper";
 import { SavedListingsService } from "@/service/savedListings/savedListings.service";
@@ -85,6 +86,23 @@ export default function ListingDetailPage() {
   const [selectedEventId, setSelectedEventId] = useState("");
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [pendingBookingId, setPendingBookingId] = useState<string | null>(null);
+  const [quote, setQuote] = useState<{ id: string; title: string; amount: number } | null>(null);
+
+  // Accepting a vendor's quote in chat lands here with ?quote=ID: open the booking at that price
+  useEffect(() => {
+    const quoteId = new URLSearchParams(window.location.search).get("quote");
+    if (!quoteId) return;
+    ChatService.getQuote(quoteId)
+      .then((res) => {
+        const q = res.data?.data;
+        if (!q || q.listing?.id !== id) return;
+        if (q.status !== "PENDING") return toast.info("That quote is no longer open.");
+        setQuote({ id: q.id, title: q.title, amount: q.amount });
+        if (q.event_id) setSelectedEventId(q.event_id);
+        setShowBooking(true);
+      })
+      .catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -447,6 +465,7 @@ export default function ListingDetailPage() {
         <BookingModal
           listing={listing}
           eventId={selectedEventId || undefined}
+          quote={quote ?? undefined}
           onClose={handleBookingModalClose}
           onBookingCreated={selectedEventId ? handleBookingCreated : undefined}
         />

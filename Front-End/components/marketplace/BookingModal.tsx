@@ -24,6 +24,8 @@ interface Props {
   };
   /** Planner bookings: attach to this event (pre-fills venue and guest count). */
   eventId?: string;
+  /** A vendor's quote from chat: the booking is at the quoted price. */
+  quote?: { id: string; title: string; amount: number };
   onClose: () => void;
   onBookingCreated?: (bookingId: string) => void;
 }
@@ -52,7 +54,7 @@ function toIso(date: string, time?: string) {
   return new Date(`${date}T${time || "00:00"}`).toISOString();
 }
 
-export default function BookingModal({ listing, eventId, onClose, onBookingCreated }: Props) {
+export default function BookingModal({ listing, eventId, quote, onClose, onBookingCreated }: Props) {
   const [step, setStep] = useState<Step>("details");
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [date, setDate] = useState("");
@@ -84,6 +86,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
       timezone: browserTimezone(),
       payment_method_id: card ?? undefined,
       promo_code: promo.trim() || undefined,
+      quote_id: quote?.id,
     };
   };
 
@@ -157,9 +160,9 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
         {step === "details" && (
           <div className="mb-5 p-4 bg-primary/5 rounded-xl">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600 dark:text-gray-300">Service price</span>
+              <span className="text-gray-600 dark:text-gray-300">{quote ? `Quote: ${quote.title}` : "Service price"}</span>
               <span className="font-bold text-gray-900 dark:text-white">
-                ${Number(listing.price).toFixed(2)} / {listing.price_unit}
+                {quote ? `${quote.amount.toFixed(2)}` : <>${Number(listing.price).toFixed(2)} / {listing.price_unit}</>}
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">A Vendly Protection fee is added. You&apos;ll see the total in the contract.</p>

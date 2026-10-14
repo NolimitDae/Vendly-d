@@ -18,6 +18,8 @@ import { format } from 'date-fns';
 import { COLORS, DARK, FONTS } from '../../constants/colors';
 import { GradientButton } from '../../components/brand';
 import EventContractsCard from '../../components/contracts/EventContractsCard';
+import { ChatService } from '../../services/chat.service';
+import { apiError } from '../../services/contracts.service';
 import {
   EventsService,
   EventDetail as EventDetailType,
@@ -76,6 +78,15 @@ export default function EventDetail() {
   const completedTasks = event.tasks.filter((t) => t.completed).length;
   const totalTasks = event.tasks.length;
 
+  const openChat = async () => {
+    if (!event) return;
+    try {
+      const res = await ChatService.openEventChat(event.id);
+      navigation.navigate('MessagesTab' as any, { screen: 'ChatDetail', initial: false, params: { conversationId: res.data.data.conversation_id, participantName: event.name } } as any);
+    } catch (e) {
+      Alert.alert('Event chat', apiError(e));
+    }
+  };
   return (
     <View style={s.root}>
       {/* Event header */}
@@ -95,6 +106,11 @@ export default function EventDetail() {
           {event.venue && <Chip icon="location-outline" label={event.venue} />}
           {event.guest_count && <Chip icon="people-outline" label={`${event.guest_count} guests`} />}
         </View>
+        <TouchableOpacity style={s.chatBtn} onPress={openChat} accessibilityRole="button" accessibilityLabel="Open the event chat">
+          <Ionicons name="chatbubbles-outline" size={18} color="#fff" />
+          <Text style={s.chatBtnText}>Event chat</Text>
+          <Text style={s.chatBtnHint}>planner + booked vendors</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Tabs */}
@@ -519,6 +535,9 @@ function Chip({ icon, label }: { icon: any; label: string }) {
 }
 
 const s = StyleSheet.create({
+  chatBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', marginTop: 12, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+  chatBtnText: { color: '#fff', fontSize: 14, fontFamily: FONTS.semibold },
+  chatBtnHint: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: FONTS.regular },
   root: { flex: 1, backgroundColor: DARK.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
   emptyText: { color: '#fff', fontSize: 18, fontFamily: FONTS.medium, textAlign: 'center' },

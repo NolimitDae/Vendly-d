@@ -23,6 +23,8 @@ import { EventsService } from "@/service/events/events.service";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import EventContractsSection from "@/components/contracts/EventContractsSection";
+import { ChatService } from "@/service/chat/chat.service";
+import { MessagesSquare } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -308,6 +310,19 @@ export default function EventDetailPage() {
                 )}
               </div>
             </div>
+            <button
+              onClick={async () => {
+                try {
+                  const res = await ChatService.openEventChat(event.id);
+                  router.push(`/chat/${res.data?.data?.conversation_id}`);
+                } catch {
+                  toast.error("Could not open the event chat");
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/40 text-primary text-sm font-medium hover:bg-primary/5 transition"
+            >
+              <MessagesSquare className="w-4 h-4" /> Event chat
+            </button>
 
             {event.status !== "CANCELLED" && event.status !== "COMPLETED" && (
               <button

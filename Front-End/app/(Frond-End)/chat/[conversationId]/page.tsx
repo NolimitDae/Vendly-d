@@ -1,55 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  Send,
-  Loader2,
-  Check,
-  CheckCheck,
-} from "lucide-react";
+import { ArrowLeft, Send, Loader2, Pin, PinOff, ShieldCheck, Tags, Users, X } from "lucide-react";
 import dayjs from "dayjs";
+import { toast } from "react-toastify";
 import { CookieHelper } from "@/helper/cookie.helper";
-import { ChatService } from "@/service/chat/chat.service";
+import { ChatService, CONTACT_WARNING, sharesContact, type ChatMessage, type ConversationInfo, type Quote } from "@/service/chat/chat.service";
+import { errorMessage } from "@/service/rentals/rentals.service";
 import { useSocket } from "@/hooks/useSocket";
+import QuoteCard from "@/components/chat/QuoteCard";
+import SendQuoteModal from "@/components/chat/SendQuoteModal";
 import { cn } from "@/lib/utils";
 
-interface Sender {
-  id: string;
-  name: string;
-  avatar?: string | null;
-}
-
-interface Message {
-  id: string;
-  text?: string;
-  createdAt: string;
-  status?: string;
-  sender: Sender;
-}
-
-interface Participant {
-  userId: string;
-  name: string;
-  avatar_url?: string | null;
-}
-
-function getUserIdFromToken(token: string): string | null {
+function tokenClaims(token: string): { sub?: string; type?: string } {
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub ?? null;
+    return JSON.parse(atob(token.split(".")[1]));
   } catch {
-    return null;
+    return {};
   }
 }
 
-function StatusIcon({ status }: { status?: string }) {
-  if (status === "READ") return <CheckCheck className="w-3.5 h-3.5 text-blue-400" />;
-  if (status === "DELIVERED") return <CheckCheck className="w-3.5 h-3.5 text-gray-400" />;
-  return <Check className="w-3.5 h-3.5 text-gray-400" />;
+function Avatar({ url, name, size = 28 }: { url?: string | null; name: string; size?: number }) {
+  return url ? (
+    <Image src={url} alt={name} width={size} height={size} className="rounded-full object-cover flex-shrink-0" style={{ width: size, height: size }} unoptimized />
+  ) : (
+    <div className="rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold flex-shrink-0" style={{ width: size, height: size, fontSize: size * 0.4 }}>
+      {name[0]?.toUpperCase() ?? "?"}
+    </div>
+  );
 }
 
 export default function ConversationPage() {
@@ -57,257 +38,271 @@ export default function ConversationPage() {
   const router = useRouter();
   const socket = useSocket();
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [opponent, setOpponent] = useState<Participant | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [info, setInfo] = useState<ConversationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [typingTimeout, setTypingTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [busyQuote, setBusyQuote] = useState<string | null>(null);
+  const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const currentUserId = useRef<string | null>(null);
+  const [me, setMe] = useState<{ id: string | null; type: string | null }>({ id: null, type: null });
 
   useEffect(() => {
     const token = CookieHelper.get({ key: "token" });
-    if (token) currentUserId.current = getUserIdFromToken(token);
+    const claims = token ? tokenClaims(token) : {};
+    setMe({ id: claims.sub ?? null, type: claims.type ?? null });
   }, []);
 
-  // Load conversation history
+  const load = useCallback(async () => {
+    try {
+      const res = await ChatService.getMessages(conversationId);
+      if (res.data?.success) {
+        // an empty chat comes back as a nested page object rather than an array
+        const list = res.data.data;
+        setMessages(Array.isArray(list) ? list : list?.data ?? []);
+        setInfo(res.data.conversation ?? null);
+      } else {
+        router.push("/chat");
+      }
+    } catch {
+      router.push("/chat");
+    } finally {
+      setLoading(false);
+    }
+  }, [conversationId, router]);
+
   useEffect(() => {
     if (!conversationId) return;
     setLoading(true);
+    load().then(() => ChatService.markAsRead(conversationId).catch(() => {}));
+  }, [conversationId, load]);
 
-    ChatService.getConversation(conversationId)
-      .then((res) => {
-        if (res.data?.success) {
-          const conv = res.data.conversation;
-          setMessages(conv.messages ?? []);
-          const other = conv.participants?.find(
-            (p: Participant) => p.userId !== currentUserId.current,
-          );
-          setOpponent(other ?? null);
-        } else {
-          router.push("/chat");
-        }
-      })
-      .catch(() => router.push("/chat"))
-      .finally(() => setLoading(false));
-
-    // Mark as read
-    ChatService.markAsRead(conversationId).catch(() => {});
-  }, [conversationId]);
-
-  // Socket: join room and listen for messages
+  // Socket: join room, live messages, read receipts, pins, quote updates
   useEffect(() => {
     if (!socket || !conversationId) return;
-
     socket.emit("joinroom", { room_id: conversationId });
 
-    const handleMessage = (payload: { from: string; data: Message }) => {
-      // Skip own messages — backend excludes sender; extra guard for edge cases
-      if (payload.from === currentUserId.current) return;
-      setMessages((prev) => [...prev, payload.data]);
+    const handleMessage = (payload: { from: string; data: ChatMessage }) => {
+      if (!payload?.data?.id) return;
+      setMessages((prev) => (prev.some((m) => m.id === payload.data.id) ? prev : [...prev, payload.data]));
+      if (payload.data.sender?.id !== me.id) ChatService.markAsRead(conversationId).catch(() => {});
     };
-
+    const handleRead = (e: { conversation_id: string; user_id: string; read_at: string }) => {
+      if (e.conversation_id !== conversationId) return;
+      setInfo((i) => (i ? { ...i, participants: i.participants.map((p) => (p.id === e.user_id ? { ...p, last_read_at: e.read_at } : p)) } : i));
+    };
+    const handlePinned = (e: { conversation_id: string; message: ChatMessage | null }) => {
+      if (e.conversation_id === conversationId) setInfo((i) => (i ? { ...i, pinned: e.message } : i));
+    };
+    const handleQuote = (e: { quote_id: string; status: Quote["status"] }) => {
+      setMessages((prev) => prev.map((m) => (m.quote?.id === e.quote_id ? { ...m, quote: { ...m.quote, status: e.status } } : m)));
+    };
     const handleTyping = () => setIsTyping(true);
     const handleStopTyping = () => setIsTyping(false);
 
     socket.on("message", handleMessage);
+    socket.on("conversationRead", handleRead);
+    socket.on("pinned", handlePinned);
+    socket.on("quoteUpdated", handleQuote);
     socket.on("userTyping", handleTyping);
     socket.on("userStoppedTyping", handleStopTyping);
-
     return () => {
       socket.off("message", handleMessage);
+      socket.off("conversationRead", handleRead);
+      socket.off("pinned", handlePinned);
+      socket.off("quoteUpdated", handleQuote);
       socket.off("userTyping", handleTyping);
       socket.off("userStoppedTyping", handleStopTyping);
     };
-  }, [socket, conversationId]);
+  }, [socket, conversationId, me.id]);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const isGroup = !!info?.is_group;
+  const others = useMemo(() => (info?.participants ?? []).filter((p) => p.id !== me.id), [info, me.id]);
+  const opponent = !isGroup ? others[0] : undefined;
+  const title = isGroup ? info?.title ?? "Event chat" : opponent?.name ?? "Conversation";
+
   const emitTyping = useCallback(() => {
     if (!socket || !opponent) return;
-    socket.emit("typing", { to: opponent.userId, data: {} });
-    if (typingTimeout) clearTimeout(typingTimeout);
-    const t = setTimeout(() => {
-      socket.emit("stopTyping", { to: opponent.userId, data: {} });
-    }, 2000);
-    setTypingTimeout(t);
-  }, [socket, opponent, typingTimeout]);
+    socket.emit("typing", { to: opponent.id, data: {} });
+    if (typingTimeout.current) clearTimeout(typingTimeout.current);
+    typingTimeout.current = setTimeout(() => socket.emit("stopTyping", { to: opponent.id, data: {} }), 2000);
+  }, [socket, opponent]);
 
-  const handleSend = async () => {
+  const send = async () => {
     const content = text.trim();
     if (!content || sending) return;
+    if (sharesContact(content) && !confirm(`${CONTACT_WARNING}\n\nSend anyway?`)) return;
     setText("");
     setSending(true);
     try {
       const res = await ChatService.sendMessage(conversationId, content);
       if (res.data?.success) {
-        setMessages((prev) => [...prev, res.data.data]);
+        setMessages((prev) => (prev.some((m) => m.id === res.data.data.id) ? prev : [...prev, res.data.data]));
+        setWarning(res.data.warning?.text ?? null);
       }
     } catch {
-      // silent
+      setText(content);
+      toast.error("Message not sent");
     } finally {
       setSending(false);
       inputRef.current?.focus();
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  const pin = async (m: ChatMessage | null) => {
+    try {
+      await ChatService.pin(conversationId, m?.id ?? null);
+      setInfo((i) => (i ? { ...i, pinned: m } : i));
+    } catch (e) {
+      toast.error(errorMessage(e, "Could not pin"));
     }
   };
 
-  const groupMessages = (msgs: Message[]) => {
-    const groups: { date: string; messages: Message[] }[] = [];
-    msgs.forEach((msg) => {
-      const date = dayjs(msg.createdAt).format("MMMM D, YYYY");
-      const last = groups[groups.length - 1];
-      if (last && last.date === date) {
-        last.messages.push(msg);
-      } else {
-        groups.push({ date, messages: [msg] });
-      }
-    });
-    return groups;
+  const acceptQuote = (q: Quote) => {
+    if (!q.listing) return;
+    router.push(`/marketplace/${q.listing.id}?quote=${q.id}`);
+  };
+  const quoteAction = async (q: Quote, action: "decline" | "withdraw") => {
+    setBusyQuote(q.id);
+    try {
+      await (action === "decline" ? ChatService.declineQuote(q.id) : ChatService.withdrawQuote(q.id));
+      setMessages((prev) => prev.map((m) => (m.quote?.id === q.id ? { ...m, quote: { ...q, status: action === "decline" ? "DECLINED" : "WITHDRAWN" } } : m)));
+    } catch (e) {
+      toast.error(errorMessage(e, "Could not update the quote"));
+    } finally {
+      setBusyQuote(null);
+    }
   };
 
-  const opponentName = opponent?.name ?? "Conversation";
-  const opponentInitial = opponentName[0]?.toUpperCase() ?? "?";
+  // read receipt under my latest message
+  const receipt = useMemo(() => {
+    const mine = [...messages].reverse().find((m) => m.sender?.id === me.id && m.kind !== "system");
+    if (!mine) return null;
+    const readers = others.filter((p) => p.last_read_at && p.last_read_at >= mine.createdAt);
+    if (!readers.length) return { id: mine.id, label: "Sent" };
+    if (!isGroup) return { id: mine.id, label: "Seen" };
+    return { id: mine.id, label: readers.length === others.length ? "Seen by everyone" : `Seen by ${readers.map((r) => r.name.split(" ")[0]).join(", ")}` };
+  }, [messages, others, isGroup, me.id]);
+
+  const groups = useMemo(() => {
+    const out: { date: string; messages: ChatMessage[] }[] = [];
+    messages.forEach((msg) => {
+      const date = dayjs(msg.createdAt).format("MMMM D, YYYY");
+      const last = out[out.length - 1];
+      if (last && last.date === date) last.messages.push(msg);
+      else out.push({ date, messages: [msg] });
+    });
+    return out;
+  }, [messages]);
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-        <Link
-          href="/chat"
-          className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400"
-        >
+        <Link href="/chat" className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400" aria-label="Back to conversations">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-
-        {opponent?.avatar_url ? (
-          <Image
-            src={opponent.avatar_url}
-            alt={opponentName}
-            width={38}
-            height={38}
-            className="w-9.5 h-9.5 rounded-full object-cover flex-shrink-0"
-            unoptimized
-          />
+        {isGroup ? (
+          <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-primary flex-shrink-0"><Users className="w-4.5 h-4.5" /></div>
         ) : (
-          <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
-            {opponentInitial}
-          </div>
+          <Avatar url={opponent?.avatar_url} name={title} size={38} />
         )}
-
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">
-            {opponentName}
-          </p>
-          {isTyping && (
+          <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{title}</p>
+          {isTyping ? (
             <p className="text-xs text-primary animate-pulse">typing...</p>
-          )}
+          ) : isGroup ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{info?.participants.map((p) => (p.id === me.id ? "You" : p.name)).join(", ")}</p>
+          ) : null}
         </div>
+        {me.type === "VENDOR" && (
+          <button onClick={() => setQuoting(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/40 text-primary text-sm font-medium hover:bg-primary/5">
+            <Tags className="w-4 h-4" /> Send quote
+          </button>
+        )}
       </div>
 
-      {/* Messages area */}
+      {info?.pinned && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 border-b border-primary/10 text-sm">
+          <Pin className="w-4 h-4 text-primary flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-semibold text-primary">Pinned{info.pinned.sender ? ` · ${info.pinned.sender.name}` : ""}</span>
+            <p className="truncate text-gray-700 dark:text-gray-200">{info.pinned.kind === "quote" ? `Quote: ${info.pinned.quote?.title ?? ""}` : info.pinned.text}</p>
+          </div>
+          <button onClick={() => pin(null)} aria-label="Unpin" className="p-1 rounded hover:bg-primary/10"><X className="w-4 h-4 text-gray-400" /></button>
+        </div>
+      )}
+
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 bg-gray-50 dark:bg-gray-900">
         {loading ? (
-          <div className="flex justify-center items-center h-full">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          </div>
+          <div className="flex justify-center items-center h-full"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-              <Send className="w-7 h-7 text-primary" />
-            </div>
-            <p className="text-gray-400 text-sm">
-              No messages yet. Say hello!
-            </p>
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-3"><Send className="w-7 h-7 text-primary" /></div>
+            <p className="text-gray-400 text-sm max-w-xs">{isGroup ? "Everyone working on this event can talk here." : "No messages yet. Say hello!"} Keep booking details in Vendly so they’re covered by your contract.</p>
           </div>
         ) : (
-          groupMessages(messages).map((group) => (
+          groups.map((group) => (
             <div key={group.date}>
-              {/* Date divider */}
               <div className="flex items-center gap-3 my-4">
                 <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-                <span className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-900 px-2 flex-shrink-0">
-                  {group.date}
-                </span>
+                <span className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-900 px-2 flex-shrink-0">{group.date}</span>
                 <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
               </div>
-
               {group.messages.map((msg, i) => {
-                const isMine = msg.sender?.id === currentUserId.current;
-                const showAvatar =
-                  !isMine &&
-                  (i === 0 ||
-                    group.messages[i - 1]?.sender?.id !== msg.sender?.id);
-
+                if (msg.kind === "system") {
+                  return <p key={msg.id} className="text-center text-xs text-gray-500 dark:text-gray-400 my-3"><span className="px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800">{msg.text}</span></p>;
+                }
+                const isMine = msg.sender?.id === me.id;
+                const name = msg.sender?.name ?? "User";
+                const firstOfRun = i === 0 || group.messages[i - 1]?.sender?.id !== msg.sender?.id || group.messages[i - 1]?.kind === "system";
+                const isPinned = info?.pinned?.id === msg.id;
                 return (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      "flex items-end gap-2 mb-1",
-                      isMine ? "justify-end" : "justify-start",
+                  <div key={msg.id} className={cn("group flex items-end gap-2 mb-1", isMine ? "justify-end" : "justify-start")}>
+                    {!isMine && <div className="w-7 flex-shrink-0">{firstOfRun && <Avatar url={msg.sender?.avatar_url ?? msg.sender?.avatar} name={name} />}</div>}
+                    {isMine && (
+                      <button onClick={() => pin(isPinned ? null : msg)} aria-label={isPinned ? "Unpin message" : "Pin message"} className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-gray-400 hover:text-primary transition">
+                        {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                      </button>
                     )}
-                  >
-                    {/* Opponent avatar spacer / avatar */}
-                    {!isMine && (
-                      <div className="w-7 flex-shrink-0">
-                        {showAvatar ? (
-                          opponent?.avatar_url ? (
-                            <Image
-                              src={opponent.avatar_url}
-                              alt={opponentName}
-                              width={28}
-                              height={28}
-                              className="w-7 h-7 rounded-full object-cover"
-                              unoptimized
-                            />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-semibold">
-                              {opponentInitial}
-                            </div>
-                          )
-                        ) : null}
-                      </div>
-                    )}
-
-                    <div
-                      className={cn(
-                        "max-w-[70%] flex flex-col gap-1",
-                        isMine ? "items-end" : "items-start",
+                    <div className={cn("max-w-[75%] flex flex-col gap-1", isMine ? "items-end" : "items-start")}>
+                      {isGroup && !isMine && firstOfRun && <span className="text-xs font-semibold text-primary px-1">{name}</span>}
+                      {msg.kind === "quote" && msg.quote ? (
+                        <QuoteCard
+                          quote={msg.quote}
+                          role={msg.quote.customer_id === me.id ? "customer" : msg.quote.vendor_id === me.id ? "vendor" : "other"}
+                          busy={busyQuote === msg.quote.id}
+                          onAccept={() => acceptQuote(msg.quote!)}
+                          onDecline={() => quoteAction(msg.quote!, "decline")}
+                          onWithdraw={() => quoteAction(msg.quote!, "withdraw")}
+                        />
+                      ) : (
+                        <div className={cn("px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words whitespace-pre-wrap", isMine ? "gradient-bg text-white rounded-br-sm" : "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm rounded-bl-sm")}>
+                          {msg.text}
+                        </div>
                       )}
-                    >
-                      <div
-                        className={cn(
-                          "px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words",
-                          isMine
-                            ? "gradient-bg text-white rounded-br-sm"
-                            : "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm rounded-bl-sm",
-                        )}
-                      >
-                        {msg.text}
-                      </div>
-                      <div
-                        className={cn(
-                          "flex items-center gap-1 text-[10px] text-gray-400",
-                          isMine ? "flex-row" : "flex-row-reverse",
-                        )}
-                      >
+                      <div className="flex items-center gap-1 text-[10px] text-gray-400">
+                        {isPinned && <Pin className="w-3 h-3 text-primary" />}
                         <span>{dayjs(msg.createdAt).format("h:mm A")}</span>
-                        {isMine && <StatusIcon status={msg.status} />}
+                        {receipt?.id === msg.id && <span>· {receipt.label}</span>}
                       </div>
                     </div>
+                    {!isMine && (
+                      <button onClick={() => pin(isPinned ? null : msg)} aria-label={isPinned ? "Unpin message" : "Pin message"} className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-gray-400 hover:text-primary transition">
+                        {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -317,7 +312,15 @@ export default function ConversationPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input area */}
+      {warning && (
+        <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-xs border-t border-amber-100 dark:border-amber-900/40">
+          <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span className="flex-1">{warning}</span>
+          <button onClick={() => setWarning(null)} aria-label="Dismiss"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
+      {/* Input */}
       <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 px-4 py-3">
         <div className="flex items-end gap-2">
           <textarea
@@ -327,8 +330,14 @@ export default function ConversationPage() {
               setText(e.target.value);
               emitTyping();
             }}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
             placeholder="Type a message... (Enter to send)"
+            aria-label="Message"
             rows={1}
             className="flex-1 resize-none px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 max-h-32 overflow-y-auto leading-relaxed"
             style={{ height: "auto" }}
@@ -338,19 +347,12 @@ export default function ConversationPage() {
               t.style.height = `${Math.min(t.scrollHeight, 128)}px`;
             }}
           />
-          <button
-            onClick={handleSend}
-            disabled={!text.trim() || sending}
-            className="p-2.5 gradient-bg text-white rounded-2xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-          >
-            {sending ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
+          <button onClick={send} disabled={!text.trim() || sending} aria-label="Send" className="p-2.5 gradient-bg text-white rounded-2xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+            {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>
       </div>
+      {quoting && <SendQuoteModal conversationId={conversationId} onClose={() => setQuoting(false)} onSent={load} />}
     </div>
   );
 }

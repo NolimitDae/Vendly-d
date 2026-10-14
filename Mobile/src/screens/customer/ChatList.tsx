@@ -35,7 +35,8 @@ export default function ChatList() {
     const d = parseISO(iso);
     return isToday(d) ? format(d, 'HH:mm') : format(d, 'MMM d');
   };
-  const items = conversations.filter((c) => !q || (other(c)?.name ?? '').toLowerCase().includes(q.toLowerCase()));
+  const nameOf = (c: Conversation) => (c.is_group ? c.title ?? 'Event chat' : other(c)?.name ?? 'User');
+  const items = conversations.filter((c) => !q || nameOf(c).toLowerCase().includes(q.toLowerCase()));
 
   return (
     <View style={s.root}>
@@ -69,17 +70,33 @@ export default function ChatList() {
           return (
             <Pressable
               style={s.row}
-              onPress={() => navigation.navigate('ChatDetail', { conversationId: item.id, participantName: o?.name ?? 'User', avatar: o?.avatar })}
+              onPress={() => navigation.navigate('ChatDetail', { conversationId: item.id, participantName: nameOf(item), avatar: item.is_group ? undefined : o?.avatar })}
               accessibilityRole="button"
             >
-              <View style={s.avatar}>
-                {o?.avatar ? <Image source={{ uri: o.avatar }} style={StyleSheet.absoluteFill} /> : <Text style={s.avatarText}>{(o?.name ?? '?')[0].toUpperCase()}</Text>}
+              <View style={[s.avatar, item.is_group && s.groupAvatar]}>
+                {item.is_group ? (
+                  <Ionicons name="people" size={26} color={DARK.accent} />
+                ) : o?.avatar ? (
+                  <Image source={{ uri: o.avatar }} style={StyleSheet.absoluteFill} />
+                ) : (
+                  <Text style={s.avatarText}>{(o?.name ?? '?')[0].toUpperCase()}</Text>
+                )}
               </View>
               <View style={{ flex: 1, gap: 6 }}>
-                <Text style={s.name} numberOfLines={1}>{o?.name ?? 'User'}</Text>
-                <Text style={s.preview} numberOfLines={1}>{item.last_message?.content || 'No messages yet'}</Text>
+                <Text style={[s.name, !!item.unread && { color: '#fff' }]} numberOfLines={1}>{nameOf(item)}</Text>
+                <Text style={[s.preview, !!item.unread && s.previewUnread]} numberOfLines={1}>
+                  {item.is_group && item.last_message?.sender_name ? `${item.last_message.sender_name.split(' ')[0]}: ` : ''}
+                  {item.last_message?.content || (item.is_group ? `${item.member_count ?? 0} members` : 'No messages yet')}
+                </Text>
               </View>
-              <Text style={s.time}>{when(item.updated_at)}</Text>
+              <View style={{ alignItems: 'flex-end', gap: 8, alignSelf: 'flex-start', paddingTop: 4 }}>
+                <Text style={[s.time, { paddingTop: 0 }]}>{when(item.updated_at)}</Text>
+                {!!item.unread && (
+                  <View style={s.badge}>
+                    <Text style={s.badgeText}>{item.unread > 99 ? '99+' : item.unread}</Text>
+                  </View>
+                )}
+              </View>
             </Pressable>
           );
         }}
@@ -102,4 +119,8 @@ const s = StyleSheet.create({
   name: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
   preview: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.regular },
   time: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular, alignSelf: 'flex-start', paddingTop: 4 },
+  groupAvatar: { backgroundColor: DARK.card, borderWidth: 1, borderColor: DARK.border },
+  previewUnread: { color: '#fff', fontFamily: FONTS.medium },
+  badge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { color: '#fff', fontSize: 12, fontFamily: FONTS.semibold },
 });

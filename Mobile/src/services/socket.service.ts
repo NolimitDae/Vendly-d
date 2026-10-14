@@ -44,6 +44,16 @@ export const SocketService = {
     }
   },
 
+  /** Any other server event: conversationRead, pinned, quoteUpdated. */
+  async on(event: string, cb: (data: any) => void) {
+    const s = await getSocket();
+    s.on(event, cb);
+  },
+
+  off(event: string, cb: (data: any) => void) {
+    socket?.off(event, cb);
+  },
+
   async emitTyping(to: string, data: any) {
     const s = await getSocket();
     s.emit('typing', { to, data });

@@ -20,6 +20,8 @@ export interface BookingFields {
   payment_method_id?: string;
   /** Promo code applied to the vendor price */
   promo_code?: string;
+  /** A vendor quote from chat (its price replaces the package price) */
+  quote_id?: string;
   scheduled_at?: string;
   event_start_at?: string;
   event_end_at?: string;

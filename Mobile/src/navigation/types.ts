@@ -32,6 +32,9 @@ export type ListingSummary = {
   reviewCount?: number;
   /** Event planners book on behalf of one of their events. */
   eventId?: string;
+  /** Booking a vendor's custom quote from chat: price is the quoted amount. */
+  quoteId?: string;
+  quoteTitle?: string;
 };
 
 export type BookingDraft = {

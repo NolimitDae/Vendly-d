@@ -23,7 +23,7 @@ interface Preview {
   source_pdf_url: string | null;
   consent_text: string;
   missing_message: string | null;
-  pricing?: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean }[]; discount?: number; promo_code?: string | null };
+  pricing?: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean }[]; discount?: number; promo_code?: string | null; quote?: { id: string; title: string; amount: number } | null };
 }
 
 const money = (n: number | undefined) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
@@ -65,6 +65,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
     timezone: deviceTimezone(),
     payment_method_id: card ?? undefined,
     promo_code: promo,
+    quote_id: listing.quoteId,
   };
 
   // The contract preview is also where the real price breakdown comes from.
@@ -163,7 +164,8 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
           ) : (
             <>
               {!!price?.discount && <Row label={`Promo ${price.promo_code ?? ''}`} value={`-${money(price.discount)}`} />}
-              <Row label="Service price" value={money(price?.price ?? listing.price)} />
+              {!!price?.quote && <Row icon="pricetags-outline" label="Quote" value={price.quote.title} />}
+              <Row label={price?.quote ? 'Quoted price' : 'Service price'} value={money(price?.price ?? listing.price)} />
               <Row label="Vendly Protection fee" value={money(price?.service_fee)} />
               <View style={s.line} />
               <Row label="Total" value={money(price?.total ?? listing.price)} bold />
