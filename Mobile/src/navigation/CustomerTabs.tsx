@@ -17,6 +17,9 @@ import SelectDate from '../screens/customer/SelectDate';
 import BookingDetails from '../screens/customer/BookingDetails';
 import BookingSummary from '../screens/customer/BookingSummary';
 import Reviews from '../screens/customer/Reviews';
+import EditProfile from '../screens/customer/EditProfile';
+import ChangePassword from '../screens/customer/ChangePassword';
+import NotificationSettings from '../screens/customer/NotificationSettings';
 import CustomerBookings from '../screens/customer/Bookings';
 import BookingDetail from '../screens/customer/BookingDetail';
 import PaymentScreen from '../screens/customer/PaymentScreen';
@@ -73,17 +76,20 @@ function BookingsNavigator() {
 
 function MessagesNavigator() {
   return (
-    <MessagesStack.Navigator screenOptions={HEADER}>
-      <MessagesStack.Screen name="ChatList" component={ChatList} options={{ title: 'Messages' }} />
-      <MessagesStack.Screen name="ChatDetail" component={ChatDetail} options={{ title: 'Chat' }} />
+    <MessagesStack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: DARK.bg } }}>
+      <MessagesStack.Screen name="ChatList" component={ChatList} />
+      <MessagesStack.Screen name="ChatDetail" component={ChatDetail} />
     </MessagesStack.Navigator>
   );
 }
 
 function ProfileNavigator() {
   return (
-    <ProfileStack.Navigator screenOptions={HEADER}>
-      <ProfileStack.Screen name="CustomerProfile" component={CustomerProfile} options={{ title: 'My Profile' }} />
+    <ProfileStack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: DARK.bg } }}>
+      <ProfileStack.Screen name="CustomerProfile" component={CustomerProfile} />
+      <ProfileStack.Screen name="EditProfile" component={EditProfile} />
+      <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
+      <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
     </ProfileStack.Navigator>
   );
 }
@@ -142,7 +148,14 @@ export default function CustomerTabs() {
           tabBarStyle: [tabBarStyle, { display: ['CustomerHome', undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' }],
         })}
       />
-      <Tab.Screen name="MessagesTab" component={MessagesNavigator} options={{ title: 'Message' }} />
+      <Tab.Screen
+        name="MessagesTab"
+        component={MessagesNavigator}
+        options={({ route }) => ({
+          title: 'Message',
+          tabBarStyle: [tabBarStyle, { display: ['ChatList', undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' }],
+        })}
+      />
       <Tab.Screen
         name="BookingsTab"
         component={BookingsNavigator}
@@ -151,7 +164,14 @@ export default function CustomerTabs() {
           tabBarStyle: [tabBarStyle, { display: ['CustomerBookings', undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' }],
         })}
       />
-      <Tab.Screen name="ProfileTab" component={ProfileNavigator} options={{ title: 'More' }} />
+      <Tab.Screen
+        name="ProfileTab"
+        component={ProfileNavigator}
+        options={({ route }) => ({
+          title: 'More',
+          tabBarStyle: [tabBarStyle, { display: ['CustomerProfile', undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' }],
+        })}
+      />
     </Tab.Navigator>
   );
 }

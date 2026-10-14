@@ -70,11 +70,14 @@ export type CustomerBookingsStackParams = {
 
 export type CustomerProfileStackParams = {
   CustomerProfile: undefined;
+  EditProfile: undefined;
+  ChangePassword: undefined;
+  Notifications: undefined;
 };
 
 export type CustomerMessagesStackParams = {
   ChatList: undefined;
-  ChatDetail: { conversationId: string; participantName: string };
+  ChatDetail: { conversationId: string; participantName: string; avatar?: string };
 };
 
 export type CustomerTabParams = {

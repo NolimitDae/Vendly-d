@@ -1,77 +1,57 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../constants/colors';
-import { ChatService, Message, toMessage } from '../../services/chat.service';
+import { format, parseISO } from 'date-fns';
+import { BrandGradient, ScreenHeader } from '../../components/brand';
+import { DARK, FONTS } from '../../constants/colors';
+import { ChatService, toMessage, type Message } from '../../services/chat.service';
 import { SocketService } from '../../services/socket.service';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ChatDetail() {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
-  const { conversationId, participantName } = route.params as {
-    conversationId: string;
-    participantName: string;
-  };
+  const insets = useSafeAreaInsets();
+  const { conversationId, participantName, avatar } = route.params as { conversationId: string; participantName: string; avatar?: string };
   const { user } = useAuth();
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const listRef = useRef<FlatList>(null);
 
   const fetchMessages = useCallback(async () => {
     try {
       const res = await ChatService.getMessages(conversationId);
       if (res.data?.success) setMessages(res.data.data);
     } catch {
-      // silent
+      // keep what we have
     } finally {
       setLoading(false);
     }
   }, [conversationId]);
 
   useEffect(() => {
-    navigation.setOptions({ title: participantName });
     fetchMessages();
-
-    let messageHandler: (data: any) => void;
-
+    let handler: (data: any) => void;
     (async () => {
       await SocketService.joinRoom(conversationId);
-
-      messageHandler = (data: any) => {
+      handler = (data: any) => {
         // Socket events carry the raw API message ({ from, data }); translate like the REST responses.
         const raw = data?.data ?? data;
-        const incoming: Message | null = raw?.id ? toMessage(raw, conversationId) : null;
+        const incoming = raw?.id ? toMessage(raw, conversationId) : null;
         if (!incoming) return;
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === incoming.id)) return prev;
-          return [incoming, ...prev];
-        });
+        setMessages((prev) => (prev.some((m) => m.id === incoming.id) ? prev : [incoming, ...prev]));
       };
-
-      await SocketService.onMessage(messageHandler);
+      await SocketService.onMessage(handler);
     })();
-
     return () => {
-      SocketService.offMessage(messageHandler);
+      SocketService.offMessage(handler);
     };
-  }, [conversationId, fetchMessages, navigation, participantName]);
+  }, [conversationId, fetchMessages]);
 
-  const handleSend = async () => {
+  const send = async () => {
     const content = text.trim();
     if (!content || sending) return;
     setSending(true);
@@ -80,9 +60,7 @@ export default function ChatDetail() {
       const res = await ChatService.sendMessage({ conversation_id: conversationId, content });
       if (res.data?.success) {
         const sent = res.data.data;
-        setMessages((prev) =>
-          prev.some((m) => m.id === sent.id) ? prev : [sent, ...prev],
-        );
+        setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [sent, ...prev]));
       }
     } catch {
       setText(content);
@@ -91,91 +69,91 @@ export default function ChatDetail() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
-
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isMe = item.sender_id === user?.id;
-    return (
-      <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
-        <Text style={[s.bubbleText, isMe ? s.bubbleTextMe : s.bubbleTextThem]}>
-          {item.content}
-        </Text>
-        <Text style={[s.bubbleTime, isMe ? s.bubbleTimeMe : s.bubbleTimeThem]}>
-          {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-      </View>
-    );
-  };
+  const Avatar = ({ uri, name }: { uri?: string; name: string }) => (
+    <View style={s.avatar}>
+      {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} /> : <Text style={s.avatarText}>{name[0]?.toUpperCase() ?? '?'}</Text>}
+    </View>
+  );
 
   return (
-    <KeyboardAvoidingView
-      style={s.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={88}
-    >
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        inverted
-        contentContainerStyle={s.list}
-        ListEmptyComponent={
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyText}>No messages yet. Say hello!</Text>
-          </View>
-        }
-      />
-      <View style={s.inputBar}>
+    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={{ paddingTop: insets.top + 8, paddingBottom: 12 }}>
+        <ScreenHeader title={participantName} onBack={() => navigation.goBack()} />
+      </View>
+
+      {loading ? (
+        <ActivityIndicator color={DARK.accent} style={{ flex: 1 }} />
+      ) : (
+        <FlatList
+          data={messages}
+          keyExtractor={(m) => m.id}
+          inverted
+          contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12, gap: 20 }}
+          ListEmptyComponent={
+            <View style={s.empty}>
+              <Text style={s.emptyText}>Say hello to {participantName.split(' ')[0]}. Keep booking details in Vendly so they're covered by your contract.</Text>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const me = item.sender_id === user?.id;
+            const time = item.created_at ? format(parseISO(item.created_at), 'h:mm a') : '';
+            return (
+              <View style={[s.line, me && { flexDirection: 'row-reverse' }]}>
+                {me ? <Avatar uri={user?.avatar_url} name={user?.name ?? 'Me'} /> : <Avatar uri={item.sender?.avatar ?? avatar} name={participantName} />}
+                <View style={{ maxWidth: '72%', gap: 6, alignItems: me ? 'flex-end' : 'flex-start' }}>
+                  {me ? (
+                    <BrandGradient style={[s.bubble, s.bubbleMe]}>
+                      <Text style={s.bubbleText}>{item.content}</Text>
+                    </BrandGradient>
+                  ) : (
+                    <View style={[s.bubble, s.bubbleThem]}>
+                      <Text style={s.bubbleText}>{item.content}</Text>
+                    </View>
+                  )}
+                  {item.file && <Image source={{ uri: item.file }} style={s.attachment} />}
+                  <Text style={s.time}>{time}</Text>
+                </View>
+              </View>
+            );
+          }}
+        />
+      )}
+
+      <View style={[s.inputBar, { marginBottom: insets.bottom + 12 }]}>
         <TextInput
           style={s.input}
           value={text}
           onChangeText={setText}
-          placeholder="Type a message..."
-          placeholderTextColor={COLORS.gray[400]}
+          placeholder="Message"
+          placeholderTextColor={DARK.muted}
           multiline
-          returnKeyType="send"
-          onSubmitEditing={handleSend}
+          onSubmitEditing={send}
+          blurOnSubmit
         />
-        <TouchableOpacity
-          style={[s.sendBtn, (!text.trim() || sending) && s.sendBtnDisabled]}
-          onPress={handleSend}
-          disabled={!text.trim() || sending}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color={COLORS.white} />
-          ) : (
-            <Ionicons name="send" size={18} color={COLORS.white} />
-          )}
-        </TouchableOpacity>
+        <Pressable onPress={send} disabled={!text.trim() || sending} accessibilityRole="button" accessibilityLabel="Send">
+          <BrandGradient style={[s.send, !text.trim() && { opacity: 0.5 }]}>
+            {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="paper-plane-outline" size={22} color="#fff" />}
+          </BrandGradient>
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingHorizontal: 16, paddingVertical: 12 },
-  bubble: { maxWidth: '75%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 8 },
-  bubbleMe: { backgroundColor: COLORS.primary, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
-  bubbleThem: { backgroundColor: COLORS.white, alignSelf: 'flex-start', borderBottomLeftRadius: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  bubbleText: { fontSize: 15, lineHeight: 20 },
-  bubbleTextMe: { color: COLORS.white },
-  bubbleTextThem: { color: COLORS.gray[900] },
-  bubbleTime: { fontSize: 10, marginTop: 4 },
-  bubbleTimeMe: { color: 'rgba(255,255,255,0.7)', textAlign: 'right' },
-  bubbleTimeThem: { color: COLORS.gray[400] },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  emptyText: { fontSize: 14, color: COLORS.gray[400] },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.gray[100] },
-  input: { flex: 1, minHeight: 40, maxHeight: 120, borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, fontSize: 15, color: COLORS.gray[900], marginRight: 8 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  sendBtnDisabled: { backgroundColor: COLORS.gray[300] },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  empty: { transform: [{ scaleY: -1 }], paddingVertical: 40, paddingHorizontal: 20 },
+  emptyText: { color: DARK.muted, fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular, textAlign: 'center' },
+  line: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  avatar: { width: 32, height: 32, borderRadius: 16, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontSize: 13, fontFamily: FONTS.semibold },
+  bubble: { paddingHorizontal: 16, paddingVertical: 14, borderRadius: 24 },
+  bubbleMe: { borderBottomRightRadius: 4 },
+  bubbleThem: { backgroundColor: DARK.card, borderTopLeftRadius: 4 },
+  bubbleText: { color: '#fff', fontSize: 16, lineHeight: 24, fontFamily: FONTS.regular },
+  attachment: { width: 200, height: 150, borderRadius: 16, backgroundColor: DARK.card },
+  time: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginHorizontal: 20, paddingLeft: 18, paddingRight: 6, paddingVertical: 6, borderRadius: 28, backgroundColor: DARK.field, borderWidth: 1, borderColor: DARK.border },
+  input: { flex: 1, minHeight: 44, maxHeight: 120, color: '#fff', fontSize: 16, fontFamily: FONTS.regular, paddingVertical: 10 },
+  send: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });

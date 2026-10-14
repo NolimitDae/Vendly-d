@@ -1,0 +1,100 @@
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { BrandGradient, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import { DARK, FONTS } from '../../constants/colors';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
+import { apiMessage } from '../auth/SignIn';
+import type { CustomerProfileStackParams } from '../../navigation/types';
+
+export default function EditProfile({ navigation }: NativeStackScreenProps<CustomerProfileStackParams, 'EditProfile'>) {
+  const insets = useSafeAreaInsets();
+  const { user, refreshUser } = useAuth();
+  const [form, setForm] = useState({ first_name: '', last_name: '', address: '' });
+  const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [saving, setSaving] = useState(false);
+  const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    // /auth/me carries first/last name and address; fall back to splitting the display name.
+    const u = user as any;
+    const [first = '', ...rest] = (u?.name ?? '').split(' ');
+    setForm({ first_name: u?.first_name ?? first, last_name: u?.last_name ?? rest.join(' '), address: u?.address ?? '' });
+  }, [user]);
+
+  const pickPhoto = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+    if (!res.canceled) setPhoto(res.assets[0]);
+  };
+
+  const save = async () => {
+    if (!form.first_name.trim() || !form.last_name.trim()) return Alert.alert('Name', 'First and last name are required.');
+    setSaving(true);
+    try {
+      const body = new FormData();
+      body.append('first_name', form.first_name.trim());
+      body.append('last_name', form.last_name.trim());
+      body.append('name', `${form.first_name.trim()} ${form.last_name.trim()}`);
+      if (form.address.trim()) body.append('address', form.address.trim());
+      if (photo) body.append('image', { uri: photo.uri, name: photo.fileName ?? 'avatar.jpg', type: photo.mimeType ?? 'image/jpeg' } as unknown as Blob);
+      const res = await api.patch('/auth/update', body, { headers: { 'Content-Type': 'multipart/form-data' } });
+      if (res.data?.success === false) throw new Error(res.data?.message);
+      await refreshUser();
+      navigation.goBack();
+    } catch (err) {
+      Alert.alert('Could not save', apiMessage(err, 'Try again in a moment.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const avatar = photo?.uri ?? user?.avatar_url;
+
+  return (
+    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 24 }} keyboardShouldPersistTaps="handled">
+        <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
+
+        <Pressable onPress={pickPhoto} style={s.avatar} accessibilityRole="button" accessibilityLabel="Change profile photo">
+          {avatar ? <Image source={{ uri: avatar }} style={s.avatarImg} /> : <Ionicons name="person-outline" size={54} color={DARK.muted} />}
+          <BrandGradient style={s.badge}>
+            <Ionicons name="image-outline" size={16} color="#fff" />
+          </BrandGradient>
+        </Pressable>
+
+        <View style={{ paddingHorizontal: 20, gap: 16 }}>
+          <Field label="First Name" placeholder="Enter your first name" value={form.first_name} onChangeText={set('first_name')} autoComplete="given-name" />
+          <Field label="Last Name" placeholder="Enter your last name" value={form.last_name} onChangeText={set('last_name')} autoComplete="family-name" />
+          <View style={{ gap: 8 }}>
+            <Text style={ui.label}>Email</Text>
+            <View style={[ui.field, { opacity: 0.6 }]}>
+              <Ionicons name="mail-outline" size={20} color={DARK.muted} />
+              <Text style={ui.input}>{user?.email}</Text>
+            </View>
+            <Text style={s.hint}>Your email is used to sign in and can't be changed here.</Text>
+          </View>
+          <View style={{ gap: 8 }}>
+            <Text style={ui.label}>Location</Text>
+            <View style={ui.field}>
+              <Ionicons name="location-outline" size={20} color={DARK.muted} />
+              <TextInput style={ui.input} placeholder="City, State" placeholderTextColor={DARK.muted} value={form.address} onChangeText={set('address')} autoComplete="street-address" />
+            </View>
+          </View>
+          <GradientButton title="Save Changes" onPress={save} loading={saving} style={{ marginTop: 12 }} />
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: DARK.bg },
+  avatar: { alignSelf: 'center', width: 118, height: 118, borderRadius: 59, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center' },
+  avatarImg: { width: 118, height: 118, borderRadius: 59 },
+  badge: { position: 'absolute', right: 2, bottom: 6, width: 32, height: 32, borderRadius: 16, borderWidth: 3, borderColor: DARK.bg, alignItems: 'center', justifyContent: 'center' },
+  hint: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
+});
