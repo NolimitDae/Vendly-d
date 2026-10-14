@@ -1,227 +1,122 @@
-import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Image,
-} from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
+import React, { useState } from 'react';
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../constants/colors';
-import { api } from '../../services/api';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { GradientButton } from '../../components/brand';
 import DeleteAccountButton from '../../components/contracts/DeleteAccountButton';
+import { DARK, FONTS } from '../../constants/colors';
+import { useAuth } from '../../context/AuthContext';
+import type { VendorProfileStackParams } from '../../navigation/types';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  type: string;
-  avatar_url?: string;
-  vendorProfile?: { business_name?: string; bio?: string };
-}
+type Item = { icon: keyof typeof Ionicons.glyphMap; label: string; onPress?: () => void; note?: string };
 
 export default function VendorProfile() {
-  const navigation = useNavigation<any>();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [name, setName] = useState('');
-  const [businessName, setBusinessName] = useState('');
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [avatarFile, setAvatarFile] = useState<{ uri: string; type: string; name: string } | null>(null);
+  const nav = useNavigation<NativeStackNavigationProp<VendorProfileStackParams>>();
+  const insets = useSafeAreaInsets();
+  const { user, logout } = useAuth();
+  const [confirm, setConfirm] = useState(false);
+  const u = user as any;
+  const business = u?.vendorProfile?.business_name as string | undefined;
+  const firstName = (user?.name ?? '').split(' ')[0];
+  const license = u?.vendorProfile?.license_status as string | undefined;
 
-  const load = useCallback(async () => {
-    try {
-      const res = await api.get('/auth/me');
-      if (res.data?.success) {
-        const u = res.data.data;
-        setUser(u);
-        setName(u.name ?? '');
-        setBusinessName(u.vendorProfile?.business_name ?? '');
-        setAvatarUri(u.avatar_url ?? null);
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to load profile');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const pickAvatar = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow access to your photo library.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setAvatarUri(asset.uri);
-      setAvatarFile({
-        uri: asset.uri,
-        type: asset.mimeType ?? 'image/jpeg',
-        name: asset.fileName ?? `avatar_${Date.now()}.jpg`,
-      });
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (avatarFile) {
-        const fd = new FormData();
-        fd.append('name', name);
-        fd.append('business_name', businessName);
-        fd.append('image', { uri: avatarFile.uri, type: avatarFile.type, name: avatarFile.name } as any);
-        await api.patch('/auth/update', fd, {
-          headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
-        });
-      } else {
-        await api.patch('/auth/update', { name, business_name: businessName });
-      }
-      setEditing(false);
-      setAvatarFile(null);
-      load();
-    } catch {
-      Alert.alert('Error', 'Failed to save profile');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: async () => {
-          await AsyncStorage.multiRemove(['token', 'user']);
-          navigation.reset({ index: 0, routes: [{ name: 'Auth' as never }] });
-        },
-      },
-    ]);
-  };
-
-  if (loading) {
-    return <View style={s.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
-  }
-
-  const initials = (user?.name ?? 'V').split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+  const sections: { title: string; items: Item[] }[] = [
+    {
+      title: 'Business',
+      items: [
+        { icon: 'person-outline', label: 'Profile', onPress: () => nav.navigate('EditProfile') },
+        { icon: 'wallet-outline', label: 'Payments & Payouts', onPress: () => nav.navigate('Payouts') },
+        { icon: 'document-text-outline', label: 'Contracts', onPress: () => nav.navigate('VendorContracts') },
+        { icon: 'shield-checkmark-outline', label: 'Verification', note: license === 'APPROVED' ? 'Verified' : license === 'REJECTED' ? 'Rejected' : 'Pending', onPress: () => Alert.alert('Verification', license === 'APPROVED' ? 'Your business is verified.' : 'Vendly reviews your licence after sign-up. Email support if this has been pending for more than two business days.') },
+      ],
+    },
+    { title: 'Manage Requests', items: [{ icon: 'notifications-outline', label: 'Notifications', onPress: () => nav.navigate('Notifications') }] },
+    { title: 'Security', items: [{ icon: 'lock-closed-outline', label: 'Change Password', onPress: () => nav.navigate('ChangePassword') }] },
+  ];
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={{ paddingBottom: 40 }}>
-      <View style={s.header}>
-        <TouchableOpacity style={s.avatarWrap} onPress={editing ? pickAvatar : undefined}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={s.avatarImg} />
-          ) : (
-            <View style={s.avatar}>
-              <Text style={s.avatarText}>{initials}</Text>
+    <View style={s.root}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 40, paddingHorizontal: 20 }}>
+        <Text style={s.title}>Settings</Text>
+        <View style={s.hero}>
+          <View style={s.avatar}>
+            {user?.avatar_url ? <Image source={{ uri: user.avatar_url }} style={StyleSheet.absoluteFill} /> : <Text style={s.avatarText}>{(firstName[0] ?? 'V').toUpperCase()}</Text>}
+          </View>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={s.hello} numberOfLines={1}>Hello {firstName || 'there'}!</Text>
+            <View style={s.meta}>
+              <Ionicons name="storefront-outline" size={18} color="#fff" />
+              <Text style={s.metaText} numberOfLines={1}>{business || user?.email}</Text>
             </View>
-          )}
-          {editing && (
-            <View style={s.cameraOverlay}>
-              <Ionicons name="camera" size={18} color={COLORS.white} />
+          </View>
+        </View>
+
+        {sections.map((sec) => (
+          <View key={sec.title} style={s.section}>
+            <Text style={s.sectionTitle}>{sec.title}</Text>
+            {sec.items.map((it) => (
+              <Pressable key={it.label} style={s.item} onPress={it.onPress} accessibilityRole="button">
+                <Ionicons name={it.icon} size={24} color="#fff" />
+                <Text style={s.itemText}>{it.label}</Text>
+                {it.note && <Text style={[s.note, it.note === 'Verified' && { color: '#6ee7c7' }]}>{it.note}</Text>}
+                <Ionicons name="chevron-forward" size={20} color={DARK.muted} />
+              </Pressable>
+            ))}
+          </View>
+        ))}
+
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>About</Text>
+          <Pressable style={s.item} onPress={() => setConfirm(true)} accessibilityRole="button">
+            <Ionicons name="log-out-outline" size={24} color="#fff" />
+            <Text style={s.itemText}>Logout</Text>
+          </Pressable>
+          <View style={{ marginTop: 12 }}>
+            <DeleteAccountButton />
+          </View>
+        </View>
+      </ScrollView>
+
+      <Modal visible={confirm} transparent animationType="slide" onRequestClose={() => setConfirm(false)}>
+        <Pressable style={s.overlay} onPress={() => setConfirm(false)}>
+          <Pressable style={[s.sheet, { paddingBottom: insets.bottom + 24 }]} onPress={() => {}}>
+            <Pressable onPress={() => setConfirm(false)} style={{ alignSelf: 'flex-end' }} accessibilityLabel="Close" hitSlop={10}>
+              <Ionicons name="close" size={26} color="#fff" />
+            </Pressable>
+            <Text style={s.sheetTitle}>Are you sure you want to log out?</Text>
+            <Text style={s.sheetBody}>Thank you and see you again</Text>
+            <View style={s.sheetActions}>
+              <Pressable style={s.outline} onPress={() => setConfirm(false)} accessibilityRole="button"><Text style={s.outlineText}>Cancel</Text></Pressable>
+              <GradientButton title="Yes, Log Out" onPress={() => { setConfirm(false); logout(); }} style={{ flex: 1.4 }} />
             </View>
-          )}
-        </TouchableOpacity>
-
-        {!editing ? (
-          <>
-            <Text style={s.name}>{user?.name}</Text>
-            {user?.vendorProfile?.business_name ? (
-              <Text style={s.business}>{user.vendorProfile.business_name}</Text>
-            ) : null}
-            <Text style={s.email}>{user?.email}</Text>
-            <View style={s.badge}><Text style={s.badgeText}>Vendor</Text></View>
-          </>
-        ) : (
-          <Text style={s.tapHint}>Tap photo to change</Text>
-        )}
-      </View>
-
-      <View style={s.card}>
-        {editing ? (
-          <>
-            <Text style={s.label}>Full Name</Text>
-            <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor={COLORS.gray[400]} />
-            <Text style={s.label}>Business Name</Text>
-            <TextInput style={s.input} value={businessName} onChangeText={setBusinessName} placeholder="Your business name" placeholderTextColor={COLORS.gray[400]} />
-            <View style={s.row}>
-              <TouchableOpacity style={[s.btn, { backgroundColor: COLORS.gray[200], flex: 1, marginRight: 8 }]} onPress={() => { setEditing(false); setAvatarFile(null); load(); }}>
-                <Text style={[s.btnText, { color: COLORS.gray[700] }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.btn, { flex: 1 }]} onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={s.btnText}>Save</Text>}
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <TouchableOpacity style={s.btn} onPress={() => setEditing(true)}>
-            <Ionicons name="pencil-outline" size={16} color={COLORS.white} style={{ marginRight: 6 }} />
-            <Text style={s.btnText}>Edit Profile</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <TouchableOpacity style={s.menuRow} onPress={() => navigation.navigate('VendorContracts')}>
-        <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
-        <Text style={s.menuText}>Contracts</Text>
-        <Ionicons name="chevron-forward" size={18} color={COLORS.gray[400]} />
-      </TouchableOpacity>
-
-      <TouchableOpacity style={s.logout} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={18} color="#ef4444" />
-        <Text style={s.logoutText}>Log Out</Text>
-      </TouchableOpacity>
-      <DeleteAccountButton />
-    </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  menuRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 12,
-    padding: 16, backgroundColor: COLORS.white, borderRadius: 14,
-  },
-  menuText: { flex: 1, fontSize: 15, fontWeight: '600', color: COLORS.gray[900] },
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { alignItems: 'center', paddingVertical: 32, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.gray[100] },
-  avatarWrap: { marginBottom: 12, position: 'relative' },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  avatarImg: { width: 80, height: 80, borderRadius: 40 },
-  avatarText: { color: COLORS.white, fontSize: 28, fontWeight: '700' },
-  cameraOverlay: { position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: COLORS.white },
-  tapHint: { fontSize: 12, color: COLORS.gray[400], marginBottom: 4 },
-  name: { fontSize: 22, fontWeight: '700', color: COLORS.gray[900] },
-  business: { fontSize: 15, color: COLORS.gray[500], marginTop: 2 },
-  email: { fontSize: 14, color: COLORS.gray[400], marginTop: 4 },
-  badge: { marginTop: 8, backgroundColor: COLORS.primaryBg, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  badgeText: { color: COLORS.primary, fontSize: 12, fontWeight: '600' },
-  card: { margin: 16, backgroundColor: COLORS.white, borderRadius: 16, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.gray[600], marginBottom: 6, marginTop: 12 },
-  input: { borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: COLORS.gray[900] },
-  row: { flexDirection: 'row', marginTop: 16 },
-  btn: { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: COLORS.white, fontWeight: '700', fontSize: 15 },
-  logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8, padding: 16, gap: 8 },
-  logoutText: { color: '#ef4444', fontWeight: '600', fontSize: 15 },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  title: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold, textAlign: 'center' },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 28 },
+  avatar: { width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontSize: 22, fontFamily: FONTS.semibold },
+  hello: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaText: { color: '#fff', fontSize: 16, fontFamily: FONTS.regular, flexShrink: 1 },
+  section: { marginTop: 28, gap: 4 },
+  sectionTitle: { color: '#fff', fontSize: 14, fontFamily: FONTS.semibold, marginBottom: 8 },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 16 },
+  itemText: { flex: 1, color: '#fff', fontSize: 18, fontFamily: FONTS.regular },
+  note: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: DARK.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingTop: 20, gap: 12, alignItems: 'center' },
+  sheetTitle: { color: '#fff', fontSize: 22, fontFamily: FONTS.semibold, textAlign: 'center', marginTop: 24 },
+  sheetBody: { color: '#fff', fontSize: 16, fontFamily: FONTS.regular, textAlign: 'center', marginBottom: 24 },
+  sheetActions: { flexDirection: 'row', gap: 12, alignSelf: 'stretch' },
+  outline: { flex: 1, height: 56, borderRadius: 28, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
+  outlineText: { color: DARK.accent, fontSize: 16, fontFamily: FONTS.medium },
 });

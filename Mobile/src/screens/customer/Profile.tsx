@@ -96,7 +96,7 @@ export default function CustomerProfile() {
               <Pressable style={s.outline} onPress={() => setConfirm(false)} accessibilityRole="button">
                 <Text style={s.outlineText}>Cancel</Text>
               </Pressable>
-              <GradientButton title="Yes, Log Out" onPress={() => { setConfirm(false); logout(); }} style={{ flex: 1 }} />
+              <GradientButton title="Yes, Log Out" onPress={() => { setConfirm(false); logout(); }} style={{ flex: 1.4 }} />
             </View>
           </Pressable>
         </Pressable>

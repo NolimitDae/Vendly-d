@@ -15,7 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { format } from 'date-fns';
-import { COLORS } from '../../constants/colors';
+import { COLORS, DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { ContractsService, apiError, openSignedLink } from '../../services/contracts.service';
 import ContractBody from '../../components/contracts/ContractBody';
@@ -76,7 +76,7 @@ function Field({ def, value, onChange }: { def: FieldDef; value: string; onChang
           value={value}
           onChangeText={onChange}
           placeholder={def.placeholder}
-          placeholderTextColor={COLORS.gray[400]}
+          placeholderTextColor={DARK.muted}
           multiline={def.type === 'textarea'}
           textAlignVertical={def.type === 'textarea' ? 'top' : 'center'}
           keyboardType={def.type === 'money' || def.type === 'number' ? 'decimal-pad' : 'default'}
@@ -218,7 +218,7 @@ export default function VendorContracts() {
           const on = listingIds.includes(l.id);
           return (
             <Pressable key={l.id} style={s.checkRow} onPress={() => setListingIds((ids) => (on ? ids.filter((x) => x !== l.id) : [...ids, l.id]))}>
-              <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={COLORS.primary} />
+              <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={DARK.accent} />
               <Text style={s.checkText}>{l.title}</Text>
             </Pressable>
           );
@@ -229,7 +229,7 @@ export default function VendorContracts() {
   if (loading) {
     return (
       <View style={s.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={DARK.accent} />
       </View>
     );
   }
@@ -265,7 +265,7 @@ export default function VendorContracts() {
         <Modal visible={!!preview} animationType="slide" onRequestClose={() => setPreview(null)}>
           <View style={{ flex: 1, backgroundColor: COLORS.white, paddingTop: 54 }}>
             <TouchableOpacity onPress={() => setPreview(null)} style={{ paddingHorizontal: 16 }} accessibilityLabel="Close">
-              <Ionicons name="close" size={26} color={COLORS.gray[700]} />
+              <Ionicons name="close" size={26} color="#fff" />
             </TouchableOpacity>
             <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>{preview && <ContractBody body={preview} />}</ScrollView>
           </View>
@@ -282,7 +282,7 @@ export default function VendorContracts() {
           PDF only, up to 10 MB, not password-protected. Vendly adds a booking addendum and a signature certificate to each booking.
         </Text>
         <TouchableOpacity style={s.drop} onPress={pickPdf}>
-          <Ionicons name="document-attach-outline" size={22} color={COLORS.primary} />
+          <Ionicons name="document-attach-outline" size={22} color={DARK.accent} />
           <Text style={s.link}>{file ? file.name : 'Choose PDF'}</Text>
         </TouchableOpacity>
         {uploadFields.map((f) => (
@@ -290,7 +290,7 @@ export default function VendorContracts() {
         ))}
         {assignment}
         <Pressable style={s.checkRow} onPress={() => setConfirmOwn(!confirmOwn)}>
-          <Ionicons name={confirmOwn ? 'checkbox' : 'square-outline'} size={22} color={COLORS.primary} />
+          <Ionicons name={confirmOwn ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
           <Text style={s.checkText}>This contract is mine to use, and it doesn&apos;t conflict with the Vendly Terms of Service.</Text>
         </Pressable>
         <TouchableOpacity style={[s.primary, (!confirmOwn || busy) && { opacity: 0.5 }]} onPress={saveUpload} disabled={!confirmOwn || busy}>
@@ -361,39 +361,34 @@ export default function VendorContracts() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 16, gap: 12, paddingBottom: 48 },
-  h1: { fontSize: 18, fontWeight: '800', color: COLORS.gray[900] },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.gray[600] },
-  muted: { fontSize: 13, color: COLORS.gray[500], lineHeight: 19 },
-  counter: { fontSize: 11, color: COLORS.gray[400], textAlign: 'right' },
-  input: {
-    borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 15, color: COLORS.gray[900], backgroundColor: COLORS.white,
-  },
-  textarea: { height: 110 },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
+  content: { padding: 20, paddingTop: 60, paddingBottom: 48, gap: 12 },
+  h: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold },
+  h1: { color: '#fff', fontSize: 20, fontFamily: FONTS.semibold },
+  muted: { color: DARK.muted, fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular },
+  card: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 8 },
+  cardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  label: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium, marginTop: 8 },
+  input: { height: 56, borderRadius: 24, paddingHorizontal: 16, fontSize: 16, color: '#fff', backgroundColor: DARK.field, fontFamily: FONTS.regular },
+  textarea: { minHeight: 110, paddingVertical: 14, textAlignVertical: 'top', borderRadius: 20 },
+  counter: { color: DARK.muted, fontSize: 12, textAlign: 'right', fontFamily: FONTS.regular },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: COLORS.white },
-  chipOn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  chipText: { color: COLORS.gray[700], fontSize: 13 },
-  chipTextOn: { color: COLORS.white, fontWeight: '600' },
-  checkRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  checkText: { flex: 1, color: COLORS.gray[700], fontSize: 14, lineHeight: 20 },
-  primary: { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
-  primaryText: { color: COLORS.white, fontWeight: '700' },
-  secondary: { borderWidth: 1, borderColor: COLORS.gray[300], borderRadius: 12, paddingVertical: 14, alignItems: 'center', backgroundColor: COLORS.white },
-  secondarySm: { borderWidth: 1, borderColor: COLORS.gray[200], borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14 },
-  secondaryText: { color: COLORS.gray[800], fontWeight: '600' },
-  link: { color: COLORS.primary, fontWeight: '600' },
-  drop: {
-    flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', padding: 18,
-    borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.gray[300], borderRadius: 12, backgroundColor: COLORS.white,
-  },
-  warn: { backgroundColor: '#fffbeb', borderColor: '#fde68a', borderWidth: 1, borderRadius: 12, padding: 14, gap: 10 },
-  warnText: { color: '#92400e' },
-  warnBtn: { backgroundColor: '#d97706', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  card: { backgroundColor: COLORS.white, borderRadius: 14, padding: 16, gap: 6 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: COLORS.gray[900] },
-  row: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 100, backgroundColor: DARK.card },
+  chipOn: { backgroundColor: COLORS.primary },
+  chipText: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium },
+  chipTextOn: { color: '#fff' },
+  checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  checkText: { flex: 1, color: '#fff', fontSize: 14, lineHeight: 20, fontFamily: FONTS.regular },
+  drop: { borderWidth: 1, borderStyle: 'dashed', borderColor: DARK.border, borderRadius: 20, padding: 24, alignItems: 'center', gap: 8, backgroundColor: DARK.card },
+  primary: { height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  primaryText: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
+  secondary: { height: 50, borderRadius: 25, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  secondarySm: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 100, borderWidth: 1, borderColor: DARK.border },
+  secondaryText: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
+  link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold, textAlign: 'center', padding: 12 },
+  warn: { backgroundColor: '#3a2a0a', borderRadius: 16, padding: 16, gap: 10 },
+  warnText: { color: '#fcd34d', fontSize: 14, lineHeight: 20, fontFamily: FONTS.medium },
+  warnBtn: { height: 48, borderRadius: 24, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
 });

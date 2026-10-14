@@ -3,10 +3,9 @@ import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, Vie
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
-import type { CustomerProfileStackParams } from '../../navigation/types';
 
 const PREFS_KEY = 'vendly_notification_prefs';
 
@@ -22,7 +21,7 @@ const PREFS = [
 type Prefs = Record<(typeof PREFS)[number]['key'], boolean>;
 const DEFAULTS: Prefs = { booking: true, messages: true, payments: true, sound: true, email: true };
 
-export default function NotificationSettings({ navigation }: NativeStackScreenProps<CustomerProfileStackParams, 'Notifications'>) {
+export default function NotificationSettings({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const insets = useSafeAreaInsets();
   const [prefs, setPrefs] = useState<Prefs>(DEFAULTS);
   const [pushAllowed, setPushAllowed] = useState<boolean | null>(null);

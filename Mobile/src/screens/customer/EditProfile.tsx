@@ -3,15 +3,14 @@ import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, St
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
-import type { CustomerProfileStackParams } from '../../navigation/types';
 
-export default function EditProfile({ navigation }: NativeStackScreenProps<CustomerProfileStackParams, 'EditProfile'>) {
+export default function EditProfile({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
   const [form, setForm] = useState({ first_name: '', last_name: '', address: '' });

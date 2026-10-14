@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Field, GradientButton, ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
-import type { CustomerProfileStackParams } from '../../navigation/types';
 
-export default function ChangePassword({ navigation }: NativeStackScreenProps<CustomerProfileStackParams, 'ChangePassword'>) {
+export default function ChangePassword({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const insets = useSafeAreaInsets();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');

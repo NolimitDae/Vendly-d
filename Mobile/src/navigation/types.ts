@@ -91,12 +91,13 @@ export type CustomerTabParams = {
 
 export type VendorDashboardStackParams = {
   VendorDashboard: undefined;
-};
-
-export type VendorListingsStackParams = {
   VendorListings: undefined;
   ListingForm: { listingId?: string } | undefined;
+  Availability: { listingId: string; title: string };
 };
+
+/** Kept for the listing form's route typing; the screens now live in the dashboard stack. */
+export type VendorListingsStackParams = VendorDashboardStackParams;
 
 export type VendorBookingsStackParams = {
   VendorBookings: undefined;
@@ -106,18 +107,21 @@ export type VendorBookingsStackParams = {
 export type VendorProfileStackParams = {
   VendorProfile: undefined;
   VendorContracts: undefined;
+  EditProfile: undefined;
+  ChangePassword: undefined;
+  Notifications: undefined;
+  Payouts: undefined;
 };
 
 export type VendorMessagesStackParams = {
   ChatList: undefined;
-  ChatDetail: { conversationId: string; participantName: string };
+  ChatDetail: { conversationId: string; participantName: string; avatar?: string };
 };
 
 export type VendorTabParams = {
   DashboardTab: undefined;
-  ListingsTab: undefined;
-  BookingsTab: undefined;
   MessagesTab: undefined;
+  BookingsTab: undefined;
   ProfileTab: undefined;
 };
 

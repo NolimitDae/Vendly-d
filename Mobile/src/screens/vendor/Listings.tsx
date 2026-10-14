@@ -1,51 +1,47 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-  StyleSheet,
-  Image,
-} from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../constants/colors';
-import { api } from '../../services/api';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { VendorListingsStackParams } from '../../navigation/types';
-
-// ─── Interfaces ──────────────────────────────────────────────────────────────
+import { BrandGradient, ScreenHeader } from '../../components/brand';
+import { DARK, FONTS } from '../../constants/colors';
+import { api } from '../../services/api';
+import type { VendorDashboardStackParams } from '../../navigation/types';
 
 interface Listing {
   id: string;
   title: string;
+  description?: string;
   price: number;
-  price_unit: string;
-  status: string;
+  price_unit?: string;
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
   images?: string[];
-  _count: { bookings: number };
+  category?: { id: string; name: string } | null;
+  avg_rating?: number | null;
+  _count?: { reviews?: number; bookings?: number };
 }
 
-type Nav = NativeStackNavigationProp<VendorListingsStackParams>;
-
-// ─── Component ────────────────────────────────────────────────────────────────
+const STATUS: Record<Listing['status'], { label: string; color: string }> = {
+  ACTIVE: { label: 'Active', color: '#6ee7c7' },
+  PAUSED: { label: 'Paused', color: '#fcd34d' },
+  DRAFT: { label: 'Draft', color: DARK.muted },
+  ARCHIVED: { label: 'Archived', color: DARK.muted },
+};
 
 export default function VendorListings() {
-  const nav = useNavigation<Nav>();
+  const nav = useNavigation<NativeStackNavigationProp<VendorDashboardStackParams>>();
+  const insets = useSafeAreaInsets();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get('/vendor/listings');
+      const res = await api.get('/vendor/listings', { params: { limit: 100 } });
       if (res.data?.success) setListings(res.data.data ?? []);
     } catch {
-      // ignore
+      // keep what we have
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -54,242 +50,131 @@ export default function VendorListings() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onRefresh = () => { setRefreshing(true); load(); };
-
-  const handleDelete = (id: string, title: string) => {
-    Alert.alert(
-      'Delete Listing',
-      `Are you sure you want to delete "${title}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.delete(`/vendor/listings/${id}`);
-              setListings((prev) => prev.filter((l) => l.id !== id));
-            } catch {
-              Alert.alert('Error', 'Failed to delete listing. Please try again.');
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleTogglePublish = async (listing: Listing) => {
-    if (togglingId === listing.id) return;
-    setTogglingId(listing.id);
+  const toggle = async (l: Listing) => {
+    // Statuses are DRAFT / ACTIVE / PAUSED / ARCHIVED; pause only applies to a live listing.
+    const live = l.status === 'ACTIVE';
     try {
-      // Listing statuses are DRAFT / ACTIVE / PAUSED / ARCHIVED ('PUBLISHED' never existed, so this
-      // toggle could only ever publish). Live listings pause; drafts and paused listings go live.
-      const live = listing.status === 'ACTIVE';
-      const res = await api.patch(`/vendor/listings/${listing.id}/${live ? 'pause' : 'publish'}`);
-      if (res.data?.success) {
-        setListings((prev) =>
-          prev.map((l) => (l.id === listing.id ? { ...l, status: res.data.data?.status ?? (live ? 'PAUSED' : 'ACTIVE') } : l)),
-        );
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to update listing status.');
-    } finally {
-      setTogglingId(null);
+      const res = await api.patch(`/vendor/listings/${l.id}/${live ? 'pause' : 'publish'}`);
+      setListings((prev) => prev.map((x) => (x.id === l.id ? { ...x, status: res.data?.data?.status ?? (live ? 'PAUSED' : 'ACTIVE') } : x)));
+    } catch (err: any) {
+      Alert.alert('Could not update', err?.response?.data?.message ?? 'Try again in a moment.');
     }
   };
 
-  const renderItem = ({ item }: { item: Listing }) => {
-    const isPublished = item.status === 'ACTIVE';
-    return (
-      <TouchableOpacity
-        style={s.card}
-        onPress={() => nav.navigate('ListingForm', { listingId: item.id })}
-        activeOpacity={0.85}
-      >
-        {item.images && item.images.length > 0 ? (
-          <Image source={{ uri: item.images[0] }} style={s.cardCover} resizeMode="cover" />
-        ) : (
-          <View style={s.cardCoverPlaceholder}>
-            <Ionicons name="image-outline" size={28} color={COLORS.gray[300]} />
-          </View>
-        )}
-        <View style={s.cardHeader}>
-          <Text style={s.cardTitle} numberOfLines={2}>{item.title}</Text>
-          <View style={[s.badge, isPublished ? s.badgePublished : s.badgeDraft]}>
-            <Text style={[s.badgeText, isPublished ? s.badgePublishedText : s.badgeDraftText]}>
-              {isPublished ? 'Live' : item.status === 'PAUSED' ? 'Paused' : 'Draft'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={s.cardMeta}>
-          <View style={s.metaItem}>
-            <Ionicons name="cash-outline" size={13} color={COLORS.gray[400]} />
-            <Text style={s.metaText}>
-              ${Number(item.price).toLocaleString()} / {item.price_unit}
-            </Text>
-          </View>
-          <View style={s.metaItem}>
-            <Ionicons name="calendar-outline" size={13} color={COLORS.gray[400]} />
-            <Text style={s.metaText}>{item._count?.bookings ?? 0} bookings</Text>
-          </View>
-        </View>
-
-        <View style={s.actions}>
-          <TouchableOpacity
-            style={s.actionBtn}
-            onPress={() => nav.navigate('ListingForm', { listingId: item.id })}
-          >
-            <Ionicons name="create-outline" size={16} color={COLORS.primary} />
-            <Text style={s.actionBtnText}>Edit</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[s.actionBtn, s.actionBtnSecondary]}
-            onPress={() => handleTogglePublish(item)}
-            disabled={togglingId === item.id}
-          >
-            {togglingId === item.id ? (
-              <ActivityIndicator size="small" color={COLORS.gray[600]} />
-            ) : (
-              <>
-                <Ionicons
-                  name={isPublished ? 'eye-off-outline' : 'eye-outline'}
-                  size={16}
-                  color={COLORS.gray[600]}
-                />
-                <Text style={[s.actionBtnText, { color: COLORS.gray[600] }]}>
-                  {isPublished ? 'Pause' : item.status === 'PAUSED' ? 'Resume' : 'Publish'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[s.actionBtn, s.actionBtnDanger]}
-            onPress={() => handleDelete(item.id, item.title)}
-          >
-            <Ionicons name="trash-outline" size={16} color="#ef4444" />
-            <Text style={[s.actionBtnText, { color: '#ef4444' }]}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const remove = (l: Listing) =>
+    Alert.alert('Delete this package?', `"${l.title}" will no longer be bookable. Existing bookings are kept.`, [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.delete(`/vendor/listings/${l.id}`);
+            setListings((prev) => prev.filter((x) => x.id !== l.id));
+          } catch (err: any) {
+            Alert.alert('Could not delete', err?.response?.data?.message ?? 'Try again in a moment.');
+          }
+        },
+      },
+    ]);
 
   return (
     <View style={s.root}>
-      {loading ? (
-        <View style={s.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      ) : (
-        <FlatList
-          data={listings}
-          keyExtractor={(l) => l.id}
-          renderItem={renderItem}
-          contentContainerStyle={[s.list, listings.length === 0 && s.listEmpty]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
-          ListHeaderComponent={
-            <View style={s.listHeader}>
-              <Text style={s.listHeaderText}>My Listings ({listings.length})</Text>
-              <TouchableOpacity
-                style={s.addBtn}
-                onPress={() => nav.navigate('ListingForm', { listingId: undefined })}
-              >
-                <Ionicons name="add" size={18} color={COLORS.white} />
-                <Text style={s.addBtnText}>Add Listing</Text>
-              </TouchableOpacity>
+      <FlatList
+        data={listings}
+        keyExtractor={(l) => l.id}
+        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 100, gap: 20 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
+        ListHeaderComponent={
+          <View style={{ gap: 20 }}>
+            <ScreenHeader title="Packages" onBack={() => nav.goBack()} />
+            <View style={{ paddingHorizontal: 20, gap: 6 }}>
+              <Text style={s.h2}>Manage Your Packages</Text>
+              <Text style={s.body}>Everything customers can book from you. Pause a package to hide it, or block dates when you're busy.</Text>
             </View>
-          }
-          ListEmptyComponent={
-            <View style={s.emptyWrap}>
-              <Ionicons name="storefront-outline" size={56} color={COLORS.gray[300]} />
-              <Text style={s.emptyTitle}>No listings yet</Text>
-              <Text style={s.emptyText}>Create your first listing to start receiving bookings</Text>
-              <TouchableOpacity
-                style={s.emptyBtn}
-                onPress={() => nav.navigate('ListingForm', { listingId: undefined })}
-              >
-                <Text style={s.emptyBtnText}>Create Listing</Text>
-              </TouchableOpacity>
+          </View>
+        }
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
+          ) : (
+            <View style={s.empty}>
+              <Ionicons name="albums-outline" size={44} color={DARK.muted} />
+              <Text style={s.emptyTitle}>No packages yet</Text>
+              <Text style={s.body}>Add your first package so customers can find and book you.</Text>
             </View>
-          }
-        />
-      )}
+          )
+        }
+        renderItem={({ item }) => {
+          const st = STATUS[item.status] ?? STATUS.DRAFT;
+          return (
+            <View style={s.card}>
+              <View style={s.photo}>
+                {item.images?.[0] ? <Image source={{ uri: item.images[0] }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <Ionicons name="image-outline" size={40} color={DARK.muted} />}
+              </View>
+              <View style={s.rowBetween}>
+                <Text style={s.title} numberOfLines={1}>{item.title}</Text>
+                <View style={s.pill}>
+                  <View style={[s.dot, { backgroundColor: st.color }]} />
+                  <Text style={s.pillText}>{st.label}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={s.chip}><Text style={s.chipText}>{item.category?.name ?? 'Uncategorised'}</Text></View>
+                <View style={s.chip}><Text style={s.chipText}>${Number(item.price).toLocaleString()}{item.price_unit && item.price_unit !== 'fixed' ? ` / ${item.price_unit}` : ''}</Text></View>
+              </View>
+              {!!item.description && <Text style={s.desc} numberOfLines={2}>{item.description}</Text>}
+              <View style={s.statsRow}>
+                <Ionicons name="star" size={18} color="#F5B700" />
+                <Text style={s.stat}>{item.avg_rating != null ? Number(item.avg_rating).toFixed(1) : 'New'} <Text style={s.statMuted}>({item._count?.reviews ?? 0})</Text></Text>
+                <View style={s.vline} />
+                <Ionicons name="calendar-outline" size={18} color={DARK.accent} />
+                <Text style={s.stat}>{item._count?.bookings ?? 0} <Text style={s.statMuted}>bookings</Text></Text>
+              </View>
+              <View style={s.actions}>
+                <Pressable style={s.secondary} onPress={() => remove(item)} accessibilityRole="button"><Text style={s.secondaryText}>Delete</Text></Pressable>
+                <Pressable style={s.secondary} onPress={() => toggle(item)} accessibilityRole="button"><Text style={s.secondaryText}>{item.status === 'ACTIVE' ? 'Pause' : 'Publish'}</Text></Pressable>
+                <Pressable style={s.secondary} onPress={() => nav.navigate('Availability', { listingId: item.id, title: item.title })} accessibilityRole="button"><Text style={s.secondaryText}>Dates</Text></Pressable>
+                <Pressable style={{ flex: 1 }} onPress={() => nav.navigate('ListingForm', { listingId: item.id })} accessibilityRole="button">
+                  <BrandGradient style={s.primary}><Text style={s.primaryText}>Edit</Text></BrandGradient>
+                </Pressable>
+              </View>
+            </View>
+          );
+        }}
+      />
+      <Pressable style={[s.fab, { bottom: insets.bottom + 24 }]} onPress={() => nav.navigate('ListingForm')} accessibilityRole="button" accessibilityLabel="Add package">
+        <BrandGradient style={s.fabInner}><Ionicons name="add" size={32} color="#fff" /></BrandGradient>
+      </Pressable>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { padding: 16, paddingBottom: 40 },
-  listEmpty: { flex: 1 },
-  listHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  listHeaderText: { fontSize: 16, fontWeight: '700', color: COLORS.gray[800] },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primary,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  addBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 13 },
-  cardCover: { width: '100%', height: 100, borderTopLeftRadius: 14, borderTopRightRadius: 14 },
-  cardCoverPlaceholder: { width: '100%', height: 100, borderTopLeftRadius: 14, borderTopRightRadius: 14, backgroundColor: COLORS.gray[100], alignItems: 'center', justifyContent: 'center' },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: COLORS.gray[900], flex: 1, marginRight: 10 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
-  badgePublished: { backgroundColor: '#f0fdf4', borderColor: '#86efac' },
-  badgeDraft: { backgroundColor: COLORS.gray[100], borderColor: COLORS.gray[300] },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  badgePublishedText: { color: '#15803d' },
-  badgeDraftText: { color: COLORS.gray[500] },
-  cardMeta: { flexDirection: 'row', gap: 16, marginBottom: 14 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, color: COLORS.gray[500] },
-  actions: { flexDirection: 'row', gap: 8, borderTopWidth: 1, borderTopColor: COLORS.gray[100], paddingTop: 12 },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primaryBg,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  actionBtnSecondary: { backgroundColor: COLORS.gray[100] },
-  actionBtnDanger: { backgroundColor: '#fef2f2' },
-  actionBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 64 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: COLORS.gray[700], marginTop: 16 },
-  emptyText: { fontSize: 14, color: COLORS.gray[400], marginTop: 6, textAlign: 'center' },
-  emptyBtn: {
-    marginTop: 20,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-  },
-  emptyBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 15 },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  h2: { color: '#fff', fontSize: 20, fontFamily: FONTS.medium },
+  body: { color: '#fff', fontSize: 15, lineHeight: 23, fontFamily: FONTS.regular },
+  empty: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 32, gap: 8 },
+  emptyTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  card: { marginHorizontal: 20, padding: 12, borderRadius: 20, backgroundColor: DARK.card, gap: 12 },
+  photo: { height: 180, borderRadius: 14, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  title: { flex: 1, color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100, backgroundColor: DARK.field },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  pillText: { color: '#fff', fontSize: 12, fontFamily: FONTS.medium },
+  chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100, backgroundColor: DARK.field },
+  chipText: { color: '#fff', fontSize: 12, fontFamily: FONTS.medium },
+  desc: { color: '#fff', fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular },
+  statsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 12, borderTopWidth: 1, borderTopColor: DARK.field },
+  stat: { color: '#fff', fontSize: 14, fontFamily: FONTS.semibold },
+  statMuted: { color: DARK.muted, fontFamily: FONTS.regular },
+  vline: { width: 1, height: 16, backgroundColor: DARK.field, marginHorizontal: 8 },
+  actions: { flexDirection: 'row', gap: 8 },
+  secondary: { height: 46, paddingHorizontal: 14, borderRadius: 100, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  secondaryText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
+  primary: { height: 46, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  primaryText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
+  fab: { position: 'absolute', right: 20 },
+  fabInner: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
 });

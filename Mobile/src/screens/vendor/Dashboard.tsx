@@ -1,205 +1,136 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StyleSheet,
-} from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { format } from 'date-fns';
-import { COLORS } from '../../constants/colors';
-import { api } from '../../services/api';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { VendorListingsStackParams, VendorBookingsStackParams } from '../../navigation/types';
+import { BrandGradient, Card } from '../../components/brand';
+import { DARK, FONTS } from '../../constants/colors';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
+import { BookingService, type Booking } from '../../services/booking.service';
+import { bookingWhen } from '../customer/Bookings';
 
-// ─── Interfaces ──────────────────────────────────────────────────────────────
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  type: string;
-  avatar_url?: string;
-  vendorProfile?: { business_name?: string };
-}
-
-interface Listing {
-  id: string;
-  title: string;
-  price: number;
-  price_unit: string;
-  status: string;
-  _count: { bookings: number };
-}
-
-interface Booking {
-  id: string;
-  status: string;
-  created_at: string;
-  scheduled_at?: string;
-  listing: { title: string };
-  customer?: { name: string };
-  vendor?: { name: string };
-  amount: number;
-  message?: string;
-}
-
-// ─── Status helpers ───────────────────────────────────────────────────────────
-
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-};
-
-const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  PENDING: { bg: '#fffbeb', text: '#b45309', border: '#fcd34d' },
-  CONFIRMED: { bg: '#eff6ff', text: '#1d4ed8', border: '#93c5fd' },
-  IN_PROGRESS: { bg: '#f3ecfe', text: '#7B2FF7', border: '#9b5ef9' },
-  COMPLETED: { bg: '#f0fdf4', text: '#15803d', border: '#86efac' },
-  CANCELLED: { bg: '#f9fafb', text: '#6b7280', border: '#e5e7eb' },
-};
-
-type ListingsNav = NativeStackNavigationProp<VendorListingsStackParams>;
-type BookingsNav = NativeStackNavigationProp<VendorBookingsStackParams>;
-
-// ─── Component ────────────────────────────────────────────────────────────────
+type Nav = NativeStackNavigationProp<any>;
 
 export default function VendorDashboard() {
-  const listingsNav = useNavigation<ListingsNav>();
-  const bookingsNav = useNavigation<BookingsNav>();
-
-  const [user, setUser] = useState<User | null>(null);
-  const [listings, setListings] = useState<Listing[]>([]);
+  const nav = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [listings, setListings] = useState<{ id: string; status: string; avg_rating?: number | null }[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [userRes, bookingsRes, listingsRes] = await Promise.all([
-        api.get('/auth/me'),
-        api.get('/bookings/my/vendor', { params: { limit: 5 } }),
+      const [b, l] = await Promise.all([
+        BookingService.getMyBookingsAsVendor({ limit: 100 }),
         api.get('/vendor/listings', { params: { limit: 100 } }),
       ]);
-      if (userRes.data?.success) setUser(userRes.data.data);
-      if (bookingsRes.data?.success) setBookings(bookingsRes.data.data ?? []);
-      if (listingsRes.data?.success) setListings(listingsRes.data.data ?? []);
+      if (b.data?.success) setBookings(b.data.data ?? []);
+      if (l.data?.success) setListings(l.data.data ?? []);
     } catch {
-      // ignore
+      // keep what we have
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onRefresh = () => { setRefreshing(true); load(); };
+  const pending = bookings.filter((b) => b.status === 'PENDING');
+  const upcoming = bookings.filter((b) => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS');
+  const completed = bookings.filter((b) => b.status === 'COMPLETED');
+  const revenue = completed.reduce((sum, b) => sum + Number(b.amount ?? 0), 0);
+  const rated = listings.filter((l) => l.avg_rating != null);
+  const rating = rated.length ? rated.reduce((s, l) => s + Number(l.avg_rating), 0) / rated.length : null;
+  const firstName = (user?.name ?? '').split(' ')[0];
 
-  if (loading) {
-    return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
+  const stats = [
+    { label: 'Total Bookings', value: String(bookings.length) },
+    { label: 'Total Revenue', value: `$${revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
+    { label: 'Average Rating', value: rating != null ? rating.toFixed(1) : '–' },
+    { label: 'Packages', value: String(listings.filter((l) => l.status === 'ACTIVE').length) },
+  ];
 
-  const totalListings = listings.length;
-  const totalBookings = bookings.length;
-  const pendingCount = bookings.filter((b) => b.status === 'PENDING').length;
-
-  const initials = (user?.name ?? 'V')
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const actions: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
+    { icon: 'add-circle-outline', label: 'Add package', onPress: () => nav.navigate('ListingForm') },
+    { icon: 'albums-outline', label: 'My packages', onPress: () => nav.navigate('VendorListings') },
+    { icon: 'calendar-outline', label: 'Bookings', onPress: () => nav.navigate('BookingsTab') },
+    { icon: 'wallet-outline', label: 'Payouts', onPress: () => nav.navigate('ProfileTab', { screen: 'Payouts', initial: false }) },
+  ];
 
   return (
     <ScrollView
       style={s.root}
-      contentContainerStyle={{ paddingBottom: 40 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 32, paddingHorizontal: 20, gap: 24 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
     >
-      {/* Header */}
       <View style={s.header}>
-        <View style={s.headerLeft}>
-          <View style={s.avatar}>
-            <Text style={s.avatarText}>{initials}</Text>
-          </View>
-          <View>
-            <Text style={s.headerGreeting}>Welcome back,</Text>
-            <Text style={s.headerName} numberOfLines={1}>
-              {user?.vendorProfile?.business_name ?? user?.name ?? 'Vendor'}
-            </Text>
-          </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.hello}>Hello {firstName || 'there'}!</Text>
+          <Text style={s.sub}>{pending.length ? `${pending.length} request${pending.length === 1 ? '' : 's'} waiting for you` : 'Here is how your business is doing'}</Text>
         </View>
-        <TouchableOpacity
-          style={s.newListingBtn}
-          onPress={() => listingsNav.navigate('ListingForm', { listingId: undefined })}
-        >
-          <Ionicons name="add" size={18} color={COLORS.white} />
-          <Text style={s.newListingText}>New Listing</Text>
-        </TouchableOpacity>
+        <Pressable style={s.avatar} onPress={() => nav.navigate('ProfileTab')} accessibilityRole="button" accessibilityLabel="Settings">
+          {user?.avatar_url ? <Image source={{ uri: user.avatar_url }} style={StyleSheet.absoluteFill} /> : <Text style={s.avatarText}>{(firstName[0] ?? 'V').toUpperCase()}</Text>}
+        </Pressable>
       </View>
 
-      {/* Stats */}
-      <View style={s.statsRow}>
-        <StatCard icon="list" label="Listings" value={String(totalListings)} color={COLORS.primary} />
-        <StatCard icon="calendar" label="Bookings" value={String(totalBookings)} color="#1d4ed8" />
-        <StatCard icon="time" label="Pending" value={String(pendingCount)} color="#b45309" />
+      {pending.length > 0 && (
+        <Pressable onPress={() => nav.navigate('BookingsTab')} accessibilityRole="button">
+          <BrandGradient style={s.alert}>
+            <Ionicons name="time-outline" size={22} color="#fff" />
+            <Text style={s.alertText}>{pending.length} booking request{pending.length === 1 ? '' : 's'} need your answer</Text>
+            <Ionicons name="chevron-forward" size={20} color="#fff" />
+          </BrandGradient>
+        </Pressable>
+      )}
+
+      <View style={{ gap: 12 }}>
+        <Text style={s.sectionTitle}>Analytics</Text>
+        <View style={s.grid}>
+          {stats.map((st) => (
+            <BrandGradient key={st.label} style={s.stat}>
+              <Text style={s.statLabel}>{st.label}</Text>
+              <Text style={s.statValue}>{st.value}</Text>
+            </BrandGradient>
+          ))}
+        </View>
       </View>
 
-      {/* Recent Bookings */}
-      <View style={s.section}>
+      <View style={{ gap: 12 }}>
+        <Text style={s.sectionTitle}>Quick actions</Text>
+        <View style={s.grid}>
+          {actions.map((a) => (
+            <Pressable key={a.label} style={s.action} onPress={a.onPress} accessibilityRole="button">
+              <Ionicons name={a.icon} size={26} color={DARK.accent} />
+              <Text style={s.actionText}>{a.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={{ gap: 12 }}>
         <View style={s.rowBetween}>
-          <Text style={s.sectionTitle}>Recent Bookings</Text>
-          <TouchableOpacity onPress={() => bookingsNav.navigate('VendorBookings')}>
-            <Text style={s.seeAll}>See all →</Text>
-          </TouchableOpacity>
+          <Text style={s.sectionTitle}>Upcoming</Text>
+          <Pressable onPress={() => nav.navigate('BookingsTab')} hitSlop={8}>
+            <Text style={s.link}>See all</Text>
+          </Pressable>
         </View>
-
-        {bookings.length === 0 ? (
-          <View style={s.emptyState}>
-            <Ionicons name="calendar-outline" size={44} color={COLORS.gray[300]} />
-            <Text style={s.emptyTitle}>No bookings yet</Text>
-            <Text style={s.emptyText}>Bookings from customers will appear here</Text>
-          </View>
+        {upcoming.length === 0 ? (
+          <Card style={s.empty}>
+            <Ionicons name="analytics-outline" size={40} color={DARK.accent} />
+            <Text style={s.emptyText}>No upcoming bookings yet</Text>
+          </Card>
         ) : (
-          bookings.map((booking) => (
-            <TouchableOpacity
-              key={booking.id}
-              style={s.bookingCard}
-              onPress={() => bookingsNav.navigate('VendorBookingDetail', { bookingId: booking.id })}
-            >
-              <View style={s.rowBetween}>
-                <Text style={s.bookingTitle} numberOfLines={1}>
-                  {booking.listing?.title ?? 'Listing'}
-                </Text>
-                <StatusBadge status={booking.status} />
+          upcoming.slice(0, 3).map((b) => (
+            <Pressable key={b.id} style={s.booking} onPress={() => nav.navigate('BookingsTab', { screen: 'VendorBookingDetail', params: { bookingId: b.id }, initial: false })} accessibilityRole="button">
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={s.bookingTitle} numberOfLines={1}>{b.listing?.title ?? 'Booking'}</Text>
+                <Text style={s.bookingMeta}>{b.customer?.name ?? 'Customer'} · {bookingWhen(b)}</Text>
               </View>
-              <View style={s.bookingMeta}>
-                <View style={s.metaItem}>
-                  <Ionicons name="person-outline" size={12} color={COLORS.gray[400]} />
-                  <Text style={s.metaText}>{booking.customer?.name ?? 'Customer'}</Text>
-                </View>
-                {booking.scheduled_at && (
-                  <View style={s.metaItem}>
-                    <Ionicons name="calendar-outline" size={12} color={COLORS.gray[400]} />
-                    <Text style={s.metaText}>
-                      {format(new Date(booking.scheduled_at), 'MMM d, yyyy')}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
+              <Text style={s.bookingAmount}>${Number(b.amount ?? 0).toFixed(0)}</Text>
+            </Pressable>
           ))
         )}
       </View>
@@ -207,109 +138,28 @@ export default function VendorDashboard() {
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StatCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: any;
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <View style={[s.statCard, { borderTopColor: color }]}>
-      <Ionicons name={icon} size={20} color={color} />
-      <Text style={s.statValue}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const sc = STATUS_COLORS[status] ?? STATUS_COLORS.CANCELLED;
-  return (
-    <View style={[s.badge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
-      <Text style={[s.badgeText, { color: sc.text }]}>{STATUS_LABELS[status] ?? status}</Text>
-    </View>
-  );
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.gray[50] },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
-  headerGreeting: { fontSize: 12, color: 'rgba(255,255,255,0.75)' },
-  headerName: { fontSize: 17, fontWeight: '800', color: COLORS.white, maxWidth: 160 },
-  newListingBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  newListingText: { color: COLORS.white, fontWeight: '700', fontSize: 13 },
-  statsRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16, gap: 10 },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-    borderTopWidth: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statValue: { fontSize: 18, fontWeight: '800', color: COLORS.gray[900], marginTop: 6 },
-  statLabel: { fontSize: 11, color: COLORS.gray[500], marginTop: 2 },
-  section: { paddingHorizontal: 16, marginTop: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: COLORS.gray[800], marginBottom: 12 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  seeAll: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
-  bookingCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  bookingTitle: { fontSize: 15, fontWeight: '700', color: COLORS.gray[900], flex: 1, marginRight: 8 },
-  bookingMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, color: COLORS.gray[500] },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  emptyState: { alignItems: 'center', paddingVertical: 36 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.gray[600], marginTop: 12 },
-  emptyText: { fontSize: 13, color: COLORS.gray[400], marginTop: 4, textAlign: 'center' },
+  root: { flex: 1, backgroundColor: DARK.bg },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  hello: { color: '#fff', fontSize: 22, fontFamily: FONTS.semibold },
+  sub: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular },
+  avatar: { width: 52, height: 52, borderRadius: 26, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontSize: 20, fontFamily: FONTS.semibold },
+  alert: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, borderRadius: 16 },
+  alertText: { flex: 1, color: '#fff', fontSize: 15, fontFamily: FONTS.semibold },
+  sectionTitle: { color: '#fff', fontSize: 20, fontFamily: FONTS.medium },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  stat: { width: '47.5%', borderRadius: 16, paddingVertical: 20, alignItems: 'center', gap: 6 },
+  statLabel: { color: '#fff', fontSize: 15, fontFamily: FONTS.regular },
+  statValue: { color: '#fff', fontSize: 28, fontFamily: FONTS.semibold },
+  action: { width: '47.5%', borderRadius: 16, backgroundColor: DARK.card, paddingVertical: 18, alignItems: 'center', gap: 8 },
+  actionText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
+  empty: { alignItems: 'center', paddingVertical: 36, gap: 12 },
+  emptyText: { color: DARK.muted, fontSize: 16, fontFamily: FONTS.regular },
+  booking: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, backgroundColor: DARK.card },
+  bookingTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  bookingMeta: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular },
+  bookingAmount: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
 });
