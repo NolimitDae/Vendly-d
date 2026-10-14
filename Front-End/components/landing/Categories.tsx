@@ -57,10 +57,10 @@ export default function Categories() {
       </div>
 
       {/* Duplicated list so the marquee loops seamlessly; hidden from screen readers (the grid above says it all). */}
-      <div aria-hidden="true" className="mt-14 flex overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
+      <div aria-hidden="true" className="landing-marquee-track mt-14 flex overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
         <div className="landing-marquee flex shrink-0 gap-3 pr-3">
           {[...services, ...services].map((s, i) => (
-            <span key={i} className="whitespace-nowrap rounded-full border border-plum-900/10 bg-white px-5 py-2.5 text-sm font-medium text-ink-600 dark:border-white/10 dark:bg-white/5 dark:text-white/70">
+            <span key={i} data-dup={i >= services.length ? "" : undefined} className="whitespace-nowrap rounded-full border border-plum-900/10 bg-white px-5 py-2.5 text-sm font-medium text-ink-600 dark:border-white/10 dark:bg-white/5 dark:text-white/70">
               {s}
             </span>
           ))}

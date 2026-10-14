@@ -418,7 +418,8 @@ input:checked~.checkmark {
   to { transform: none; }
 }
 @keyframes landing-marquee {
-  to { transform: translateX(-50%); }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
 }
 @keyframes landing-float {
   0%, 100% { transform: translateY(0); }
@@ -430,7 +431,8 @@ input:checked~.checkmark {
 }
 .landing-rise { animation: landing-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--delay, 0ms); }
 .landing-word { display: inline-block; animation: landing-word 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--delay, 0ms); }
-.landing-marquee { animation: landing-marquee 45s linear infinite; }
+/* translate3d + will-change keep the loop on the GPU, so iPhones scroll it smoothly instead of stuttering */
+.landing-marquee { animation: landing-marquee 45s linear infinite; will-change: transform; backface-visibility: hidden; }
 .landing-float { animation: landing-float 6s ease-in-out infinite; animation-delay: var(--delay, 0ms); }
 .landing-glow { animation: landing-glow 9s ease-in-out infinite; }
 @keyframes landing-fade {
@@ -449,4 +451,9 @@ input:checked~.checkmark {
   /* Reduce motion means no movement, not no feedback: entrances fade in place. */
   .landing-rise, .landing-word { animation-name: landing-fade !important; }
   .landing-marquee, .landing-float, .landing-glow, .landing-sway-touch { animation: none !important; }
+  /* no auto-scroll: the chip strip becomes swipeable instead of sitting frozen */
+  .landing-marquee-track { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+  .landing-marquee-track::-webkit-scrollbar { display: none; }
+  .landing-marquee-track [data-dup] { display: none; }
+  .landing-marquee-track > * > * { scroll-snap-align: start; }
 }
