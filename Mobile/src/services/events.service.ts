@@ -41,6 +41,8 @@ export interface BudgetItem {
   allocated: number;
   spent: number;
   note?: string;
+  /** lines created from a booking are shown in the bookings budget instead */
+  booking_id?: string | null;
 }
 
 export interface EventTask {
@@ -51,6 +53,8 @@ export interface EventTask {
 }
 
 export interface EventDetail extends Event {
+  client_email?: string | null;
+  client_sees_budget?: boolean;
   bookings: EventBooking[];
   budget_items: BudgetItem[];
   tasks: EventTask[];

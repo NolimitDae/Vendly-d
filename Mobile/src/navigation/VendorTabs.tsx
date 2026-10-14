@@ -16,6 +16,7 @@ import RentalItemForm from '../screens/vendor/RentalItemForm';
 import RentalItemDetail from '../screens/vendor/RentalItemDetail';
 import VendorBookings from '../screens/vendor/Bookings';
 import VendorBookingDetail from '../screens/vendor/BookingDetail';
+import EventShared from '../screens/shared/EventShared';
 import VendorContracts from '../screens/vendor/Contracts';
 import VendorProfile from '../screens/vendor/Profile';
 import Payouts from '../screens/vendor/Payouts';
@@ -60,6 +61,7 @@ function BookingsNavigator() {
     <BookStack.Navigator screenOptions={STACK}>
       <BookStack.Screen name="VendorBookings" component={VendorBookings} />
       <BookStack.Screen name="VendorBookingDetail" component={VendorBookingDetail} />
+      <BookStack.Screen name="EventShared" component={EventShared} />
     </BookStack.Navigator>
   );
 }

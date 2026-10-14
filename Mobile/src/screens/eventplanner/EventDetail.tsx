@@ -18,6 +18,10 @@ import { format } from 'date-fns';
 import { COLORS, DARK, FONTS } from '../../constants/colors';
 import { GradientButton } from '../../components/brand';
 import EventContractsCard from '../../components/contracts/EventContractsCard';
+import RunOfShow from '../../components/events/RunOfShow';
+import EventFiles from '../../components/events/EventFiles';
+import { BookingsBudget, ClientShareCard, TeamsCard } from '../../components/events/PlannerExtras';
+import { EventToolsService, type TimelineItem } from '../../services/eventTools.service';
 import { ChatService } from '../../services/chat.service';
 import { apiError } from '../../services/contracts.service';
 import {
@@ -28,7 +32,16 @@ import {
 } from '../../services/events.service';
 import type { EventDetailProps } from '../../navigation/types';
 
-type Tab = 'overview' | 'vendors' | 'budget' | 'tasks';
+type Tab = 'overview' | 'schedule' | 'vendors' | 'budget' | 'files' | 'tasks';
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'schedule', label: 'Run of show' },
+  { key: 'vendors', label: 'Vendors' },
+  { key: 'budget', label: 'Budget' },
+  { key: 'files', label: 'Files' },
+  { key: 'tasks', label: 'Tasks' },
+];
+const ACTIVE_BOOKING = ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'];
 
 const STATUS_COLORS = COLORS.status;
 const STATUS_LABELS: Record<string, string> = {
@@ -48,11 +61,15 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [budgetKey, setBudgetKey] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const res = await EventsService.findOne(eventId);
+      const [res, tl] = await Promise.all([EventsService.findOne(eventId), EventToolsService.timeline(eventId).catch(() => null)]);
       if (res.data?.success) setEvent(res.data.data);
+      if (tl?.data?.success) setTimeline(tl.data.data);
+      setBudgetKey((k) => k + 1);
     } catch {
       Alert.alert('Error', 'Failed to load event');
     } finally {
@@ -76,6 +93,8 @@ export default function EventDetail() {
 
   const sc = STATUS_COLORS[event.status as keyof typeof STATUS_COLORS] ?? STATUS_COLORS.PLANNING;
   const completedTasks = event.tasks.filter((t) => t.completed).length;
+  // vendors who accepted: they can own run-of-show items and form a team
+  const bookedVendors = [...new Map(event.bookings.filter((eb) => ACTIVE_BOOKING.includes(eb.booking.status)).map((eb) => [eb.booking.vendor.id, { id: eb.booking.vendor.id, name: eb.booking.vendor.name }])).values()];
   const totalTasks = event.tasks.length;
 
   const openChat = async () => {
@@ -114,19 +133,17 @@ export default function EventDetail() {
       </View>
 
       {/* Tabs */}
-      <View style={s.tabBar}>
-        {(['overview', 'vendors', 'budget', 'tasks'] as Tab[]).map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[s.tabBtn, tab === t && s.tabBtnActive]}
-            onPress={() => setTab(t)}
-          >
-            <Text style={[s.tabText, tab === t && s.tabTextActive]}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-              {t === 'tasks' && totalTasks > 0 ? ` (${completedTasks}/${totalTasks})` : ''}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabBar}>
+          {TABS.map(({ key: t, label }) => (
+            <TouchableOpacity key={t} style={[s.tabBtn, tab === t && s.tabBtnActive]} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: tab === t }}>
+              <Text style={[s.tabText, tab === t && s.tabTextActive]}>
+                {label}
+                {t === 'tasks' && totalTasks > 0 ? ` (${completedTasks}/${totalTasks})` : ''}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -135,15 +152,29 @@ export default function EventDetail() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
       >
         {tab === 'overview' && (
-          <OverviewTab event={event} completedTasks={completedTasks} totalTasks={totalTasks} />
+          <View style={{ gap: 16 }}>
+            <OverviewTab event={event} completedTasks={completedTasks} totalTasks={totalTasks} />
+            <ClientShareCard eventId={event.id} email={event.client_email} seesBudget={event.client_sees_budget} onChanged={load} />
+          </View>
         )}
+        {tab === 'schedule' && (
+          <RunOfShow eventId={event.id} eventDate={event.date} role="planner" items={timeline} vendors={bookedVendors} onChanged={load} />
+        )}
+        {tab === 'files' && <EventFiles eventId={event.id} role="planner" />}
         {tab === 'vendors' && (
           <>
             <VendorsTab event={event} onFind={() => navigation.navigate('FindVendors', { eventId: event.id })} />
+            <View style={{ height: 16 }} />
+            <TeamsCard eventId={event.id} bookedVendors={bookedVendors} />
             <EventContractsCard eventId={event.id} />
           </>
         )}
-        {tab === 'budget' && <BudgetTab event={event} onRefresh={load} />}
+        {tab === 'budget' && (
+          <View style={{ gap: 12 }}>
+            <BookingsBudget eventId={event.id} refreshKey={budgetKey} />
+            <BudgetTab event={event} onRefresh={load} />
+          </View>
+        )}
         {tab === 'tasks' && <TasksTab event={event} onRefresh={load} />}
       </ScrollView>
     </View>
@@ -269,9 +300,7 @@ function BudgetTab({ event, onRefresh }: { event: EventDetailType; onRefresh: ()
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const totalAllocated = event.budget_items.reduce((s, b) => s + Number(b.allocated), 0);
-  const totalSpent = event.budget_items.reduce((s, b) => s + Number(b.spent), 0);
-  const overBudget = event.total_budget != null && totalAllocated > Number(event.total_budget);
+  const manualItems = event.budget_items.filter((b) => !b.booking_id);
 
   const handleAdd = async () => {
     if (!category || !allocated) { Alert.alert('Error', 'Category and allocated amount are required'); return; }
@@ -297,52 +326,14 @@ function BudgetTab({ event, onRefresh }: { event: EventDetailType; onRefresh: ()
 
   return (
     <View style={{ gap: 12 }}>
-      {/* Summary card */}
-      <View style={s.budgetSummary}>
-        <View style={s.budgetSumRow}>
-          <Text style={s.budgetSumLabel}>Total Allocated</Text>
-          <Text style={[s.budgetSumValue, { color: COLORS.primary }]}>${totalAllocated.toLocaleString()}</Text>
-        </View>
-        <View style={s.budgetSumRow}>
-          <Text style={s.budgetSumLabel}>Total Spent</Text>
-          <Text style={[s.budgetSumValue, totalSpent > totalAllocated && { color: '#ef4444' }]}>
-            ${totalSpent.toLocaleString()}
-          </Text>
-        </View>
-        <View style={s.budgetSumRow}>
-          <Text style={s.budgetSumLabel}>Remaining</Text>
-          <Text style={[s.budgetSumValue, { color: '#10b981' }]}>
-            ${(totalAllocated - totalSpent).toLocaleString()}
-          </Text>
-        </View>
-
-        {/* Overall progress bar */}
-        {totalAllocated > 0 && (
-          <View style={{ marginTop: 12 }}>
-            <View style={s.progressBar}>
-              <View
-                style={[
-                  s.progressFill,
-                  { width: `${Math.min(100, (totalSpent / totalAllocated) * 100)}%` },
-                  totalSpent > totalAllocated && { backgroundColor: '#ef4444' },
-                ]}
-              />
-            </View>
-            {overBudget && (
-              <Text style={s.overBudgetWarn}>
-                ⚠️ Allocated ${(totalAllocated - Number(event.total_budget!)).toLocaleString()} over total budget
-              </Text>
-            )}
-          </View>
-        )}
-      </View>
+      <Text style={s.sectionNote}>Your own budget lines (things not booked through Vendly)</Text>
 
       {/* Per-category items */}
-      {event.budget_items.map((item) => (
+      {manualItems.map((item) => (
         <BudgetItemRow key={item.id} item={item} />
       ))}
 
-      {event.budget_items.length === 0 && (
+      {manualItems.length === 0 && (
         <View style={s.emptyCard}>
           <Text style={s.emptyText}>No budget items yet</Text>
         </View>
@@ -551,8 +542,9 @@ const s = StyleSheet.create({
   badge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, backgroundColor: DARK.field },
   badgeSmall: { paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { color: '#fff', fontSize: 12, fontFamily: FONTS.semibold },
-  tabBar: { flexDirection: 'row', marginHorizontal: 20, padding: 4, borderRadius: 100, backgroundColor: DARK.card, marginBottom: 16 },
-  tabBtn: { flex: 1, height: 40, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  tabBar: { flexDirection: 'row', marginHorizontal: 16, padding: 4, borderRadius: 100, backgroundColor: DARK.card, marginBottom: 16 },
+  sectionNote: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
+  tabBtn: { height: 40, paddingHorizontal: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   tabBtnActive: { backgroundColor: COLORS.primary },
   tabText: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium },
   tabTextActive: { color: '#fff' },

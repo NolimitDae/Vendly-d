@@ -28,6 +28,8 @@ export interface Booking {
   security_deposit?: number | string | null;
   rental_reservations?: { id: string; quantity: number; start_date: string; end_date: string; status: string; item: { id: string; title: string; images?: string[] } }[];
   rental_return?: { damage_fee: number | string; late_fee: number | string; notes?: string | null; created_at: string } | null;
+  /** the planner event this booking is part of */
+  event_bookings?: { event: { id: string; name: string; date?: string | null } }[];
   created_at: string;
   listing: {
     id: string;

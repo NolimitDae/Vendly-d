@@ -375,6 +375,14 @@ export default function Navbar() {
                         <Bookmark className="w-4 h-4" />
                         Saved Listings
                       </Link>
+                      <Link
+                        href="/my-events"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <Calendar className="w-4 h-4" />
+                        Shared Events
+                      </Link>
                     </>
                   )}
                   {(user.type === "CLIENT" || user.type === "CUSTOMER" || user.type === "VENDOR") && (

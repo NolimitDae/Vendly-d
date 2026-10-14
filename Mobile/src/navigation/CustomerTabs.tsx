@@ -24,6 +24,8 @@ import EditProfile from '../screens/customer/EditProfile';
 import ChangePassword from '../screens/customer/ChangePassword';
 import NotificationSettings from '../screens/customer/NotificationSettings';
 import PaymentMethods from '../screens/customer/PaymentMethods';
+import SharedEvents from '../screens/shared/SharedEvents';
+import EventShared from '../screens/shared/EventShared';
 import CustomerBookings from '../screens/customer/Bookings';
 import BookingDetail from '../screens/customer/BookingDetail';
 import PaymentScreen from '../screens/customer/PaymentScreen';
@@ -98,6 +100,8 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
       <ProfileStack.Screen name="PaymentMethods" component={PaymentMethods} />
+      <ProfileStack.Screen name="SharedEvents" component={SharedEvents} />
+      <ProfileStack.Screen name="EventShared" component={EventShared} />
     </ProfileStack.Navigator>
   );
 }

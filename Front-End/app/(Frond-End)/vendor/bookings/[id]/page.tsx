@@ -15,6 +15,7 @@ import {
   Package,
   Camera,
   X,
+  CalendarHeart,
 } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import { toast } from "react-toastify";
@@ -62,6 +63,7 @@ interface Booking {
   security_deposit?: number | string | null;
   rental_reservations?: RentalBookingFields["rental_reservations"];
   rental_return?: RentalBookingFields["rental_return"];
+  event_bookings?: { event: { id: string; name: string; date?: string | null } }[];
 }
 
 export default function VendorBookingDetailPage() {
@@ -216,6 +218,16 @@ export default function VendorBookingDetailPage() {
           )}
         </div>
       </div>
+
+      {!!booking.event_bookings?.length && ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
+        <Link href={`/my-events/${booking.event_bookings[0].event.id}`} className="flex items-center gap-3 p-4 rounded-xl bg-white dark:bg-gray-800 border border-primary/30 hover:shadow-md transition">
+          <CalendarHeart className="w-5 h-5 text-primary" />
+          <span className="flex-1">
+            <span className="block font-semibold text-gray-900 dark:text-white">{booking.event_bookings[0].event.name}</span>
+            <span className="block text-sm text-gray-500 dark:text-gray-400">Run of show, shared files and the event chat</span>
+          </span>
+        </Link>
+      )}
 
       <RentalReturnPanel booking={booking} role="VENDOR" onChanged={fetchAll} />
 

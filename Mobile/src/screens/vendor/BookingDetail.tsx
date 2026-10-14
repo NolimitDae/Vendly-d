@@ -205,6 +205,17 @@ export default function VendorBookingDetail() {
 
           <RentalReturnCard booking={booking} role="VENDOR" onDone={load} />
 
+          {!!booking.event_bookings?.length && ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'].includes(st) && (
+            <Pressable style={s.eventCard} onPress={() => nav.navigate('EventShared', { eventId: booking.event_bookings![0].event.id })} accessibilityRole="button">
+              <Ionicons name="sparkles-outline" size={22} color={DARK.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.h2}>{booking.event_bookings[0].event.name}</Text>
+                <Text style={s.muted}>Run of show, shared files and the event chat</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={DARK.muted} />
+            </Pressable>
+          )}
+
           <BookingContractCard bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={load} />
 
           {(st === 'CONFIRMED' || st === 'IN_PROGRESS') && booking.payment_plan && booking.payment_plan.startsWith('DEPOSIT') && !Number(booking.early_released_amount ?? 0) && (
@@ -332,6 +343,7 @@ function Row({ icon, label, value, bold }: { icon?: keyof typeof Ionicons.glyphM
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: DARK.bg },
+  eventCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: DARK.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: DARK.border },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
   hero: { alignItems: 'center', gap: 8, paddingVertical: 24 },
   ring: { width: 100, height: 100, borderRadius: 50, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },

@@ -27,6 +27,7 @@ export default function CustomerProfile() {
       items: [
         { icon: 'person-outline', label: 'Profile', onPress: () => nav.navigate('EditProfile') },
         { icon: 'wallet-outline', label: 'Payments & Payouts', onPress: () => nav.navigate('PaymentMethods') },
+        { icon: 'sparkles-outline', label: 'Events shared with me', onPress: () => nav.navigate('SharedEvents') },
         { icon: 'help-circle-outline', label: 'FAQs', onPress: soon('Help centre') },
       ],
     },

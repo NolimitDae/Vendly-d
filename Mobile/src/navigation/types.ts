@@ -84,6 +84,8 @@ export type CustomerProfileStackParams = {
   ChangePassword: undefined;
   Notifications: undefined;
   PaymentMethods: undefined;
+  SharedEvents: undefined;
+  EventShared: { eventId: string };
 };
 
 export type CustomerMessagesStackParams = {
@@ -116,6 +118,7 @@ export type VendorListingsStackParams = VendorDashboardStackParams;
 export type VendorBookingsStackParams = {
   VendorBookings: undefined;
   VendorBookingDetail: { bookingId: string };
+  EventShared: { eventId: string };
 };
 
 export type VendorProfileStackParams = {

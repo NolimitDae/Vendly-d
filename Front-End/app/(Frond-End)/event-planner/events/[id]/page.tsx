@@ -23,6 +23,10 @@ import { EventsService } from "@/service/events/events.service";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import EventContractsSection from "@/components/contracts/EventContractsSection";
+import RunOfShow from "@/components/events/RunOfShow";
+import EventFiles from "@/components/events/EventFiles";
+import { BookingsBudget, ClientShareCard, TeamsCard } from "@/components/events/PlannerExtras";
+import { EventToolsService, type TimelineItem } from "@/service/events/eventTools.service";
 import { ChatService } from "@/service/chat/chat.service";
 import { MessagesSquare } from "lucide-react";
 
@@ -41,12 +45,14 @@ interface BudgetItem {
   allocated: number;
   spent: number;
   note?: string;
+  booking_id?: string | null;
 }
 
 interface EventBooking {
   id: string;
   booking: {
     id: string;
+    status?: string;
     vendor: { id: string; name: string; avatar?: string };
     listing: { id: string; title: string; price: number; images: string[] };
   };
@@ -66,6 +72,8 @@ interface Event {
   budget_items: BudgetItem[];
   tasks: EventTask[];
   created_at: string;
+  client_email?: string | null;
+  client_sees_budget?: boolean;
 }
 
 interface BudgetSummary {
@@ -77,7 +85,9 @@ interface BudgetSummary {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "vendors" | "budget" | "tasks";
+type Tab = "overview" | "schedule" | "vendors" | "budget" | "files" | "tasks";
+const TAB_LABELS: Record<Tab, string> = { overview: "Overview", schedule: "Run of show", vendors: "Vendors", budget: "Budget", files: "Files", tasks: "Tasks" };
+const ACTIVE_BOOKING = ["CONFIRMED", "IN_PROGRESS", "COMPLETED"];
 
 const STATUS_STYLES: Record<string, string> = {
   PLANNING: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -110,6 +120,8 @@ export default function EventDetailPage() {
   const [budget, setBudget] = useState<BudgetSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [toolsKey, setToolsKey] = useState(0);
   const [cancelling, setCancelling] = useState(false);
 
   // Task form
@@ -133,7 +145,13 @@ export default function EventDetailPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, toolsKey]);
+
+  useEffect(() => {
+    if (!id) return;
+    EventToolsService.timeline(id).then((r) => r.data?.success && setTimeline(r.data.data)).catch(() => {});
+  }, [id, toolsKey]);
+  const refreshTools = () => setToolsKey((k) => k + 1);
 
   const handleCancel = async () => {
     if (!confirm("Cancel this event? This action cannot be undone.")) return;
@@ -270,6 +288,8 @@ export default function EventDetailPage() {
   }
 
   const completedTasks = event.tasks.filter((t) => t.completed).length;
+  // vendors who accepted: they can own run-of-show items and form a team
+  const bookedVendors = [...new Map(event.bookings.filter((eb) => !eb.booking.status || ACTIVE_BOOKING.includes(eb.booking.status)).map((eb) => [eb.booking.vendor.id, { id: eb.booking.vendor.id, name: eb.booking.vendor.name }])).values()];
   const totalTasks = event.tasks.length;
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -388,22 +408,22 @@ export default function EventDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-1.5 shadow-sm">
-          {(["overview", "vendors", "budget", "tasks"] as Tab[]).map((t) => (
+        <div className="flex gap-1 mb-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-1.5 shadow-sm overflow-x-auto" role="tablist">
+          {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={cn(
-                "flex-1 py-2 rounded-xl text-sm font-medium capitalize transition",
+                "flex-1 whitespace-nowrap px-3 py-2 rounded-xl text-sm font-medium transition",
                 tab === t
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700",
               )}
             >
-              {t}
+              {TAB_LABELS[t]}
               {t === "vendors" && ` (${event.bookings.length})`}
               {t === "tasks" && ` (${completedTasks}/${totalTasks})`}
-              {t === "budget" && budget && ` (${event.budget_items.length})`}
+
             </button>
           ))}
         </div>
@@ -549,12 +569,31 @@ export default function EventDetailPage() {
             </div>
           </div>
         )}
-        {tab === "vendors" && <EventContractsSection eventId={id} />}
+        {tab === "vendors" && (
+          <div className="mt-4 space-y-4">
+            <TeamsCard eventId={id} bookedVendors={bookedVendors} />
+            <EventContractsSection eventId={id} />
+          </div>
+        )}
+
+        {tab === "schedule" && (
+          <RunOfShow eventId={id} eventDate={event.date} role="planner" items={timeline} vendors={bookedVendors} onChanged={refreshTools} />
+        )}
+
+        {tab === "files" && <EventFiles eventId={id} role="planner" />}
+
+        {tab === "overview" && (
+          <div className="mt-4">
+            <ClientShareCard eventId={id} email={event.client_email} seesBudget={event.client_sees_budget} onChanged={refreshTools} />
+          </div>
+        )}
 
         {/* ── TAB: Budget ── */}
         {tab === "budget" && (
           <div className="space-y-4">
-            {/* Summary */}
+            <BookingsBudget eventId={id} refreshKey={toolsKey} />
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 pt-2">Your own budget lines</p>
+            {/* Summary (the planner's own lines) */}
             {budget && (
               <div className="grid grid-cols-3 gap-4">
                 {[
@@ -595,7 +634,7 @@ export default function EventDetailPage() {
 
             {/* Items list */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-              {event.budget_items.length === 0 ? (
+              {event.budget_items.filter((i) => !i.booking_id).length === 0 ? (
                 <div className="py-12 text-center">
                   <DollarSign className="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
                   <p className="text-sm text-gray-400">No budget items yet</p>
@@ -616,7 +655,7 @@ export default function EventDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {event.budget_items.map((item) => (
+                    {event.budget_items.filter((i) => !i.booking_id).map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
                         <td className="px-4 py-3">
                           <p className="font-medium text-gray-900 dark:text-white">{item.category}</p>

@@ -683,6 +683,8 @@ export class BookingService {
       review: { select: { id: true, rating: true, comment: true } },
       rental_reservations: { select: { id: true, quantity: true, start_date: true, end_date: true, daily_rate: true, status: true, item: { select: { id: true, title: true, images: true } } } },
       rental_return: true,
+      // the planner event this booking is part of (vendors open its run of show and files)
+      event_bookings: { select: { event: { select: { id: true, name: true, date: true } } } },
     };
   }
 
