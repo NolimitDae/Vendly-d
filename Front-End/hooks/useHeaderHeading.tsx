@@ -16,6 +16,12 @@ export const useHeaderHeading = ({ path }: { path: string }) => {
             return { heading: "Transaction Management", description: "Monitor and manage all transactions" }
         case "/dashboard/services":
             return { heading: "Service Management", description: "Manage platform services" }
+        case "/dashboard/disputes":
+            return { heading: "Disputes", description: "Resolve problems customers reported" }
+        case "/dashboard/promos":
+            return { heading: "Promo Codes", description: "Create and manage discount codes" }
+        case "/dashboard/revenue":
+            return { heading: "Revenue", description: "Money in, fees, refunds and payouts" }
         case "/dashboard/settings":
             return { heading: "Platform Settings", description: "Configure platform settings and preferences" }
         default:

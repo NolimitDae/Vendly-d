@@ -57,6 +57,16 @@ export type CustomerHomeStackParams = {
   BookingDetails: { listing: ListingSummary; date: string };
   BookingSummary: { listing: ListingSummary; draft: BookingDraft };
   Reviews: { listingId: string; title: string };
+  Rentals: { vendorId?: string; vendorName?: string } | undefined;
+  RentalItem: { itemId: string };
+  RentalCheckout: {
+    vendorId: string;
+    vendorName: string;
+    /** yyyy-MM-dd */
+    startDate: string;
+    endDate: string;
+    lines: { item_id: string; quantity: number; title: string; image?: string; daily_rate: number }[];
+  };
 };
 
 export type CustomerBookingsStackParams = {
@@ -92,6 +102,9 @@ export type VendorDashboardStackParams = {
   VendorListings: undefined;
   ListingForm: { listingId?: string } | undefined;
   Availability: { listingId: string; title: string };
+  RentalInventory: undefined;
+  RentalItemForm: { itemId?: string } | undefined;
+  RentalItemDetail: { itemId: string };
 };
 
 /** Kept for the listing form's route typing; the screens now live in the dashboard stack. */

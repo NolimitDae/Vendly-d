@@ -9,6 +9,8 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PaymentPlan } from 'prisma/generated/enums';
 import { buildSchedule } from 'src/modules/payments/payment-schedule';
+import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
+import { PromoService } from 'src/modules/platform/promo.service';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
 import {
@@ -123,6 +125,7 @@ export class BookingContractsService {
     private vendorContracts: VendorContractsService,
     private mail: MailService,
     private push: PushService,
+    private promos: PromoService,
   ) {}
 
   // ─── Audit ──────────────────────────────────────────────────────────────
@@ -155,9 +158,16 @@ export class BookingContractsService {
 
   // ─── Building contracts ─────────────────────────────────────────────────
 
-  private serviceFee(price: unknown) {
-    const { customer_service_fee_percent, customer_service_fee_minimum } = appConfig().fees;
-    return serviceFeeFor(price, customer_service_fee_percent, customer_service_fee_minimum);
+  private serviceFee(price: unknown, categoryId?: string | null) {
+    return platformServiceFee(price, categoryId);
+  }
+
+  /** Listing price after an optional promo code. Throws a friendly 400 for a bad code. */
+  private async priceAfterPromo(price: unknown, promoCode?: string | null) {
+    const base = Number(price ?? 0);
+    if (!promoCode?.trim()) return { price: base, discount: 0, code: null as string | null };
+    const q = await this.promos.quote(promoCode, base);
+    return { price: Math.round((base - q.discount) * 100) / 100, discount: q.discount, code: q.code };
   }
 
   private async loadBookingContext(userId: string, dto: BookingContractFieldsDto) {
@@ -210,6 +220,7 @@ export class BookingContractsService {
 
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {
     const ctx = await this.loadBookingContext(userId, dto);
+    const priced = await this.priceAfterPromo(ctx.listing.price, dto.promo_code);
     const data = buildMergeData({
       booking: {
         id: bookingId,
@@ -219,8 +230,8 @@ export class BookingContractsService {
         venue_address: dto.venue_address,
         guest_count: dto.guest_count,
         message: dto.message,
-        amount: ctx.listing.price,
-        service_fee: this.serviceFee(ctx.listing.price),
+        amount: priced.price,
+        service_fee: this.serviceFee(priced.price, ctx.listing.category_id),
         currency: 'usd',
       },
       listing: ctx.listing,
@@ -233,7 +244,7 @@ export class BookingContractsService {
       timezone: dto.timezone,
     });
     const rendered = this.renderFor(ctx.vc, data);
-    return { ...ctx, data, rendered, missing: missingFields(rendered.required, data) };
+    return { ...ctx, priced, data, rendered, missing: missingFields(rendered.required, data) };
   }
 
   private consentInfo() {
@@ -241,12 +252,12 @@ export class BookingContractsService {
   }
 
   /** Numbers (not the formatted strings the contract uses) plus the charge schedule the customer will be on. */
-  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null) {
-    const fee = this.serviceFee(price);
-    const l = await this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { payment_plan: true, category: { select: { default_payment_plan: true } } } });
+  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null, promo?: { discount: number; code: string | null }) {
+    const l = await this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { payment_plan: true, category_id: true, category: { select: { default_payment_plan: true } } } });
+    const fee = this.serviceFee(price, l?.category_id);
     const plan = l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
     const schedule = buildSchedule({ plan, price, serviceFee: fee, eventStart: eventStart ? new Date(eventStart) : null }).map((i) => ({ label: i.label, amount: i.amount, due_at: i.due_at, capture_manually: i.capture_manually }));
-    return { price, service_fee: fee, total: Math.round((price + fee) * 100) / 100, plan, schedule };
+    return { price, service_fee: fee, total: Math.round((price + fee) * 100) / 100, plan, schedule, discount: promo?.discount ?? 0, promo_code: promo?.code ?? null };
   }
 
   /** Step 1 of a booking request: the filled contract for the customer to review. */
@@ -263,7 +274,7 @@ export class BookingContractsService {
         vendor_contract_version: p.vc.version,
         missing_fields: p.missing,
         missing_message: p.missing.length ? missingFieldsMessage(p.missing) : null,
-        pricing: await this.pricingFor(dto.listing_id, Number(p.listing.price), dto.event_start_at),
+        pricing: await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced),
         preview_token: signPreview({ bid: bookingId, lid: dto.listing_id, uid: userId }),
         source_pdf_url: p.vc.file_key
           ? this.vendorContracts.downloadUrl(p.vc.file_key, userId, p.vc.id, p.vc.file_name || 'contract.pdf')
@@ -357,14 +368,17 @@ export class BookingContractsService {
           venue_address: dto.venue_address,
           guest_count: dto.guest_count,
           message: dto.message,
-          amount: p.listing.price,
-          service_fee: this.serviceFee(p.listing.price),
+          amount: p.priced.price,
+          service_fee: this.serviceFee(p.priced.price, p.listing.category_id),
           currency: 'usd',
           payment_method_id: dto.payment_method_id,
+          promo_code: p.priced.code,
+          discount: p.priced.discount || null,
           status: BookingStatus.PENDING,
         },
       });
       if (p.event) await tx.eventBooking.create({ data: { event_id: p.event.id, booking_id: b.id } });
+      if (p.priced.code) await this.promos.redeem(tx, p.priced.code);
 
       const contract = await tx.bookingContract.create({
         data: {

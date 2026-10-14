@@ -56,8 +56,10 @@ export default function VendorDashboard() {
   const actions: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
     { icon: 'add-circle-outline', label: 'Add package', onPress: () => nav.navigate('ListingForm') },
     { icon: 'albums-outline', label: 'My packages', onPress: () => nav.navigate('VendorListings') },
+    { icon: 'cube-outline', label: 'Rental stock', onPress: () => nav.navigate('RentalInventory') },
     { icon: 'calendar-outline', label: 'Bookings', onPress: () => nav.navigate('BookingsTab') },
     { icon: 'wallet-outline', label: 'Payouts', onPress: () => nav.navigate('ProfileTab', { screen: 'Payouts', initial: false }) },
+    { icon: 'document-text-outline', label: 'Contracts', onPress: () => nav.navigate('ProfileTab', { screen: 'VendorContracts', initial: false }) },
   ];
 
   return (

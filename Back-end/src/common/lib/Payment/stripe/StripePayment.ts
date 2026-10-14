@@ -606,8 +606,9 @@ export class StripePayment {
     );
   }
 
-  static capturePaymentIntent(id: string, idempotencyKey: string): Promise<stripe.PaymentIntent> {
-    return getStripe().paymentIntents.capture(id, {}, { idempotencyKey });
+  /** Captures an authorized PaymentIntent; `amount` (in currency units) captures part of it and releases the rest. */
+  static capturePaymentIntent(id: string, idempotencyKey: string, amount?: number): Promise<stripe.PaymentIntent> {
+    return getStripe().paymentIntents.capture(id, amount != null ? { amount_to_capture: Math.round(amount * 100) } : {}, { idempotencyKey });
   }
 
   static cancelPaymentIntent(id: string): Promise<stripe.PaymentIntent> {

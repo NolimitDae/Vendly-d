@@ -22,6 +22,12 @@ export interface Booking {
   service_fee?: number | string | null;
   paid_at?: string | null;
   payment_plan?: string | null;
+  early_released_amount?: number | string | null;
+  /** Rentals: the "listing" is synthesised from the rented items */
+  is_rental?: boolean;
+  security_deposit?: number | string | null;
+  rental_reservations?: { id: string; quantity: number; start_date: string; end_date: string; status: string; item: { id: string; title: string; images?: string[] } }[];
+  rental_return?: { damage_fee: number | string; late_fee: number | string; notes?: string | null; created_at: string } | null;
   created_at: string;
   listing: {
     id: string;

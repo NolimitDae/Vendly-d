@@ -12,11 +12,17 @@ import { StringHelper } from 'src/common/helper/string.helper';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
+import { rentalTitle } from 'src/modules/rentals/rentals.service';
 import { BookingContractsService, RequestMeta } from 'src/modules/contracts/booking-contracts.service';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 import { settleCancellation, Settlement } from './cancellation';
 import { PaymentsService } from 'src/modules/payments/payments.service';
+
+/** What the booking is for: the package title, or the rented items. */
+function titleOf(booking: any): string | undefined {
+  return booking?.listing?.title ?? (booking?.rental_reservations?.length ? rentalTitle(booking.rental_reservations) : undefined);
+}
 
 @Injectable()
 export class BookingService {
@@ -43,7 +49,7 @@ export class BookingService {
       where: { id: created.id },
       include: this.bookingIncludes(),
     });
-    const listing = { title: booking.listing?.title ?? 'Service', vendor: booking.vendor };
+    const listing = { title: titleOf(booking) ?? 'Service', vendor: booking.vendor };
     const customer = booking.customer;
 
     // notify vendor via email
@@ -87,15 +93,15 @@ export class BookingService {
     await this.mailService.sendBookingNotification({
       to: booking.customer.email,
       recipientName: booking.customer.name,
-      subject: `Booking confirmed — ${booking.listing?.title}`,
+      subject: `Booking confirmed — ${titleOf(booking)}`,
       message: 'Great news! Your booking has been confirmed by the vendor.',
       status: 'CONFIRMED',
-      listingTitle: booking.listing?.title ?? 'Service',
+      listingTitle: titleOf(booking) ?? 'Service',
       scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
       amount: Number(booking.amount),
       ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
-    this.pushBooking(booking.customer_id, bookingId, 'Booking confirmed', `${booking.listing?.title ?? 'Your booking'} was confirmed`);
+    this.pushBooking(booking.customer_id, bookingId, 'Booking confirmed', `${titleOf(booking) ?? 'Your booking'} was confirmed`);
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -119,14 +125,14 @@ export class BookingService {
     await this.mailService.sendBookingNotification({
       to: booking.customer.email,
       recipientName: booking.customer.name,
-      subject: `Booking declined — ${booking.listing?.title}`,
+      subject: `Booking declined — ${titleOf(booking)}`,
       message: 'Unfortunately, your booking request was not accepted by the vendor.',
       status: 'REJECTED',
-      listingTitle: booking.listing?.title ?? 'Service',
+      listingTitle: titleOf(booking) ?? 'Service',
       reason: dto.reason,
       ctaUrl: `${clientUrl}/marketplace`,
     }).catch(() => null);
-    this.pushBooking(booking.customer_id, bookingId, 'Booking declined', `${booking.listing?.title ?? 'Your booking'} was declined`);
+    this.pushBooking(booking.customer_id, bookingId, 'Booking declined', `${titleOf(booking) ?? 'Your booking'} was declined`);
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -144,7 +150,7 @@ export class BookingService {
       data: { status: BookingStatus.IN_PROGRESS },
       include: this.bookingIncludes(),
     });
-    this.pushBooking(booking.customer_id, bookingId, 'Work started', `The vendor has started on ${booking.listing?.title ?? 'your booking'}`);
+    this.pushBooking(booking.customer_id, bookingId, 'Work started', `The vendor has started on ${titleOf(booking) ?? 'your booking'}`);
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -168,13 +174,13 @@ export class BookingService {
     await this.mailService.sendBookingNotification({
       to: booking.customer.email,
       recipientName: booking.customer.name,
-      subject: `Service completed — ${booking.listing?.title}`,
+      subject: `Service completed — ${titleOf(booking)}`,
       message: 'Your service has been completed! We\'d love to hear your feedback.',
       status: 'COMPLETED',
-      listingTitle: booking.listing?.title ?? 'Service',
+      listingTitle: titleOf(booking) ?? 'Service',
       ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
-    this.pushBooking(booking.customer_id, bookingId, 'Service completed', `${booking.listing?.title ?? 'Your booking'} is complete — leave a review`);
+    this.pushBooking(booking.customer_id, bookingId, 'Service completed', `${titleOf(booking) ?? 'Your booking'} is complete — leave a review`);
 
     return { success: true, data: this.formatBooking(updated) };
   }
@@ -299,14 +305,14 @@ export class BookingService {
     await this.mailService.sendBookingNotification({
       to: notifyUser.email,
       recipientName: notifyUser.name,
-      subject: `Booking cancelled — ${booking.listing?.title}`,
+      subject: `Booking cancelled — ${titleOf(booking)}`,
       message: `The booking has been cancelled by the ${isCustomer ? 'customer' : 'vendor'}.${
         settlement && settlement.refundTotal > 0
           ? ` A refund of $${settlement.refundTotal.toFixed(2)} is on its way to the customer.`
           : ''
       }`,
       status: 'CANCELLED',
-      listingTitle: booking.listing?.title ?? 'Service',
+      listingTitle: titleOf(booking) ?? 'Service',
       reason: dto.reason,
       ctaUrl: `${clientUrl}/bookings`,
     }).catch(() => null);
@@ -314,7 +320,7 @@ export class BookingService {
       isCustomer ? booking.vendor_id : booking.customer_id,
       bookingId,
       'Booking cancelled',
-      `${booking.listing?.title ?? 'A booking'} was cancelled by the ${isCustomer ? 'customer' : 'vendor'}`,
+      `${titleOf(booking) ?? 'A booking'} was cancelled by the ${isCustomer ? 'customer' : 'vendor'}`,
     );
 
     return { success: true, data: { ...this.formatBooking(updated), refund: settlement } };
@@ -386,22 +392,25 @@ export class BookingService {
       });
     }
 
-    if (settlement.vendorKeeps > 0) {
+    const early = Number((booking as { early_released_amount?: unknown }).early_released_amount ?? 0);
+    const net = Math.round((settlement.vendorKeeps - early) * 100) / 100;
+    if (net !== 0) {
       await this.prisma.$transaction(async (tx) => {
         const claimed = await tx.booking.updateMany({
           where: { id: booking.id, payout_credited_at: null },
           data: { payout_credited_at: new Date() },
         });
         if (claimed.count !== 1) return;
-        await tx.user.update({ where: { id: booking.vendor_id }, data: { balance: { increment: settlement.vendorKeeps } } });
+        // a negative net is a deposit paid out early that the vendor now owes back; it comes off future payouts
+        await tx.user.update({ where: { id: booking.vendor_id }, data: { balance: { increment: net } } });
         await tx.paymentTransaction.create({
           data: {
             user_id: booking.vendor_id,
-            type: 'booking_cancellation_earning',
+            type: net > 0 ? 'booking_cancellation_earning' : 'payout_recovery',
             provider: 'stripe',
             reference_number: booking.id,
             status: 'succeeded',
-            amount: settlement.vendorKeeps,
+            amount: net,
             currency,
           },
         });
@@ -469,7 +478,7 @@ export class BookingService {
       serviceFee: Number(booking.service_fee ?? 0),
       currency: booking.currency ?? 'usd',
       bookingId: booking.id,
-      listingTitle: booking.listing?.title ?? 'Service Booking',
+      listingTitle: titleOf(booking) ?? 'Service Booking',
       successUrl,
       cancelUrl,
     });
@@ -663,6 +672,8 @@ export class BookingService {
       vendor: { select: { id: true, name: true, avatar: true, email: true } },
       listing: { select: { id: true, title: true, price: true, images: true } },
       review: { select: { id: true, rating: true, comment: true } },
+      rental_reservations: { select: { id: true, quantity: true, start_date: true, end_date: true, daily_rate: true, status: true, item: { select: { id: true, title: true, images: true } } } },
+      rental_return: true,
     };
   }
 
@@ -687,7 +698,20 @@ export class BookingService {
               TanvirStorage.url(`listings/${img}`),
             ),
           }
-        : null,
+        : booking.rental_reservations?.length
+          ? {
+              // rentals have no package: the apps show the rented items in its place
+              id: null,
+              title: rentalTitle(booking.rental_reservations),
+              price: Number(booking.amount ?? 0),
+              images: booking.rental_reservations.flatMap((r: any) => r.item?.images ?? []).slice(0, 1).map((img: string) => TanvirStorage.url(`rentals/${img}`)),
+            }
+          : null,
+      rental_reservations: booking.rental_reservations?.map((r: any) => ({
+        ...r,
+        item: r.item ? { ...r.item, images: (r.item.images ?? []).map((img: string) => TanvirStorage.url(`rentals/${img}`)) } : r.item,
+      })),
+      is_rental: !!booking.rental_reservations?.length,
     };
   }
 }

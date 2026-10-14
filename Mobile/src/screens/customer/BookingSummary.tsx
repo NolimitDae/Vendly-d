@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -23,7 +23,7 @@ interface Preview {
   source_pdf_url: string | null;
   consent_text: string;
   missing_message: string | null;
-  pricing?: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean }[] };
+  pricing?: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean }[]; discount?: number; promo_code?: string | null };
 }
 
 const money = (n: number | undefined) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
@@ -39,6 +39,8 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
   const [cards, setCards] = useState<SavedCard[]>([]);
   const [card, setCard] = useState<string | null>(null);
   const [addingCard, setAddingCard] = useState(false);
+  const [promoInput, setPromoInput] = useState('');
+  const [promo, setPromo] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     PaymentsService.cards()
@@ -62,6 +64,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
     event_id: listing.eventId,
     timezone: deviceTimezone(),
     payment_method_id: card ?? undefined,
+    promo_code: promo,
   };
 
   // The contract preview is also where the real price breakdown comes from.
@@ -71,12 +74,18 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
       const res = await ContractsService.bookingPreview(fields);
       setPreview(res.data?.data ?? null);
     } catch (err) {
-      Alert.alert('Could not prepare the contract', apiError(err));
+      if (promo) {
+        // a bad code shouldn't block the booking: tell the customer and price it without the code
+        Alert.alert('Promo code', apiError(err));
+        setPromo(undefined);
+      } else {
+        Alert.alert('Could not prepare the contract', apiError(err));
+      }
     } finally {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listing.id, draft]);
+  }, [listing.id, draft, promo]);
 
   useEffect(() => {
     loadPreview();
@@ -153,6 +162,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
             <ActivityIndicator color={DARK.accent} />
           ) : (
             <>
+              {!!price?.discount && <Row label={`Promo ${price.promo_code ?? ''}`} value={`-${money(price.discount)}`} />}
               <Row label="Service price" value={money(price?.price ?? listing.price)} />
               <Row label="Vendly Protection fee" value={money(price?.service_fee)} />
               <View style={s.line} />
@@ -173,6 +183,24 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
           <View style={s.note}>
             <Ionicons name="shield-checkmark-outline" size={16} color={DARK.accent} />
             <Text style={s.noteText}>Nothing is charged now. Your card is charged once {listing.vendorName} accepts, and Vendly holds the money until the service is done.</Text>
+          </View>
+        </Card>
+
+        <Card style={{ gap: 10 }}>
+          <Text style={s.h2}>Promo</Text>
+          <View style={s.promoRow}>
+            <Ionicons name="pricetag-outline" size={20} color={DARK.accent} />
+            <TextInput
+              style={s.promoInput}
+              placeholder="Promo code"
+              placeholderTextColor={DARK.muted}
+              autoCapitalize="characters"
+              value={promoInput}
+              onChangeText={(t) => setPromoInput(t.toUpperCase())}
+            />
+            <Pressable onPress={() => setPromo(promoInput.trim() || undefined)} hitSlop={8} accessibilityRole="button">
+              <Text style={s.addCardText}>{promo && promo === promoInput.trim() ? 'Applied' : 'Apply'}</Text>
+            </Pressable>
           </View>
         </Card>
 
@@ -264,6 +292,8 @@ const s = StyleSheet.create({
   noteText: { flex: 1, color: DARK.muted, fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
   planText: { color: DARK.accent, fontSize: 13, fontFamily: FONTS.medium },
   addCard: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  promoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 52, paddingHorizontal: 16, borderRadius: 26, backgroundColor: DARK.field },
+  promoInput: { flex: 1, color: '#fff', fontSize: 16, fontFamily: FONTS.medium, paddingVertical: 0 },
   addCardText: { color: DARK.accent, fontSize: 15, fontFamily: FONTS.semibold },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },

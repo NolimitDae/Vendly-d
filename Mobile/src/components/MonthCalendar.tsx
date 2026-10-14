@@ -1,14 +1,30 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { addDays, addMonths, format, getDay, isBefore, isSameDay, isSameMonth, startOfDay, startOfMonth } from 'date-fns';
+import { addDays, addMonths, format, getDay, isAfter, isBefore, isSameDay, isSameMonth, startOfDay, startOfMonth } from 'date-fns';
 import { BrandGradient } from './brand';
 import { DARK, FONTS } from '../constants/colors';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-/** Single-date month picker in the Figma calendar style. Past days are disabled. */
-export default function MonthCalendar({ value, onChange }: { value: Date | null; onChange: (d: Date) => void }) {
+/**
+ * Month picker in the Figma calendar style. Past days are disabled.
+ * Single date: `value` + `onChange`. Range (rentals): pass `rangeEnd` too; the parent decides how
+ * taps extend the range. `isDisabled` greys out sold-out days, `badge` puts a small count under a day.
+ */
+export default function MonthCalendar({
+  value,
+  onChange,
+  rangeEnd,
+  isDisabled,
+  badge,
+}: {
+  value: Date | null;
+  onChange: (d: Date) => void;
+  rangeEnd?: Date | null;
+  isDisabled?: (d: Date) => boolean;
+  badge?: (d: Date) => string | undefined;
+}) {
   const today = startOfDay(new Date());
   const [month, setMonth] = useState(startOfMonth(value ?? today));
   const days = useMemo(() => {
@@ -30,12 +46,28 @@ export default function MonthCalendar({ value, onChange }: { value: Date | null;
       <View style={{ flexDirection: 'row' }}>{WEEKDAYS.map((d) => <Text key={d} style={s.weekday}>{d}</Text>)}</View>
       <View style={s.grid}>
         {days.map((d) => {
-          const off = !isSameMonth(d, month) || isBefore(d, today);
-          const on = !!value && isSameDay(d, value);
-          const label = <Text style={[s.day, off && { color: DARK.field }, on && { color: '#fff' }]}>{format(d, 'd')}</Text>;
+          const outside = !isSameMonth(d, month) || isBefore(d, today);
+          const blocked = !outside && !!isDisabled?.(d);
+          const off = outside || blocked;
+          const edge = (!!value && isSameDay(d, value)) || (!!rangeEnd && isSameDay(d, rangeEnd));
+          const inside = !!value && !!rangeEnd && isAfter(d, value) && isBefore(d, rangeEnd);
+          const note = !outside ? badge?.(d) : undefined;
+          const label = (
+            <Text style={[s.day, off && { color: DARK.field }, blocked && s.struck, (edge || inside) && { color: '#fff' }]}>{format(d, 'd')}</Text>
+          );
           return (
-            <Pressable key={d.toISOString()} disabled={off} onPress={() => onChange(d)} style={s.cell} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={format(d, 'EEEE d MMMM')}>
-              {on ? <BrandGradient style={s.circle}>{label}</BrandGradient> : <View style={[s.circle, !off && { backgroundColor: '#2A1536' }]}>{label}</View>}
+            <Pressable
+              key={d.toISOString()}
+              disabled={off}
+              onPress={() => onChange(d)}
+              style={s.cell}
+              accessibilityRole="button"
+              accessibilityState={{ selected: edge || inside, disabled: off }}
+              accessibilityLabel={`${format(d, 'EEEE d MMMM')}${blocked ? ', unavailable' : ''}${note ? `, ${note}` : ''}`}
+            >
+              {inside && <View style={s.band} />}
+              {edge ? <BrandGradient style={s.circle}>{label}</BrandGradient> : <View style={[s.circle, !off && !inside && { backgroundColor: '#2A1536' }, inside && { backgroundColor: 'transparent' }]}>{label}</View>}
+              {!!note && <Text style={s.badge}>{note}</Text>}
             </Pressable>
           );
         })}
@@ -52,5 +84,8 @@ const s = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 10 },
   cell: { width: `${100 / 7}%`, alignItems: 'center' },
   circle: { width: 39, height: 39, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.card },
+  band: { position: 'absolute', top: 0, left: 0, right: 0, height: 39, backgroundColor: '#5A2361' },
   day: { color: DARK.accent, fontSize: 12, fontFamily: FONTS.medium },
+  struck: { textDecorationLine: 'line-through' },
+  badge: { color: DARK.muted, fontSize: 9, fontFamily: FONTS.medium, marginTop: 2 },
 });

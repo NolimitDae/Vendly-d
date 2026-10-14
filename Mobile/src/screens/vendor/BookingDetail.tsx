@@ -11,6 +11,8 @@ import BookingContractCard from '../../components/contracts/BookingContractCard'
 import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { BookingService, type Booking } from '../../services/booking.service';
+import { PaymentsService } from '../../services/payments.service';
+import RentalReturnCard from '../../components/RentalReturnCard';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
 
@@ -174,10 +176,21 @@ export default function VendorBookingDetail() {
 
           <Card style={{ gap: 14, borderWidth: 1, borderColor: DARK.field }}>
             <Text style={s.h2}>Your Service</Text>
-            <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />
+            {!booking.is_rental && <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />}
             {!!booking.venue_address && <Row icon="location-outline" label="Address" value={booking.venue_address} />}
-            {!!startAt && <Row icon="calendar-outline" label="Date" value={format(parseISO(startAt), 'EEE, dd MMM yyyy')} />}
-            {!!startAt && <Row icon="time-outline" label="Time" value={bookingWhen(booking).split('•')[1]?.trim() ?? format(parseISO(startAt), 'h:mm a')} />}
+            {booking.is_rental ? (
+              <>
+                {booking.rental_reservations?.map((r) => <Row key={r.id} icon="layers-outline" label={`${r.quantity} ×`} value={r.item.title} />)}
+                {!!booking.rental_reservations?.[0] && (
+                  <Row icon="calendar-outline" label="Dates" value={`${format(parseISO(booking.rental_reservations[0].start_date.slice(0, 10)), 'dd MMM')} → ${format(parseISO(booking.rental_reservations[0].end_date.slice(0, 10)), 'dd MMM yyyy')}`} />
+                )}
+              </>
+            ) : (
+              <>
+                {!!startAt && <Row icon="calendar-outline" label="Date" value={format(parseISO(startAt), 'EEE, dd MMM yyyy')} />}
+                {!!startAt && <Row icon="time-outline" label="Time" value={bookingWhen(booking).split('•')[1]?.trim() ?? format(parseISO(startAt), 'h:mm a')} />}
+              </>
+            )}
             {booking.guest_count != null && <Row icon="people-outline" label="Guests" value={String(booking.guest_count)} />}
             {!!booking.message && <Row icon="chatbox-ellipses-outline" label="Notes" value={booking.message} />}
             <View style={s.dashed} />
@@ -187,9 +200,35 @@ export default function VendorBookingDetail() {
             <View style={s.line} />
             <Row label="Customer total" value={money(total)} bold />
             <Row label="You receive" value={money(booking.amount)} bold />
+            {Number(booking.security_deposit ?? 0) > 0 && <Row label="Security deposit (held)" value={money(booking.security_deposit)} />}
           </Card>
 
+          <RentalReturnCard booking={booking} role="VENDOR" onDone={load} />
+
           <BookingContractCard bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={load} />
+
+          {(st === 'CONFIRMED' || st === 'IN_PROGRESS') && booking.payment_plan && booking.payment_plan.startsWith('DEPOSIT') && !Number(booking.early_released_amount ?? 0) && (
+            <Card style={{ gap: 10 }}>
+              <Text style={s.h2}>Need the deposit now?</Text>
+              <Text style={s.muted}>You can take the paid deposit before the event, for supplies or travel. It comes off your final payout, and is taken back from future payouts if the booking is refunded.</Text>
+              <Pressable
+                style={s.outline}
+                accessibilityRole="button"
+                onPress={() =>
+                  Alert.alert('Release the deposit now?', 'It is sent to your bank through Stripe.', [
+                    { text: 'Not now', style: 'cancel' },
+                    { text: 'Release', onPress: () => run(() => PaymentsService.releaseDeposit(bookingId), 'Could not release the deposit') },
+                  ])
+                }
+              >
+                <Ionicons name="flash-outline" size={20} color={DARK.accent} />
+                <Text style={s.outlineText}>Release deposit early</Text>
+              </Pressable>
+            </Card>
+          )}
+          {Number(booking.early_released_amount ?? 0) > 0 && (
+            <Text style={s.muted}>Deposit of {money(booking.early_released_amount)} released early · it comes off your final payout.</Text>
+          )}
 
           {(st === 'IN_PROGRESS' || st === 'CONFIRMED') && paid && (
             <Card style={{ gap: 12 }}>
@@ -271,7 +310,8 @@ export default function VendorBookingDetail() {
             </>
           )}
           {st === 'CONFIRMED' && paid && <GradientButton title="Start booking" onPress={start} loading={busy} />}
-          {st === 'IN_PROGRESS' && <GradientButton title="Mark as completed" onPress={complete} loading={busy} />}
+          {st === 'IN_PROGRESS' && (!booking.is_rental || booking.rental_return) && <GradientButton title="Mark as completed" onPress={complete} loading={busy} />}
+          {st === 'IN_PROGRESS' && booking.is_rental && !booking.rental_return && <Text style={s.footerHint}>Check the items back in above, then complete the rental</Text>}
         </View>
       )}
     </View>

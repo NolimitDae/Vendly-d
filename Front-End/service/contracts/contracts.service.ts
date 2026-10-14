@@ -20,6 +20,8 @@ export interface BookingFields {
   vendor_id: string;
   /** Saved Stripe card (pm_…) charged when the vendor accepts */
   payment_method_id?: string;
+  /** Promo code applied to the vendor price */
+  promo_code?: string;
   scheduled_at?: string;
   event_start_at?: string;
   event_end_at?: string;

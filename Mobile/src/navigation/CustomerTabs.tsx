@@ -17,6 +17,9 @@ import SelectDate from '../screens/customer/SelectDate';
 import BookingDetails from '../screens/customer/BookingDetails';
 import BookingSummary from '../screens/customer/BookingSummary';
 import Reviews from '../screens/customer/Reviews';
+import Rentals from '../screens/customer/Rentals';
+import RentalItem from '../screens/customer/RentalItem';
+import RentalCheckout from '../screens/customer/RentalCheckout';
 import EditProfile from '../screens/customer/EditProfile';
 import ChangePassword from '../screens/customer/ChangePassword';
 import NotificationSettings from '../screens/customer/NotificationSettings';
@@ -61,6 +64,9 @@ function HomeNavigator() {
       <HomeStack.Screen name="BookingDetails" component={BookingDetails} options={{ headerShown: false }} />
       <HomeStack.Screen name="BookingSummary" component={BookingSummary} options={{ headerShown: false }} />
       <HomeStack.Screen name="Reviews" component={Reviews} options={{ headerShown: false }} />
+      <HomeStack.Screen name="Rentals" component={Rentals} options={{ headerShown: false }} />
+      <HomeStack.Screen name="RentalItem" component={RentalItem} options={{ headerShown: false }} />
+      <HomeStack.Screen name="RentalCheckout" component={RentalCheckout} options={{ headerShown: false }} />
     </HomeStack.Navigator>
   );
 }

@@ -11,6 +11,9 @@ import VendorDashboard from '../screens/vendor/Dashboard';
 import VendorListings from '../screens/vendor/Listings';
 import ListingForm from '../screens/vendor/ListingForm';
 import Availability from '../screens/vendor/Availability';
+import RentalInventory from '../screens/vendor/RentalInventory';
+import RentalItemForm from '../screens/vendor/RentalItemForm';
+import RentalItemDetail from '../screens/vendor/RentalItemDetail';
 import VendorBookings from '../screens/vendor/Bookings';
 import VendorBookingDetail from '../screens/vendor/BookingDetail';
 import VendorContracts from '../screens/vendor/Contracts';
@@ -45,6 +48,9 @@ function DashboardNavigator() {
       <DashStack.Screen name="VendorListings" component={VendorListings} />
       <DashStack.Screen name="ListingForm" component={ListingForm} />
       <DashStack.Screen name="Availability" component={Availability} />
+      <DashStack.Screen name="RentalInventory" component={RentalInventory} />
+      <DashStack.Screen name="RentalItemForm" component={RentalItemForm} />
+      <DashStack.Screen name="RentalItemDetail" component={RentalItemDetail} />
     </DashStack.Navigator>
   );
 }

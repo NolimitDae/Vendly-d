@@ -7,8 +7,10 @@ import { VENDOR_CATEGORY_OPTIONS, VENDOR_COLUMNS } from "./tableConfig";
 import { usePagination } from "@/hooks";
 import { AdminService } from "@/service/admin/admin.service";
 import { Loader2 } from "lucide-react";
+import { toast } from "react-toastify";
+import { MoneyService } from "@/service/admin/money.service";
 
-function toRow(v: any) {
+function toRow(v: any, onToggle: (v: any) => void) {
   return {
     vendorName: {
       image: v.avatar || "/no-image.jpg",
@@ -21,6 +23,7 @@ function toRow(v: any) {
     location: v.address || "-",
     subscription: v.license_status || "-",
     totalBookings: v.total_bookings ?? 0,
+    account: { suspended: v.status === 0, onToggle: () => onToggle(v) },
     _raw: v,
   };
 }
@@ -43,19 +46,31 @@ const VendorsPageContent = () => {
   const { paginatedData, currentPage, totalPages, totalItems, goToPage } =
     usePagination({ data: filtered, itemsPerPage, resetDeps: [filtered] });
 
+  const toggle = useCallback(async (v: any) => {
+    const suspend = v.status !== 0;
+    if (!confirm(suspend ? `Suspend ${v.business_name || v.name}? They are signed out everywhere and can't log in until restored.` : `Restore ${v.business_name || v.name}?`)) return;
+    try {
+      await MoneyService.setUserStatus(v.id, suspend ? 0 : 1);
+      toast.success(suspend ? "Account suspended" : "Account restored");
+      setRows((prev) => prev.map((r) => (r._raw.id === v.id ? toRow({ ...v, status: suspend ? 0 : 1 }, toggle) : r)));
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? "Couldn't update the account");
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await AdminService.getVendors({ limit: 200 });
       if (res.data?.success) {
-        setRows((res.data.data as any[]).map(toRow));
+        setRows((res.data.data as any[]).map((v) => toRow(v, toggle)));
       }
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toggle]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -125,6 +125,7 @@ export class UserService {
 
 
   async getVendors(query: { page?: number; limit?: number; status?: string }) {
+    // status (account active/suspended) is returned so admins can suspend from the list
     const page = Number(query.page ?? 1);
     const limit = Number(query.limit ?? 20);
     const skip = (page - 1) * limit;
@@ -149,6 +150,7 @@ export class UserService {
           email: true,
           avatar: true,
           created_at: true,
+          status: true,
           vendorProfile: {
             select: {
               business_name: true,
@@ -172,6 +174,7 @@ export class UserService {
         ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${u.avatar}`)
         : null,
       created_at: u.created_at,
+      status: u.status ?? 1,
       business_name: u.vendorProfile?.business_name ?? null,
       address: u.vendorProfile?.address ?? null,
       license_status: u.vendorProfile?.license_status ?? null,

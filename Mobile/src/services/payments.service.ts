@@ -56,6 +56,7 @@ export const PaymentsService = {
 
   timeline: (bookingId: string) => api.get<{ success: boolean; data: PaymentTimeline }>(`/bookings/${bookingId}/payments`),
   approve: (bookingId: string) => api.post(`/bookings/${bookingId}/approve`),
+  releaseDeposit: (bookingId: string) => api.post(`/bookings/${bookingId}/release-deposit`),
   dispute: (bookingId: string, reason: string) => api.post(`/bookings/${bookingId}/dispute`, { reason }),
   retry: (bookingId: string, installmentId: string, paymentMethodId?: string) =>
     api.post<{ success: boolean; data: Installment }>(`/bookings/${bookingId}/installments/${installmentId}/retry`, paymentMethodId ? { payment_method_id: paymentMethodId } : {}),

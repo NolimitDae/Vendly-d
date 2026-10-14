@@ -168,6 +168,13 @@ export class BookingController {
     return this.payments.openDispute(id, user.id, dto.reason);
   }
 
+  /** Vendor takes a paid deposit before the event; it comes off the final payout. */
+  @Post(':id/release-deposit')
+  @Throttle({ short: { limit: 3, ttl: 60_000 } })
+  releaseDeposit(@GetUser() user: any, @Param('id') id: string) {
+    return this.payments.releaseDepositEarly(id, user.id);
+  }
+
   /** Customer retries a failed charge, optionally with another saved card. */
   @Post(':id/installments/:installmentId/retry')
   @Throttle({ short: { limit: 3, ttl: 60_000 } })

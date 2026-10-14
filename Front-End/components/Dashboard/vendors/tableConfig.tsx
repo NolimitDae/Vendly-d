@@ -43,6 +43,21 @@ export const VENDOR_COLUMNS = [
         label: "Total Bookings",
         width: { mobile: "120px", desktop: "200px" }
     },
+    {
+        accessor: "account",
+        label: "Account",
+        width: { mobile: "130px", desktop: "160px" },
+        formatter: (value: any) => (
+            <button
+                type="button"
+                onClick={value?.onToggle}
+                className={`text-xs font-semibold px-3 py-1 rounded-full ${value?.suspended ? "bg-red-100 text-red-600 dark:bg-red-900/30" : "bg-green-100 text-green-700 dark:bg-green-900/30"}`}
+                title={value?.suspended ? "Restore account" : "Suspend account"}
+            >
+                {value?.suspended ? "Suspended · restore" : "Active · suspend"}
+            </button>
+        ),
+    },
 ]
 
 export const VENDOR_CATEGORY_OPTIONS = [

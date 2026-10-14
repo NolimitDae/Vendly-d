@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
-import { SettingsService } from './settings.service';
+import { PaymentsModule } from 'src/modules/payments/payments.module';
+import { PrismaModule } from 'src/prisma/prisma.module';
 import { SettingsController } from './settings.controller';
 
+// Fee settings, promo codes and flags come from the global PlatformModule.
 @Module({
+  imports: [PaymentsModule, PrismaModule],
   controllers: [SettingsController],
-  providers: [SettingsService],
 })
 export class SettingsModule {}

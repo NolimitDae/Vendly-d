@@ -160,6 +160,12 @@ export class BookingContractFieldsDto {
   @MaxLength(64)
   timezone?: string;
 
+  @ApiPropertyOptional({ description: 'Promo code to apply to the vendor price' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  promo_code?: string;
+
   @ApiPropertyOptional({ description: 'Saved Stripe card (pm_…) to charge when the vendor accepts' })
   @IsOptional()
   @IsString()

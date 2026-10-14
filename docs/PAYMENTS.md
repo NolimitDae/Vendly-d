@@ -33,7 +33,7 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 
 - On completion the vendor is **not** paid immediately. `release_at` = completion + 3 days, or 48h after the last proof upload if sooner.
 - `POST /bookings/:id/approve` (customer) releases immediately.
-- `POST /bookings/:id/dispute` (customer, before release) freezes the money until an admin resolves it (`dispute_resolved_at`; admin tooling is Phase C).
+- `POST /bookings/:id/dispute` (customer, before release) freezes the money until an admin resolves it (`dispute_resolved_at`; resolved from Admin → Disputes, below).
 - An hourly cron releases due bookings: vendor share = paid installments − fee − refunds, sent as a Stripe Transfer to the vendor's Connect account; vendors without Connect get a Vendly balance credit instead (withdrawn through the existing `/withdraw` routes).
 - `GET /bookings/:id/payments` returns the timeline: plan, installments with status/attempts/errors, paid/outstanding, release and dispute state.
 
@@ -41,9 +41,18 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 
 - Tiers (`booking/cancellation.ts`) decide how much comes back; `PaymentsService.refundBooking` refunds newest installment first, voids uncaptured holds and cancels unpaid installments. The vendor's kept share, if any, is credited as before.
 
+## Admin tools (Phase C)
+
+- **Fees live in the database** (`platform_settings`), edited at Admin → Settings: Vendly Protection fee %, minimum fee, vendor commission %, currency/limits. Per-category fee overrides (`ServiceCategory.fee_percent`). Cached in memory (`currentFees()`) and refreshed on every change; env values are the fallback. The old JSON-file settings store (wiped on each Railway deploy) is gone.
+- **Vendor commission** is taken from the vendor share at release and recorded as `vendly_commission` (default 0%).
+- **Disputes:** Admin → Disputes lists open disputes with the customer's report and what is held; decide release / partial refund / full refund with a note. Both sides are emailed. A full refund claws back any early-released deposit.
+- **Early deposit release:** `POST /bookings/:id/release-deposit` (vendor, deposit plans, contract executed, Stripe Connect set up). Subtracted from the final payout; if the booking is later refunded or cancelled, the vendor's Vendly balance goes negative and is recovered from the next payouts first.
+- **Promo codes:** Admin → Promo codes. Percent or fixed amount off the vendor price, optional minimum, max uses and expiry. Customers enter a code on the booking request (web modal and mobile summary); the preview shows the discount and the code is redeemed atomically when the booking is created. `POST /promo/check` validates a code.
+- **Feature flags:** Admin → Settings. `GET /flags` (public) returns enabled keys.
+- **Revenue report:** Admin → Revenue: collected, Vendly fees, commission, refunds and payouts by day, with CSV export.
+- **Suspend / restore:** Admin → Vendors, `PATCH /admin/users/:id/status`. Suspended users are rejected on their next request.
+
 ## Still to do
 
-- Admin dispute resolution (refund / partial refund / release) and fee settings in the database: Phase C.
-- Early deposit release for vendors with recovery from future payouts.
-- App screens: add-card sheet and card picker in the booking summary (mobile + web), payment timeline on booking detail, approve/dispute buttons.
-- Legacy bookings paid through hosted Checkout (before this engine) keep the old path: no installments, vendor credited to balance on completion.
+- Legacy bookings paid through hosted Checkout before this engine keep the old path: no installments, vendor credited to balance on completion.
+- Amendments that change the price use the platform fee rate, not the category override.

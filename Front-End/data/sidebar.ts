@@ -90,6 +90,24 @@ export const navItems: NavItem[] = [
     type: "admin",
   },
   {
+    icon: TransactionsIcon,
+    label: "Revenue",
+    href: "/dashboard/revenue",
+    type: "admin",
+  },
+  {
+    icon: PendingApprovalIcon,
+    label: "Disputes",
+    href: "/dashboard/disputes",
+    type: "admin",
+  },
+  {
+    icon: WalletIcon,
+    label: "Promo codes",
+    href: "/dashboard/promos",
+    type: "admin",
+  },
+  {
     icon: ServicesIcon,
     label: "Services",
     href: "/dashboard/services",

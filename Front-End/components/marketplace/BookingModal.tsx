@@ -38,7 +38,7 @@ interface Preview {
   source_pdf_url: string | null;
   consent_text: string;
   missing_message: string | null;
-  pricing: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: ScheduleLine[] };
+  pricing: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: ScheduleLine[]; discount?: number; promo_code?: string | null };
 }
 
 const inputCls =
@@ -64,6 +64,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState<string | null>(null);
+  const [promo, setPromo] = useState("");
 
   const fields = () => {
     const end = endTime ? toIso(date, endTime) : undefined;
@@ -82,6 +83,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
       event_id: eventId,
       timezone: browserTimezone(),
       payment_method_id: card ?? undefined,
+      promo_code: promo.trim() || undefined,
     };
   };
 
@@ -165,6 +167,7 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
         )}
         {step === "contract" && preview?.pricing && (
           <div className="mb-4 p-4 bg-primary/5 rounded-xl text-sm space-y-1">
+            {!!preview.pricing.discount && <div className="flex justify-between text-green-600"><span>Promo {preview.pricing.promo_code}</span><span>-{money(preview.pricing.discount)}</span></div>}
             <div className="flex justify-between"><span>Vendor price</span><span>{money(preview.pricing.price)}</span></div>
             <div className="flex justify-between"><span>Vendly Protection fee</span><span>{money(preview.pricing.service_fee)}</span></div>
             <div className="flex justify-between font-bold"><span>Total</span><span>{money(preview.pricing.total)}</span></div>
@@ -239,6 +242,10 @@ export default function BookingModal({ listing, eventId, onClose, onBookingCreat
                 placeholder="These are included in the contract."
                 className={`${inputCls} resize-none`}
               />
+            </div>
+            <div>
+              <label htmlFor="promo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Promo code (optional)</label>
+              <input id="promo" value={promo} onChange={(e) => setPromo(e.target.value.toUpperCase())} maxLength={50} className={inputCls} />
             </div>
             <div>
               <p className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Payment method</p>

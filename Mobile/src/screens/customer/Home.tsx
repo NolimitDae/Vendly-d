@@ -185,6 +185,18 @@ export default function CustomerHome() {
         </View>
       )}
 
+      {/* Rentals */}
+      <Pressable style={s.rentals} onPress={() => nav.navigate('Rentals')} accessibilityRole="button" accessibilityLabel="Browse rentals">
+        <View style={s.rentalsIcon}>
+          <Ionicons name="cube-outline" size={26} color={DARK.accent} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.rentalsTitle}>Rent decor & equipment</Text>
+          <Text style={s.rentalsBody}>Chairs, arches, lighting and AV by the day, with live stock</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={DARK.muted} />
+      </Pressable>
+
       {/* Services */}
       <View style={s.section}>
         <View style={s.sectionRow}>
@@ -291,6 +303,10 @@ const s = StyleSheet.create({
   bannerPhoto: { width: 117, height: 154, alignSelf: 'flex-end', marginRight: 18, overflow: 'hidden' },
   bannerPhotoImg: { position: 'absolute', top: 0, left: '-8%', width: '271%', height: '100%' },
   section: { marginTop: 24, paddingHorizontal: 20, gap: 16 },
+  rentals: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 20, marginTop: 24, padding: 14, borderRadius: 16, backgroundColor: DARK.card, borderWidth: 1, borderColor: DARK.field },
+  rentalsIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  rentalsTitle: { color: '#fff', fontSize: 15, fontFamily: FONTS.semibold },
+  rentalsBody: { color: DARK.muted, fontSize: 12, lineHeight: 17, fontFamily: FONTS.regular },
   sectionTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   seeAll: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },

@@ -8,6 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
 import PaymentTimeline from '../../components/PaymentTimeline';
+import RentalReturnCard from '../../components/RentalReturnCard';
 import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { api } from '../../services/api';
@@ -177,22 +178,35 @@ export default function BookingDetail() {
 
           <Card style={{ gap: 14, borderWidth: 1, borderColor: DARK.field }}>
             <Text style={s.h2}>Booking Details</Text>
-            <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />
+            {!booking.is_rental && <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />}
             <Row icon="storefront-outline" label="Vendor" value={vendor} />
             {!!booking.venue_address && <Row icon="location-outline" label="Location" value={booking.venue_address} />}
-            {!!start && <Row icon="calendar-outline" label="Date" value={format(parseISO(start), 'EEE, dd MMM yyyy')} />}
-            {!!start && <Row icon="time-outline" label="Time" value={bookingWhen(booking).split('•')[1]?.trim() ?? format(parseISO(start), 'h:mm a')} />}
+            {booking.is_rental ? (
+              <>
+                {booking.rental_reservations?.map((r) => <Row key={r.id} icon="layers-outline" label={`${r.quantity} ×`} value={r.item.title} />)}
+                {!!booking.rental_reservations?.[0] && (
+                  <Row icon="calendar-outline" label="Dates" value={`${format(parseISO(booking.rental_reservations[0].start_date.slice(0, 10)), 'dd MMM')} → ${format(parseISO(booking.rental_reservations[0].end_date.slice(0, 10)), 'dd MMM yyyy')}`} />
+                )}
+              </>
+            ) : (
+              <>
+                {!!start && <Row icon="calendar-outline" label="Date" value={format(parseISO(start), 'EEE, dd MMM yyyy')} />}
+                {!!start && <Row icon="time-outline" label="Time" value={bookingWhen(booking).split('•')[1]?.trim() ?? format(parseISO(start), 'h:mm a')} />}
+              </>
+            )}
             {booking.guest_count != null && <Row icon="people-outline" label="Guests" value={String(booking.guest_count)} />}
             {!!booking.message && <Row icon="chatbox-ellipses-outline" label="Notes" value={booking.message} />}
 
             <View style={s.dashed} />
             <Text style={s.h2}>Price Details</Text>
-            <Row label="Service price" value={money(booking.amount)} />
+            <Row label={booking.is_rental ? 'Rental' : 'Service price'} value={money(booking.amount)} />
             <Row label="Vendly Protection fee" value={money(booking.service_fee)} />
             <View style={s.line} />
             <Row label="Total" value={money(total)} bold />
             <Text style={s.paidNote}>{paid ? `Paid on ${format(parseISO(booking.paid_at!), 'dd MMM yyyy')} · held by Vendly until the service is done` : st === 'PENDING' ? 'Nothing is charged until the vendor accepts' : ''}</Text>
           </Card>
+
+          <RentalReturnCard booking={booking} role="CUSTOMER" onDone={load} />
 
           <PaymentTimeline bookingId={booking.id} bookingStatus={booking.status} onChanged={load} />
 
