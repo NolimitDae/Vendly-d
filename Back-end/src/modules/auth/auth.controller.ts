@@ -454,6 +454,10 @@ export class AuthController {
           HttpStatus.UNAUTHORIZED,
         );
       }
+      // same rule as sign-up
+      if (String(password).length < 8) {
+        return { success: false, message: 'Password must be at least 8 characters long' };
+      }
       return await this.authService.resetPassword({
         email: email,
         token: token,

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { api } from '../../services/api';
 import { useAuth, type AuthContextValue } from '../../context/AuthContext';
-import { Field, GradientButton, OutlineButton, ui } from '../../components/brand';
+import { Field, GradientButton, ui } from '../../components/brand';
+import SocialButtons from '../../components/SocialButtons';
 import { DARK, FONTS } from '../../constants/colors';
 import type { AuthStackParams } from '../../navigation/types';
 
@@ -25,8 +25,6 @@ export const apiMessage = (err: any, fallback: string): string => {
   const m = err?.response?.data?.message ?? err?.message;
   return Array.isArray(m) ? m[0] : m || fallback;
 };
-
-const comingSoon = () => Alert.alert('Coming soon', 'Google and Apple sign-in are on the way. Use your email for now.');
 
 export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackParams, 'SignIn'>) {
   const insets = useSafeAreaInsets();
@@ -84,6 +82,9 @@ export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackP
               textContentType="password"
               onSubmitEditing={submit}
             />
+            <Pressable onPress={() => navigation.navigate('ForgotPassword', { email: email.trim() || undefined })} accessibilityRole="link" hitSlop={8} style={{ alignSelf: 'flex-end', marginTop: -4 }}>
+              <Text style={ui.link}>Forgot password?</Text>
+            </Pressable>
           </View>
 
           <GradientButton title="Continue with Email" onPress={submit} loading={loading} style={{ marginTop: 28 }} />
@@ -94,10 +95,7 @@ export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackP
             <View style={s.line} />
           </View>
 
-          <View style={{ gap: 16 }}>
-            <OutlineButton title="Continue with Google" icon={<Ionicons name="logo-google" size={22} color="#fff" />} onPress={comingSoon} />
-            <OutlineButton title="Continue with Apple" icon={<Ionicons name="logo-apple" size={24} color="#fff" />} onPress={comingSoon} />
-          </View>
+          <SocialButtons onNeedsRole={(social) => navigation.navigate('RoleSelect', { social })} />
 
           <View style={s.footer}>
             <Text style={ui.muted}>Don’t have an account? </Text>

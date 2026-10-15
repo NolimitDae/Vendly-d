@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
+import { socialSignIn } from '../../services/socialAuth';
+import { apiMessage } from './SignIn';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -14,9 +17,24 @@ const ROLES: { value: SignupRole; label: string }[] = [
   { value: 'EVENT_PLANNER', label: 'Event Planner' },
 ];
 
-export default function RoleSelect({ navigation }: NativeStackScreenProps<AuthStackParams, 'RoleSelect'>) {
+export default function RoleSelect({ navigation, route }: NativeStackScreenProps<AuthStackParams, 'RoleSelect'>) {
   const insets = useSafeAreaInsets();
   const [role, setRole] = useState<SignupRole>('CLIENT');
+  const social = route.params?.social;
+  const { login } = useAuth();
+  const [busy, setBusy] = useState(false);
+
+  // Google / Apple sign-up: the account is created with the chosen role, no form needed
+  const next = async () => {
+    if (!social) return navigation.navigate('SignUp', { role });
+    setBusy(true);
+    try {
+      await socialSignIn(social, login, role);
+    } catch (err) {
+      Alert.alert('Sign-up failed', apiMessage(err, 'Try again, or sign up with your email.'));
+      setBusy(false);
+    }
+  };
 
   return (
     <View style={[s.root, { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 20 }]}>
@@ -49,7 +67,7 @@ export default function RoleSelect({ navigation }: NativeStackScreenProps<AuthSt
       </View>
 
       <View style={{ gap: 20 }}>
-        <GradientButton title="Continue" onPress={() => navigation.navigate('SignUp', { role })} />
+        <GradientButton title={social ? `Continue with ${social.provider === 'apple' ? 'Apple' : 'Google'}` : 'Continue'} onPress={next} loading={busy} />
         <View style={s.footer}>
           <Text style={ui.muted}>Already have an account? </Text>
           <Pressable onPress={() => navigation.navigate('SignIn')} accessibilityRole="link" hitSlop={8}>

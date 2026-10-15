@@ -151,9 +151,14 @@ describe('AuthController', () => {
     const result = await controller.resetPassword({
       email: 'john@example.com',
       token: '1234',
-      password: 'newpass',
+      password: 'newpass123',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('refuses a reset to a password shorter than 8 characters', async () => {
+    const result = await controller.resetPassword({ email: 'john@example.com', token: '1234', password: 'short' });
+    expect(result).toMatchObject({ success: false, message: expect.stringMatching(/8 characters/) });
   });
 
   it('should change password', async () => {

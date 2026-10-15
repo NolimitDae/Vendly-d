@@ -148,11 +148,14 @@ export type SignupRole = 'CLIENT' | 'VENDOR' | 'EVENT_PLANNER';
 
 export type AuthStackParams = {
   Onboarding: undefined;
-  RoleSelect: undefined;
+  /** social: a Google / Apple sign-in that needs a role to create the account */
+  RoleSelect: { social?: { provider: 'google' | 'apple'; id_token: string; name?: string } } | undefined;
   SignIn: undefined;
   SignUp: { role: SignupRole };
   /** password is only passed in memory so the user is signed in right after verifying. */
   VerifyEmail: { email: string; password?: string };
+  ForgotPassword: { email?: string } | undefined;
+  ResetPassword: { email: string };
 };
 
 // ─── Screen props ─────────────────────────────────────────────────────────────

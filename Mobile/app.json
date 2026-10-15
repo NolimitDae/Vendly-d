@@ -16,7 +16,8 @@
       "bundleIdentifier": "com.vendly.mobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -44,13 +45,16 @@
           "enableGooglePay": false
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "extra": {
       "eas": {
         "projectId": "490325e9-37a3-424d-9247-cad34e99e35e"
       }
     },
-    "owner": "nolimittechs-organization"
+    "owner": "nolimittechs-organization",
+    "scheme": "vendly"
   }
 }

@@ -10,6 +10,8 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../../mail/mail.module';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
+import { SocialAuthController } from './social/social-auth.controller';
+import { SocialAuthService } from './social/social-auth.service';
 
 @Module({
   imports: [
@@ -27,8 +29,8 @@ import { FacebookStrategy } from './strategies/facebook.strategy';
     PrismaModule,
     MailModule,
   ],
-  controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy, GoogleStrategy, FacebookStrategy],
+  controllers: [AuthController, SocialAuthController],
+  providers: [AuthService, SocialAuthService, LocalStrategy, JwtStrategy, GoogleStrategy, FacebookStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}
