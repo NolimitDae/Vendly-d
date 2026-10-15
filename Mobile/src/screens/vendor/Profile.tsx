@@ -32,7 +32,10 @@ export default function VendorProfile() {
         { icon: 'shield-checkmark-outline', label: 'Verification', note: license === 'APPROVED' ? 'Verified' : license === 'REJECTED' ? 'Rejected' : u?.license_uploaded ? 'In review' : 'Upload licence', onPress: () => nav.navigate('License') },
       ],
     },
-    { title: 'Manage Requests', items: [{ icon: 'notifications-outline', label: 'Notifications', onPress: () => nav.navigate('Notifications') }] },
+    { title: 'Manage Requests', items: [
+      { icon: 'mail-unread-outline', label: 'Inbox', onPress: () => (nav as any).navigate('Inbox') },
+      { icon: 'notifications-outline', label: 'Notification settings', onPress: () => nav.navigate('Notifications') },
+    ] },
     { title: 'Security', items: [{ icon: 'lock-closed-outline', label: 'Change Password', onPress: () => nav.navigate('ChangePassword') }] },
   ];
 

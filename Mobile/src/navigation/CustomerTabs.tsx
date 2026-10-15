@@ -25,6 +25,7 @@ import ChangePassword from '../screens/customer/ChangePassword';
 import NotificationSettings from '../screens/customer/NotificationSettings';
 import PaymentMethods from '../screens/customer/PaymentMethods';
 import SharedEvents from '../screens/shared/SharedEvents';
+import Inbox from '../screens/shared/Inbox';
 import EventShared from '../screens/shared/EventShared';
 import CustomerBookings from '../screens/customer/Bookings';
 import BookingDetail from '../screens/customer/BookingDetail';
@@ -57,7 +58,7 @@ function HomeNavigator() {
   return (
     <HomeStack.Navigator screenOptions={{ ...HEADER, contentStyle: { backgroundColor: DARK.bg } }}>
       <HomeStack.Screen name="CustomerHome" component={CustomerHome} options={{ headerShown: false }} />
-      <HomeStack.Screen name="Notifications" component={NotificationsPlaceholder} options={{ title: 'Notifications' }} />
+      <HomeStack.Screen name="Notifications" component={Inbox} options={{ headerShown: false }} />
       <HomeStack.Screen name="FindVendors" component={FindVendors} options={{ headerShown: false }} />
       <HomeStack.Screen name="SearchResults" component={SearchResults} options={{ headerShown: false }} />
       <HomeStack.Screen name="ListingDetail" component={ListingDetail} options={{ headerShown: false }} />
@@ -106,17 +107,6 @@ function ProfileNavigator() {
   );
 }
 
-function NotificationsPlaceholder() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name="notifications-outline" size={48} color={COLORS.gray[300]} />
-      <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600', color: COLORS.gray[500] }}>
-        Notifications
-      </Text>
-      <Text style={{ marginTop: 4, fontSize: 13, color: COLORS.gray[400] }}>Coming soon</Text>
-    </View>
-  );
-}
 
 const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   HomeTab: 'home-outline',

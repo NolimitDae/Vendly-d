@@ -26,6 +26,7 @@ import ChatDetail from '../screens/customer/ChatDetail';
 import EditProfile from '../screens/customer/EditProfile';
 import ChangePassword from '../screens/customer/ChangePassword';
 import NotificationSettings from '../screens/customer/NotificationSettings';
+import Inbox from '../screens/shared/Inbox';
 
 import type {
   VendorTabParams,
@@ -86,6 +87,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="EditProfile" component={EditProfile} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
+      <ProfileStack.Screen name="Inbox" component={Inbox} />
     </ProfileStack.Navigator>
   );
 }

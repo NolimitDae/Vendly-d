@@ -42,7 +42,10 @@ export default function EPProfile() {
         { icon: 'wallet-outline', label: 'Payments & Payouts', onPress: () => nav.navigate('PaymentMethods') },
       ],
     },
-    { title: 'Manage Requests', items: [{ icon: 'notifications-outline', label: 'Notifications', onPress: () => nav.navigate('Notifications') }] },
+    { title: 'Manage Requests', items: [
+      { icon: 'mail-unread-outline', label: 'Inbox', onPress: () => (nav as any).navigate('Inbox') },
+      { icon: 'notifications-outline', label: 'Notification settings', onPress: () => nav.navigate('Notifications') },
+    ] },
     { title: 'Security', items: [{ icon: 'lock-closed-outline', label: 'Change Password', onPress: () => nav.navigate('ChangePassword') }] },
   ];
 

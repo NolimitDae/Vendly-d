@@ -129,6 +129,7 @@ export type VendorProfileStackParams = {
   Notifications: undefined;
   Payouts: undefined;
   License: undefined;
+  Inbox: undefined;
 };
 
 export type VendorMessagesStackParams = {
