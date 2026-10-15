@@ -61,6 +61,14 @@
       }
     },
     "owner": "nolimittechs-organization",
-    "scheme": "vendly"
+    "scheme": "vendly",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/490325e9-37a3-424d-9247-cad34e99e35e",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }

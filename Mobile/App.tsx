@@ -12,6 +12,16 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { AuthProvider } from './src/contexts/AuthContext';
 import RootNavigator from './src/navigation';
+import * as Sentry from '@sentry/react-native';
+
+// Crash and error reports. Off unless EXPO_PUBLIC_SENTRY_DSN is set for the build.
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  enabled: !!process.env.EXPO_PUBLIC_SENTRY_DSN,
+  environment: process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT ?? (__DEV__ ? 'development' : 'production'),
+  tracesSampleRate: 0.1,
+  sendDefaultPii: false,
+});
 
 // StripeProvider uses a native module unavailable in Expo Go — wrap conditionally
 let StripeProvider: React.ComponentType<any> = ({ children }: { children: React.ReactNode }) => <>{children}</>;
@@ -21,7 +31,7 @@ try {
 
 const STRIPE_PK = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
 
-export default function App() {
+function App() {
   const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
@@ -43,3 +53,5 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+export default Sentry.wrap(App);
