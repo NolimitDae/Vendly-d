@@ -42,6 +42,11 @@ export class AuthService {
           avatar: true,
           address: true,
           type: true,
+          first_name: true,
+          last_name: true,
+          bio: true,
+          // vendors: business details and where their licence check stands
+          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true } },
         },
       });
 
@@ -59,9 +64,19 @@ export class AuthService {
       }
 
       if (user) {
+        const { vendorProfile, ...rest } = user;
         return {
           success: true,
-          data: user,
+          data: {
+            ...rest,
+            vendorProfile: vendorProfile ? { business_name: vendorProfile.business_name, about_me: vendorProfile.about_me, license_status: vendorProfile.license_status } : null,
+            ...(vendorProfile && {
+              business_name: vendorProfile.business_name,
+              about_me: vendorProfile.about_me,
+              license_status: vendorProfile.license_status,
+              license_uploaded: (vendorProfile.license_photo?.length ?? 0) > 0,
+            }),
+          },
         };
       } else {
         return {
@@ -245,6 +260,8 @@ export class AuthService {
       }
       // VendorProfile.license_photo is a String[] in Prisma schema
       data.license_photo = fileNames;
+      // a new document goes back in the review queue (e.g. after a rejection)
+      data.license_status = 'PENDING';
     }
 
     const updatedVendorProfile = await this.prisma.vendorProfile.upsert({

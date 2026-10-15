@@ -20,6 +20,7 @@ import EventShared from '../screens/shared/EventShared';
 import VendorContracts from '../screens/vendor/Contracts';
 import VendorProfile from '../screens/vendor/Profile';
 import Payouts from '../screens/vendor/Payouts';
+import License from '../screens/vendor/License';
 import ChatList from '../screens/customer/ChatList';
 import ChatDetail from '../screens/customer/ChatDetail';
 import EditProfile from '../screens/customer/EditProfile';
@@ -81,6 +82,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="VendorProfile" component={VendorProfile} />
       <ProfileStack.Screen name="VendorContracts" component={VendorContracts} />
       <ProfileStack.Screen name="Payouts" component={Payouts} />
+      <ProfileStack.Screen name="License" component={License} />
       <ProfileStack.Screen name="EditProfile" component={EditProfile} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />

@@ -128,6 +128,7 @@ export type VendorProfileStackParams = {
   ChangePassword: undefined;
   Notifications: undefined;
   Payouts: undefined;
+  License: undefined;
 };
 
 export type VendorMessagesStackParams = {

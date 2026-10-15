@@ -13,7 +13,8 @@ import { apiMessage } from '../auth/SignIn';
 export default function EditProfile({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
-  const [form, setForm] = useState({ first_name: '', last_name: '', address: '' });
+  const [form, setForm] = useState({ first_name: '', last_name: '', address: '', business_name: '', about_me: '' });
+  const isVendor = user?.type === 'VENDOR';
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -22,7 +23,7 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
     // /auth/me carries first/last name and address; fall back to splitting the display name.
     const u = user as any;
     const [first = '', ...rest] = (u?.name ?? '').split(' ');
-    setForm({ first_name: u?.first_name ?? first, last_name: u?.last_name ?? rest.join(' '), address: u?.address ?? '' });
+    setForm({ first_name: u?.first_name ?? first, last_name: u?.last_name ?? rest.join(' '), address: u?.address ?? '', business_name: u?.business_name ?? '', about_me: u?.about_me ?? u?.bio ?? '' });
   }, [user]);
 
   const pickPhoto = async () => {
@@ -39,6 +40,10 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
       body.append('last_name', form.last_name.trim());
       body.append('name', `${form.first_name.trim()} ${form.last_name.trim()}`);
       if (form.address.trim()) body.append('address', form.address.trim());
+      if (isVendor) {
+        body.append('business_name', form.business_name.trim());
+        body.append('about_me', form.about_me.trim());
+      }
       if (photo) body.append('image', { uri: photo.uri, name: photo.fileName ?? 'avatar.jpg', type: photo.mimeType ?? 'image/jpeg' } as unknown as Blob);
       const res = await api.patch('/auth/update', body, { headers: { 'Content-Type': 'multipart/form-data' } });
       if (res.data?.success === false) throw new Error(res.data?.message);
@@ -83,6 +88,17 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
               <TextInput style={ui.input} placeholder="City, State" placeholderTextColor={DARK.muted} value={form.address} onChangeText={set('address')} autoComplete="street-address" />
             </View>
           </View>
+          {isVendor && (
+            <>
+              <Field label="Business Name" placeholder="What customers see on your profile" value={form.business_name} onChangeText={set('business_name')} autoComplete="organization" />
+              <View style={{ gap: 8 }}>
+                <Text style={ui.label}>About your business</Text>
+                <View style={[ui.field, { height: undefined, paddingVertical: 12, alignItems: 'flex-start' }]}>
+                  <TextInput style={[ui.input, { minHeight: 90, textAlignVertical: 'top' }]} placeholder="Your style, experience, what makes you different…" placeholderTextColor={DARK.muted} value={form.about_me} onChangeText={set('about_me')} multiline maxLength={1000} />
+                </View>
+              </View>
+            </>
+          )}
           <GradientButton title="Save Changes" onPress={save} loading={saving} style={{ marginTop: 12 }} />
         </View>
       </ScrollView>

@@ -29,7 +29,7 @@ export default function VendorProfile() {
         { icon: 'person-outline', label: 'Profile', onPress: () => nav.navigate('EditProfile') },
         { icon: 'wallet-outline', label: 'Payments & Payouts', onPress: () => nav.navigate('Payouts') },
         { icon: 'document-text-outline', label: 'Contracts', onPress: () => nav.navigate('VendorContracts') },
-        { icon: 'shield-checkmark-outline', label: 'Verification', note: license === 'APPROVED' ? 'Verified' : license === 'REJECTED' ? 'Rejected' : 'Pending', onPress: () => Alert.alert('Verification', license === 'APPROVED' ? 'Your business is verified.' : 'Vendly reviews your licence after sign-up. Email support if this has been pending for more than two business days.') },
+        { icon: 'shield-checkmark-outline', label: 'Verification', note: license === 'APPROVED' ? 'Verified' : license === 'REJECTED' ? 'Rejected' : u?.license_uploaded ? 'In review' : 'Upload licence', onPress: () => nav.navigate('License') },
       ],
     },
     { title: 'Manage Requests', items: [{ icon: 'notifications-outline', label: 'Notifications', onPress: () => nav.navigate('Notifications') }] },
