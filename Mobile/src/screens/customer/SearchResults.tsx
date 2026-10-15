@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Chip, GradientButton, ScreenHeader } from '../../components/brand';
 import SearchFilters, { activeFilters, type Filters } from '../../components/SearchFilters';
+import { ResultRowSkeleton } from '../../components/Skeleton';
 import { DARK, FONTS } from '../../constants/colors';
 import { useSaved } from '../../hooks/useSaved';
 import { MarketplaceService, vendorName, type Category, type Listing } from '../../services/marketplace.service';
@@ -94,7 +95,11 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
+            <View style={{ gap: 16 }}>
+              <ResultRowSkeleton />
+              <ResultRowSkeleton />
+              <ResultRowSkeleton />
+            </View>
           ) : (
             <View style={s.empty}>
               <Ionicons name="search-outline" size={40} color={DARK.muted} />

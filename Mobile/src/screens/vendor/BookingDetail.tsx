@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { format, parseISO } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../components/brand';
@@ -33,6 +34,7 @@ export default function VendorBookingDetail() {
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [proofPhotos, setProofPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [proofNotes, setProofNotes] = useState('');
+  const [proofStamps, setProofStamps] = useState<string[]>([]);
   const [delivTitle, setDelivTitle] = useState('');
   const [delivMsg, setDelivMsg] = useState('');
   const [delivLink, setDelivLink] = useState('');
@@ -85,14 +87,38 @@ export default function VendorBookingDetail() {
 
   const pickProofPhotos = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.8 });
-    if (!res.canceled) setProofPhotos(res.assets);
+    // added to any photos already taken with the camera
+    if (!res.canceled) setProofPhotos((prev) => [...prev, ...res.assets]);
+  };
+  // Photos taken here (not picked from the library) are stamped with the time and, if allowed,
+  // where they were taken: strong evidence if the customer disputes the job.
+  const takeProofPhoto = async () => {
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cam.granted) return Alert.alert('Camera', 'Allow camera access in Settings to take proof photos.');
+    const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (res.canceled) return;
+    setProofPhotos((prev) => [...prev, ...res.assets]);
+    const takenAt = new Date();
+    let where = '';
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.granted) {
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        where = ` near ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+      }
+    } catch {
+      // no location: the time stamp alone still helps
+    }
+    setProofStamps((prev) => [...prev, `📷 Taken in Vendly ${format(takenAt, 'd MMM yyyy, HH:mm')}${where}`]);
   };
   const uploadProof = () => {
     if (!proofPhotos.length) return Alert.alert('Photos', 'Pick at least one photo of the finished work.');
+    const notes = [proofNotes.trim(), ...proofStamps].filter(Boolean).join('\n');
     run(async () => {
-      await BookingService.uploadProof(bookingId, proofPhotos.map((p) => ({ uri: p.uri, name: p.fileName ?? 'photo.jpg', type: p.mimeType ?? 'image/jpeg' })), proofNotes || undefined);
+      await BookingService.uploadProof(bookingId, proofPhotos.map((p) => ({ uri: p.uri, name: p.fileName ?? 'photo.jpg', type: p.mimeType ?? 'image/jpeg' })), notes || undefined);
       setProofPhotos([]);
       setProofNotes('');
+      setProofStamps([]);
     }, 'Could not upload proof');
   };
   const sendDeliverable = () => {
@@ -250,10 +276,17 @@ export default function VendorBookingDetail() {
                   {proofPhotos.map((p, i) => <Image key={i} source={{ uri: p.uri }} style={s.thumb} />)}
                 </View>
               )}
-              <Pressable style={s.outline} onPress={pickProofPhotos} accessibilityRole="button">
-                <Ionicons name="camera-outline" size={20} color={DARK.accent} />
-                <Text style={s.outlineText}>{proofPhotos.length ? `${proofPhotos.length} photo${proofPhotos.length > 1 ? 's' : ''} selected · change` : 'Add photos'}</Text>
-              </Pressable>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Pressable style={[s.outline, { flex: 1 }]} onPress={takeProofPhoto} accessibilityRole="button">
+                  <Ionicons name="camera-outline" size={20} color={DARK.accent} />
+                  <Text style={s.outlineText}>Take photo</Text>
+                </Pressable>
+                <Pressable style={[s.outline, { flex: 1 }]} onPress={pickProofPhotos} accessibilityRole="button">
+                  <Ionicons name="images-outline" size={20} color={DARK.accent} />
+                  <Text style={s.outlineText}>{proofPhotos.length ? `${proofPhotos.length} selected` : 'From library'}</Text>
+                </Pressable>
+              </View>
+              {proofStamps.length > 0 && <Text style={s.muted}>{proofStamps.join('\n')}</Text>}
               <View style={ui.field}>
                 <TextInput style={ui.input} placeholder="Notes (optional)" placeholderTextColor={DARK.muted} value={proofNotes} onChangeText={setProofNotes} />
               </View>

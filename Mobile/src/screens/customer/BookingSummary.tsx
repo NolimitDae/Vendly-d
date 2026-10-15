@@ -11,6 +11,7 @@ import AddCardSheet from '../../components/AddCardSheet';
 import { CardRow } from './PaymentMethods';
 import { PaymentsService, PLAN_LABELS, type PaymentPlan, type SavedCard } from '../../services/payments.service';
 import { openChatWith } from '../../navigation/openChat';
+import { haptic } from '../../utils/haptics';
 import { BookingService } from '../../services/booking.service';
 import { ContractsService, apiError, deviceTimezone, type BookingFields, type SignaturePayload } from '../../services/contracts.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
@@ -106,6 +107,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
       await BookingService.createBooking({ ...fields, preview_token: preview.preview_token, signature });
       setSigning(false);
       setSent(true);
+      haptic.success();
     } catch (err: any) {
       if (err?.response?.status === 409) {
         Alert.alert('Contract updated', 'The vendor changed the contract. Please review it again.');

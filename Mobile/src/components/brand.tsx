@@ -14,6 +14,7 @@ import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-nati
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { BRAND_GRADIENT, BRAND_GRADIENT_STOPS, DARK, FONTS } from '../constants/colors';
+import { haptic } from '../utils/haptics';
 
 // Same VM monogram as the website (Front-End/components/brand/Logo.tsx), brighter stops for dark backgrounds.
 export function LogoMark({ size = 40, tone = 'dark' }: { size?: number; tone?: 'light' | 'dark' }) {
@@ -73,7 +74,10 @@ export function GradientButton({
   const off = disabled || loading;
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        haptic.tap();
+        onPress();
+      }}
       disabled={off}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!off }}
@@ -179,7 +183,14 @@ export function Chip({
     </>
   );
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: !!active }}>
+    <Pressable
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!active }}
+    >
       {active ? <BrandGradient style={ui.chip}>{inner}</BrandGradient> : <View style={[ui.chip, { backgroundColor: DARK.card }]}>{inner}</View>}
     </Pressable>
   );

@@ -47,7 +47,13 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Vendly stamps proof-of-work photos with where they were taken, so your work is protected if a booking is disputed."
+        }
+      ]
     ],
     "extra": {
       "eas": {

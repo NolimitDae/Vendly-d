@@ -13,6 +13,7 @@ import { PaymentsService, type SavedCard } from '../../services/payments.service
 import { RentalsService, type RentalItem, type RentalQuote } from '../../services/rentals.service';
 import { apiError } from '../../services/contracts.service';
 import { openChatWith } from '../../navigation/openChat';
+import { haptic } from '../../utils/haptics';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 
 const money = (n: number | undefined) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
@@ -75,6 +76,7 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
     try {
       await RentalsService.book({ lines, start_date: startDate, end_date: endDate, venue_address: venue.trim() || undefined, message: notes.trim() || undefined, payment_method_id: card });
       setSent(true);
+      haptic.success();
     } catch (e) {
       Alert.alert('Could not send the request', apiError(e));
       refreshQuote();

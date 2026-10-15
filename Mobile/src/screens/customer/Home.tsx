@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DARK, FONTS } from '../../constants/colors';
 import { BrandGradient } from '../../components/brand';
+import { ListingCardSkeleton } from '../../components/Skeleton';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 
@@ -206,7 +207,10 @@ export default function CustomerHome() {
           </Pressable>
         </View>
         {loading ? (
-          <ActivityIndicator color={DARK.accent} style={{ marginVertical: 32 }} />
+          <View style={{ flexDirection: 'row', gap: 12, marginRight: -20, overflow: 'hidden' }}>
+            <ListingCardSkeleton />
+            <ListingCardSkeleton />
+          </View>
         ) : listings.length === 0 ? (
           <View style={s.empty}>
             <Ionicons name="storefront-outline" size={40} color={DARK.muted} />
