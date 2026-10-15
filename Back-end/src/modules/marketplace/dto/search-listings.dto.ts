@@ -51,7 +51,7 @@ export class SearchListingsDto {
   @Type(() => Number)
   limit?: number;
 
-  @ApiPropertyOptional({ enum: ['price_asc', 'price_desc', 'newest', 'rating'] })
+  @ApiPropertyOptional({ enum: ['price_asc', 'price_desc', 'newest', 'rating', 'distance'] })
   @IsOptional()
   @IsString()
   sort?: string;
@@ -60,6 +60,27 @@ export class SearchListingsDto {
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date must be YYYY-MM-DD' })
   date?: string;
+
+  @ApiPropertyOptional({ example: 29.76, description: 'Search near this point (with near_lng)' })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(-90)
+  @Max(90)
+  near_lat?: number;
+
+  @ApiPropertyOptional({ example: -95.37 })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(-180)
+  @Max(180)
+  near_lng?: number;
+
+  @ApiPropertyOptional({ example: 25, description: 'Radius in miles (default 25)' })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(500)
+  radius_miles?: number;
 
   @ApiPropertyOptional({ example: 4, description: 'Minimum average review rating (1-5)' })
   @IsOptional()

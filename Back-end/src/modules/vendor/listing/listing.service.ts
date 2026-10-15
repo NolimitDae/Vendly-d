@@ -3,9 +3,11 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { StringHelper } from 'src/common/helper/string.helper';
 import appConfig from 'src/config/app.config';
@@ -14,7 +16,10 @@ import { UpdateVendorListingDto } from './dto/update-listing.dto';
 
 @Injectable()
 export class VendorListingService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private geocoder?: GeocodeService,
+  ) {}
 
   async create(
     vendorId: string,
@@ -54,6 +59,9 @@ export class VendorListingService {
         sub_category: { select: { id: true, name: true } },
       },
     });
+
+    // map position for "near me" search, filled in the background
+    if (listing.location) void this.geocoder?.listing(listing.id);
 
     return { success: true, data: this.formatListing(listing) };
   }
@@ -136,6 +144,13 @@ export class VendorListingService {
       throw new ForbiddenException('Access denied');
 
     const updateData: any = { ...dto };
+    const moved = dto.location !== undefined && (dto.location || null) !== (listing.location || null);
+    if (moved) {
+      // the old coordinates no longer apply; re-geocoded below (or by the hourly backfill)
+      updateData.lat = null;
+      updateData.lng = null;
+      updateData.geocoded_at = null;
+    }
 
     if (images?.length) {
       // delete old images
@@ -159,6 +174,8 @@ export class VendorListingService {
         sub_category: { select: { id: true, name: true } },
       },
     });
+
+    if (moved && updated.location) void this.geocoder?.listing(id);
 
     return { success: true, data: this.formatListing(updated) };
   }

@@ -746,6 +746,11 @@ model VendorListing {
   images        String[]
   tags          String[]
   location      String?   @db.VarChar(255)
+  // map position of location (geocoded on save) for "near me" search
+  lat           Float?
+  lng           Float?
+  // when geocoding last ran for this location; null = still to do
+  geocoded_at   DateTime?
   availability  String?   @db.Text
   delivery_time Int?
 
@@ -764,6 +769,7 @@ model VendorListing {
   contractAssignments VendorContractListing[]
   quotes         Quote[]
 
+  @@index([lat, lng])
   @@map("vendor_listings")
 }
 

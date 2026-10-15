@@ -171,7 +171,7 @@ export function ResultCard({ item, saved, onSave, onPress }: { item: Listing; sa
         {!!item.location && (
           <View style={[s.meta, { flexShrink: 1 }]}>
             <Ionicons name="location-outline" size={16} color="#fff" />
-            <Text style={s.metaText} numberOfLines={1}>{item.location}</Text>
+            <Text style={s.metaText} numberOfLines={1}>{item.location}{item.distance_miles != null ? ` · ${item.distance_miles} mi` : ''}</Text>
           </View>
         )}
       </View>

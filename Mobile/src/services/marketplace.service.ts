@@ -8,6 +8,8 @@ export interface Listing {
   price_unit: string;
   images: string[];
   location?: string | null;
+  /** set when searching near a point */
+  distance_miles?: number | null;
   delivery_time?: number | null;
   tags?: string[];
   avg_rating?: number | null;
@@ -52,7 +54,10 @@ export interface SearchParams {
   location?: string;
   min_price?: number;
   max_price?: number;
-  sort?: 'rating' | 'price_asc' | 'price_desc' | 'newest';
+  sort?: 'rating' | 'price_asc' | 'price_desc' | 'newest' | 'distance';
+  near_lat?: number;
+  near_lng?: number;
+  radius_miles?: number;
   /** yyyy-MM-dd: leave out packages the vendor blocked that day */
   date?: string;
   min_rating?: number;

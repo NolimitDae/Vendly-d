@@ -113,6 +113,20 @@ describe('MarketplaceService', () => {
       });
     });
 
+    it('finds packages near a point, nearest first, with their distance', async () => {
+      const near = { ...mockListing, id: 'near', lat: 29.78, lng: -95.4 };
+      const far = { ...mockListing, id: 'far', lat: 29.79, lng: -95.82 };
+      const unknown = { ...mockListing, id: 'unknown', lat: null, lng: null };
+      mockPrisma.vendorListing.count.mockResolvedValue(3);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([far, unknown, near]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      const res = await service.searchListings({ near_lat: 29.76, near_lng: -95.37, radius_miles: 30, page: 1, limit: 12 });
+      expect(res.data.map((l: any) => l.id)).toEqual(['near', 'far']);
+      expect(res.data[0].distance_miles).toBeLessThan(3);
+      expect(res.meta.total).toBe(2);
+      expect(mockPrisma.vendorListing.count).toHaveBeenCalledWith({ where: expect.objectContaining({ lat: expect.any(Object), lng: expect.any(Object) }) });
+    });
+
     it('filters by minimum rating and counts only the matches', async () => {
       const a = { ...mockListing, id: 'a' };
       const b = { ...mockListing, id: 'b' };

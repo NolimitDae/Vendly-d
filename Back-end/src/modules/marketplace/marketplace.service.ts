@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { boundingBox, milesBetween } from 'src/modules/geo/geo';
 import { ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
@@ -42,9 +43,18 @@ export class MarketplaceService {
       where.blockedDates = { none: { start_date: { lte: day }, end_date: { gte: day } } };
     }
 
+    // near me: a cheap box in the database, then the exact distance below
+    const near = query.near_lat !== undefined && query.near_lng !== undefined ? { lat: Number(query.near_lat), lng: Number(query.near_lng) } : null;
+    const radius = Number(query.radius_miles ?? 25);
+    if (near) {
+      const box = boundingBox(near, radius);
+      where.lat = { gte: box.minLat, lte: box.maxLat };
+      where.lng = { gte: box.minLng, lte: box.maxLng };
+    }
+
     const sortByRating = query.sort === 'rating';
-    // ratings are averaged from reviews, so rating sort / filter is done after loading
-    const inMemory = sortByRating || query.min_rating !== undefined;
+    // ratings come from reviews and distances from coordinates, so those filters / sorts run after loading
+    const inMemory = sortByRating || query.min_rating !== undefined || !!near;
 
     let orderBy: any = { created_at: 'desc' };
     if (query.sort === 'price_asc') orderBy = { price: 'asc' };
@@ -79,14 +89,15 @@ export class MarketplaceService {
     let formattedListings = listings.map((l) => ({
       ...this.formatListingCard(l),
       avg_rating: avgRatings[l.id] ?? null,
+      distance_miles: near && l.lat != null && l.lng != null ? Math.round(milesBetween(near, { lat: l.lat, lng: l.lng }) * 10) / 10 : null,
     }));
 
     let matched = total;
-    if (query.min_rating !== undefined) {
-      formattedListings = formattedListings.filter((l) => (l.avg_rating ?? 0) >= query.min_rating!);
-      matched = formattedListings.length;
-    }
+    if (near) formattedListings = formattedListings.filter((l) => l.distance_miles != null && l.distance_miles <= radius);
+    if (query.min_rating !== undefined) formattedListings = formattedListings.filter((l) => (l.avg_rating ?? 0) >= query.min_rating!);
+    if (inMemory) matched = formattedListings.length;
     if (sortByRating) formattedListings.sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
+    else if (near && (query.sort === 'distance' || !query.sort)) formattedListings.sort((a, b) => (a.distance_miles ?? 1e9) - (b.distance_miles ?? 1e9));
     if (inMemory) formattedListings = formattedListings.slice(skip, skip + limit);
 
     return {
