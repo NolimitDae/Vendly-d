@@ -1,3 +1,5 @@
+// must be first: error tracking hooks into modules loaded after it
+import './instrument';
 // external imports
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';

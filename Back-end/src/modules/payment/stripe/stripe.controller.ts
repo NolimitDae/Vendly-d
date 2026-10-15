@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { Request } from 'express';
+import * as Sentry from '@sentry/nestjs';
 import { TransactionRepository } from '../../../common/repository/transaction/transaction.repository';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Stripe } from 'stripe';
@@ -115,6 +116,8 @@ export class StripeController {
       if ((error as any)?.type === 'StripeSignatureVerificationError') {
         throw new BadRequestException('Invalid Stripe signature');
       }
+      // a real processing failure (not a bad signature) means money may be out of sync: report it
+      Sentry.captureException(error, { tags: { job: 'stripe-webhook' } });
       throw new InternalServerErrorException('Webhook processing failed');
     }
   }

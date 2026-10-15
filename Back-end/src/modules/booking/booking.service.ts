@@ -20,6 +20,7 @@ import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 import { settleCancellation, Settlement } from './cancellation';
 import { PaymentsService } from 'src/modules/payments/payments.service';
+import { track } from 'src/common/analytics';
 
 /** What the booking is for: the package title, or the rented items. */
 function titleOf(booking: any): string | undefined {
@@ -49,6 +50,7 @@ export class BookingService {
   async create(customerId: string, dto: SignedBookingRequestDto, meta: RequestMeta = {}) {
     // validates the listing, the signed contract and creates booking + contract atomically
     const created = await this.contracts.createSignedBooking(customerId, dto, meta);
+    track('booking_requested', customerId, { booking_id: created.id, listing_id: dto.listing_id, with_quote: !!dto.quote_id, for_event: !!dto.event_id });
     const booking = await this.prisma.booking.findUniqueOrThrow({
       where: { id: created.id },
       include: this.bookingIncludes(),
@@ -96,6 +98,7 @@ export class BookingService {
     for (const e of events) await this.chatExtras.syncEventChat(e.event_id).catch((err) => console.error(`Event chat for ${e.event_id} failed:`, err));
     // and it gets its own line in the event budget
     if (events.length) await this.eventTools.syncBookingBudget(bookingId).catch((err) => console.error(`Event budget for ${bookingId} failed:`, err));
+    track('booking_accepted', vendorId, { booking_id: bookingId, amount: Number(booking.amount ?? 0) });
     const updated = await this.getBookingOrFail(bookingId);
 
     const clientUrl = appConfig().app.client_app_url;

@@ -4,6 +4,7 @@ import { UserRepository } from 'src/common/repository/user/user.repository';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthService } from '../auth.service';
 import { SocialIdentity, SocialTokenError, verifyApple, verifyGoogle } from './social-tokens';
+import { track } from 'src/common/analytics';
 
 export type SocialRole = 'CLIENT' | 'VENDOR' | 'EVENT_PLANNER';
 const ROLES: SocialRole[] = ['CLIENT', 'VENDOR', 'EVENT_PLANNER'];
@@ -59,6 +60,7 @@ export class SocialAuthService {
         });
         if (!created?.data?.id) throw new BadRequestException(created?.message ?? 'Could not create your account');
         userId = created.data.id;
+        track('signup', userId, { type: dto.role, method: id.provider });
       }
       await this.prisma.account.create({ data: { user_id: userId!, type: 'oauth', provider: id.provider, provider_account_id: id.sub } });
     }

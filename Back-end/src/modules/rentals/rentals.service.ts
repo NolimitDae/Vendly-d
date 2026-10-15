@@ -10,6 +10,7 @@ import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateRentalItemDto, RentalBookDto, RentalQuoteDto, RentalReturnDto, UpdateRentalItemDto } from './dto/rentals.dto';
 import { availabilityCalendar, availableQuantity, DAY_MS, parseDay, priceRental, rangeProblem, rentalDays, ReservationLike } from './rental-availability';
+import { track } from 'src/common/analytics';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Bookings in these states no longer hold stock. */
@@ -296,6 +297,7 @@ export class RentalsService {
     });
 
     const title = rentalTitle(created.rental_reservations);
+    track('rental_requested', customerId, { booking_id: created.id, items: created.rental_reservations.length, amount: Number(created.amount) });
     const clientUrl = appConfig().app.client_app_url;
     if (created.vendor.email) {
       await this.mail

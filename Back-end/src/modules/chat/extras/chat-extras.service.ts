@@ -4,6 +4,7 @@ import { MessageGateway } from 'src/modules/chat/message/message.gateway';
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { formatMessage, formatQuote, messageInclude } from './format';
+import { track } from 'src/common/analytics';
 
 const DAY = 24 * 3600 * 1000;
 /** Bookings that put a vendor in the event chat. */
@@ -124,6 +125,7 @@ export class ChatExtrasService {
     });
     await this.prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
     const formatted = formatMessage(msg);
+    track('quote_sent', vendorId, { quote_id: quote.id, amount, group: conv.is_group });
     this.gateway.server?.to(conversationId).emit('message', { from: vendorId, data: formatted });
     void this.push.sendToUser(customerId, { title: 'New quote', body: `${quote.title} · $${amount.toFixed(2)}`, data: { type: 'chat', conversationId } });
     return { success: true, data: formatted };

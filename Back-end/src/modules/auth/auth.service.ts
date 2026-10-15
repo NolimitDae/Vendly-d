@@ -16,6 +16,7 @@ import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserType } from 'prisma/generated/client';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { track } from 'src/common/analytics';
 
 @Injectable()
 export class AuthService {
@@ -150,6 +151,7 @@ export class AuthService {
       }
 
       const userId = user.data.id;
+      track('signup', userId, { type, method: 'email' });
 
       // create stripe customer account
       const stripeCustomer = await StripePayment.createCustomer({

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from 'prisma/generated/client';
 import { Response } from 'express';
+import * as Sentry from '@sentry/nestjs';
 
 @Catch(
   Prisma.PrismaClientKnownRequestError,
@@ -125,6 +126,8 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       };
     }
 
+    // database errors we did not expect (not bad input) go to error tracking
+    if (status >= 500) Sentry.captureException(exception);
     response.status(status).json(errorResponse);
   }
 }

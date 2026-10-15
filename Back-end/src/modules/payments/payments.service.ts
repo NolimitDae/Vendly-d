@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import * as Sentry from '@sentry/nestjs';
 import { BookingStatus, InstallmentStatus, PaymentPlan } from 'prisma/generated/enums';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import appConfig from 'src/config/app.config';
@@ -8,6 +9,7 @@ import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { currentFees } from 'src/modules/platform/platform-settings.service';
 import { AUTO_RELEASE_DAYS, buildSchedule, MAX_ATTEMPTS, PROOF_RELEASE_HOURS, RETRY_INTERVAL_MS } from './payment-schedule';
+import { track } from 'src/common/analytics';
 
 const HOUR = 3600 * 1000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -182,6 +184,7 @@ export class PaymentsService {
         description: `${b.listing?.title ?? 'Vendly booking'} — ${inst.label}`,
       });
       if (pi.status === 'succeeded' || pi.status === 'requires_capture') {
+        track(pi.status === 'requires_capture' ? 'payment_authorized' : 'payment_succeeded', b.customer_id, { booking_id: b.id, amount: Number(inst.amount), label: inst.label });
         return this.markPaid(inst.id, pi.id, pi.status === 'requires_capture');
       }
       if (NEEDS_CUSTOMER.has(pi.status)) {
@@ -230,6 +233,7 @@ export class PaymentsService {
     needsCustomer = false,
   ) {
     const exhausted = attempt >= MAX_ATTEMPTS || needsCustomer;
+    track('payment_failed', b.customer_id, { booking_id: b.id, attempt, final: exhausted, needs_customer: needsCustomer });
     const updated = await this.prisma.bookingInstallment.update({
       where: { id: installmentId },
       data: {
@@ -278,7 +282,11 @@ export class PaymentsService {
       select: { id: true },
       take: 100,
     });
-    for (const d of due) await this.chargeInstallment(d.id).catch((e) => this.logger.error(`due charge ${d.id}`, e));
+    for (const d of due)
+      await this.chargeInstallment(d.id).catch((e) => {
+        this.logger.error(`due charge ${d.id}`, e);
+        Sentry.captureException(e, { tags: { job: 'due-charges' }, extra: { installment_id: d.id } });
+      });
     return due.length;
   }
 
@@ -332,6 +340,7 @@ export class PaymentsService {
     if (b.dispute_opened_at) throw new BadRequestException('A dispute is already open.');
     if (!([BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED] as BookingStatus[]).includes(b.status)) throw new BadRequestException('You can dispute a booking once the service has started.');
     await this.prisma.booking.update({ where: { id: bookingId }, data: { dispute_opened_at: new Date(), dispute_reason: reason } });
+    track('dispute_opened', customerId, { booking_id: bookingId });
     return { success: true };
   }
 
@@ -343,7 +352,11 @@ export class PaymentsService {
       select: { id: true },
       take: 100,
     });
-    for (const b of due) await this.releaseBooking(b.id).catch((e) => this.logger.error(`release ${b.id}`, e));
+    for (const b of due)
+      await this.releaseBooking(b.id).catch((e) => {
+        this.logger.error(`release ${b.id}`, e);
+        Sentry.captureException(e, { tags: { job: 'releases' }, extra: { booking_id: b.id } });
+      });
     return due.length;
   }
 
@@ -374,6 +387,7 @@ export class PaymentsService {
       data: { released_at: new Date(), payout_credited_at: new Date(), commission_amount: commission },
     });
     if (claimed.count !== 1) return null;
+    track('payout_released', b.vendor_id, { booking_id: bookingId, share, commission });
     const currency = b.currency ?? 'usd';
     if (commission > 0) {
       await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'vendly_commission', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount: commission, currency } });
@@ -564,6 +578,7 @@ export class PaymentsService {
     for (const who of [b.customer, b.vendor]) {
       if (who?.email) await this.mail.sendBookingNotification({ to: who.email, recipientName: who.name ?? '', subject: `Dispute resolved — ${title}`, message, status: 'DISPUTE_RESOLVED', listingTitle: title }).catch(() => null);
     }
+    track('dispute_resolved', adminId, { booking_id: bookingId, action: input.action, refunded });
     return { success: true, data: { refunded, action: input.action } };
   }
 
