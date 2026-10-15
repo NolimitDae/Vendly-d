@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { BookingService, type Booking } from '../../services/booking.service';
 import { bookingWhen } from '../customer/Bookings';
+import { useFeature } from '../../hooks/useFeature';
 
 type Nav = NativeStackNavigationProp<any>;
 
@@ -53,10 +54,11 @@ export default function VendorDashboard() {
     { label: 'Packages', value: String(listings.filter((l) => l.status === 'ACTIVE').length) },
   ];
 
+  const rentalsOn = useFeature('rentals');
   const actions: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
     { icon: 'add-circle-outline', label: 'Add package', onPress: () => nav.navigate('ListingForm') },
     { icon: 'albums-outline', label: 'My packages', onPress: () => nav.navigate('VendorListings') },
-    { icon: 'cube-outline', label: 'Rental stock', onPress: () => nav.navigate('RentalInventory') },
+    ...(rentalsOn ? [{ icon: 'cube-outline' as const, label: 'Rental stock', onPress: () => nav.navigate('RentalInventory') }] : []),
     { icon: 'calendar-outline', label: 'Bookings', onPress: () => nav.navigate('BookingsTab') },
     { icon: 'wallet-outline', label: 'Payouts', onPress: () => nav.navigate('ProfileTab', { screen: 'Payouts', initial: false }) },
     { icon: 'document-text-outline', label: 'Contracts', onPress: () => nav.navigate('ProfileTab', { screen: 'VendorContracts', initial: false }) },

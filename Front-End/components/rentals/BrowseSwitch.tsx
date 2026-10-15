@@ -1,9 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { Package, Store } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFeature } from "@/hooks/useFeature";
 
 /** Services ↔ Rentals switch shown at the top of both browse pages. */
 export default function BrowseSwitch({ active }: { active: "services" | "rentals" }) {
+  // Admin can switch rentals off; the switch then disappears from the services page
+  const rentalsOn = useFeature("rentals");
+  if (!rentalsOn && active === "services") return null;
   const tab = (on: boolean) =>
     cn(
       "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition",

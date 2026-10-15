@@ -18,6 +18,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DARK, FONTS } from '../../constants/colors';
 import { BrandGradient } from '../../components/brand';
 import { ListingCardSkeleton } from '../../components/Skeleton';
+import { useFeature } from '../../hooks/useFeature';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 
@@ -63,6 +64,7 @@ export default function CustomerHome() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const rentalsOn = useFeature('rentals');
 
   useEffect(() => {
     api
@@ -186,8 +188,8 @@ export default function CustomerHome() {
         </View>
       )}
 
-      {/* Rentals */}
-      <Pressable style={s.rentals} onPress={() => nav.navigate('Rentals')} accessibilityRole="button" accessibilityLabel="Browse rentals">
+      {/* Rentals (Admin can switch the feature off) */}
+      {rentalsOn && <Pressable style={s.rentals} onPress={() => nav.navigate('Rentals')} accessibilityRole="button" accessibilityLabel="Browse rentals">
         <View style={s.rentalsIcon}>
           <Ionicons name="cube-outline" size={26} color={DARK.accent} />
         </View>
@@ -196,7 +198,7 @@ export default function CustomerHome() {
           <Text style={s.rentalsBody}>Chairs, arches, lighting and AV by the day, with live stock</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={DARK.muted} />
-      </Pressable>
+      </Pressable>}
 
       {/* Services */}
       <View style={s.section}>

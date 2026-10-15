@@ -145,8 +145,9 @@ export class PlatformSettingsService implements OnModuleInit {
   }
 
   /** Public: the keys of enabled flags, for apps to switch features on. */
+  /** Enabled keys in data; switched-off keys in disabled (so apps can treat an unknown flag as on). */
   async enabledFlags() {
-    const rows = await this.prisma.featureFlag.findMany({ where: { enabled: true }, select: { key: true } });
-    return { success: true, data: rows.map((r) => r.key) };
+    const rows = await this.prisma.featureFlag.findMany({ select: { key: true, enabled: true } });
+    return { success: true, data: rows.filter((r) => r.enabled).map((r) => r.key), disabled: rows.filter((r) => !r.enabled).map((r) => r.key) };
   }
 }

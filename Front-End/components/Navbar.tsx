@@ -13,6 +13,7 @@ import { FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar,
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { useFeature } from "@/hooks/useFeature";
 import { CookieHelper } from "@/helper/cookie.helper";
 import { AuthService } from "@/service/auth/auth.service";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -56,6 +57,7 @@ export default function Navbar() {
   const [hash, setHash] = useState("");
   const [user, setUser] = useState<UserInfo | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const rentalsOn = useFeature("rentals");
   const [bellOpen, setBellOpen] = useState(false);
   const { notifications, unread, markAsRead, markAllAsRead } = useNotifications();
 
@@ -303,14 +305,14 @@ export default function Navbar() {
                         <BookOpen className="w-4 h-4" />
                         My Bookings
                       </Link>
-                      <Link
+                      {rentalsOn && <Link
                         href="/vendor/rentals"
                         onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                       >
                         <Package className="w-4 h-4" />
                         Rental Stock
-                      </Link>
+                      </Link>}
                       <Link
                         href="/vendor/earnings"
                         onClick={() => setUserMenuOpen(false)}
