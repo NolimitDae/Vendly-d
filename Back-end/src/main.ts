@@ -6,7 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { join } from 'path';
+import { join, resolve } from 'path';
 // internal imports
 import { AppModule } from './app.module';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
@@ -58,8 +58,9 @@ async function bootstrap() {
     }),
   );
 
-  // only public/storage is served; public/private holds contracts and signatures
-  app.useStaticAssets(join(__dirname, "..", "..", "public", "storage"), {
+  // only public/storage is served; public/private holds contracts and signatures.
+  // STORAGE_DIR moves uploads onto a persistent volume (Railway wipes the container disk on deploy).
+  app.useStaticAssets(process.env.STORAGE_DIR ? resolve(process.env.STORAGE_DIR) : join(__dirname, "..", "..", "public", "storage"), {
     index: false,
     prefix: "/public/storage",
   });

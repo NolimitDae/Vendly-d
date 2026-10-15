@@ -108,7 +108,8 @@ export default () => ({
    * Storage directory
    */
   storageUrl: {
-    rootUrl: './public/storage',
+    // a persistent volume path in production (see STORAGE_DIR in .env.example)
+    rootUrl: process.env.STORAGE_DIR ?? './public/storage',
     rootUrlPublic: '/public/storage',
     // storage directory
     package: '/package',
