@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 
 export class SearchListingsDto {
   @ApiPropertyOptional()
@@ -55,4 +55,16 @@ export class SearchListingsDto {
   @IsOptional()
   @IsString()
   sort?: string;
+
+  @ApiPropertyOptional({ example: '2026-11-14', description: 'Only packages not blocked by the vendor on this day' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date must be YYYY-MM-DD' })
+  date?: string;
+
+  @ApiPropertyOptional({ example: 4, description: 'Minimum average review rating (1-5)' })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(5)
+  min_rating?: number;
 }

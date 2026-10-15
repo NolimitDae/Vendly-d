@@ -101,6 +101,30 @@ describe('MarketplaceService', () => {
         }),
       );
     });
+
+    it('leaves out packages the vendor blocked on the chosen date', async () => {
+      mockPrisma.vendorListing.count.mockResolvedValue(0);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      await service.searchListings({ date: '2026-11-14', page: 1 });
+      const day = new Date('2026-11-14T00:00:00.000Z');
+      expect(mockPrisma.vendorListing.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({ blockedDates: { none: { start_date: { lte: day }, end_date: { gte: day } } } }),
+      });
+    });
+
+    it('filters by minimum rating and counts only the matches', async () => {
+      const a = { ...mockListing, id: 'a' };
+      const b = { ...mockListing, id: 'b' };
+      mockPrisma.vendorListing.count.mockResolvedValue(2);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([a, b]);
+      mockPrisma.review.groupBy.mockResolvedValue([{ listing_id: 'a', _avg: { rating: 4.6 } }, { listing_id: 'b', _avg: { rating: 3.2 } }]);
+      const res = await service.searchListings({ min_rating: 4, page: 1, limit: 12 });
+      expect(res.data.map((l: any) => l.id)).toEqual(['a']);
+      expect(res.meta.total).toBe(1);
+      // ratings come from reviews, so everything matching is loaded before paging
+      expect(mockPrisma.vendorListing.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0, take: undefined }));
+    });
   });
 
   describe('getListing', () => {

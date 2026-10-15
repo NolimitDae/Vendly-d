@@ -53,6 +53,9 @@ export interface SearchParams {
   min_price?: number;
   max_price?: number;
   sort?: 'rating' | 'price_asc' | 'price_desc' | 'newest';
+  /** yyyy-MM-dd: leave out packages the vendor blocked that day */
+  date?: string;
+  min_rating?: number;
   page?: number;
   limit?: number;
 }

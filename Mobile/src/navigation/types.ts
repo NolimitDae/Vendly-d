@@ -53,7 +53,7 @@ export type CustomerHomeStackParams = {
   CustomerHome: undefined;
   Notifications: undefined;
   FindVendors: { eventId?: string } | undefined;
-  SearchResults: { q?: string; categoryId?: string; categoryName?: string; location?: string; eventId?: string };
+  SearchResults: { q?: string; categoryId?: string; categoryName?: string; location?: string; eventId?: string; filters?: import('../components/SearchFilters').Filters };
   ListingDetail: { listingId: string; eventId?: string };
   VendorProfile: { vendorId: string };
   SelectDate: { listing: ListingSummary };

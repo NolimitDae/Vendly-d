@@ -6,6 +6,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { MarketplaceService, type Category } from '../../services/marketplace.service';
+import SearchFilters, { type Filters } from '../../components/SearchFilters';
+import { useAuth } from '../../context/AuthContext';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 
 export default function FindVendors({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'FindVendors'>) {
@@ -14,7 +16,10 @@ export default function FindVendors({ navigation, route }: NativeStackScreenProp
   const [categories, setCategories] = useState<Category[]>([]);
   const [q, setQ] = useState('');
   const [category, setCategory] = useState<Category | null>(null);
-  const [location, setLocation] = useState('');
+  // start from the location on their profile; they can change it for this search
+  const { user } = useAuth();
+  const [location, setLocation] = useState(((user as any)?.address as string | undefined) ?? '');
+  const [filters, setFilters] = useState<Filters>({});
 
   useEffect(() => {
     MarketplaceService.getCategories().then((r) => setCategories(r.data?.data ?? [])).catch(() => {});
@@ -27,6 +32,7 @@ export default function FindVendors({ navigation, route }: NativeStackScreenProp
       categoryName: category?.name,
       location: location.trim() || undefined,
       eventId,
+      filters,
     });
 
   return (
@@ -78,6 +84,7 @@ export default function FindVendors({ navigation, route }: NativeStackScreenProp
               />
             </View>
           </View>
+          <SearchFilters value={filters} onChange={setFilters} />
           <GradientButton title="Find Vendors" onPress={find} style={{ marginTop: 12 }} />
         </View>
       </ScrollView>

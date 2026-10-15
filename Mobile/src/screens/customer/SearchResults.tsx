@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Chip, ScreenHeader } from '../../components/brand';
+import { Chip, GradientButton, ScreenHeader } from '../../components/brand';
+import SearchFilters, { activeFilters, type Filters } from '../../components/SearchFilters';
 import { DARK, FONTS } from '../../constants/colors';
 import { useSaved } from '../../hooks/useSaved';
 import { MarketplaceService, vendorName, type Category, type Listing } from '../../services/marketplace.service';
@@ -18,7 +19,10 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
   const [sub, setSub] = useState('');
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<Filters>(route.params.filters ?? {});
+  const [sheet, setSheet] = useState(false);
   const saved = useSaved();
+  const nFilters = activeFilters(filters);
 
   useEffect(() => {
     if (!categoryId) return;
@@ -35,6 +39,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
         category_id: categoryId,
         sub_category_id: sub || undefined,
         location,
+        ...filters,
         limit: 30,
       });
       setListings(res.data?.data ?? []);
@@ -43,7 +48,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
     } finally {
       setLoading(false);
     }
-  }, [query, categoryId, sub, location]);
+  }, [query, categoryId, sub, location, filters]);
 
   useEffect(() => {
     load();
@@ -70,6 +75,10 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
                 onSubmitEditing={() => setQuery(q.trim())}
                 returnKeyType="search"
               />
+              <Pressable onPress={() => setSheet(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Filters${nFilters ? `, ${nFilters} on` : ''}`}>
+                <Ionicons name="options-outline" size={22} color="#fff" />
+                {nFilters > 0 && <View style={s.filterDot}><Text style={s.filterDotText}>{nFilters}</Text></View>}
+              </Pressable>
             </View>
             {subs && subs.length > 0 && (
               <FlatList
@@ -89,7 +98,10 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
           ) : (
             <View style={s.empty}>
               <Ionicons name="search-outline" size={40} color={DARK.muted} />
-              <Text style={s.emptyText}>No services match yet</Text>
+              <Text style={s.emptyText}>{nFilters ? 'Nothing matches these filters' : 'No services match yet'}</Text>
+              {nFilters > 0 && (
+                <Pressable onPress={() => setFilters({ sort: filters.sort })} accessibilityRole="button"><Text style={s.clear}>Clear filters</Text></Pressable>
+              )}
             </View>
           )
         }
@@ -102,6 +114,20 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
           />
         )}
       />
+      <Modal visible={sheet} transparent animationType="slide" onRequestClose={() => setSheet(false)}>
+        <View style={s.overlay}>
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={s.sheetHead}>
+              <Text style={s.sheetTitle}>Filters</Text>
+              <Pressable onPress={() => setFilters({})} hitSlop={8} accessibilityRole="button"><Text style={s.clear}>Reset</Text></Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingBottom: 12 }}>
+              <SearchFilters value={filters} onChange={setFilters} />
+            </ScrollView>
+            <GradientButton title="Show results" onPress={() => setSheet(false)} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -161,6 +187,13 @@ export function ResultCard({ item, saved, onSave, onPress }: { item: Listing; sa
 }
 
 const s = StyleSheet.create({
+  filterDot: { position: 'absolute', top: -6, right: -8, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: DARK.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  filterDotText: { color: DARK.bg, fontSize: 10, fontFamily: FONTS.bold },
+  clear: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: { maxHeight: '88%', backgroundColor: DARK.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 16 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetTitle: { color: '#fff', fontSize: 20, fontFamily: FONTS.semibold },
   root: { flex: 1, backgroundColor: DARK.bg },
   search: {
     flexDirection: 'row',

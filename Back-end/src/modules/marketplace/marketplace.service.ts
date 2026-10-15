@@ -36,7 +36,15 @@ export class MarketplaceService {
       if (query.max_price !== undefined) where.price.lte = query.max_price;
     }
 
+    // packages the vendor has blocked on that day are left out
+    if (query.date) {
+      const day = new Date(query.date + 'T00:00:00.000Z');
+      where.blockedDates = { none: { start_date: { lte: day }, end_date: { gte: day } } };
+    }
+
     const sortByRating = query.sort === 'rating';
+    // ratings are averaged from reviews, so rating sort / filter is done after loading
+    const inMemory = sortByRating || query.min_rating !== undefined;
 
     let orderBy: any = { created_at: 'desc' };
     if (query.sort === 'price_asc') orderBy = { price: 'asc' };
@@ -47,8 +55,8 @@ export class MarketplaceService {
       this.prisma.vendorListing.count({ where }),
       this.prisma.vendorListing.findMany({
         where,
-        skip: sortByRating ? 0 : skip,
-        take: sortByRating ? undefined : limit,
+        skip: inMemory ? 0 : skip,
+        take: inMemory ? undefined : limit,
         orderBy,
         include: {
           category: { select: { id: true, name: true, default_payment_plan: true } },
@@ -73,15 +81,18 @@ export class MarketplaceService {
       avg_rating: avgRatings[l.id] ?? null,
     }));
 
-    if (sortByRating) {
-      formattedListings.sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
-      formattedListings = formattedListings.slice(skip, skip + limit);
+    let matched = total;
+    if (query.min_rating !== undefined) {
+      formattedListings = formattedListings.filter((l) => (l.avg_rating ?? 0) >= query.min_rating!);
+      matched = formattedListings.length;
     }
+    if (sortByRating) formattedListings.sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
+    if (inMemory) formattedListings = formattedListings.slice(skip, skip + limit);
 
     return {
       success: true,
       data: formattedListings,
-      meta: { total, page, limit, last_page: Math.ceil(total / limit) },
+      meta: { total: matched, page, limit, last_page: Math.ceil(matched / limit) },
     };
   }
 
