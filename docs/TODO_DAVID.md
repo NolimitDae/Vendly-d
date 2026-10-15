@@ -11,11 +11,25 @@ Where things live:
 
 ## 1. Do these first (things are broken or at risk without them)
 
-- [ ] **Keep uploaded files from disappearing.** Right now photos, avatars, proof photos, signed contracts and
-      event files are saved on the server's own disk, which Railway wipes on every deploy.
-  1. Railway → backend service → **Settings → Volumes → Add volume**, mount path `/data`.
-  2. Set on the backend: `STORAGE_DIR=/data/storage` and `PRIVATE_STORAGE_DIR=/data/private`.
-  3. Redeploy. (Anything uploaded before this is already gone; vendors may need to re-add listing photos.)
+- [ ] **Move uploads to Cloudflare R2** so photos, contracts and event files stop disappearing on deploy
+      (and the backend can later run on more than one server). No Railway volume needed.
+  1. Cloudflare dashboard → **R2** → create two buckets: `vendly-public` and `vendly-private`.
+  2. `vendly-public` → Settings → **Public access** → enable the **r2.dev** URL (later: connect a custom domain instead).
+     Copy that URL. Leave `vendly-private` private.
+  3. R2 → **Manage API tokens** → Create token → **Object Read & Write**, limited to those two buckets.
+     Copy the **Access Key ID**, **Secret Access Key**, and your **Account ID** (shown on the R2 overview page).
+  4. Railway → backend service → Variables, add:
+     - `STORAGE_DRIVER` = `s3`
+     - `S3_ENDPOINT` = `https://<Account ID>.r2.cloudflarestorage.com`
+     - `S3_REGION` = `auto`
+     - `S3_BUCKET` = `vendly-public`
+     - `S3_PRIVATE_BUCKET` = `vendly-private`
+     - `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` = from step 3
+     - `S3_PUBLIC_URL` = the r2.dev URL from step 2
+  5. Deploy, then upload a profile photo to check it shows. (Anything uploaded before this was already wiped;
+     vendors may need to re-add listing photos.)
+  6. Later, with your own domain: connect `media.yourdomain.com` to `vendly-public`, then change `S3_PUBLIC_URL`
+     on the backend and add `NEXT_PUBLIC_MEDIA_URL` with the same value on the website.
 - [ ] **Check the latest deploys went through.** Railway → each service → Deployments → the newest one should be green.
       If one is red, send me the build log.
 - [ ] **Stripe, so card payments work end to end:**
@@ -98,7 +112,6 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 
 - [ ] **One login, several roles?** Should someone be both a customer and a vendor (switching modes), or keep one role per account?
 - [ ] **Light mode in the app** (parked for now; about a day of work).
-- [ ] **Storage long-term:** a Railway volume (section 1) is fine to start; S3 is better once you have lots of photos. Your call when.
 - [ ] **"Near me" on the website search too?** It's in the app now; the website still filters by typed location.
 
 ## Good to know

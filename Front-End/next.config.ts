@@ -24,6 +24,16 @@ const securityHeaders = [
   },
 ];
 
+/** Hostname of a URL from the environment (custom media domain, API domain), if set. */
+const hostOf = (url?: string) => {
+  try {
+    return url ? new URL(url).hostname : null;
+  } catch {
+    return null;
+  }
+};
+const extraImageHosts = [hostOf(process.env.NEXT_PUBLIC_MEDIA_URL), hostOf(process.env.NEXT_PUBLIC_API_ENDPOINT)].filter((h): h is string => !!h);
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   output: "standalone",
@@ -48,6 +58,11 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.amazonaws.com" },
       { protocol: "https", hostname: "*.cloudfront.net" },
       { protocol: "https", hostname: "*.s3.amazonaws.com" },
+      // Cloudflare R2 public buckets, and the API on Railway (files it serves itself)
+      { protocol: "https", hostname: "*.r2.dev" },
+      { protocol: "https", hostname: "*.up.railway.app" },
+      // a custom media domain (NEXT_PUBLIC_MEDIA_URL) and the API domain
+      ...extraImageHosts.map((hostname) => ({ protocol: "https" as const, hostname })),
     ],
   },
 };

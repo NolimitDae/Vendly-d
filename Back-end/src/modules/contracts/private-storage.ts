@@ -1,6 +1,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as AWS from 'aws-sdk';
+import { contentTypeFor, storageSettings } from 'src/common/lib/Disk/storage-settings';
 
 const ROOT = path.resolve(process.env.PRIVATE_STORAGE_DIR || './public/private');
 
@@ -10,19 +12,60 @@ function resolveKey(key: string) {
   return full;
 }
 
-/** Files that must never be publicly reachable (contracts, signatures). */
+/** A private S3 / R2 bucket when STORAGE_DRIVER=s3 and S3_PRIVATE_BUCKET are set; else null (local disk). */
+let client: { s3: AWS.S3; bucket: string } | null | undefined;
+function privateBucket() {
+  if (client !== undefined) return client;
+  const s = storageSettings();
+  client =
+    s.driver === 's3' && s.privateBucket
+      ? {
+          bucket: s.privateBucket,
+          s3: new AWS.S3({
+            endpoint: s.endpoint,
+            region: s.region,
+            signatureVersion: 'v4',
+            s3ForcePathStyle: true,
+            credentials: { accessKeyId: s.accessKeyId ?? '', secretAccessKey: s.secretAccessKey ?? '' },
+          }),
+        }
+      : null;
+  return client;
+}
+
+/** Test hook: re-read the storage settings. */
+export const __resetPrivateStorage = () => {
+  client = undefined;
+};
+
+/**
+ * Files that must never be publicly reachable (contracts, signatures, event files). Stored in a
+ * private bucket in production; downloads always go through the API's signed, expiring links.
+ */
 export const PrivateStorage = {
   newKey(folder: string, ext: string) {
     return `${folder}/${Date.now()}-${randomBytes(12).toString('hex')}.${ext}`;
   },
 
   async put(key: string, data: Buffer | Uint8Array) {
+    const remote = privateBucket();
+    if (remote) {
+      resolveKey(key); // same key rules as on disk (no "../")
+      await remote.s3.putObject({ Bucket: remote.bucket, Key: key, Body: Buffer.from(data), ContentType: contentTypeFor(key) }).promise();
+      return;
+    }
     const full = resolveKey(key);
     await fs.mkdir(path.dirname(full), { recursive: true });
     await fs.writeFile(full, data);
   },
 
   async get(key: string): Promise<Buffer> {
+    const remote = privateBucket();
+    if (remote) {
+      resolveKey(key);
+      const obj = await remote.s3.getObject({ Bucket: remote.bucket, Key: key }).promise();
+      return Buffer.from(obj.Body as Uint8Array);
+    }
     return fs.readFile(resolveKey(key));
   },
 };

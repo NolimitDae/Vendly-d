@@ -1,6 +1,7 @@
 import * as AWS from 'aws-sdk';
 import { IStorage } from './iStorage';
 import { DiskOption } from '../Option';
+import { contentTypeFor } from '../storage-settings';
 
 /**
  * S3Adapter for s3 bucket storage
@@ -14,6 +15,7 @@ export class S3Adapter implements IStorage {
     const awsConfig: AWS.S3.ClientConfiguration = {
       endpoint: this._config.connection.awsEndpoint,
       region: this._config.connection.awsDefaultRegion,
+      signatureVersion: 'v4',
       credentials: {
         accessKeyId: this._config.connection.awsAccessKeyId,
         secretAccessKey: this._config.connection.awsSecretAccessKey,
@@ -39,6 +41,10 @@ export class S3Adapter implements IStorage {
    */
 
   url(key: string): string {
+    // a public bucket URL or CDN domain (Cloudflare R2) wins
+    if (this._config.connection.awsPublicUrl) {
+      return `${this._config.connection.awsPublicUrl.replace(/\/+$/, '')}/${key.replace(/^\/+/, '')}`;
+    }
     if (this._config.connection.minio) {
       return `${this._config.connection.awsEndpoint}/${this._config.connection.awsBucket}/${key}`;
     }
@@ -91,6 +97,9 @@ export class S3Adapter implements IStorage {
         Bucket: this._config.connection.awsBucket,
         Key: key,
         Body: value,
+        ContentType: contentTypeFor(key),
+        // file names are random and never reused, so they can be cached forever
+        CacheControl: 'public, max-age=31536000, immutable',
       };
       const upload = await this.s3.upload(params).promise();
       return upload;

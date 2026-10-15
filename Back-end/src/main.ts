@@ -12,6 +12,7 @@ import { AppModule } from './app.module';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 import { CustomExceptionFilter } from './common/exception/custom-exception.filter';
 import { TanvirStorage } from './common/lib/Disk/TanvirStorage';
+import { storageSettings } from './common/lib/Disk/storage-settings';
 import appConfig from './config/app.config';
 import { PrismaExceptionFilter } from './common/exception/prisma-exception.filter';
 import { AllExceptionsFilter } from './common/exception/all-exceptions.filter';
@@ -83,16 +84,20 @@ async function bootstrap() {
   );
 
   // storage setup
+  // local disk in development; Cloudflare R2 (or any S3) when STORAGE_DRIVER=s3
+  const store = storageSettings();
   TanvirStorage.config({
-    driver: 'local',
+    driver: store.driver,
     connection: {
       rootUrl: appConfig().storageUrl.rootUrl,
       publicUrl: appConfig().storageUrl.rootUrlPublic,
-      awsBucket: appConfig().fileSystems.s3.bucket,
-      awsAccessKeyId: appConfig().fileSystems.s3.key,
-      awsSecretAccessKey: appConfig().fileSystems.s3.secret,
-      awsDefaultRegion: appConfig().fileSystems.s3.region,
-      awsEndpoint: appConfig().fileSystems.s3.endpoint,
+      awsBucket: store.bucket,
+      awsAccessKeyId: store.accessKeyId,
+      awsSecretAccessKey: store.secretAccessKey,
+      awsDefaultRegion: store.region,
+      awsEndpoint: store.endpoint,
+      awsPublicUrl: store.publicUrl,
+      // path-style addressing (bucket in the path) works for R2 and MinIO
       minio: true,
     },
   });

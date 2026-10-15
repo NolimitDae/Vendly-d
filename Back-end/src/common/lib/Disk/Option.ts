@@ -29,6 +29,8 @@ export type DiskOption = {
     awsDefaultRegion?: string;
     awsBucket?: string;
     awsEndpoint?: string;
+    /** public address files are served from (R2 public bucket URL / CDN domain) */
+    awsPublicUrl?: string;
 
     /**
      * using minio
