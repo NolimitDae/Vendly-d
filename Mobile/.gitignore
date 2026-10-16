@@ -10,3 +10,7 @@ ios/
 *.key
 *.mobileprovision
 *.orig.*
+
+# local environment (API URL, keys)
+.env
+.env.local
