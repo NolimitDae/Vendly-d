@@ -35,8 +35,13 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '10mb' });
   app.useBodyParser('urlencoded', { extended: true, limit: '10mb' });
 
+  // The website's address, plus any extra ones in CORS_ORIGINS (comma-separated), e.g. the old
+  // Railway address while moving to a custom domain.
+  const origins = [appConfig().app.client_app_url, ...(process.env.CORS_ORIGINS ?? '').split(',')]
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
   app.enableCors({
-    origin: appConfig().app.client_app_url,
+    origin: origins.length > 1 ? origins : origins[0],
     credentials: true,
     maxAge: 86400, // 24h preflight cache
   });
