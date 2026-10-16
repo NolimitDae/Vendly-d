@@ -1,3 +1,4 @@
+import CustomToastContainer from "@/components/CustomToast/CustomToastContainer";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import { ThemeProvider } from "@/providers/ThemeProvider";
@@ -23,6 +24,7 @@ export default function FrontEndLayout({
           <NotificationProvider>
             <Navbar />
             {children}
+            <CustomToastContainer />
             <div className="bg-[#FAFAFA] dark:bg-gray-950">
               <Footer />
             </div>

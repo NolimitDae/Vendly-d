@@ -10,8 +10,8 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      // js.stripe.com: Stripe's card form (saved cards) loads its script from there
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com",
+      // js.stripe.com: Stripe's card form (saved cards); cloudflareinsights: Cloudflare's visitor stats
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com https://static.cloudflareinsights.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https: http://localhost http://127.0.0.1",
       "font-src 'self'",
