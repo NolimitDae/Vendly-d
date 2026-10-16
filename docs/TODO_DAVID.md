@@ -30,6 +30,23 @@ Where things live:
      vendors may need to re-add listing photos.)
   6. Later, with your own domain: connect `media.yourdomain.com` to `vendly-public`, then change `S3_PUBLIC_URL`
      on the backend and add `NEXT_PUBLIC_MEDIA_URL` with the same value on the website.
+- [ ] **Put everything on vendlymarketplace.com** (bought 2026-10-15, managed in Cloudflare):
+  | Address | Points to | Where to set it up |
+  |---|---|---|
+  | `vendlymarketplace.com` (+ `www`) | website | Railway → website service → Settings → Networking → Custom Domain |
+  | `api.vendlymarketplace.com` | backend | Railway → backend service → Settings → Networking → Custom Domain |
+  | `media.vendlymarketplace.com` | uploaded photos | Cloudflare → R2 → `vendly-public` → Settings → Custom Domains |
+  1. For each Railway one, Railway shows a **CNAME target**: add it in Cloudflare → DNS as a CNAME record (start with the
+     cloud **grey / DNS only**; Railway issues the certificate). Wait for Railway to show the domain as verified.
+  2. Cloudflare → Rules → Redirect Rules: send `www.vendlymarketplace.com` to `https://vendlymarketplace.com` (one address for the site).
+  3. Backend variables: `APP_URL=https://api.vendlymarketplace.com`, `CLIENT_APP_URL=https://vendlymarketplace.com`,
+     `CORS_ORIGINS=<the old website railway.app URL>` (keeps the old address working while you switch; remove later),
+     `S3_PUBLIC_URL=https://media.vendlymarketplace.com`.
+  4. Website variables: `NEXT_PUBLIC_API_ENDPOINT=https://api.vendlymarketplace.com`, `NEXT_PUBLIC_APP_URL=https://vendlymarketplace.com`,
+     `NEXT_PUBLIC_MEDIA_URL=https://media.vendlymarketplace.com`. Redeploy the website (these are baked in at build time).
+  5. Stripe webhook endpoint → `https://api.vendlymarketplace.com/api/payment/stripe/webhook` (new signing secret → `STRIPE_WEBHOOK_SECRET`).
+  6. App builds: `EXPO_PUBLIC_API_URL=https://api.vendlymarketplace.com` in the EAS environment.
+  7. Later: send email from `@vendlymarketplace.com` (your mail provider will give DNS records to add in Cloudflare).
 - [ ] **Check the latest deploys went through.** Railway → each service → Deployments → the newest one should be green.
       If one is red, send me the build log.
 - [ ] **Stripe, so card payments work end to end:**
