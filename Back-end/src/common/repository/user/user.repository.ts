@@ -192,6 +192,7 @@ export class UserRepository {
     image,
     type,
     role_id,
+    accepted_terms,
   }: {
     first_name?: string;
     last_name?: string;
@@ -204,6 +205,7 @@ export class UserRepository {
     image?: Express.Multer.File;
     type?: string;
     role_id?: string;
+    accepted_terms?: boolean;
   }) {
     try {
       // -------------------------
@@ -216,6 +218,7 @@ export class UserRepository {
       if (name) data.name = name;
       if (address) data.location = address;
       if (phone) data.phone_number = phone;
+      if (accepted_terms) data.terms_accepted_at = new Date();
 
       // -------------------------
       // Step 2: Upload avatar if provided

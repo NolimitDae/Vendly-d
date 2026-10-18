@@ -186,6 +186,7 @@ model User {
   push_token        String?
   // email verification
   email_verified_at DateTime?
+  terms_accepted_at DateTime? // when they ticked Terms of Service + Privacy Policy at sign-up
   // subscription 
 
   //----------------------------------------

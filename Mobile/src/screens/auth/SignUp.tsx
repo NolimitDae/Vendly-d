@@ -9,6 +9,7 @@ import { BackButton, BrandGradient, Field, GradientButton, ui } from '../../comp
 import { DARK, FONTS } from '../../constants/colors';
 import type { AuthStackParams } from '../../navigation/types';
 import { apiMessage } from './SignIn';
+import TermsCheckbox from '../../components/TermsCheckbox';
 
 export default function SignUp({ navigation, route }: NativeStackScreenProps<AuthStackParams, 'SignUp'>) {
   const { role } = route.params;
@@ -16,6 +17,8 @@ export default function SignUp({ navigation, route }: NativeStackScreenProps<Aut
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', password: '', business_name: '' });
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [loading, setLoading] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [termsError, setTermsError] = useState(false);
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
   const business = role !== 'CLIENT';
 
@@ -32,12 +35,15 @@ export default function SignUp({ navigation, route }: NativeStackScreenProps<Aut
     if (form.password.length < 8) return Alert.alert('Password too short', 'Use at least 8 characters.');
     if (business && !form.business_name.trim()) return Alert.alert('Missing details', 'Add your business name.');
 
+    if (!accepted) return setTermsError(true);
+
     const body = new FormData();
     body.append('first_name', form.first_name.trim());
     body.append('last_name', form.last_name.trim());
     body.append('email', email);
     body.append('password', form.password);
     body.append('type', role);
+    body.append('accepted_terms', 'true');
     if (business) body.append('business_name', form.business_name.trim());
     if (photo) {
       body.append('image', {
@@ -115,6 +121,8 @@ export default function SignUp({ navigation, route }: NativeStackScreenProps<Aut
               textContentType="newPassword"
             />
           </View>
+
+          <TermsCheckbox checked={accepted} onChange={(v) => { setAccepted(v); if (v) setTermsError(false); }} error={termsError} />
 
           <GradientButton title="Create New Account" onPress={submit} loading={loading} style={{ marginTop: 10 }} />
           <View style={s.footer}>

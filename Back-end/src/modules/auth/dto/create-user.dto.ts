@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
+  Equals,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -95,6 +97,12 @@ export class CreateUserDto {
     required: false,
   })
   type?: UserType;
+
+  // multipart sends "true" as text; implicit conversion would turn "false" into true, so read the raw value
+  @Transform(({ obj }) => obj.accepted_terms === true || obj.accepted_terms === 'true')
+  @Equals(true, { message: 'You must accept the Terms of Service and Privacy Policy' })
+  @ApiProperty({ example: true, description: 'Must be true: the user accepted the Terms of Service and Privacy Policy' })
+  accepted_terms: boolean;
 
   @IsOptional()
   @ApiPropertyOptional({

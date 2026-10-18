@@ -33,7 +33,7 @@ export class SocialAuthService {
     throw new BadRequestException('Unknown sign-in provider');
   }
 
-  async signIn(dto: { provider: 'google' | 'apple'; id_token: string; role?: SocialRole; name?: string }) {
+  async signIn(dto: { provider: 'google' | 'apple'; id_token: string; role?: SocialRole; name?: string; accepted_terms?: boolean }) {
     const id = await this.identity(dto.provider, dto.id_token);
 
     let userId: string | null = null;
@@ -50,6 +50,7 @@ export class SocialAuthService {
       } else {
         if (!dto.role) return { success: false, needs_role: true, message: 'Choose how you’ll use Vendly to finish signing up.' };
         if (!ROLES.includes(dto.role)) throw new BadRequestException('Invalid account type');
+        if (dto.accepted_terms !== true) throw new BadRequestException('You must accept the Terms of Service and Privacy Policy');
         const name = dto.name?.trim() || id.name || id.email.split('@')[0];
         const created = await this.users.createUser({
           email: id.email,
@@ -57,6 +58,7 @@ export class SocialAuthService {
           // social accounts sign in without a password; this random one only exists so the column is set
           password: randomBytes(32).toString('hex'),
           type: dto.role,
+          accepted_terms: true,
         });
         if (!created?.data?.id) throw new BadRequestException(created?.message ?? 'Could not create your account');
         userId = created.data.id;

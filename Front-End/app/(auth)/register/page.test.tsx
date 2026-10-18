@@ -62,6 +62,7 @@ async function fillDetailsForm(
   await user.type(screen.getByPlaceholderText('Doe'), vals.last_name);
   await user.type(screen.getByPlaceholderText('john@example.com'), vals.email);
   await user.type(screen.getByPlaceholderText(/min\. 8 characters/i), vals.password);
+  await user.click(screen.getByRole('checkbox', { name: /terms of service/i }));
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -190,6 +191,7 @@ describe('RegisterPage', () => {
             last_name: 'Doe',
             email: 'john@example.com',
             type: 'CLIENT',
+            accepted_terms: true,
           }),
         );
       });
@@ -197,6 +199,16 @@ describe('RegisterPage', () => {
         'Account created! Check your email to verify.',
       );
       expect(mockPush).toHaveBeenCalledWith('/otp?email=john%40example.com&purpose=verify');
+    });
+
+    it('blocks sign-up until the terms box is ticked', async () => {
+      const user = userEvent.setup();
+      await advanceToDetailsStep(user);
+      await fillDetailsForm(user);
+      await user.click(screen.getByRole('checkbox', { name: /terms of service/i })); // untick
+      await user.click(screen.getByRole('button', { name: /create account/i }));
+      expect(await screen.findByText(/please accept the terms of service/i)).toBeInTheDocument();
+      expect(AuthService.register).not.toHaveBeenCalled();
     });
 
     it('shows API error message when registration fails', async () => {

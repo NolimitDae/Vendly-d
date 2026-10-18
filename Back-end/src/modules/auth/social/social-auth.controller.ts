@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { SocialAuthService, type SocialRole } from './social-auth.service';
 
 export class SocialSignInDto {
@@ -11,6 +11,10 @@ export class SocialSignInDto {
   @IsOptional()
   @IsIn(['CLIENT', 'VENDOR', 'EVENT_PLANNER'])
   role?: SocialRole;
+  @ApiPropertyOptional({ description: 'Required when this creates a new account: they accepted the Terms of Service and Privacy Policy' })
+  @IsOptional()
+  @IsBoolean()
+  accepted_terms?: boolean;
   @ApiPropertyOptional({ description: 'Apple only shares the name on the first sign-in, so the app passes it along' })
   @IsOptional()
   @IsString()

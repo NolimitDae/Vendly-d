@@ -104,6 +104,7 @@ export class AuthService {
     password,
     type,
     image,
+    accepted_terms,
   }: {
     first_name: string;
     last_name: string;
@@ -115,6 +116,7 @@ export class AuthService {
     password: string;
     type?: string;
     image?: Express.Multer.File;
+    accepted_terms?: boolean;
   }) {
     try {
       // Check if email already exist
@@ -141,6 +143,7 @@ export class AuthService {
         password: password,
         image: image,
         type: type,
+        accepted_terms,
       });
 
       if (!user || user.success === false || !user.data?.id) {

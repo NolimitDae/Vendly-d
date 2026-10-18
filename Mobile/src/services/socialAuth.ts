@@ -13,8 +13,8 @@ export interface SocialPending {
  * Trades a Google / Apple ID token for a Vendly session. A brand-new account comes back with
  * `needs_role`, so the app asks how they'll use Vendly and calls again with the role.
  */
-export async function socialSignIn(pending: SocialPending, login: AuthContextValue['login'], role?: SignupRole): Promise<'signed_in' | 'needs_role'> {
-  const res = await api.post('/auth/social', { ...pending, role });
+export async function socialSignIn(pending: SocialPending, login: AuthContextValue['login'], role?: SignupRole, accepted_terms?: boolean): Promise<'signed_in' | 'needs_role'> {
+  const res = await api.post('/auth/social', { ...pending, role, accepted_terms });
   if (res.data?.needs_role) return 'needs_role';
   const auth = res.data?.authorization;
   if (!res.data?.success || !auth?.access_token) throw new Error(res.data?.message ?? 'Sign-in failed');

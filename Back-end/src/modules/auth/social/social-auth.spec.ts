@@ -95,8 +95,10 @@ describe('SocialAuthService', () => {
     await expect(service.signIn({ provider: 'google', id_token: 't' })).resolves.toMatchObject({ needs_role: true });
     users.createUser.mockResolvedValue({ success: true, data: { id: 'u2' } });
     prisma.user.findUnique.mockResolvedValue({ ...active, id: 'u2' });
-    await service.signIn({ provider: 'google', id_token: 't', role: 'VENDOR' });
-    expect(users.createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'ada@gmail.com', name: 'Ada Obi', type: 'VENDOR' }));
+    await expect(service.signIn({ provider: 'google', id_token: 't', role: 'VENDOR' })).rejects.toThrow(/Terms of Service/);
+    expect(users.createUser).not.toHaveBeenCalled();
+    await service.signIn({ provider: 'google', id_token: 't', role: 'VENDOR', accepted_terms: true });
+    expect(users.createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'ada@gmail.com', name: 'Ada Obi', type: 'VENDOR', accepted_terms: true }));
     expect(auth.login).toHaveBeenCalledWith({ email: 'ada@gmail.com', userId: 'u2' });
   });
 

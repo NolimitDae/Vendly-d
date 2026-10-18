@@ -163,6 +163,7 @@ export class AuthController {
         password: password,
         type: type,
         image: image,
+        accepted_terms: data.accepted_terms,
       });
 
       return response;

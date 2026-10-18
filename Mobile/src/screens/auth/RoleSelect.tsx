@@ -3,6 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { socialSignIn } from '../../services/socialAuth';
 import { apiMessage } from './SignIn';
+import TermsCheckbox from '../../components/TermsCheckbox';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -23,13 +24,16 @@ export default function RoleSelect({ navigation, route }: NativeStackScreenProps
   const social = route.params?.social;
   const { login } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [termsError, setTermsError] = useState(false);
 
   // Google / Apple sign-up: the account is created with the chosen role, no form needed
   const next = async () => {
     if (!social) return navigation.navigate('SignUp', { role });
+    if (!accepted) return setTermsError(true);
     setBusy(true);
     try {
-      await socialSignIn(social, login, role);
+      await socialSignIn(social, login, role, true);
     } catch (err) {
       Alert.alert('Sign-up failed', apiMessage(err, 'Try again, or sign up with your email.'));
       setBusy(false);
@@ -67,6 +71,7 @@ export default function RoleSelect({ navigation, route }: NativeStackScreenProps
       </View>
 
       <View style={{ gap: 20 }}>
+        {social && <TermsCheckbox checked={accepted} onChange={(v) => { setAccepted(v); if (v) setTermsError(false); }} error={termsError} />}
         <GradientButton title={social ? `Continue with ${social.provider === 'apple' ? 'Apple' : 'Google'}` : 'Continue'} onPress={next} loading={busy} />
         <View style={s.footer}>
           <Text style={ui.muted}>Already have an account? </Text>

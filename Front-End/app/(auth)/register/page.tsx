@@ -23,6 +23,8 @@ export default function RegisterPage() {
   const [accountType, setAccountType] = useState<AccountType>("CLIENT");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [termsError, setTermsError] = useState(false);
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
@@ -59,15 +61,20 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+    if (!accepted) {
+      setTermsError(true);
+      return;
+    }
 
     setLoading(true);
     try {
-      const payload: Record<string, string> = {
+      const payload: Record<string, string | boolean> = {
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         email: form.email.trim(),
         password: form.password,
         type: accountType,
+        accepted_terms: true,
       };
       if (form.business_name.trim()) payload.business_name = form.business_name.trim();
       if (form.phone.trim()) payload.phone = form.phone.trim();
@@ -75,7 +82,7 @@ export default function RegisterPage() {
       const res = await AuthService.register(payload as any);
       if (res.data?.success) {
         toast.success("Account created! Check your email to verify.");
-        router.push(`/otp?email=${encodeURIComponent(payload.email)}&purpose=verify`);
+        router.push(`/otp?email=${encodeURIComponent(String(payload.email))}&purpose=verify`);
       } else {
         toast.error(res.data?.message || "Registration failed");
       }
@@ -239,6 +246,32 @@ export default function RegisterPage() {
                 />
               </div>
 
+              <div>
+                <label className="flex items-start gap-2.5 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={accepted}
+                    onChange={(e) => {
+                      setAccepted(e.target.checked);
+                      if (e.target.checked) setTermsError(false);
+                    }}
+                    aria-describedby={termsError ? "terms-error" : undefined}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 accent-plum-700"
+                  />
+                  <span>
+                    I have read and agree to the{" "}
+                    <Link href="/terms" target="_blank" className="text-plum-700 dark:text-orchid-300 font-medium hover:underline">Terms of Service</Link>
+                    {" "}and acknowledge the{" "}
+                    <Link href="/privacy" target="_blank" className="text-plum-700 dark:text-orchid-300 font-medium hover:underline">Privacy Policy</Link>.
+                  </span>
+                </label>
+                {termsError && (
+                  <p id="terms-error" role="alert" className="text-red-500 text-xs mt-1">
+                    Please accept the Terms of Service and Privacy Policy to continue.
+                  </p>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -248,12 +281,6 @@ export default function RegisterPage() {
                 Create Account
               </button>
 
-              <p className="text-xs text-gray-400 text-center">
-                By registering you agree to our{" "}
-                <Link href="/terms" className="text-plum-700 dark:text-orchid-300 font-medium hover:underline">Terms of Service</Link>
-                {" "}and{" "}
-                <Link href="/privacy" className="text-plum-700 dark:text-orchid-300 font-medium hover:underline">Privacy Policy</Link>.
-              </p>
             </form>
           )}
         </div>
