@@ -49,6 +49,13 @@ export const AuthService = {
       headers: { "Content-Type": "application/json" },
     }),
 
+  resendVerification: async (email: string) =>
+    Fetch.post(
+      "/auth/resend-verification-email",
+      { email },
+      { headers: { "Content-Type": "application/json" } },
+    ),
+
   forgotPassword: async (email: string) =>
     Fetch.post(
       "/auth/forgot-password",

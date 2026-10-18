@@ -6,6 +6,7 @@ import BackIcon from "../../../components/Dashboard/auth/BackIcon";
 import AuthRightSection from "../../../components/Dashboard/auth/AuthRightSection";
 import OtpForm from "../../../components/Dashboard/auth/otp/OtpForm";
 import { AuthService } from "@/service/auth/auth.service";
+import { toast } from "react-toastify";
 
 const OTPPageContent = () => {
   const searchParams = useSearchParams();
@@ -27,6 +28,15 @@ const OTPPageContent = () => {
     }
   };
 
+  const resend = async () => {
+    try {
+      await AuthService.resendVerification(email);
+      toast.success("A new code is on its way");
+    } catch {
+      toast.error("Could not resend. Try again in a minute.");
+    }
+  };
+
   return (
     <DashboardContainer className="flex flex-col lg:flex-row min-h-screen">
       <div className="flex justify-center items-center w-full lg:w-1/2 px-4">
@@ -44,6 +54,11 @@ const OTPPageContent = () => {
             </div>
           </div>
           <OtpForm onComplete={handleComplete} />
+          {purpose === "verify" && email && (
+            <button type="button" onClick={resend} className="text-sm text-descriptionColor underline">
+              Didn&apos;t get a code? Resend
+            </button>
+          )}
         </div>
       </div>
       <AuthRightSection />

@@ -176,7 +176,7 @@ describe('RegisterPage', () => {
       });
     });
 
-    it('submits correct payload and redirects to /login on success', async () => {
+    it('submits correct payload and redirects to the code screen on success', async () => {
       (AuthService.register as jest.Mock).mockResolvedValue({ data: { success: true } });
       const user = userEvent.setup();
       await advanceToDetailsStep(user);
@@ -196,7 +196,7 @@ describe('RegisterPage', () => {
       expect(toast.success).toHaveBeenCalledWith(
         'Account created! Check your email to verify.',
       );
-      expect(mockPush).toHaveBeenCalledWith('/login');
+      expect(mockPush).toHaveBeenCalledWith('/otp?email=john%40example.com&purpose=verify');
     });
 
     it('shows API error message when registration fails', async () => {

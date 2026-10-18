@@ -75,7 +75,7 @@ export default function RegisterPage() {
       const res = await AuthService.register(payload as any);
       if (res.data?.success) {
         toast.success("Account created! Check your email to verify.");
-        router.push("/login");
+        router.push(`/otp?email=${encodeURIComponent(payload.email)}&purpose=verify`);
       } else {
         toast.error(res.data?.message || "Registration failed");
       }

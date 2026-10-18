@@ -72,6 +72,10 @@ const LoginForm = () => {
       if (msg === "Token is required") {
         setPendingCredentials(data);
         setTwoFARequired(true);
+      } else if (/verify your email/i.test(msg)) {
+        // Unverified account: send a fresh code and take them to the code screen
+        await AuthService.resendVerification(data.email).catch(() => {});
+        router.push(`/otp?email=${encodeURIComponent(data.email)}&purpose=verify`);
       } else {
         toast.error(msg || "Login failed. Check your credentials.");
       }
