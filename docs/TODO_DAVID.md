@@ -11,7 +11,7 @@ Where things live:
 
 ## 1. Do these first (things are broken or at risk without them)
 
-- [ ] **Move uploads to Cloudflare R2** so photos, contracts and event files stop disappearing on deploy
+- [x] **Move uploads to Cloudflare R2** so photos, contracts and event files stop disappearing on deploy
       (and the backend can later run on more than one server). No Railway volume needed.
   1. Cloudflare dashboard → **R2** → create two buckets: `vendly-public` and `vendly-private`.
   2. `vendly-public` → Settings → **Public access** → enable the **r2.dev** URL (later: connect a custom domain instead).
@@ -30,7 +30,7 @@ Where things live:
      vendors may need to re-add listing photos.)
   6. Later, with your own domain: connect `media.yourdomain.com` to `vendly-public`, then change `S3_PUBLIC_URL`
      on the backend and add `NEXT_PUBLIC_MEDIA_URL` with the same value on the website.
-- [ ] **Put everything on vendlymarketplace.com** (bought 2026-10-15, managed in Cloudflare):
+- [x] **Put everything on vendlymarketplace.com** (bought 2026-10-15, managed in Cloudflare):
   | Address | Points to | Where to set it up |
   |---|---|---|
   | `vendlymarketplace.com` (+ `www`) | website | Railway → website service → Settings → Networking → Custom Domain |
@@ -47,9 +47,9 @@ Where things live:
   5. Stripe webhook endpoint → `https://api.vendlymarketplace.com/api/payment/stripe/webhook` (new signing secret → `STRIPE_WEBHOOK_SECRET`).
   6. App builds: `EXPO_PUBLIC_API_URL=https://api.vendlymarketplace.com` in the EAS environment.
   7. Later: send email from `@vendlymarketplace.com` (your mail provider will give DNS records to add in Cloudflare).
-- [ ] **Check the latest deploys went through.** Railway → each service → Deployments → the newest one should be green.
+- [x] **Check the latest deploys went through.** Railway → each service → Deployments → the newest one should be green.
       If one is red, send me the build log.
-- [ ] **Stripe, so card payments work end to end:**
+- [x] **Stripe, so card payments work end to end:**
   - Set on the **website**: `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (starts `pk_live_` or `pk_test_`).
   - Set for **app builds**: `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (same key; goes in the EAS environment, see section 4).
   - Stripe dashboard → Developers → Webhooks → your endpoint `https://<your-api-domain>/api/payment/stripe/webhook`
@@ -58,7 +58,7 @@ Where things live:
     `customer.subscription.deleted`, `invoice.payment_succeeded`.
   - Copy that endpoint's signing secret into `STRIPE_WEBHOOK_SECRET` on the backend.
   - Stripe → Connect → turn on Express accounts (vendors get paid through it).
-- [ ] **Rotate the Figma token** you pasted in chat: Figma → Settings → Security → revoke it, make a new one, paste it into
+- [x] **Rotate the Figma token** you pasted in chat: Figma → Settings → Security → revoke it, make a new one, paste it into
       `C:\Users\David\.figma-token` (never into chat).
 
 ## 2. Sign in with Google and Apple
