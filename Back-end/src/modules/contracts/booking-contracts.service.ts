@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { withJobLock } from 'src/common/helper/job-lock';
 import { PaymentPlan, QuoteStatus } from 'prisma/generated/enums';
 import { buildSchedule } from 'src/modules/payments/payment-schedule';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
@@ -1188,6 +1189,10 @@ export class BookingContractsService {
 
   /** 24h reminders for unsigned contracts; 48h notice to both sides for stalled amendments. */
   @Cron(CronExpression.EVERY_HOUR)
+  cronReminders() {
+    return withJobLock(this.prisma, 'contract-reminders', () => this.sendReminders());
+  }
+
   async sendReminders(now = new Date()) {
     const pending = await this.prisma.bookingContract.findMany({
       where: {

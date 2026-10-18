@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { withJobLock } from 'src/common/helper/job-lock';
 import * as Sentry from '@sentry/nestjs';
 import { BookingStatus, InstallmentStatus, PaymentPlan } from 'prisma/generated/enums';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
@@ -276,6 +277,10 @@ export class PaymentsService {
 
   /** Every 15 minutes: charge what is due and retry what failed earlier. */
   @Cron(CronExpression.EVERY_10_MINUTES)
+  cronDueCharges() {
+    return withJobLock(this.prisma, 'due-charges', () => this.runDueCharges());
+  }
+
   async runDueCharges(now = new Date()) {
     const due = await this.prisma.bookingInstallment.findMany({
       where: { status: InstallmentStatus.SCHEDULED, OR: [{ attempts: 0, due_at: { lte: now } }, { attempts: { gt: 0 }, next_attempt_at: { lte: now } }] },
@@ -346,6 +351,10 @@ export class PaymentsService {
 
   /** Hourly: pay vendors for completed bookings whose release time has passed and that aren't disputed. */
   @Cron(CronExpression.EVERY_HOUR)
+  cronReleases() {
+    return withJobLock(this.prisma, 'releases', () => this.runReleases());
+  }
+
   async runReleases(now = new Date()) {
     const due = await this.prisma.booking.findMany({
       where: { status: BookingStatus.COMPLETED, released_at: null, release_at: { lte: now }, OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }] },
