@@ -6,9 +6,9 @@ import { Toaster } from "sonner";
 
 function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html>
+    <html className="dark" style={{ colorScheme: "dark" }}>
       <body>
-        <Toaster position="top-center" richColors />
+        <Toaster position="top-center" richColors theme="dark" />
         <Suspense fallback={<Loader />}>
           <AdminMenu>{children}</AdminMenu>
         </Suspense>

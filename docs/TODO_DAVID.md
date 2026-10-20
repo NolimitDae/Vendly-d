@@ -58,6 +58,12 @@ Where things live:
     `customer.subscription.deleted`, `invoice.payment_succeeded`.
   - Copy that endpoint's signing secret into `STRIPE_WEBHOOK_SECRET` on the backend.
   - Stripe → Connect → turn on Express accounts (vendors get paid through it).
+- [ ] **Turn on email (sign-up codes, password resets, notifications)** — Railway blocks normal (SMTP) email, so it goes through Resend:
+  1. Sign up at **resend.com** → Domains → Add domain → `vendlymarketplace.com`.
+  2. Add the DNS records Resend shows in Cloudflare → DNS (grey cloud / DNS only). Wait until Resend says **Verified**.
+  3. Resend → API Keys → Create (Sending access) → copy it.
+  4. Backend variables: `RESEND_API_KEY=<that key>`, `MAIL_FROM_ADDRESS=noreply@vendlymarketplace.com`, `APP_NAME=Vendly`. Redeploy.
+  5. Check: sign up with a new email (or use "resend code") and the code should arrive within a minute.
 - [x] **Rotate the Figma token** you pasted in chat: Figma → Settings → Security → revoke it, make a new one, paste it into
       `C:\Users\David\.figma-token` (never into chat).
 

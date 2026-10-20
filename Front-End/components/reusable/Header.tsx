@@ -181,7 +181,7 @@ const Header: React.FC<HeaderProps> = ({
 
               <DropdownMenu open={isProfileDropdownOpen} onOpenChange={setIsProfileDropdownOpen}>
                 <DropdownMenuTrigger asChild>
-                  <div className="flex gap-2 h-full items-center cursor-pointer md:bg-white rounded-lg md:px-3 md:py-2 md:border-[0.5px] border-borderColor">
+                  <div className="flex gap-2 h-full items-center cursor-pointer md:bg-bgColor rounded-lg md:px-3 md:py-2 md:border-[0.5px] border-borderColor">
                     <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
                       {adminLoading ? (
                         <Skeleton className="w-9 h-9 rounded-full" />

@@ -58,7 +58,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             gapKey="gapOne"
             imageSizeKey="imageOne"
             fontSizeKey="fontSizeOne"
-            textColorKey="purple"
+            textColorKey="white"
           />
 
           <SidebarIcon onclick={onClose} />

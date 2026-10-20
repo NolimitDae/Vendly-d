@@ -5,6 +5,7 @@ import { MailService } from './mail.service';
 import appConfig from '../config/app.config';
 import { BullModule } from '@nestjs/bullmq';
 import { MailProcessor } from './processors/mail.processor';
+import { resendTransport } from './resend.transport';
 
 @Global()
 @Module({
@@ -12,7 +13,7 @@ import { MailProcessor } from './processors/mail.processor';
     MailerModule.forRoot({
       // transport: 'smtps://user@example.com:topsecret@smtp.example.com',
       // or
-      transport: {
+      transport: appConfig().mail.resendApiKey ? resendTransport(appConfig().mail.resendApiKey) : {
         host: appConfig().mail.host,
         port: +appConfig().mail.port,
         secure: false,
