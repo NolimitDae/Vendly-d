@@ -1,7 +1,17 @@
 // Extends app.json with values that come from the environment at build time.
 // Google sign-in on iOS returns to the app through the reversed iOS client ID, which has to be a
 // registered URL scheme; it's only added when EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID is set.
+const { withEntitlementsPlist } = require('expo/config-plugins');
+
 module.exports = ({ config }) => {
+  // shortcut: the development profile was made before Sign in with Apple was added, so dev builds leave it out;
+  // remove once the profile is regenerated with that capability.
+  if (process.env.EAS_BUILD_PROFILE === 'development') {
+    config = withEntitlementsPlist({ ...config, ios: { ...config.ios, usesAppleSignIn: false } }, (c) => {
+      delete c.modResults['com.apple.developer.applesignin'];
+      return c;
+    });
+  }
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
   if (!iosClientId) return config;
   const reversed = iosClientId.split('.').reverse().join('.');
