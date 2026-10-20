@@ -12,7 +12,7 @@
         "image": "latest"
       },
       "ios": {
-        "image": "latest"
+        "image": "sdk-54"
       },
       "channel": "development"
     },
@@ -23,7 +23,7 @@
         "image": "latest"
       },
       "ios": {
-        "image": "latest"
+        "image": "sdk-54"
       },
       "channel": "preview"
     },
@@ -34,7 +34,7 @@
         "image": "latest"
       },
       "ios": {
-        "image": "latest"
+        "image": "sdk-54"
       },
       "channel": "production"
     }
