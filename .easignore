@@ -1,0 +1,19 @@
+# EAS Build uploads the whole repo; only Mobile/ is needed (archive was 2.3 GB, limit 2 GB).
+# This file replaces .gitignore for EAS, so Mobile's own ignores are repeated below.
+/*
+!/Mobile
+
+**/node_modules/
+Mobile/.expo/
+Mobile/dist/
+Mobile/web-build/
+Mobile/android/
+Mobile/ios/
+Mobile/*.jks
+Mobile/*.p8
+Mobile/*.p12
+Mobile/*.key
+Mobile/*.mobileprovision
+# Keys come from the EAS "development" environment, not local .env files.
+Mobile/.env
+Mobile/.env.local
