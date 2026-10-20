@@ -4,9 +4,9 @@
 const { withEntitlementsPlist } = require('expo/config-plugins');
 
 module.exports = ({ config }) => {
-  // shortcut: the development profile was made before Sign in with Apple was added, so dev builds leave it out;
+  // shortcut: the ad-hoc profile was made before Sign in with Apple was added, so test builds leave it out;
   // remove once the profile is regenerated with that capability.
-  if (process.env.EAS_BUILD_PROFILE === 'development') {
+  if (['development', 'preview'].includes(process.env.EAS_BUILD_PROFILE)) {
     config = withEntitlementsPlist({ ...config, ios: { ...config.ios, usesAppleSignIn: false } }, (c) => {
       delete c.modResults['com.apple.developer.applesignin'];
       return c;
