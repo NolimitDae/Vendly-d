@@ -13,17 +13,37 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean; _skipAuthRefresh?: boolean };
+
+/** True when the JWT expires within 30s (or can't be read, so the server decides). */
+export function expiresSoon(token: string, now = Date.now()): boolean {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const { exp } = JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')));
+    return typeof exp === 'number' && exp * 1000 < now + 30_000;
+  } catch {
+    return false;
+  }
+}
+
 api.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem(TOKEN_KEY);
+  let token = await AsyncStorage.getItem(TOKEN_KEY);
+  // Uploads can't rely on the 401 retry below: the server rejects before reading the body and iOS reports a
+  // dropped connection instead of the 401. So swap a token that's about to expire before sending.
+  if (token && !(config as RetriableConfig)._skipAuthRefresh && expiresSoon(token)) token = (await refreshOnce()) ?? token;
   // Don't overwrite an Authorization header the caller set explicitly (e.g. the /auth/me bootstrap).
   if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean; _skipAuthRefresh?: boolean };
-
 // One refresh at a time: concurrent 401s wait for the same refresh instead of each starting their own.
 let refreshing: Promise<string | null> | null = null;
+function refreshOnce() {
+  refreshing ??= refreshAccessToken().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
 
 /** Trades the stored refresh token for a new access token (and a rotated refresh token). Null if that fails. */
 async function refreshAccessToken(): Promise<string | null> {
@@ -53,10 +73,7 @@ api.interceptors.response.use(
       // Access tokens expire; refresh once and replay the request before signing out.
       if (original && !original._retried && !original._skipAuthRefresh) {
         original._retried = true;
-        refreshing ??= refreshAccessToken().finally(() => {
-          refreshing = null;
-        });
-        const token = await refreshing;
+        const token = await refreshOnce();
         if (token) {
           original.headers.set('Authorization', `Bearer ${token}`);
           return api(original);
