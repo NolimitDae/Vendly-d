@@ -87,4 +87,30 @@ describe('client co-signature', () => {
     prisma.bookingContract.findMany = jest.fn().mockResolvedValue([{ ...awaiting }]);
     await expect(service.countersignForBooking('b1', 'vendor', sig, {}, async () => null)).rejects.toThrow('hasn’t co-signed');
   });
+
+  describe('what a co-signing client may not do', () => {
+    const asClient = () => {
+      const amendment = { ...awaiting, status: 'AWAITING_VENDOR', supersedes_id: 'c0', booking: { id: 'b1', customer_id: 'planner', vendor_id: 'vendor', status: 'CONFIRMED', listing: null }, signatures: [] };
+      const ctx = setup(amendment, { cara: 'cara@example.com' });
+      // the client is matched to the booking by email
+      ctx.prisma.bookingContract.findFirst.mockResolvedValue({ id: 'c1' });
+      ctx.prisma.booking = { findFirst: jest.fn().mockResolvedValue(amendment.booking) };
+      ctx.prisma.bookingContract.update = jest.fn();
+      return ctx;
+    };
+
+    it('cannot decline or withdraw an amendment', async () => {
+      const { service, prisma } = asClient();
+      await expect(service.declineAmendment('c1', { userId: 'cara' }, {})).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.bookingContract.update).not.toHaveBeenCalled();
+    });
+
+    it('cannot request an amendment', async () => {
+      const { service } = asClient();
+      await expect(service.previewAmendment('b1', { userId: 'cara' }, { changes: { guest_count: 80 } } as any)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.requestAmendment('b1', { userId: 'cara' }, { changes: { guest_count: 80 }, signature: sig } as any, {}),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
 });

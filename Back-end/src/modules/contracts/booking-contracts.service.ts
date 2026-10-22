@@ -770,7 +770,6 @@ export class BookingContractsService {
       awaiting_role: awaiting,
       my_role: myRole,
       can_sign: !!awaiting && (awaiting === myRole || (awaiting === 'CUSTOMER' && myRole === 'PLANNER')),
-      client_email: c.client_email ?? null,
       signatures: (c.signatures ?? []).map((s: any) => ({ role: s.role, legal_name: s.legal_name, signed_at: s.signed_at })),
     };
   }
@@ -903,7 +902,8 @@ export class BookingContractsService {
 
   private async amendmentContext(bookingId: string, user: AuthUser, dto: AmendmentPreviewDto) {
     const { booking, role } = await this.assertBookingAccess(bookingId, user);
-    if (role === 'ADMIN') throw new ForbiddenException('Only the booking parties can amend a contract.');
+    // the planner's client co-signs the original contract but doesn't amend it; changes go through the planner
+    if (role === 'ADMIN' || role === 'CLIENT') throw new ForbiddenException('Only the booking parties can amend a contract.');
     if (([BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.REJECTED] as BookingStatus[]).includes(booking.status)) {
       throw new BadRequestException(`A ${booking.status.toLowerCase()} booking can't be amended.`);
     }
@@ -1094,7 +1094,7 @@ export class BookingContractsService {
     if (!contract.supersedes_id || !PENDING_STATUSES.includes(contract.status)) {
       throw new BadRequestException('Only a pending amendment can be declined or withdrawn.');
     }
-    if (role === 'ADMIN') throw new ForbiddenException('Access denied');
+    if (role === 'ADMIN' || role === 'CLIENT') throw new ForbiddenException('Access denied');
     await this.prisma.$transaction(async (tx) => {
       await tx.bookingContract.update({
         where: { id: contract.id },
@@ -1331,7 +1331,13 @@ export class BookingContractsService {
       where: { id: contractId },
       include: { booking: { include: { vendor: true, customer: true, listing: true } } },
     });
-    const parties = [c.booking.customer, c.booking.vendor];
+    const parties: { id: string; email: string | null; name: string | null }[] = [c.booking.customer, c.booking.vendor];
+    // a client who co-signed gets the signed copy too
+    const clientSig = await this.prisma.contractSignature.findFirst({
+      where: { booking_contract_id: c.id, role: ContractSignerRole.CLIENT, user_id: { not: null } },
+      select: { user: { select: { id: true, email: true, name: true } } },
+    });
+    if (clientSig?.user) parties.push(clientSig.user);
     for (const p of parties) {
       await this.notify(p.id, p.email, p.name, {
         subject: `Contract signed: ${c.booking.listing?.title ?? 'your booking'}`,
