@@ -153,9 +153,9 @@ The Vendor will provide: {{package_name}}.
 
 ## 4. Price and payment ${R}
 - Vendor price: {{vendor_price}}
-- Vendly service fee: {{service_fee}}
+- Vendly Protection fee: {{service_fee}}
 - Total: {{total_price}}
-{{payment_schedule}} All payments are made through Vendly. Any service fee is paid to Vendly.
+{{payment_schedule}} All payments are made through Vendly. The Vendly Protection fee is paid to Vendly.
 
 ## 5. Cancellation and rescheduling ${R}
 Cancellation policy: {{cancellation_policy_name}}. {{cancellation_policy_text}} Rescheduling requires both parties to sign an amended contract. Refunds are processed by Vendly under the Vendly Terms of Service.
@@ -305,7 +305,7 @@ This addendum attaches to the Vendor's own contract and forms part of it. If any
 ## Services and price
 - Package: {{package_name}}
 - Vendor price: {{vendor_price}}
-- Vendly service fee: {{service_fee}}
+- Vendly Protection fee: {{service_fee}}
 - Total: {{total_price}}
 - Payment: {{payment_schedule}}
 - Cancellation policy: {{cancellation_policy_name}}. {{cancellation_policy_text}}

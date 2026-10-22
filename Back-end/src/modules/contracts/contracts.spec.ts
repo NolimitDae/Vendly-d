@@ -105,7 +105,7 @@ describe('contract merge fields', () => {
     expect(body).toContain('Vera Photo LLC');
     expect(body).toContain('Carl Customer');
     expect(body).toContain('$1,500.00');
-    expect(body).toContain('Vendly service fee: $75.00');
+    expect(body).toContain('Vendly Protection fee: $75.00');
     expect(body).toContain('Total: $1,575.00');
     expect(body).toContain(PLATFORM_TERMS_CLAUSE);
     expect(body).toContain('No flash during the ceremony.');
