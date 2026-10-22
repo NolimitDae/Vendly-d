@@ -299,4 +299,64 @@ describe('MarketplacePage', () => {
       });
     });
   });
+
+  describe('near me', () => {
+    const PERMISSION_DENIED = 1;
+    const mockGeo = (impl: (ok: any, fail: any) => void) =>
+      Object.defineProperty(global.navigator, 'geolocation', {
+        configurable: true,
+        value: { getCurrentPosition: jest.fn(impl) },
+      });
+
+    afterEach(() => {
+      delete (global.navigator as any).geolocation;
+      window.localStorage.clear();
+    });
+
+    it('asks for location, then searches near the visitor and shows distances', async () => {
+      mockGeo((ok) => ok({ coords: { latitude: 40.712776, longitude: -74.005974 } }));
+      const near = makeListings(1).map((l) => ({ ...l, location: 'Brooklyn, NY', distance_miles: 3.2 }));
+      setupMocks(near);
+      const user = userEvent.setup();
+      render(<MarketplacePage />);
+
+      await user.click(await screen.findByRole('button', { name: 'Use my location' }));
+
+      await waitFor(() =>
+        expect(MarketplaceService.searchListings).toHaveBeenLastCalledWith(
+          expect.objectContaining({ near_lat: 40.7128, near_lng: -74.006, radius_miles: 25, sort: 'distance' }),
+        ),
+      );
+      expect(await screen.findByText(/3.2 mi away/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Near me/ })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.queryByRole('button', { name: 'Use my location' })).not.toBeInTheDocument();
+    });
+
+    it('explains how to allow location when the browser blocks it', async () => {
+      mockGeo((_ok, fail) => fail({ code: PERMISSION_DENIED, PERMISSION_DENIED }));
+      setupMocks();
+      const user = userEvent.setup();
+      render(<MarketplacePage />);
+
+      await user.click(await screen.findByRole('button', { name: 'Use my location' }));
+
+      expect(await screen.findByText(/Location is blocked for this site/)).toBeInTheDocument();
+      expect(MarketplaceService.searchListings).not.toHaveBeenCalledWith(expect.objectContaining({ near_lat: expect.anything() }));
+    });
+
+    it('hides the prompt after "Not now" and remembers it', async () => {
+      mockGeo(() => undefined);
+      setupMocks();
+      const user = userEvent.setup();
+      const { unmount } = render(<MarketplacePage />);
+
+      await user.click(await screen.findByRole('button', { name: 'Not now' }));
+      expect(screen.queryByText('Find vendors near you')).not.toBeInTheDocument();
+      unmount();
+
+      render(<MarketplacePage />);
+      await screen.findAllByText(/Service 0/);
+      expect(screen.queryByText('Find vendors near you')).not.toBeInTheDocument();
+    });
+  });
 });

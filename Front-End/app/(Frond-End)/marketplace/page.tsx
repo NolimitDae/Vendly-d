@@ -7,7 +7,10 @@ import { SavedListingsService } from "@/service/savedListings/savedListings.serv
 import { CookieHelper } from "@/helper/cookie.helper";
 import Link from "next/link";
 import Image from "next/image";
-import { Star, Search, SlidersHorizontal, MapPin, Heart } from "lucide-react";
+import { Star, Search, SlidersHorizontal, MapPin, Heart, LocateFixed, X, Loader2 } from "lucide-react";
+import { useNearMe } from "@/hooks/useNearMe";
+
+const RADII = [10, 25, 50, 100];
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import BrowseSwitch from "@/components/rentals/BrowseSwitch";
@@ -24,6 +27,7 @@ interface Listing {
   category?: { id: string; name: string };
   vendor?: { id: string; name: string; avatar_url?: string; vendorProfile?: { business_name?: string } };
   _count?: { reviews: number };
+  distance_miles?: number | null;
 }
 
 interface Category {
@@ -45,6 +49,9 @@ export default function MarketplacePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const isLoggedIn = !!CookieHelper.get({ key: "token" });
+  const nearMe = useNearMe();
+  const [radius, setRadius] = useState(25);
+  const near = nearMe.active ? nearMe.coords : null;
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -56,9 +63,10 @@ export default function MarketplacePage() {
         category_id: categoryId || undefined,
         min_price: minPrice ? Number(minPrice) : undefined,
         max_price: maxPrice ? Number(maxPrice) : undefined,
-        sort,
+        sort: !near && sort === "distance" ? "newest" : sort,
         page,
         limit: 12,
+        ...(near ? { near_lat: near.lat, near_lng: near.lng, radius_miles: radius } : {}),
       });
       if (res.data?.success) {
         setListings(res.data.data);
@@ -69,7 +77,23 @@ export default function MarketplacePage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, categoryId, minPrice, maxPrice, sort, page]);
+  }, [debouncedSearch, categoryId, minPrice, maxPrice, sort, page, near?.lat, near?.lng, radius]);
+
+  const askForLocation = async () => {
+    const ok = await nearMe.locate();
+    if (ok) {
+      setSort("distance");
+      setPage(1);
+    }
+  };
+
+  const toggleNearMe = () => {
+    if (nearMe.active) {
+      nearMe.turnOff();
+      if (sort === "distance") setSort("newest");
+      setPage(1);
+    } else void askForLocation();
+  };
 
   useEffect(() => { fetchListings(); }, [fetchListings]);
 
@@ -162,7 +186,35 @@ export default function MarketplacePage() {
             <option value="price_asc">Price: Low to High</option>
             <option value="price_desc">Price: High to Low</option>
             <option value="rating">Top Rated</option>
+            {near && <option value="distance">Nearest</option>}
           </select>
+          <button
+            type="button"
+            onClick={toggleNearMe}
+            aria-pressed={nearMe.active}
+            disabled={nearMe.status === "asking"}
+            className={cn(
+              "flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border transition",
+              nearMe.active
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700",
+            )}
+          >
+            {nearMe.status === "asking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
+            Near me
+          </button>
+          {near && (
+            <select
+              aria-label="Distance"
+              value={radius}
+              onChange={(e) => { setRadius(Number(e.target.value)); setPage(1); }}
+              className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none"
+            >
+              {RADII.map((r) => (
+                <option key={r} value={r}>Within {r} miles</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
@@ -198,8 +250,50 @@ export default function MarketplacePage() {
           </div>
         )}
 
+        {/* Ask for location: shown until the visitor turns it on or says not now */}
+        {!nearMe.active && nearMe.status !== "unsupported" && (nearMe.status === "denied" || !nearMe.dismissed) && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6 p-4 rounded-2xl border border-primary/20 bg-primary/5 dark:bg-primary/10">
+            <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+              <MapPin className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-gray-900 dark:text-white">Find vendors near you</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {nearMe.status === "denied"
+                  ? "Location is blocked for this site. Allow it in your browser's site settings, then try again."
+                  : nearMe.status === "error"
+                    ? "We couldn't get your location. Check your connection and try again."
+                    : "Share your location to see services closest to you first. We only use it for this search."}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={askForLocation}
+                disabled={nearMe.status === "asking"}
+                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-60 flex items-center gap-2"
+              >
+                {nearMe.status === "asking" && <Loader2 className="w-4 h-4 animate-spin" />}
+                {nearMe.status === "denied" ? "Try again" : "Use my location"}
+              </button>
+              {nearMe.status !== "denied" && (
+                <button
+                  type="button"
+                  onClick={nearMe.dismiss}
+                  aria-label="Not now"
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Results count */}
-        <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">{meta.total} services found</p>
+        <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">
+          {meta.total} services found{near ? ` within ${radius} miles` : ""}
+        </p>
 
         {/* Listings grid */}
         {loading ? (
@@ -219,7 +313,9 @@ export default function MarketplacePage() {
           <div className="text-center py-20 text-gray-400">
             <Search className="w-12 h-12 mx-auto mb-4 opacity-40" />
             <p className="text-lg">No services found</p>
-            <p className="text-sm">Try adjusting your search or filters</p>
+            <p className="text-sm">
+              {near ? "Nothing that close yet. Try a bigger distance or turn off Near me." : "Try adjusting your search or filters"}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -309,10 +405,16 @@ function ListingCard({
           </h3>
           <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 dark:text-gray-400">{listing.description}</p>
 
-          {listing.location && (
+          {(listing.location || listing.distance_miles != null) && (
             <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
               <MapPin className="w-3 h-3" />
               {listing.location}
+              {listing.distance_miles != null && (
+                <span className="text-primary font-medium">
+                  {listing.location ? " · " : ""}
+                  {listing.distance_miles < 1 ? "Under 1 mi" : `${listing.distance_miles} mi`} away
+                </span>
+              )}
             </div>
           )}
 

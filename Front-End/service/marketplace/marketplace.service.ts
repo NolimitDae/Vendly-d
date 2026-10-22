@@ -19,6 +19,10 @@ export const MarketplaceService = {
     page?: number;
     limit?: number;
     sort?: string;
+    /** "near me": only listings within radius_miles of this point */
+    near_lat?: number;
+    near_lng?: number;
+    radius_miles?: number;
   }) => {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => {
