@@ -19,12 +19,12 @@ type Section = 'schedule' | 'vendors' | 'files' | 'contracts';
 /** An event as a booked vendor or the planner's client sees it: read-only, plus files and (vendors) ticking off their items. */
 export default function EventShared() {
   const nav = useNavigation<any>();
-  const { eventId } = useRoute<any>().params as { eventId: string };
+  const { eventId, section: initialSection } = useRoute<any>().params as { eventId: string; section?: Section };
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [ev, setEv] = useState<EventOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [section, setSection] = useState<Section>('schedule');
+  const [section, setSection] = useState<Section>(initialSection ?? 'schedule');
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(() => {

@@ -305,6 +305,12 @@ export class BookingContractsService {
     return userType === UserType.EVENT_PLANNER ? ContractSignerRole.PLANNER : ContractSignerRole.CUSTOMER;
   }
 
+  /** The booking's customer signs as the planner when the booking belongs to one of their events. */
+  private async customerSignerRole(bookingId: string, userType?: string | null): Promise<ContractSignerRole> {
+    const forEvent = await this.prisma.eventBooking.findFirst({ where: { booking_id: bookingId }, select: { event_id: true } });
+    return forEvent ? ContractSignerRole.PLANNER : this.signerRoleFor(userType);
+  }
+
   private async storeSignatureImage(dataUrl: string | undefined, folder: string) {
     let buf: Buffer | null;
     try {
@@ -370,7 +376,8 @@ export class BookingContractsService {
     }
 
     const imageKey = await this.storeSignatureImage(dto.signature.signature_image, `signatures/${userId}`);
-    const role = this.signerRoleFor(p.customer.type);
+    // booking for one of their events means they sign as the planner, whichever role they're using now
+    const role = p.event ? ContractSignerRole.PLANNER : this.signerRoleFor(p.customer.type);
     // A planner booking for an event with a client: with co-signing on, the client signs before the vendor.
     const clientEmail =
       role === ContractSignerRole.PLANNER && p.event?.client_email && (await this.clientCosignOn())
@@ -466,7 +473,8 @@ export class BookingContractsService {
       // the status guard stops two signatures racing
       const moved = await tx.bookingContract.updateMany({
         where: { id: contract.id, status: BookingContractStatus.AWAITING_CLIENT },
-        data: { status: BookingContractStatus.AWAITING_VENDOR },
+        // the vendor's 24-hour reminder starts from here
+        data: { status: BookingContractStatus.AWAITING_VENDOR, last_reminder_at: null },
       });
       if (moved.count !== 1) throw new ConflictException('This contract was already signed.');
       await tx.contractSignature.create({
@@ -496,7 +504,12 @@ export class BookingContractsService {
       throw new ForbiddenException('Access denied');
     }
     const contracts = await this.prisma.bookingContract.findMany({
-      where: { booking: { event_bookings: { some: { event_id: eventId } } }, status: { not: BookingContractStatus.SUPERSEDED } },
+      where: {
+        booking: { event_bookings: { some: { event_id: eventId } } },
+        // only contracts this client was asked to co-sign (others aren't theirs to see)
+        client_email: { equals: me.email, mode: 'insensitive' },
+        status: { not: BookingContractStatus.SUPERSEDED },
+      },
       include: {
         signatures: { select: { role: true, legal_name: true, signed_at: true } },
         booking: { select: { id: true, listing: { select: { title: true } }, vendor: { select: { name: true, vendorProfile: { select: { business_name: true } } } } } },
@@ -1000,7 +1013,7 @@ export class BookingContractsService {
       throw new ConflictException('The amendment changed since you reviewed it. Please review and sign again.');
     }
     const isVendor = a.role === 'VENDOR';
-    const role = isVendor ? ContractSignerRole.VENDOR : this.signerRoleFor(a.full.customer.type);
+    const role = isVendor ? ContractSignerRole.VENDOR : await this.customerSignerRole(bookingId, a.full.customer.type);
     const imageKey = isVendor
       ? await this.resolveVendorSignatureImage(user.userId, dto.signature)
       : await this.storeSignatureImage(dto.signature.signature_image, `signatures/${user.userId}`);
@@ -1056,7 +1069,7 @@ export class BookingContractsService {
     }
     const isVendor = role === 'VENDOR';
     const customer = await this.prisma.user.findUnique({ where: { id: contract.booking.customer_id }, select: { type: true } });
-    const signerRole = isVendor ? ContractSignerRole.VENDOR : this.signerRoleFor(customer?.type);
+    const signerRole = isVendor ? ContractSignerRole.VENDOR : await this.customerSignerRole(contract.booking_id, customer?.type);
     const imageKey = isVendor
       ? await this.resolveVendorSignatureImage(user.userId, dto)
       : await this.storeSignatureImage(dto.signature_image, `signatures/${user.userId}`);
@@ -1230,13 +1243,22 @@ export class BookingContractsService {
     userId: string,
     email: string | null | undefined,
     name: string | null | undefined,
-    n: { subject: string; message: string; bookingId?: string; contractId?: string; listingTitle?: string | null; ctaPath?: string },
+    n: {
+      subject: string;
+      message: string;
+      bookingId?: string;
+      contractId?: string;
+      listingTitle?: string | null;
+      ctaPath?: string;
+      /** what tapping the push opens in the app (defaults to the booking) */
+      pushData?: Record<string, unknown>;
+    },
   ) {
     try {
       await this.push.sendToUser(userId, {
         title: n.subject,
         body: n.message.slice(0, 180),
-        data: { type: 'contract', bookingId: n.bookingId, contractId: n.contractId },
+        data: n.pushData ?? { type: 'contract', bookingId: n.bookingId, contractId: n.contractId },
       });
       if (email) {
         const path = n.ctaPath ?? (n.contractId ? `/contracts/${n.contractId}` : '/bookings');
@@ -1279,6 +1301,7 @@ export class BookingContractsService {
     });
     if (!c?.client_email) return;
     const client = await this.prisma.user.findFirst({ where: { email: { equals: c.client_email, mode: 'insensitive' }, deleted_at: null }, select: { id: true, name: true } });
+    const link = await this.prisma.eventBooking.findFirst({ where: { booking_id: bookingId }, select: { event_id: true } });
     const n = {
       subject: `Please co-sign: ${c.booking.listing?.title ?? 'a booking for your event'}`,
       message: `${c.booking.customer.name ?? 'Your planner'} booked ${c.booking.listing?.title ?? 'a vendor'} for your event and asked you to co-sign the contract. Sign in to Vendly with this email to review and sign it.`,
@@ -1286,6 +1309,8 @@ export class BookingContractsService {
       contractId: c.id,
       listingTitle: c.booking.listing?.title,
       ctaPath: `/contracts/${c.id}`,
+      // the client can't open the booking itself; the push opens the event's Contracts tab
+      pushData: { type: 'cosign', eventId: link?.event_id, contractId: c.id },
     };
     if (client) return this.notify(client.id, c.client_email, client.name, n);
     await this.mail

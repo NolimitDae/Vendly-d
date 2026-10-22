@@ -30,7 +30,7 @@ export default function ClientContractsList({ eventId }: { eventId: string }) {
 
   return (
     <ul className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
-      {rows.length === 0 && <li className="p-6 text-sm text-gray-500 text-center">No vendor contracts yet.</li>}
+      {rows.length === 0 && <li className="p-6 text-sm text-gray-500 text-center">No contracts need your signature.</li>}
       {rows.map((c) => (
         <li key={c.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
           <FileSignature className="w-5 h-5 text-primary flex-shrink-0" />

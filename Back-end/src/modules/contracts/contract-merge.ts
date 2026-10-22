@@ -99,7 +99,8 @@ export function buildMergeData(input: MergeInput): MergeData {
   const serviceFee = Number(b.service_fee ?? 0);
 
   const preset = CANCELLATION_PRESETS[fv.cancellation_policy];
-  const isPlanner = input.customer.type === 'EVENT_PLANNER';
+  // a booking for an event is always made by its planner, whichever role they're using now
+  const isPlanner = input.customer.type === 'EVENT_PLANNER' || !!input.event;
   const eventDate = b.event_start_at ?? b.scheduled_at;
 
   const moneyField = (k: string) => (fv[k] ? fmtMoney(fv[k], currency) : '');

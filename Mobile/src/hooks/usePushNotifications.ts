@@ -18,6 +18,11 @@ function openFromNotification(data: Record<string, unknown> | undefined, userTyp
     });
   } else if (data.type === 'message') {
     navigationRef.navigate('MessagesTab', { screen: 'ChatList' });
+  } else if (data.type === 'cosign' && typeof data.eventId === 'string') {
+    // the planner's client: the event's Contracts tab (customers keep shared events under Settings, vendors under Bookings)
+    const params = { eventId: data.eventId, section: 'contracts' };
+    if (userType === 'VENDOR') navigationRef.navigate('BookingsTab', { screen: 'EventShared', params });
+    else if (userType === 'CUSTOMER' || userType === 'CLIENT') navigationRef.navigate('ProfileTab', { screen: 'EventShared', params });
   } else if (data.type === 'identity') {
     // ID check reviewed: approved opens role switching, rejected opens the upload again
     navigationRef.navigate('ProfileTab', { screen: data.status === 'REJECTED' ? 'VerifyIdentity' : 'SwitchRole' });

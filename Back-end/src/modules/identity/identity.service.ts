@@ -80,7 +80,8 @@ export class IdentityService {
     const save = async (file: Upload, label: string) => {
       if (file.size > ID_MAX_BYTES) throw new BadRequestException(`The ${label} photo is over 10 MB.`);
       const kind = imageKind(file.buffer);
-      if (!kind) throw new BadRequestException(`The ${label} photo must be a JPEG, PNG, WebP or HEIC image.`);
+      // HEIC is refused: admins review in a browser, and Chrome and Firefox can't show it
+      if (!kind || kind === 'heic') throw new BadRequestException(`The ${label} photo must be a JPEG, PNG or WebP image.`);
       const key = PrivateStorage.newKey(`identity/${userId}`, kind);
       await PrivateStorage.put(key, file.buffer);
       stored.push(key);
@@ -95,7 +96,8 @@ export class IdentityService {
       // One open check at a time: a new upload replaces the one waiting for review.
       const pending = await this.prisma.identityVerification.findMany({ where: { user_id: userId, status: 'PENDING' } });
       const created = await this.prisma.$transaction(async (tx) => {
-        if (pending.length) await tx.identityVerification.deleteMany({ where: { id: { in: pending.map((p) => p.id) } } });
+        // only checks still waiting: one an admin just reviewed is kept
+        if (pending.length) await tx.identityVerification.deleteMany({ where: { id: { in: pending.map((p) => p.id) }, status: 'PENDING' } });
         return tx.identityVerification.create({
           data: { user_id: userId, document_type: dto.document_type, legal_name: legalName.slice(0, 255), front_key, back_key, selfie_key },
           select: { id: true, status: true, created_at: true },
@@ -155,13 +157,15 @@ export class IdentityService {
     if (v.status !== 'PENDING') throw new BadRequestException('This check has already been reviewed.');
 
     const now = new Date();
-    await this.prisma.$transaction([
-      this.prisma.identityVerification.update({
-        where: { id },
+    await this.prisma.$transaction(async (tx) => {
+      // the status guard stops two admins deciding the same check
+      const done = await tx.identityVerification.updateMany({
+        where: { id, status: 'PENDING' },
         data: { status: dto.status, reviewed_by_id: adminId, reviewed_at: now, rejection_reason: dto.status === 'REJECTED' ? reason : null },
-      }),
-      ...(dto.status === 'APPROVED' ? [this.prisma.user.update({ where: { id: v.user_id }, data: { id_verified_at: now } })] : []),
-    ]);
+      });
+      if (done.count !== 1) throw new BadRequestException('This check has already been reviewed.');
+      if (dto.status === 'APPROVED') await tx.user.update({ where: { id: v.user_id }, data: { id_verified_at: now } });
+    });
 
     await this.push
       .sendToUser(

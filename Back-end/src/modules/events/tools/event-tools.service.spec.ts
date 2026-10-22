@@ -19,6 +19,7 @@ const prisma: any = {
   vendorTeam: { findFirst: jest.fn() },
   conversation: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
   message: { create: jest.fn() },
+  bookingContract: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
 };
 const mail = { sendBookingNotification: jest.fn().mockResolvedValue(undefined) };
 const push = { sendToUser: jest.fn().mockResolvedValue(undefined) };
@@ -130,6 +131,35 @@ describe('EventToolsService', () => {
       mail.sendBookingNotification.mockClear();
       prisma.event.findUnique.mockResolvedValue(event({ client_email: 'ada@example.com' }));
       await service.setClient('e1', 'planner', { email: 'ada@example.com', sees_budget: true });
+      expect(mail.sendBookingNotification).not.toHaveBeenCalled();
+      expect(prisma.bookingContract.findMany).toHaveBeenCalledTimes(1); // only when the client changed
+    });
+
+    const waiting = [{ id: 'c1', booking: { vendor_id: 'v1', listing: { title: 'DJ' } } }];
+
+    it('a new client email takes over contracts waiting for the co-signature, and the invite says so', async () => {
+      prisma.event.findUnique.mockResolvedValue(event({ client_email: 'old@example.com' }));
+      prisma.event.update.mockResolvedValue({});
+      prisma.user.findUnique.mockResolvedValue({ name: 'Amara' });
+      prisma.bookingContract.findMany.mockResolvedValueOnce(waiting);
+      await service.setClient('e1', 'planner', { email: 'New@Example.com' });
+      expect(prisma.bookingContract.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['c1'] }, status: 'AWAITING_CLIENT' },
+        data: { client_email: 'new@example.com', last_reminder_at: null },
+      });
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'new@example.com', message: expect.stringContaining('co-sign a vendor contract') }));
+    });
+
+    it('removing the client sends waiting contracts straight to the vendor', async () => {
+      prisma.event.findUnique.mockResolvedValue(event({ client_email: 'ada@example.com' }));
+      prisma.event.update.mockResolvedValue({});
+      prisma.bookingContract.findMany.mockResolvedValueOnce(waiting);
+      await service.setClient('e1', 'planner', { email: null });
+      expect(prisma.bookingContract.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['c1'] }, status: 'AWAITING_CLIENT' },
+        data: { status: 'AWAITING_VENDOR', client_email: null, last_reminder_at: null },
+      });
+      expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ title: 'Ready to accept: DJ' }));
       expect(mail.sendBookingNotification).not.toHaveBeenCalled();
     });
   });

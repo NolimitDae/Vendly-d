@@ -54,7 +54,8 @@ describe('client co-signature', () => {
     await expect(service.signAsParty('c1', { userId: 'cara' }, sig, {})).resolves.toMatchObject({ success: true });
     expect(tx.bookingContract.updateMany).toHaveBeenCalledWith({
       where: { id: 'c1', status: 'AWAITING_CLIENT' },
-      data: { status: 'AWAITING_VENDOR' },
+      // the vendor's 24-hour reminder clock restarts
+      data: { status: 'AWAITING_VENDOR', last_reminder_at: null },
     });
     expect(tx.contractSignature.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ role: 'CLIENT', user_id: 'cara', legal_name: 'Cara Client', document_sha256: SHA }) }),

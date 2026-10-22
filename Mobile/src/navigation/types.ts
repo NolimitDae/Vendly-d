@@ -87,7 +87,7 @@ export type CustomerProfileStackParams = {
   Notifications: undefined;
   PaymentMethods: undefined;
   SharedEvents: undefined;
-  EventShared: { eventId: string };
+  EventShared: { eventId: string; section?: 'schedule' | 'vendors' | 'files' | 'contracts' };
 };
 
 export type CustomerMessagesStackParams = {
@@ -120,7 +120,7 @@ export type VendorListingsStackParams = VendorDashboardStackParams;
 export type VendorBookingsStackParams = {
   VendorBookings: undefined;
   VendorBookingDetail: { bookingId: string };
-  EventShared: { eventId: string };
+  EventShared: { eventId: string; section?: 'schedule' | 'vendors' | 'files' | 'contracts' };
 };
 
 export type VendorProfileStackParams = {

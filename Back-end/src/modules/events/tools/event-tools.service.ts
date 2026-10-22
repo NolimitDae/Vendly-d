@@ -306,6 +306,31 @@ export class EventToolsService {
       data: { client_email: email, ...(changed && { client_invited_at: email ? new Date() : null }), ...(dto.sees_budget !== undefined && { client_sees_budget: dto.sees_budget }) },
       select: { client_email: true, client_invited_at: true, client_sees_budget: true },
     });
+    // Contracts waiting for the client's co-signature follow the change: a new client is asked
+    // instead, and with no client they go straight to the vendor.
+    const waiting = changed
+      ? await this.prisma.bookingContract.findMany({
+          where: { status: 'AWAITING_CLIENT', booking: { event_bookings: { some: { event_id: eventId } } } },
+          select: { id: true, booking: { select: { vendor_id: true, listing: { select: { title: true } } } } },
+        })
+      : [];
+    if (waiting.length) {
+      const ids = waiting.map((w) => w.id);
+      if (email) {
+        await this.prisma.bookingContract.updateMany({ where: { id: { in: ids }, status: 'AWAITING_CLIENT' }, data: { client_email: email, last_reminder_at: null } });
+      } else {
+        await this.prisma.bookingContract.updateMany({ where: { id: { in: ids }, status: 'AWAITING_CLIENT' }, data: { status: 'AWAITING_VENDOR', client_email: null, last_reminder_at: null } });
+        for (const w of waiting) {
+          await this.push
+            .sendToUser(w.booking.vendor_id, {
+              title: `Ready to accept: ${w.booking.listing?.title ?? 'a booking'}`,
+              body: 'The planner no longer needs their client to co-sign. Review the contract and tap Accept & Sign.',
+              data: { type: 'contract' },
+            })
+            .catch(() => null);
+        }
+      }
+    }
     if (email && changed) {
       const planner = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
       await this.mail
@@ -313,7 +338,9 @@ export class EventToolsService {
           to: email,
           recipientName: '',
           subject: `${planner?.name ?? 'Your planner'} shared “${event.name}” with you on Vendly`,
-          message: `${planner?.name ?? 'Your planner'} added you to ${event.name}. Sign in (or create a free account with this email) to follow the vendors, the run of show and shared files.`,
+          message: `${planner?.name ?? 'Your planner'} added you to ${event.name}. Sign in (or create a free account with this email) to follow the vendors, the run of show and shared files.${
+            waiting.length ? ` They also asked you to co-sign ${waiting.length === 1 ? 'a vendor contract' : `${waiting.length} vendor contracts`}: open the event’s Contracts tab.` : ''
+          }`,
           status: 'INVITE',
           listingTitle: event.name,
           ctaUrl: `${appConfig().app.client_app_url}/my-events/${eventId}`,

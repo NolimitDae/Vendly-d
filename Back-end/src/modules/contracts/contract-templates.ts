@@ -318,3 +318,13 @@ This addendum attaches to the Vendor's own contract and forms part of it. If any
 `;
 
 export const UPLOADED_REQUIRED_FIELDS = ['event_date', 'vendor_business_name', 'customer_name', 'vendor_price', 'cancellation_policy'];
+
+/**
+ * Templates published before the fee was renamed still say "Vendly service fee"; new contracts
+ * always use the current name, whichever template version the vendor is pinned to.
+ */
+export function withProtectionFeeWording(body: string) {
+  return body
+    .replace(/Any service fee is paid to Vendly\./g, 'The Vendly Protection fee is paid to Vendly.')
+    .replace(/Vendly service fee/g, 'Vendly Protection fee');
+}

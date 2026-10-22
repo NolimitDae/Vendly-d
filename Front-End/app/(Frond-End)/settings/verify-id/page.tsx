@@ -42,9 +42,8 @@ export default function VerifyIdPage() {
 
   const pick = (slot: Slot, file?: File) => {
     if (!file) return;
-    if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type) && !/\.(jpe?g|png|webp|heic)$/i.test(file.name)) {
-      return toast.error("Use a photo (JPEG, PNG, WebP or HEIC).");
-    }
+    // HEIC isn't accepted (reviewers can't open it); iPhones convert to JPEG when HEIC isn't offered
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return toast.error("Use a JPEG, PNG or WebP photo.");
     if (file.size > MAX) return toast.error("Photos can be up to 10 MB.");
     setFiles((f) => ({ ...f, [slot]: file }));
     setPreviews((p) => ({ ...p, [slot]: URL.createObjectURL(file) }));
@@ -192,7 +191,7 @@ function PhotoSlot({ label, hint, preview, onPick, selfie }: { label: string; hi
       <input
         ref={ref}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/heic"
+        accept="image/jpeg,image/png,image/webp"
         {...(selfie ? { capture: "user" as const } : {})}
         className="hidden"
         onChange={(e) => onPick(e.target.files?.[0])}

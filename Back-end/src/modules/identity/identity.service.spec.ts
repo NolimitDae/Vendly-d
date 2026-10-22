@@ -22,7 +22,14 @@ const PDF = Buffer.from('%PDF-1.7 not an image at all');
 const file = (buffer: Buffer) => ({ buffer, size: buffer.length });
 
 function setup(user: any = { id_verified_at: null, type: 'CUSTOMER' }, pending: any[] = []) {
-  const tx = { identityVerification: { deleteMany: jest.fn(), create: jest.fn().mockResolvedValue({ id: 'iv1', status: 'PENDING' }) } };
+  const tx = {
+    identityVerification: {
+      deleteMany: jest.fn(),
+      create: jest.fn().mockResolvedValue({ id: 'iv1', status: 'PENDING' }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    user: { update: jest.fn() },
+  };
   const prisma: any = {
     user: { findUnique: jest.fn().mockResolvedValue(user), update: jest.fn().mockReturnValue('user-update') },
     identityVerification: {
@@ -59,14 +66,14 @@ describe('IdentityService.submit', () => {
     expect(PrivateStorage.put).toHaveBeenCalledTimes(3);
     const keys = (PrivateStorage.put as jest.Mock).mock.calls.map((c) => c[0]);
     expect(keys.every((k: string) => k.startsWith('identity/u1/'))).toBe(true);
-    expect(tx.identityVerification.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['old'] } } });
+    expect(tx.identityVerification.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['old'] }, status: 'PENDING' } });
     expect(tx.identityVerification.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ user_id: 'u1', legal_name: 'Jane Q Doe' }) }));
     expect(PrivateStorage.remove).toHaveBeenCalledWith('identity/u1/a.jpg');
   });
 
   it('rejects files that are not images, and cleans up what was stored', async () => {
     const { service } = setup();
-    await expect(service.submit('u1', dto, { front: file(JPEG), back: file(PDF), selfie: file(JPEG) })).rejects.toThrow('JPEG, PNG, WebP or HEIC');
+    await expect(service.submit('u1', dto, { front: file(JPEG), back: file(PDF), selfie: file(JPEG) })).rejects.toThrow('JPEG, PNG or WebP');
     expect(PrivateStorage.remove).toHaveBeenCalledTimes(1);
   });
 
@@ -83,26 +90,40 @@ describe('IdentityService.submit', () => {
 
 describe('IdentityService.adminReview', () => {
   it('approving marks the user verified and tells them', async () => {
-    const { service, prisma, push } = setup();
+    const { service, prisma, push, tx } = setup();
     prisma.identityVerification.findUnique.mockResolvedValue({ id: 'iv1', user_id: 'u1', status: 'PENDING' });
     await service.adminReview('iv1', 'admin', { status: 'APPROVED' });
-    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { id_verified_at: expect.any(Date) } });
+    expect(tx.identityVerification.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'iv1', status: 'PENDING' } }));
+    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { id_verified_at: expect.any(Date) } });
     expect(push.sendToUser).toHaveBeenCalledWith('u1', expect.objectContaining({ title: 'Your ID is verified' }));
   });
 
   it('rejecting needs a reason and does not verify', async () => {
-    const { service, prisma } = setup();
+    const { service, prisma, tx } = setup();
     prisma.identityVerification.findUnique.mockResolvedValue({ id: 'iv1', user_id: 'u1', status: 'PENDING' });
     await expect(service.adminReview('iv1', 'admin', { status: 'REJECTED' })).rejects.toThrow('Tell the user why');
     await service.adminReview('iv1', 'admin', { status: 'REJECTED', reason: 'The photo is blurry.' });
     expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(prisma.identityVerification.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'REJECTED', rejection_reason: 'The photo is blurry.' }) }));
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.identityVerification.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'REJECTED', rejection_reason: 'The photo is blurry.' }) }));
   });
 
-  it('a check can only be reviewed once', async () => {
+  it('a check can only be reviewed once, even by two admins at the same moment', async () => {
     const { service, prisma } = setup();
     prisma.identityVerification.findUnique.mockResolvedValue({ id: 'iv1', user_id: 'u1', status: 'APPROVED' });
     await expect(service.adminReview('iv1', 'admin', { status: 'APPROVED' })).rejects.toThrow('already been reviewed');
+
+    const raced = setup();
+    raced.prisma.identityVerification.findUnique.mockResolvedValue({ id: 'iv1', user_id: 'u1', status: 'PENDING' });
+    raced.tx.identityVerification.updateMany.mockResolvedValue({ count: 0 });
+    await expect(raced.service.adminReview('iv1', 'admin', { status: 'APPROVED' })).rejects.toThrow('already been reviewed');
+    expect(raced.tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses HEIC photos, which admins could not view', async () => {
+    const HEIC = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypheic'), Buffer.alloc(12)]);
+    expect(imageKind(HEIC)).toBe('heic');
+    await expect(setup().service.submit('u1', { document_type: 'PASSPORT', legal_name: 'Jane Q Doe' }, { front: file(HEIC), selfie: file(JPEG) })).rejects.toThrow('JPEG, PNG or WebP');
   });
 });
 

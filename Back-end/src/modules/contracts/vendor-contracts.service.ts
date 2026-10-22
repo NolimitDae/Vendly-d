@@ -25,6 +25,7 @@ import {
   UPLOADED_REQUIRED_FIELDS,
   defaultTemplates,
   vendorFieldsFor,
+  withProtectionFeeWording,
 } from './contract-templates';
 import { buildMergeData, fieldLabel, renderTemplate, sha256 } from './contract-merge';
 import { PdfValidationError, validateUploadedPdf } from './contract-pdf';
@@ -410,7 +411,7 @@ export class VendorContractsService implements OnModuleInit {
       };
     }
     if (!vc.template) throw new BadRequestException("The vendor's contract template is missing.");
-    return { title: vc.template.title, body: vc.template.body, required: vc.template.required_fields };
+    return { title: vc.template.title, body: withProtectionFeeWording(vc.template.body), required: vc.template.required_fields };
   }
 
   // ─── Admin ──────────────────────────────────────────────────────────────

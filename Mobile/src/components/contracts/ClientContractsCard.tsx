@@ -74,7 +74,7 @@ export default function ClientContractsCard({ eventId }: { eventId: string }) {
 
   return (
     <View style={{ gap: 10 }}>
-      {rows.length === 0 && <Text style={s.muted}>No vendor contracts yet.</Text>}
+      {rows.length === 0 && <Text style={s.muted}>No contracts need your signature.</Text>}
       {rows.map((r) => (
         <Card key={r.id} style={s.row}>
           <Ionicons name="document-text-outline" size={22} color={DARK.accent} />

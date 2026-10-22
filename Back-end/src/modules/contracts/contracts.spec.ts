@@ -2,6 +2,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { PDFDocument } from 'pdf-lib';
 import { ContractCategory } from 'prisma/generated/client';
 import { BookingContractsService } from './booking-contracts.service';
+import { withProtectionFeeWording } from './contract-templates';
 import {
   buildMergeData,
   contentHash,
@@ -87,6 +88,29 @@ function mergeFor(overrides: Partial<Parameters<typeof buildMergeData>[0]['booki
     timezone: 'America/Chicago',
   });
 }
+
+describe('fee wording', () => {
+  it('older templates render with the current fee name', () => {
+    expect(withProtectionFeeWording('- Vendly service fee: {{service_fee}}\nAll payments are made through Vendly. Any service fee is paid to Vendly.')).toBe(
+      '- Vendly Protection fee: {{service_fee}}\nAll payments are made through Vendly. The Vendly Protection fee is paid to Vendly.',
+    );
+  });
+
+  it('a booking for an event names the customer as the event planner, whichever role is in use', () => {
+    const base = mergeFor();
+    expect(base.customer_role_label).toBe('Customer');
+    const forEvent = buildMergeData({
+      booking: { id: 'b', amount: 100, service_fee: 5, currency: 'usd' },
+      listing: { title: 'DJ' },
+      vendor: { name: 'V', email: 'v@x.co', vendorProfile: { business_name: 'V', address: 'A' } },
+      customer: { name: 'Pat Planner', type: 'CUSTOMER' },
+      event: { id: 'e1', name: 'Gala', venue: 'Hall', guest_count: 50 },
+      fieldValues: SAMPLE_VALUES,
+      contractVersion: 1,
+    } as any);
+    expect(forEvent.customer_role_label).toBe('Event Planner');
+  });
+});
 
 describe('contract merge fields', () => {
   const templates = defaultTemplates();
