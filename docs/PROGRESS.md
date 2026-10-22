@@ -38,11 +38,11 @@ Built: data model with DB-enforced write-once signatures/audit log, Vendly defau
 
 | ID | Gap | Why |
 |----|-----|-----|
-| C1 | Deposit charged on Accept & Sign | Phase 1 payments (saved card + deposit) don't exist yet; contracts run on the current Pay Now flow and the contract text says payment is in full through Vendly |
+| C1 | Deposit charged on Accept & Sign | Done: Accept & Sign schedules the payment plan and charges what's due on the saved card |
 | C2 | Request expiry voiding contracts | Bookings have no expiry concept yet; decline and cancel do void |
-| C3 | Custom quotes in chat generating contracts | Custom quotes don't exist yet |
-| C4 | Dispute queue showing the contract | No dispute system exists yet; admin can view any booking's contract and audit log |
-| C5 | Client co-signature | Behind a flag and off at launch per spec; not built |
+| C3 | Custom quotes in chat generating contracts | Done: booking with a quote puts the quoted price in the contract and claims the quote |
+| C4 | Dispute queue showing the contract | Disputes exist, but the queue doesn't show the contract yet; admin can view any booking's contract and audit log |
+| C5 | Client co-signature | Built behind the `client_cosign` flag (off by default): the planner's client signs before the vendor (status AWAITING_CLIENT) |
 | C6 | Privacy policy wording | Add "Signed contracts are kept for 7 years" to the privacy policy (admin dashboard > Privacy) |
 | C7 | Lawyer review | Remove [LAWYER REVIEW] by publishing new template versions once approved |
 

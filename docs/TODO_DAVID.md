@@ -130,12 +130,20 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
       Rentals show by default. Other flag names aren't connected to anything yet; tell me what else you want switchable.
 - [ ] Admin → Promo codes: any launch codes.
 - [ ] Admin → Vendors: approve vendor licences (vendors can now upload them from the app).
+- [ ] Admin → **ID checks**: approve or reject people's ID photos. Switching between customer, vendor and planner on one
+      login needs an approved ID. Check the name matches, the ID isn't expired or edited, and the selfie is the same person.
+- [ ] Optional: to let a planner's client **co-sign** vendor contracts, add a feature flag named `client_cosign` and switch it on
+      (off by default). See issue #5 for the open questions.
+- [ ] Privacy policy (Admin → Privacy): say that ID photos are stored privately for verification and deleted with the account,
+      and that location is used for "near me" search and proof photos.
 
 ## 8. Decisions I need from you
 
-- [ ] **One login, several roles?** Should someone be both a customer and a vendor (switching modes), or keep one role per account?
-- [ ] **Light mode in the app** (parked for now; about a day of work).
-- [ ] **"Near me" on the website search too?** It's in the app now; the website still filters by typed location.
+- [x] **One login, several roles:** built. Switching needs an approved ID check (Settings → Your roles / Switch role).
+- [ ] **Light mode in the app** (on hold until everything else works).
+- [x] **"Near me" on the website search too:** built, with a location prompt on the website and the app home screen.
+- [ ] **Answer the questions in GitHub issue #5** (ID check method, photo retention, client co-signing, login cookie).
+- [ ] **Make a new iPhone build** once this batch is pushed: the location prompt text changed, which needs a native build.
 
 ## Good to know
 
