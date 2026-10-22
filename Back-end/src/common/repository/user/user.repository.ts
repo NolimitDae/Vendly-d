@@ -8,6 +8,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { ArrayHelper } from '../../helper/array.helper';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { StringHelper } from 'src/common/helper/string.helper';
+import { normalizeEmail } from 'src/common/helper/email';
 
 @Injectable()
 export class UserRepository {
@@ -236,6 +237,7 @@ export class UserRepository {
       // Step 3: Check email uniqueness
       // -------------------------
       if (email) {
+        email = normalizeEmail(email);
         const userEmailExist = await this.exist({
           field: 'email',
           value: String(email),
@@ -334,6 +336,7 @@ export class UserRepository {
         data['name'] = name;
       }
       if (email) {
+        email = normalizeEmail(email);
         // Check if email already exist
         const userEmailExist = await this.exist({
           field: 'email',

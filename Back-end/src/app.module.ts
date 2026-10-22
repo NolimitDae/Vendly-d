@@ -17,6 +17,7 @@ import { GeoModule } from './modules/geo/geo.module';
 import appConfig from './config/app.config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { EmailCaseMiddleware } from './common/middleware/email-case.middleware';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -117,6 +118,6 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware).forRoutes('*');
+    consumer.apply(LoggerMiddleware, EmailCaseMiddleware).forRoutes('*');
   }
 }
