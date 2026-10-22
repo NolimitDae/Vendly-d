@@ -8,7 +8,7 @@ import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
 import Logo from "@/components/brand/Logo";
 import { nav, VENDOR_SIGNUP_HREF } from "@/components/landing/content";
-import { FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings } from "lucide-react";
+import { FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
@@ -413,6 +413,16 @@ export default function Navbar() {
                     <Settings className="w-4 h-4" />
                     Settings
                   </Link>
+                  {user?.type !== "ADMIN" && (
+                    <Link
+                      href="/settings#roles"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                    >
+                      <Repeat className="w-4 h-4" />
+                      Switch role
+                    </Link>
+                  )}
                   <hr className="my-1 border-gray-100 dark:border-gray-700" />
                   <button
                     onClick={handleLogout}
@@ -618,6 +628,16 @@ export default function Navbar() {
                   <Settings className="w-4 h-4" />
                   Settings
                 </Link>
+                {user?.type !== "ADMIN" && (
+                  <Link
+                    href="/settings#roles"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    <Repeat className="w-4 h-4" />
+                    Switch role
+                  </Link>
+                )}
                 <Link
                   href="/notifications"
                   onClick={() => setMenuOpen(false)}

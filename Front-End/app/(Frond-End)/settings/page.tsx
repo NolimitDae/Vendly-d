@@ -9,6 +9,7 @@ import { TwoFAService } from "@/service/twofa/twofa.service";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import DeleteAccountCard from "@/components/contracts/DeleteAccountCard";
+import AccountRoles from "@/components/settings/AccountRoles";
 
 type SetupStep = "idle" | "qr" | "verify";
 
@@ -140,6 +141,10 @@ export default function SettingsPage() {
             </div>
             <ChevronRight className="w-5 h-5 text-gray-400" />
           </Link>
+
+          {/* One login, several roles */}
+          <AccountRoles />
+          <div className="h-6" />
 
           {/* 2FA card */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">

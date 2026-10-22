@@ -102,6 +102,12 @@ export const navItems: NavItem[] = [
     type: "admin",
   },
   {
+    icon: PendingApprovalIcon,
+    label: "ID checks",
+    href: "/dashboard/identity",
+    type: "admin",
+  },
+  {
     icon: WalletIcon,
     label: "Promo codes",
     href: "/dashboard/promos",
