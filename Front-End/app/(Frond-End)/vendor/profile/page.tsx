@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { AuthService } from "@/service/auth/auth.service";
 import { toast } from "react-toastify";
 import Image from "next/image";
-import { Camera, Loader2, Upload, X, BadgeCheck, Clock } from "lucide-react";
+import { Camera, Loader2, Upload, X, BadgeCheck, Clock, ImagePlus } from "lucide-react";
+import { shopUrl } from "@/components/marketplace/VendorShop";
+
+/** Same rule as the server: 3–30 lower-case letters or numbers, single dashes between. */
+const HANDLE_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 interface ProfileData {
   name?: string;
@@ -15,6 +19,9 @@ interface ProfileData {
   avatar_url?: string;
   address?: string;
   bio?: string;
+  handle?: string | null;
+  banner_url?: string | null;
+  logo_url?: string | null;
   vendorProfile?: {
     business_name?: string;
     about_me?: string;
@@ -37,9 +44,17 @@ export default function VendorProfilePage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [licenseStatus, setLicenseStatus] = useState("");
   const [licenseFiles, setLicenseFiles] = useState<File[]>([]);
+  const [handle, setHandle] = useState("");
+  const [savedHandle, setSavedHandle] = useState("");
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
   const avatarRef = useRef<HTMLInputElement>(null);
   const licenseRef = useRef<HTMLInputElement>(null);
+  const bannerRef = useRef<HTMLInputElement>(null);
+  const logoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     AuthService.me()
@@ -52,6 +67,10 @@ export default function VendorProfilePage() {
         setAddress(d.address ?? "");
         setAvatarUrl(d.avatar_url ?? null);
         setLicenseStatus(d.vendorProfile?.license_status ?? "");
+        setHandle(d.handle ?? "");
+        setSavedHandle(d.handle ?? "");
+        setBannerUrl(d.banner_url ?? null);
+        setLogoUrl(d.logo_url ?? null);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -64,8 +83,22 @@ export default function VendorProfilePage() {
     setAvatarUrl(URL.createObjectURL(file));
   };
 
+  const pickImage = (file: File | undefined, set: (f: File) => void, preview: (url: string) => void) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return toast.error("Images can be up to 5 MB.");
+    set(file);
+    preview(URL.createObjectURL(file));
+  };
+
+  const cleanHandle = handle.trim().toLowerCase();
+  const handleError =
+    cleanHandle && (cleanHandle.length < 3 || cleanHandle.length > 30 || !HANDLE_RE.test(cleanHandle))
+      ? "Use 3–30 lower-case letters or numbers, with single dashes between words."
+      : "";
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (handleError) return toast.error(handleError);
     setSaving(true);
     try {
       const fd = new FormData();
@@ -75,11 +108,17 @@ export default function VendorProfilePage() {
       if (aboutMe) fd.append("about_me", aboutMe);
       if (address) fd.append("address", address);
       if (avatarFile) fd.append("image", avatarFile);
+      if (cleanHandle !== savedHandle) fd.append("handle", cleanHandle);
+      if (bannerFile) fd.append("banner", bannerFile);
+      if (logoFile) fd.append("logo", logoFile);
 
       const res = await AuthService.updateProfile(fd);
       if (res.data?.success) {
         toast.success("Profile saved successfully!");
         setAvatarFile(null);
+        setBannerFile(null);
+        setLogoFile(null);
+        setSavedHandle(cleanHandle);
       } else {
         toast.error(res.data?.message || "Failed to save profile");
       }
@@ -242,6 +281,79 @@ export default function VendorProfilePage() {
                 placeholder="Tell clients about your services and experience…"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
               />
+            </div>
+          </div>
+
+          {/* Shop: link, banner and logo shown on the public shop page */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 space-y-5">
+            <div>
+              <h2 className="font-semibold text-gray-900 dark:text-white">Shop</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Customers see these on your shop page. Share your link anywhere.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="shop-handle" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Shop link
+              </label>
+              <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-primary">
+                <span className="pl-4 text-sm text-gray-400 whitespace-nowrap">vendlymarketplace.com/v/</span>
+                <input
+                  id="shop-handle"
+                  type="text"
+                  value={handle}
+                  onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
+                  placeholder="your-business"
+                  maxLength={30}
+                  autoCapitalize="none"
+                  className="flex-1 min-w-0 px-1 py-2.5 bg-transparent focus:outline-none text-sm"
+                />
+              </div>
+              {handleError ? (
+                <p className="text-xs text-red-500 mt-1">{handleError}</p>
+              ) : savedHandle ? (
+                <a href={shopUrl(savedHandle)} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-block">
+                  View my shop
+                </a>
+              ) : (
+                <p className="text-xs text-gray-400 mt-1">Leave empty if you don&apos;t want a shop link yet.</p>
+              )}
+            </div>
+
+            <div>
+              <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Banner</span>
+              <button
+                type="button"
+                onClick={() => bannerRef.current?.click()}
+                className="relative w-full aspect-[3/1] rounded-xl overflow-hidden border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-primary transition flex items-center justify-center text-gray-400"
+                aria-label={bannerUrl ? "Change banner" : "Add banner"}
+              >
+                {bannerUrl ? (
+                  <Image src={bannerUrl} alt="Shop banner" fill className="object-cover" unoptimized />
+                ) : (
+                  <span className="flex items-center gap-2 text-sm">
+                    <ImagePlus className="w-5 h-5" /> Add a wide banner (3:1)
+                  </span>
+                )}
+              </button>
+              <input ref={bannerRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => pickImage(e.target.files?.[0], setBannerFile, setBannerUrl)} />
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => logoRef.current?.click()}
+                className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-primary transition flex items-center justify-center text-gray-400 flex-shrink-0"
+                aria-label={logoUrl ? "Change logo" : "Add logo"}
+              >
+                {logoUrl ? <Image src={logoUrl} alt="Shop logo" fill className="object-cover" unoptimized /> : <ImagePlus className="w-5 h-5" />}
+              </button>
+              <div>
+                <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">Logo</span>
+                <p className="text-xs text-gray-400 mt-1">Square image, JPEG, PNG or WebP, max 5MB</p>
+              </div>
+              <input ref={logoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => pickImage(e.target.files?.[0], setLogoFile, setLogoUrl)} />
             </div>
           </div>
 
