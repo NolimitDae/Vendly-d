@@ -41,11 +41,24 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   about_me?: string;
 
   @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ example: 'bellas-catering', description: 'Vendor shop link: vendlymarketplace.com/v/<handle>. Empty clears it.' })
+  handle?: string;
+
+  @IsOptional()
   @ApiPropertyOptional({
     type: 'string',
     format: 'binary',
     description: 'New profile image (JPEG, PNG — max 5MB)',
   })
   image?: any;
+
+  @IsOptional()
+  @ApiPropertyOptional({ type: 'string', format: 'binary', description: 'Vendor shop banner (max 5MB)' })
+  banner?: any;
+
+  @IsOptional()
+  @ApiPropertyOptional({ type: 'string', format: 'binary', description: 'Vendor shop logo (max 5MB)' })
+  logo?: any;
 }
 

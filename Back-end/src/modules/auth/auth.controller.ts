@@ -16,7 +16,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -264,20 +264,30 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Patch('update')
   @UseInterceptors(
-    FileInterceptor('image', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: imageFileFilter,
-    }),
+    FileFieldsInterceptor(
+      [
+        { name: 'image', maxCount: 1 },
+        { name: 'banner', maxCount: 1 },
+        { name: 'logo', maxCount: 1 },
+      ],
+      {
+        storage: memoryStorage(),
+        limits: { fileSize: 5 * 1024 * 1024 },
+        fileFilter: imageFileFilter,
+      },
+    ),
   )
   async updateUser(
     @Req() req: Request,
     @Body() data: UpdateUserDto,
-    @UploadedFile() image: Express.Multer.File,
+    @UploadedFiles() files: { image?: Express.Multer.File[]; banner?: Express.Multer.File[]; logo?: Express.Multer.File[] } = {},
   ) {
     try {
       const user_id = req.user.userId;
-      const response = await this.authService.updateUser(user_id, data, image);
+      const response = await this.authService.updateUser(user_id, data, files.image?.[0], {
+        banner: files.banner?.[0],
+        logo: files.logo?.[0],
+      });
       return response;
     } catch (error) {
       return {

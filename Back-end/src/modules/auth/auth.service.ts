@@ -17,6 +17,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UserType } from 'prisma/generated/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { track } from 'src/common/analytics';
+import { normalizeHandle, shopImageUrl } from '../../common/helper/handle';
 
 @Injectable()
 export class AuthService {
@@ -47,7 +48,7 @@ export class AuthService {
           last_name: true,
           bio: true,
           // vendors: business details and where their licence check stands
-          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true } },
+          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true, handle: true, banner: true, logo: true } },
         },
       });
 
@@ -76,6 +77,9 @@ export class AuthService {
               about_me: vendorProfile.about_me,
               license_status: vendorProfile.license_status,
               license_uploaded: (vendorProfile.license_photo?.length ?? 0) > 0,
+              handle: vendorProfile.handle,
+              banner_url: shopImageUrl(vendorProfile.banner),
+              logo_url: shopImageUrl(vendorProfile.logo),
             }),
           },
         };
@@ -321,10 +325,19 @@ export class AuthService {
   }
 
   // update user 
+  /** Stores an image in the avatar dir (deleting the one it replaces) and returns its filename. */
+  private async replaceImage(file: Express.Multer.File, old?: string | null) {
+    if (old) await TanvirStorage.delete(appConfig().storageUrl.avatar + '/' + old);
+    const fileName = `${StringHelper.randomString()}_${file.originalname}`;
+    await TanvirStorage.put(appConfig().storageUrl.avatar + '/' + fileName, file.buffer);
+    return fileName;
+  }
+
   async updateUser(
     userId: string,
     updateUserDto: UpdateUserDto,
     image?: Express.Multer.File,
+    shop: { banner?: Express.Multer.File; logo?: Express.Multer.File } = {},
   ) {
     try {
       const data: any = {};
@@ -339,30 +352,30 @@ export class AuthService {
 
       if (updateUserDto.about_me !== undefined) data.bio = updateUserDto.about_me;
 
-      if (image) {
-        // delete old image from storage
-        const oldImage = await this.prisma.user.findFirst({
-          where: { id: userId },
-          select: { avatar: true },
-        });
-        if (oldImage.avatar) {
-          await TanvirStorage.delete(
-            appConfig().storageUrl.avatar + '/' + oldImage.avatar,
-          );
-        }
-
-        // upload file
-        const fileName = `${StringHelper.randomString()}_${image.originalname}`;
-        await TanvirStorage.put(
-          appConfig().storageUrl.avatar + '/' + fileName,
-          image.buffer,
-        );
-
-        data.avatar = fileName;
-      }
-      
       const user = await this.userRepository.getUserDetails(userId);
       if (user) {
+        let handle: string | null | undefined;
+        if (user.type === UserType.VENDOR && updateUserDto.handle !== undefined) {
+          const result = normalizeHandle(updateUserDto.handle);
+          if ('error' in result) return { success: false, message: result.error };
+          handle = result.handle;
+          if (handle) {
+            const taken = await this.prisma.vendorProfile.findFirst({
+              where: { handle, user_id: { not: userId } },
+              select: { id: true },
+            });
+            if (taken) return { success: false, message: 'That shop link is taken. Try another.' };
+          }
+        }
+
+        if (image) {
+          const oldImage = await this.prisma.user.findFirst({
+            where: { id: userId },
+            select: { avatar: true },
+          });
+          data.avatar = await this.replaceImage(image, oldImage?.avatar);
+        }
+
         await this.prisma.user.update({
           where: { id: userId },
           data: { ...data },
@@ -376,6 +389,15 @@ export class AuthService {
             vendorProfilePatch.about_me = updateUserDto.about_me;
           if (updateUserDto.address !== undefined)
             vendorProfilePatch.address = updateUserDto.address;
+          if (handle !== undefined) vendorProfilePatch.handle = handle;
+          if (shop.banner || shop.logo) {
+            const old = await this.prisma.vendorProfile.findUnique({
+              where: { user_id: userId },
+              select: { banner: true, logo: true },
+            });
+            if (shop.banner) vendorProfilePatch.banner = await this.replaceImage(shop.banner, old?.banner);
+            if (shop.logo) vendorProfilePatch.logo = await this.replaceImage(shop.logo, old?.logo);
+          }
 
           if (Object.keys(vendorProfilePatch).length > 0) {
             await this.prisma.vendorProfile.upsert({

@@ -4,6 +4,7 @@ import { ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
+import { shopImageUrl } from 'src/common/helper/handle';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 @Injectable()
@@ -153,9 +154,13 @@ export class MarketplaceService {
     };
   }
 
-  async getVendorProfile(vendorId: string) {
+  /** Looks a vendor up by id or by shop handle (vendlymarketplace.com/v/<handle>). */
+  async getVendorProfile(idOrHandle: string) {
     const vendor = await this.prisma.user.findFirst({
-      where: { id: vendorId, deleted_at: null },
+      where: {
+        deleted_at: null,
+        OR: [{ id: idOrHandle }, { vendorProfile: { handle: idOrHandle.toLowerCase() } }],
+      },
       select: {
         id: true,
         name: true,
@@ -168,6 +173,9 @@ export class MarketplaceService {
             business_name: true,
             about_me: true,
             license_status: true,
+            handle: true,
+            banner: true,
+            logo: true,
           },
         },
         vendorListings: {
@@ -190,7 +198,7 @@ export class MarketplaceService {
     if (!vendor) throw new NotFoundException('Vendor not found');
 
     const avgRating = await this.prisma.review.aggregate({
-      where: { vendor_id: vendorId, deleted_at: null },
+      where: { vendor_id: vendor.id, deleted_at: null },
       _avg: { rating: true },
     });
 
@@ -198,6 +206,9 @@ export class MarketplaceService {
       success: true,
       data: {
         ...vendor,
+        handle: vendor.vendorProfile?.handle ?? null,
+        banner_url: shopImageUrl(vendor.vendorProfile?.banner),
+        logo_url: shopImageUrl(vendor.vendorProfile?.logo),
         avatar_url: vendor.avatar
           ? TanvirStorage.url(
               `${appConfig().storageUrl.avatar}/${vendor.avatar}`,

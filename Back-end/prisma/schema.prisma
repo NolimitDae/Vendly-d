@@ -281,6 +281,10 @@ model VendorProfile {
   business_name           String?                  @db.VarChar(255)
   about_me                String?                  @db.Text
   address                 String?
+  // shop page: vendlymarketplace.com/v/<handle>, plus banner and logo filenames (avatar storage dir)
+  handle                  String?                  @unique @db.VarChar(30)
+  banner                  String?
+  logo                    String?
   vendorSubscriptionPlans VendorSubscriptionPlan[]
   // private storage key of the vendor's saved drawn signature
   saved_signature_key     String?
