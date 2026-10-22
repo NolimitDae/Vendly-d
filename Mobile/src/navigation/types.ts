@@ -82,6 +82,8 @@ export type CustomerProfileStackParams = {
   CustomerProfile: undefined;
   EditProfile: undefined;
   ChangePassword: undefined;
+  SwitchRole: undefined;
+  VerifyIdentity: undefined;
   Notifications: undefined;
   PaymentMethods: undefined;
   SharedEvents: undefined;
@@ -126,6 +128,8 @@ export type VendorProfileStackParams = {
   VendorContracts: undefined;
   EditProfile: undefined;
   ChangePassword: undefined;
+  SwitchRole: undefined;
+  VerifyIdentity: undefined;
   Notifications: undefined;
   Payouts: undefined;
   License: undefined;

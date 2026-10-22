@@ -37,7 +37,7 @@ export default function CustomerProfile() {
     },
     {
       title: 'Security',
-      items: [{ icon: 'lock-closed-outline', label: 'Change Password', onPress: () => nav.navigate('ChangePassword') }],
+      items: [{ icon: 'lock-closed-outline', label: 'Change Password', onPress: () => nav.navigate('ChangePassword') }, { icon: 'swap-horizontal-outline', label: 'Switch role', onPress: () => nav.navigate('SwitchRole') }],
     },
   ];
 

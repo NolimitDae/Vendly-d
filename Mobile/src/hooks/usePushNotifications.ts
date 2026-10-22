@@ -18,6 +18,9 @@ function openFromNotification(data: Record<string, unknown> | undefined, userTyp
     });
   } else if (data.type === 'message') {
     navigationRef.navigate('MessagesTab', { screen: 'ChatList' });
+  } else if (data.type === 'identity') {
+    // ID check reviewed: approved opens role switching, rejected opens the upload again
+    navigationRef.navigate('ProfileTab', { screen: data.status === 'REJECTED' ? 'VerifyIdentity' : 'SwitchRole' });
   }
 }
 

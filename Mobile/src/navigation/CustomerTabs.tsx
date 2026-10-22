@@ -22,6 +22,8 @@ import RentalItem from '../screens/customer/RentalItem';
 import RentalCheckout from '../screens/customer/RentalCheckout';
 import EditProfile from '../screens/customer/EditProfile';
 import ChangePassword from '../screens/customer/ChangePassword';
+import SwitchRole from '../screens/shared/SwitchRole';
+import VerifyIdentity from '../screens/shared/VerifyIdentity';
 import NotificationSettings from '../screens/customer/NotificationSettings';
 import PaymentMethods from '../screens/customer/PaymentMethods';
 import SharedEvents from '../screens/shared/SharedEvents';
@@ -99,6 +101,8 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="CustomerProfile" component={CustomerProfile} />
       <ProfileStack.Screen name="EditProfile" component={EditProfile} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
+      <ProfileStack.Screen name="SwitchRole" component={SwitchRole} />
+      <ProfileStack.Screen name="VerifyIdentity" component={VerifyIdentity} />
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
       <ProfileStack.Screen name="PaymentMethods" component={PaymentMethods} />
       <ProfileStack.Screen name="SharedEvents" component={SharedEvents} />

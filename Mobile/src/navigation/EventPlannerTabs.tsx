@@ -27,6 +27,8 @@ import ChatList from '../screens/customer/ChatList';
 import ChatDetail from '../screens/customer/ChatDetail';
 import EditProfile from '../screens/customer/EditProfile';
 import ChangePassword from '../screens/customer/ChangePassword';
+import SwitchRole from '../screens/shared/SwitchRole';
+import VerifyIdentity from '../screens/shared/VerifyIdentity';
 import NotificationSettings from '../screens/customer/NotificationSettings';
 import Inbox from '../screens/shared/Inbox';
 import PaymentMethods from '../screens/customer/PaymentMethods';
@@ -86,6 +88,8 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="PlannerProfile" component={PlannerProfile} />
       <ProfileStack.Screen name="EditProfile" component={EditProfile} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
+      <ProfileStack.Screen name="SwitchRole" component={SwitchRole} />
+      <ProfileStack.Screen name="VerifyIdentity" component={VerifyIdentity} />
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
       <ProfileStack.Screen name="Inbox" component={Inbox} />
       <ProfileStack.Screen name="PaymentMethods" component={PaymentMethods} />

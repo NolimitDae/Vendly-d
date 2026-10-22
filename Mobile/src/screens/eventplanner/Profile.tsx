@@ -46,7 +46,7 @@ export default function EPProfile() {
       { icon: 'mail-unread-outline', label: 'Inbox', onPress: () => (nav as any).navigate('Inbox') },
       { icon: 'notifications-outline', label: 'Notification settings', onPress: () => nav.navigate('Notifications') },
     ] },
-    { title: 'Security', items: [{ icon: 'lock-closed-outline', label: 'Change Password', onPress: () => nav.navigate('ChangePassword') }] },
+    { title: 'Security', items: [{ icon: 'lock-closed-outline', label: 'Change Password', onPress: () => nav.navigate('ChangePassword') }, { icon: 'swap-horizontal-outline', label: 'Switch role', onPress: () => nav.navigate('SwitchRole') }] },
   ];
 
   return (
