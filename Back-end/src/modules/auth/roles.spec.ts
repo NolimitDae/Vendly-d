@@ -63,4 +63,15 @@ describe('AuthService.switchRole', () => {
     await expect(setup({ ...base, type: 'ADMIN', roles: ['ADMIN'], id_verified_at: new Date() }).service.switchRole('u1', 'VENDOR')).rejects.toBeInstanceOf(ForbiddenException);
     await expect(setup({ ...base, type: 'CUSTOMER', roles: [], id_verified_at: new Date() }).service.switchRole('u1', 'ADMIN')).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('reports the switch as done even if fresh tokens could not be issued', async () => {
+    const { service, tx, jwt } = setup({ ...base, type: 'CUSTOMER', roles: ['CUSTOMER', 'VENDOR'], id_verified_at: new Date() });
+    jwt.sign.mockImplementation(() => {
+      throw new Error('signing failed');
+    });
+    const res: any = await service.switchRole('u1', 'VENDOR');
+    expect(tx.user.update).toHaveBeenCalled();
+    expect(res).toMatchObject({ success: true, active: 'VENDOR' });
+    expect(res.authorization).toBeUndefined();
+  });
 });

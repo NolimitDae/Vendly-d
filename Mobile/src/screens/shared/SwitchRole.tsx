@@ -19,7 +19,7 @@ const apiMessage = (e: any, fallback: string) => {
 export default function SwitchRole() {
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { login, refreshUser } = useAuth();
   const [info, setInfo] = useState<RolesInfo | null>(null);
   const [busy, setBusy] = useState<SwitchableRole | null>(null);
   const [addingVendor, setAddingVendor] = useState(false);
@@ -40,11 +40,15 @@ export default function SwitchRole() {
     try {
       const res = await IdentityService.switchRole(role, role === 'VENDOR' ? businessName.trim() || undefined : undefined);
       const auth = res.data?.authorization;
-      if (!res.data?.success || !auth?.access_token) throw new Error(res.data?.message);
-      const me = await api.get('/auth/me', { headers: { Authorization: `Bearer ${auth.access_token}` } });
+      if (!res.data?.success) throw new Error(res.data?.message);
       haptic.success();
-      // Logging in with the new role swaps the whole app to that role's tabs.
-      await login(auth.access_token, me.data?.data, auth.refresh_token);
+      // Updating the signed-in user to the new role swaps the whole app to that role's tabs.
+      if (auth?.access_token) {
+        const me = await api.get('/auth/me', { headers: { Authorization: `Bearer ${auth.access_token}` } });
+        await login(auth.access_token, me.data?.data, auth.refresh_token);
+      } else {
+        await refreshUser(); // the current token already carries the new role
+      }
     } catch (e) {
       Alert.alert('Couldn’t switch', apiMessage(e, 'Please try again.'));
       setBusy(null);

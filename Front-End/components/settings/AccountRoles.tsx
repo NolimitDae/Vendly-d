@@ -45,11 +45,12 @@ export default function AccountRoles() {
     try {
       const res = await IdentityService.switchRole(role, role === "VENDOR" ? businessName.trim() || undefined : undefined);
       const auth = res.data?.authorization;
-      if (!res.data?.success || !auth?.access_token) throw new Error(res.data?.message);
-      saveSession(auth.access_token, auth.refresh_token);
+      if (!res.data?.success) throw new Error(res.data?.message);
+      // fresh tokens when issued; the current session already carries the new role either way
+      if (auth?.access_token) saveSession(auth.access_token, auth.refresh_token);
       toast.success(res.data.added ? res.data.message : `Switched to ${ROLE_LABEL[role]}`);
       // full reload so the menus and pages pick up the new role
-      hardNavigate(homeFor(res.data.type));
+      hardNavigate(homeFor(res.data.type ?? role));
     } catch (e) {
       toast.error(apiMessage(e, "Couldn't switch roles. Please try again."));
       setBusy(null);

@@ -74,4 +74,14 @@ describe('AccountRoles', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Verify your ID first.'));
     expect(assign).not.toHaveBeenCalled();
   });
+
+  it('still moves to the new role when no fresh tokens come back', async () => {
+    (IdentityService.roles as jest.Mock).mockResolvedValue(roles({ roles: ['CUSTOMER', 'EVENT_PLANNER'], id_verification: { verified: true, status: 'APPROVED' } }));
+    (IdentityService.switchRole as jest.Mock).mockResolvedValue({ data: { success: true, active: 'EVENT_PLANNER', added: false } });
+    const user = userEvent.setup();
+    render(<AccountRoles />);
+    await user.click(await screen.findByRole('button', { name: 'Switch to event planner' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/event-planner/profile'));
+    expect(saveSession).not.toHaveBeenCalled();
+  });
 });

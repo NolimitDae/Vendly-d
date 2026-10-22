@@ -1133,8 +1133,10 @@ export class AuthService {
     });
     track(adding ? 'role_added' : 'role_switched', userId, { role: target });
 
+    // The switch is saved. Fresh tokens are a convenience: existing ones already carry the new role,
+    // since the role on each request is read from the database.
     const tokens = await this.login({ email: user.email, userId });
-    return { ...tokens, message: adding ? `You can now use Vendly as a ${target === 'EVENT_PLANNER' ? 'planner' : target.toLowerCase()}.` : 'Switched.', active: target, roles: heldRoles({ type: newType, roles }), added: adding };
+    return { ...tokens, success: true, message: adding ? `You can now use Vendly as a ${target === 'EVENT_PLANNER' ? 'planner' : target.toLowerCase()}.` : 'Switched.', active: target, roles: heldRoles({ type: newType, roles }), added: adding };
   }
 
   async deleteAccount(userId: string) {
