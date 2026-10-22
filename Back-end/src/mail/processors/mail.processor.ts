@@ -19,16 +19,19 @@ export class MailProcessor extends WorkerHost {
 
   @OnWorkerEvent('completed')
   onCompleted(job: Job, result: any) {
-    this.logger.log(`Job ${job.id} with name ${job.name} completed`);
+    // The provider's message id lets a send be matched in Resend's email log.
+    const messageId = result?.messageId ? ` (message id ${result.messageId})` : '';
+    this.logger.log(`Job ${job.id} with name ${job.name} completed${messageId}`);
   }
 
   async process(job: Job): Promise<any> {
     this.logger.log(`Processing job ${job.id} with name ${job.name}`);
+    let info: { messageId?: string } | undefined;
     try {
       switch (job.name) {
         case 'sendMemberInvitation':
           this.logger.log('Sending member invitation email');
-          await this.mailerService.sendMail({
+          info = await this.mailerService.sendMail({
             to: job.data.to,
             from: job.data.from,
             subject: job.data.subject,
@@ -38,7 +41,7 @@ export class MailProcessor extends WorkerHost {
           break;
         case 'sendOtpCodeToEmail':
           this.logger.log('Sending OTP code to email');
-          await this.mailerService.sendMail({
+          info = await this.mailerService.sendMail({
             to: job.data.to,
             from: job.data.from,
             subject: job.data.subject,
@@ -48,7 +51,7 @@ export class MailProcessor extends WorkerHost {
           break;
         case 'sendVerificationLink':
           this.logger.log('Sending verification link');
-          await this.mailerService.sendMail({
+          info = await this.mailerService.sendMail({
             to: job.data.to,
             subject: job.data.subject,
             template: job.data.template,
@@ -57,7 +60,7 @@ export class MailProcessor extends WorkerHost {
           break;
         case 'sendBookingNotification':
           this.logger.log('Sending booking notification email');
-          await this.mailerService.sendMail({
+          info = await this.mailerService.sendMail({
             to: job.data.to,
             from: job.data.from,
             subject: job.data.subject,
@@ -69,6 +72,7 @@ export class MailProcessor extends WorkerHost {
           this.logger.log('Unknown job name');
           return;
       }
+      return { messageId: info?.messageId };
     } catch (error) {
       this.logger.error(
         `Error processing job ${job.id} with name ${job.name}`,

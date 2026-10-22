@@ -108,7 +108,7 @@ const sections: { id: string; title: string; body: React.ReactNode }[] = [
             booking. You must not pay, or ask to be paid, outside Vendly for a booking made through Vendly.
           </li>
           <li>
-            <strong>What you pay.</strong> Customers pay the vendor&apos;s price plus a Vendly service fee, which is
+            <strong>What you pay.</strong> Customers pay the vendor&apos;s price plus a Vendly Protection fee, which is
             currently 5% of the vendor&apos;s price. The fee and total are shown in the contract before you sign.
           </li>
           <li>
@@ -128,7 +128,7 @@ const sections: { id: string; title: string; body: React.ReactNode }[] = [
           <li>
             <strong>Held funds and payouts.</strong> We hold the customer&apos;s payment until the vendor marks the
             booking complete. The vendor&apos;s price is then added to the vendor&apos;s payout balance, which the
-            vendor can withdraw to their Stripe account. The service fee is kept by Vendly. We may delay or withhold a
+            vendor can withdraw to their Stripe account. The Vendly Protection fee is kept by Vendly. We may delay or withhold a
             payout while a dispute, chargeback or suspected fraud is being reviewed.
           </li>
           <li>
@@ -146,12 +146,12 @@ const sections: { id: string; title: string; body: React.ReactNode }[] = [
       <ul>
         <li>
           <strong>Customer cancels.</strong> Refunds of the vendor&apos;s price follow the cancellation policy in the
-          signed contract (Flexible, Moderate or Strict). The Vendly service fee is not refunded when a customer
+          signed contract (Flexible, Moderate or Strict). The Vendly Protection fee is not refunded when a customer
           cancels, unless the vendor&apos;s policy gives a full refund.
         </li>
         <li>
           <strong>Vendor cancels or doesn&apos;t show up.</strong> The customer receives a full refund, including the
-          service fee. Vendors who cancel confirmed bookings may have their account restricted.
+          Vendly Protection fee. Vendors who cancel confirmed bookings may have their account restricted.
         </li>
         <li>
           <strong>Events outside anyone&apos;s control.</strong> If an event can&apos;t go ahead because of severe
