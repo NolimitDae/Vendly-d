@@ -72,6 +72,8 @@ export const ContractsService = {
   requestAmendment: (bookingId: string, changes: AmendmentChanges, signature: SignaturePayload) =>
     Fetch.post(`/contracts/booking/${bookingId}/amendments`, { changes, signature, timezone: browserTimezone() }, auth()),
   eventContracts: (eventId: string) => Fetch.get(`/contracts/event/${eventId}`, auth()),
+  /** Contracts on an event shared with me as the planner's client (co-signing). */
+  clientEventContracts: (eventId: string) => Fetch.get(`/contracts/client/event/${eventId}`, auth()),
   eventZip: (eventId: string) => Fetch.get(`/contracts/event/${eventId}/zip`, auth()),
   verifyCode: (code: string) => Fetch.get(`/contracts/verify/${encodeURIComponent(code)}`),
   verifyFile: (file: File) => {

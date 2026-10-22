@@ -77,6 +77,8 @@ export const ContractsService = {
   requestAmendment: (bookingId: string, changes: AmendmentChanges, signature: SignaturePayload) =>
     api.post(`/contracts/booking/${bookingId}/amendments`, { changes, signature, timezone: deviceTimezone() }),
   eventContracts: (eventId: string) => api.get(`/contracts/event/${eventId}`),
+  /** Contracts on an event shared with me as the planner's client (co-signing). */
+  clientEventContracts: (eventId: string) => api.get(`/contracts/client/event/${eventId}`),
   eventZip: (eventId: string) => api.get(`/contracts/event/${eventId}/zip`),
 
   vendorList: () => api.get('/vendor/contracts'),

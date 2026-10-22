@@ -124,6 +124,14 @@ export class ContractsController {
     return this.contracts.eventContracts(eventId, user);
   }
 
+  /** Contracts on an event shared with me as the planner's client. */
+  @Get('client/event/:eventId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  clientEventContracts(@GetUser() user: AuthUser, @Param('eventId') eventId: string) {
+    return this.contracts.clientEventContracts(eventId, user);
+  }
+
   @Get('event/:eventId/zip')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -153,7 +161,7 @@ export class ContractsController {
   @ApiBearerAuth()
   @Throttle(SIGN_LIMIT)
   sign(@GetUser() user: AuthUser, @Param('id') id: string, @Body() dto: SignContractDto, @Req() req: Request) {
-    return this.contracts.signAmendment(id, user, dto.signature, requestMeta(req));
+    return this.contracts.signAsParty(id, user, dto.signature, requestMeta(req));
   }
 
   @Post(':id/decline')

@@ -1,6 +1,7 @@
 const STYLES: Record<string, string> = {
   AWAITING_VENDOR: "bg-amber-100 text-amber-800",
   AWAITING_CUSTOMER: "bg-amber-100 text-amber-800",
+  AWAITING_CLIENT: "bg-amber-100 text-amber-800",
   EXECUTED: "bg-green-100 text-green-800",
   VOID: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
   SUPERSEDED: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
@@ -10,6 +11,7 @@ const STYLES: Record<string, string> = {
 const LABELS: Record<string, string> = {
   AWAITING_VENDOR: "Awaiting vendor signature",
   AWAITING_CUSTOMER: "Awaiting customer signature",
+  AWAITING_CLIENT: "Awaiting client co-signature",
   EXECUTED: "Signed",
   VOID: "Void",
   SUPERSEDED: "Superseded",

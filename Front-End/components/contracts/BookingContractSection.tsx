@@ -162,6 +162,13 @@ export default function BookingContractSection({ bookingId, role, bookingStatus,
               The customer signed this contract. Review it and Accept &amp; Sign to confirm the booking.
             </div>
           )}
+          {current.status === "AWAITING_CLIENT" && (
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300">
+              {role === "VENDOR"
+                ? "The planner signed. Their client is co-signing too; you can Accept & Sign once they have."
+                : "Waiting for your client to co-sign. We emailed them a link; the vendor can accept once they sign."}
+            </div>
+          )}
           {pendingAmendment && (
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300">
               Amendment (version {pendingAmendment.version}){" "}

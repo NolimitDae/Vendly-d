@@ -97,8 +97,11 @@ export default function ContractPage() {
   const bookingHref = contract
     ? contract.my_role === "VENDOR"
       ? `/vendor/bookings/${contract.booking_id}`
-      : `/bookings/${contract.booking_id}`
+      : contract.my_role === "CLIENT"
+        ? "/my-events"
+        : `/bookings/${contract.booking_id}`
     : "/bookings";
+  const coSigning = contract?.my_role === "CLIENT";
 
   const download = (kind: "executed" | "draft" | "source") =>
     openContractFile(() => ContractsService.downloadLink(id, kind)).catch((e) => toast.error(apiError(e, "Download failed")));
@@ -119,7 +122,7 @@ export default function ContractPage() {
     setBusy(true);
     try {
       await ContractsService.sign(id, signature);
-      toast.success("Amendment signed. The new version is now in force.");
+      toast.success(coSigning ? "Signed. The vendor can now accept the booking." : "Amendment signed. The new version is now in force.");
       setSigningAmendment(false);
       await load();
     } catch (err) {
@@ -205,7 +208,7 @@ export default function ContractPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
       <Link href={bookingHref} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white dark:text-gray-400">
-        <ArrowLeft className="w-4 h-4" /> Back to booking
+        <ArrowLeft className="w-4 h-4" /> {coSigning ? "Back to shared events" : "Back to booking"}
       </Link>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3">
@@ -280,6 +283,16 @@ export default function ContractPage() {
           </button>
         </div>
       )}
+      {coSigning && contract.can_sign && !signingAmendment && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+          <p className="text-sm text-gray-700 dark:text-gray-200">
+            Your planner booked this vendor for your event and asked you to co-sign the contract. Read it below, then sign.
+          </p>
+          <button onClick={startSigning} className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold">
+            Review &amp; co-sign
+          </button>
+        </div>
+      )}
       {contract.is_amendment && contract.awaiting_role && !contract.can_sign && isParty && (
         <button onClick={decline} disabled={busy} className="text-sm text-red-600 underline">
           Withdraw this amendment
@@ -295,7 +308,7 @@ export default function ContractPage() {
             consentText={contract.consent_text}
             sourcePdfUrl={sourceUrl}
             vendor={contract.my_role === "VENDOR" ? { hasSavedSignature } : undefined}
-            submitLabel="Sign amendment"
+            submitLabel={coSigning ? "Co-sign contract" : "Sign amendment"}
             busy={busy}
             onSubmit={signAmendment}
             onCancel={() => setSigningAmendment(false)}

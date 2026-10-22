@@ -64,7 +64,9 @@ export class BookingService {
       to: listing.vendor.email,
       recipientName: listing.vendor.name,
       subject: `New booking request — ${listing.title}`,
-      message: `${customer.name} signed the contract and sent a booking request. Review it, then Accept & Sign or decline.`,
+      message: created.awaiting_client
+        ? `${customer.name} signed the contract and sent a booking request. Their client is co-signing it too; you can Accept & Sign once they have.`
+        : `${customer.name} signed the contract and sent a booking request. Review it, then Accept & Sign or decline.`,
       status: 'PENDING',
       listingTitle: listing.title,
       scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
@@ -72,6 +74,7 @@ export class BookingService {
       ctaUrl: `${clientUrl}/vendor/bookings/${booking.id}`,
     }).catch(() => null);
     this.pushBooking(booking.vendor_id, booking.id, 'New signed booking request', `${customer.name} requested ${listing.title}`);
+    if (created.awaiting_client) await this.contracts.notifyClientToSign(booking.id).catch(() => null);
 
     return { success: true, data: this.formatBooking(booking) };
   }

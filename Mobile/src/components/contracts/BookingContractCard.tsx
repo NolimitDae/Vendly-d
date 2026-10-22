@@ -191,6 +191,13 @@ export default function BookingContractCard({ bookingId, role, bookingStatus, on
       {needsVendorSignature && (
         <Text style={s.notice}>The customer signed this contract. Review it and Accept &amp; Sign to confirm the booking.</Text>
       )}
+      {current?.status === 'AWAITING_CLIENT' && (
+        <Text style={s.notice}>
+          {role === 'VENDOR'
+            ? 'The planner signed. Their client is co-signing too; you can Accept & Sign once they have.'
+            : 'Waiting for your client to co-sign. We emailed them a link; the vendor can accept once they sign.'}
+        </Text>
+      )}
       {pendingAmendment && (
         <Text style={s.notice}>
           Amendment (version {pendingAmendment.version}) {pendingAmendment.can_sign ? 'is waiting for your signature.' : 'is waiting for the other party.'}

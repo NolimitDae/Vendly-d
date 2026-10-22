@@ -73,8 +73,12 @@ type Tx = Prisma.TransactionClient;
 const PENDING_STATUSES: BookingContractStatus[] = [
   BookingContractStatus.DRAFT,
   BookingContractStatus.AWAITING_CUSTOMER,
+  BookingContractStatus.AWAITING_CLIENT,
   BookingContractStatus.AWAITING_VENDOR,
 ];
+
+/** Feature flag for the planner's client co-signing contracts (off unless an admin turns it on). */
+export const CLIENT_COSIGN_FLAG = 'client_cosign';
 
 const PREVIEW_TTL_MS = 2 * 60 * 60 * 1000;
 const HOUR = 3600 * 1000;
@@ -186,11 +190,11 @@ export class BookingContractsService {
     });
     if (!customer) throw new NotFoundException('User not found');
 
-    let event: { id: string; name: string; venue: string | null; guest_count: number | null } | null = null;
+    let event: { id: string; name: string; venue: string | null; guest_count: number | null; client_email: string | null } | null = null;
     if (dto.event_id) {
       event = await this.prisma.event.findFirst({
         where: { id: dto.event_id, event_planner_id: userId },
-        select: { id: true, name: true, venue: true, guest_count: true },
+        select: { id: true, name: true, venue: true, guest_count: true, client_email: true },
       });
       if (!event) throw new ForbiddenException('Event not found');
     }
@@ -367,6 +371,11 @@ export class BookingContractsService {
 
     const imageKey = await this.storeSignatureImage(dto.signature.signature_image, `signatures/${userId}`);
     const role = this.signerRoleFor(p.customer.type);
+    // A planner booking for an event with a client: with co-signing on, the client signs before the vendor.
+    const clientEmail =
+      role === ContractSignerRole.PLANNER && p.event?.client_email && (await this.clientCosignOn())
+        ? p.event.client_email.trim().toLowerCase()
+        : null;
 
     const booking = await this.prisma.$transaction(async (tx) => {
       const b = await tx.booking.create({
@@ -403,7 +412,8 @@ export class BookingContractsService {
           booking_id: b.id,
           vendor_contract_id: p.vc.id,
           version: 1,
-          status: BookingContractStatus.AWAITING_VENDOR,
+          status: clientEmail ? BookingContractStatus.AWAITING_CLIENT : BookingContractStatus.AWAITING_VENDOR,
+          client_email: clientEmail,
           title: p.rendered.title,
           rendered_body: p.rendered.body,
           merge_data: p.data,
@@ -421,7 +431,86 @@ export class BookingContractsService {
       return b;
     });
 
-    return booking;
+    return Object.assign(booking, { awaiting_client: !!clientEmail });
+  }
+
+  async clientCosignOn() {
+    const flag = await this.prisma.featureFlag.findUnique({ where: { key: CLIENT_COSIGN_FLAG }, select: { enabled: true } });
+    return flag?.enabled === true;
+  }
+
+  /**
+   * The planner's client co-signs (logged in with the email the planner invited). Moves the contract
+   * on to the vendor, whose Accept & Sign then executes it as usual.
+   */
+  async clientSign(contractId: string, user: AuthUser, sig: SignatureDto, meta: RequestMeta) {
+    const contract = await this.prisma.bookingContract.findUnique({
+      where: { id: contractId },
+      select: { id: true, booking_id: true, status: true, client_email: true, content_sha256: true, booking: { select: { vendor_id: true, customer_id: true } } },
+    });
+    if (!contract) throw new NotFoundException('Contract not found');
+    const me = await this.prisma.user.findUnique({ where: { id: user.userId }, select: { id: true, email: true } });
+    const isClient = !!me?.email && !!contract.client_email && me.email.toLowerCase() === contract.client_email.toLowerCase();
+    if (!isClient || contract.booking.vendor_id === user.userId || contract.booking.customer_id === user.userId) {
+      throw new ForbiddenException('Only the client this contract was sent to can co-sign it.');
+    }
+    if (contract.status !== BookingContractStatus.AWAITING_CLIENT) {
+      throw new BadRequestException('This contract isn’t waiting for your signature.');
+    }
+    if (sig.content_sha256 !== contract.content_sha256) {
+      throw new ConflictException('The contract you reviewed does not match. Please reload and sign again.');
+    }
+    const imageKey = await this.storeSignatureImage(sig.signature_image, `signatures/${user.userId}`);
+
+    await this.prisma.$transaction(async (tx) => {
+      // the status guard stops two signatures racing
+      const moved = await tx.bookingContract.updateMany({
+        where: { id: contract.id, status: BookingContractStatus.AWAITING_CLIENT },
+        data: { status: BookingContractStatus.AWAITING_VENDOR },
+      });
+      if (moved.count !== 1) throw new ConflictException('This contract was already signed.');
+      await tx.contractSignature.create({
+        data: this.signatureRow(contract.id, user.userId, ContractSignerRole.CLIENT, sig, contract.content_sha256, imageKey, me!.email, meta),
+      });
+      await this.audit(tx, { booking_contract_id: contract.id, actor_id: user.userId, actor_role: ContractSignerRole.CLIENT, action: ContractAuditAction.SIGNED, meta });
+    });
+
+    await this.notifyClientSigned(contract.booking_id);
+    return { success: true, message: 'Signed. The vendor can now accept the booking.' };
+  }
+
+  /** POST /contracts/:id/sign: the client's co-signature, or a party signing an amendment. */
+  async signAsParty(contractId: string, user: AuthUser, sig: SignatureDto, meta: RequestMeta) {
+    const c = await this.prisma.bookingContract.findUnique({ where: { id: contractId }, select: { status: true } });
+    if (c?.status === BookingContractStatus.AWAITING_CLIENT) return this.clientSign(contractId, user, sig, meta);
+    return this.signAmendment(contractId, user, sig, meta);
+  }
+
+  /** Contracts on an event, for the planner's client (matched by the login's email). */
+  async clientEventContracts(eventId: string, user: AuthUser) {
+    const [event, me] = await Promise.all([
+      this.prisma.event.findUnique({ where: { id: eventId }, select: { id: true, client_email: true } }),
+      this.prisma.user.findUnique({ where: { id: user.userId }, select: { email: true } }),
+    ]);
+    if (!event || !event.client_email || !me?.email || event.client_email.toLowerCase() !== me.email.toLowerCase()) {
+      throw new ForbiddenException('Access denied');
+    }
+    const contracts = await this.prisma.bookingContract.findMany({
+      where: { booking: { event_bookings: { some: { event_id: eventId } } }, status: { not: BookingContractStatus.SUPERSEDED } },
+      include: {
+        signatures: { select: { role: true, legal_name: true, signed_at: true } },
+        booking: { select: { id: true, listing: { select: { title: true } }, vendor: { select: { name: true, vendorProfile: { select: { business_name: true } } } } } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+    return {
+      success: true,
+      data: contracts.map((c) => ({
+        ...this.summary(c, 'CLIENT'),
+        listing_title: c.booking.listing?.title ?? null,
+        vendor_name: c.booking.vendor?.vendorProfile?.business_name || c.booking.vendor?.name || null,
+      })),
+    };
   }
 
   // ─── Vendor countersign / execute ───────────────────────────────────────
@@ -463,6 +552,9 @@ export class BookingContractsService {
     });
     if (!contracts.length) return null;
     const current = contracts.find((c) => c.status === BookingContractStatus.AWAITING_VENDOR && !c.supersedes_id);
+    if (!current && contracts.some((c) => c.status === BookingContractStatus.AWAITING_CLIENT)) {
+      throw new BadRequestException('The planner’s client hasn’t co-signed the contract yet. You can accept once they sign.');
+    }
     if (!current) throw new BadRequestException('There is no contract waiting for your signature on this booking.');
     if (!sig) throw new BadRequestException('Accept & Sign requires your signature on the contract.');
     if (sig.content_sha256 !== current.content_sha256) {
@@ -612,7 +704,15 @@ export class BookingContractsService {
       where: { booking_id: booking.id, event: { event_planner_id: userId } },
       select: { event_id: true },
     });
-    return planner ? 'PLANNER' : null;
+    if (planner) return 'PLANNER';
+    // the planner's client asked to co-sign, matched by the login's email
+    const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!me?.email) return null;
+    const asClient = await this.prisma.bookingContract.findFirst({
+      where: { booking_id: booking.id, client_email: { equals: me.email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    return asClient ? 'CLIENT' : null;
   }
 
   private async assertBookingAccess(bookingId: string, user: AuthUser) {
@@ -643,6 +743,7 @@ export class BookingContractsService {
   private awaitingRole(status: BookingContractStatus) {
     if (status === BookingContractStatus.AWAITING_VENDOR) return 'VENDOR';
     if (status === BookingContractStatus.AWAITING_CUSTOMER) return 'CUSTOMER';
+    if (status === BookingContractStatus.AWAITING_CLIENT) return 'CLIENT';
     return null;
   }
 
@@ -669,6 +770,7 @@ export class BookingContractsService {
       awaiting_role: awaiting,
       my_role: myRole,
       can_sign: !!awaiting && (awaiting === myRole || (awaiting === 'CUSTOMER' && myRole === 'PLANNER')),
+      client_email: c.client_email ?? null,
       signatures: (c.signatures ?? []).map((s: any) => ({ role: s.role, legal_name: s.legal_name, signed_at: s.signed_at })),
     };
   }
@@ -1169,6 +1271,61 @@ export class BookingContractsService {
     });
   }
 
+  /** Asks the planner's client to co-sign (push if they have an account, and email). */
+  async notifyClientToSign(bookingId: string) {
+    const c = await this.prisma.bookingContract.findFirst({
+      where: { booking_id: bookingId, status: BookingContractStatus.AWAITING_CLIENT },
+      include: { booking: { include: { customer: true, listing: true } } },
+    });
+    if (!c?.client_email) return;
+    const client = await this.prisma.user.findFirst({ where: { email: { equals: c.client_email, mode: 'insensitive' }, deleted_at: null }, select: { id: true, name: true } });
+    const n = {
+      subject: `Please co-sign: ${c.booking.listing?.title ?? 'a booking for your event'}`,
+      message: `${c.booking.customer.name ?? 'Your planner'} booked ${c.booking.listing?.title ?? 'a vendor'} for your event and asked you to co-sign the contract. Sign in to Vendly with this email to review and sign it.`,
+      bookingId,
+      contractId: c.id,
+      listingTitle: c.booking.listing?.title,
+      ctaPath: `/contracts/${c.id}`,
+    };
+    if (client) return this.notify(client.id, c.client_email, client.name, n);
+    await this.mail
+      .sendBookingNotification({
+        to: c.client_email,
+        recipientName: '',
+        subject: n.subject,
+        message: n.message,
+        status: 'CONTRACT',
+        listingTitle: n.listingTitle ?? 'Your booking',
+        ctaUrl: `${appConfig().app.client_app_url}${n.ctaPath}`,
+      })
+      .catch((err) => this.logger.warn(`Client co-sign email failed: ${(err as Error).message}`));
+  }
+
+  /** The client co-signed: the vendor can now accept, and the planner hears about it. */
+  private async notifyClientSigned(bookingId: string) {
+    const c = await this.prisma.bookingContract.findFirst({
+      where: { booking_id: bookingId, status: BookingContractStatus.AWAITING_VENDOR },
+      include: { booking: { include: { vendor: true, customer: true, listing: true } } },
+    });
+    if (!c) return;
+    const title = c.booking.listing?.title ?? 'a booking';
+    await this.notify(c.booking.vendor_id, c.booking.vendor.email, c.booking.vendor.name, {
+      subject: `Ready to accept: ${title}`,
+      message: `The client co-signed the contract for ${title}. Review it and tap Accept & Sign to confirm.`,
+      bookingId,
+      contractId: c.id,
+      listingTitle: title,
+      ctaPath: `/vendor/bookings/${bookingId}`,
+    });
+    await this.notify(c.booking.customer_id, c.booking.customer.email, c.booking.customer.name, {
+      subject: `Your client signed: ${title}`,
+      message: `Your client co-signed the contract for ${title}. It now goes to the vendor to accept.`,
+      bookingId,
+      contractId: c.id,
+      listingTitle: title,
+    });
+  }
+
   private async notifyExecuted(contractId: string) {
     const c = await this.prisma.bookingContract.findUniqueOrThrow({
       where: { id: contractId },
@@ -1196,7 +1353,7 @@ export class BookingContractsService {
   async sendReminders(now = new Date()) {
     const pending = await this.prisma.bookingContract.findMany({
       where: {
-        status: { in: [BookingContractStatus.AWAITING_CUSTOMER, BookingContractStatus.AWAITING_VENDOR] },
+        status: { in: [BookingContractStatus.AWAITING_CUSTOMER, BookingContractStatus.AWAITING_CLIENT, BookingContractStatus.AWAITING_VENDOR] },
         created_at: { lte: new Date(now.getTime() - 24 * HOUR) },
       },
       include: { booking: { include: { vendor: true, customer: true, listing: true } } },
@@ -1220,6 +1377,8 @@ export class BookingContractsService {
             listingTitle: title,
           });
         }
+      } else if (!c.last_reminder_at && c.status === BookingContractStatus.AWAITING_CLIENT) {
+        await this.notifyClientToSign(c.booking_id);
       } else if (!c.last_reminder_at) {
         await this.notify(signer.id, signer.email, signer.name, {
           subject: `Contract waiting for your signature: ${title}`,

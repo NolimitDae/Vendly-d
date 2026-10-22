@@ -7,13 +7,14 @@ import { format, parseISO } from 'date-fns';
 import { Card, ScreenHeader } from '../../components/brand';
 import RunOfShow from '../../components/events/RunOfShow';
 import EventFiles from '../../components/events/EventFiles';
+import ClientContractsCard from '../../components/contracts/ClientContractsCard';
 import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { EventToolsService, type EventOverview } from '../../services/eventTools.service';
 import { ChatService } from '../../services/chat.service';
 import { apiError } from '../../services/contracts.service';
 
-type Section = 'schedule' | 'vendors' | 'files';
+type Section = 'schedule' | 'vendors' | 'files' | 'contracts';
 
 /** An event as a booked vendor or the planner's client sees it: read-only, plus files and (vendors) ticking off their items. */
 export default function EventShared() {
@@ -77,9 +78,9 @@ export default function EventShared() {
         </Card>
 
         <View style={s.tabs}>
-          {(['schedule', 'vendors', 'files'] as Section[]).map((k) => (
+          {((ev.role === 'client' ? ['schedule', 'vendors', 'files', 'contracts'] : ['schedule', 'vendors', 'files']) as Section[]).map((k) => (
             <Pressable key={k} style={[s.tab, section === k && s.tabOn]} onPress={() => setSection(k)} accessibilityRole="tab" accessibilityState={{ selected: section === k }}>
-              <Text style={[s.tabText, section === k && s.tabTextOn]}>{k === 'schedule' ? 'Run of show' : k === 'vendors' ? `Vendors (${ev.vendors.length})` : `Files (${ev.file_count})`}</Text>
+              <Text style={[s.tabText, section === k && s.tabTextOn]}>{k === 'schedule' ? 'Run of show' : k === 'vendors' ? `Vendors (${ev.vendors.length})` : k === 'files' ? `Files (${ev.file_count})` : 'Contracts'}</Text>
             </Pressable>
           ))}
         </View>
@@ -101,6 +102,7 @@ export default function EventShared() {
             ))
           ))}
         {section === 'files' && <EventFiles eventId={ev.id} role={ev.role} />}
+        {section === 'contracts' && ev.role === 'client' && <ClientContractsCard eventId={ev.id} />}
       </View>
     </ScrollView>
   );

@@ -1358,6 +1358,8 @@ enum VendorContractStatus {
 enum BookingContractStatus {
   DRAFT
   AWAITING_CUSTOMER
+  // planner bookings with client co-signing on: the client signs before the vendor
+  AWAITING_CLIENT
   AWAITING_VENDOR
   EXECUTED
   VOID
@@ -1368,6 +1370,8 @@ enum ContractSignerRole {
   CUSTOMER
   PLANNER
   VENDOR
+  // the planner's client co-signing (feature flag client_cosign)
+  CLIENT
 }
 
 enum ContractAuditAction {
@@ -1480,6 +1484,8 @@ model BookingContract {
   executed_pdf_key    String?
   executed_pdf_sha256 String?   @db.VarChar(64)
   verification_code   String    @unique @db.VarChar(32)
+  // the planner's client asked to co-sign (matched to their login by email)
+  client_email        String?   @db.VarChar(255)
   executed_at         DateTime?
   voided_at           DateTime?
   void_reason         String?   @db.Text

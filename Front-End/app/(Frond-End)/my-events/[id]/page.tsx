@@ -10,11 +10,12 @@ import { cn } from "@/lib/utils";
 import { CookieHelper } from "@/helper/cookie.helper";
 import RunOfShow from "@/components/events/RunOfShow";
 import EventFiles from "@/components/events/EventFiles";
+import ClientContractsList from "@/components/contracts/ClientContractsList";
 import { EventToolsService, usd, type EventOverview } from "@/service/events/eventTools.service";
 import { ChatService } from "@/service/chat/chat.service";
 import { errorMessage } from "@/service/rentals/rentals.service";
 
-type Section = "schedule" | "vendors" | "files";
+type Section = "schedule" | "vendors" | "files" | "contracts";
 
 const userIdFromToken = () => {
   try {
@@ -92,9 +93,9 @@ export default function SharedEventPage() {
         </div>
 
         <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-1.5" role="tablist">
-          {(["schedule", "vendors", "files"] as Section[]).map((k) => (
+          {((ev.role === "client" ? ["schedule", "vendors", "files", "contracts"] : ["schedule", "vendors", "files"]) as Section[]).map((k) => (
             <button key={k} role="tab" aria-selected={section === k} onClick={() => setSection(k)} className={cn("flex-1 py-2 rounded-xl text-sm font-medium transition", section === k ? "bg-primary text-primary-foreground" : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700")}>
-              {k === "schedule" ? "Run of show" : k === "vendors" ? `Vendors (${ev.vendors.length})` : `Files (${ev.file_count})`}
+              {k === "schedule" ? "Run of show" : k === "vendors" ? `Vendors (${ev.vendors.length})` : k === "files" ? `Files (${ev.file_count})` : "Contracts"}
             </button>
           ))}
         </div>
@@ -116,6 +117,7 @@ export default function SharedEventPage() {
           </ul>
         )}
         {section === "files" && <EventFiles eventId={ev.id} role={ev.role} />}
+        {section === "contracts" && ev.role === "client" && <ClientContractsList eventId={ev.id} />}
       </div>
     </div>
   );
