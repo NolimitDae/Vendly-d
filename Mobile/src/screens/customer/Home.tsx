@@ -20,6 +20,7 @@ import { BrandGradient } from '../../components/brand';
 import { ListingCardSkeleton } from '../../components/Skeleton';
 import { useFeature } from '../../hooks/useFeature';
 import { useAuth } from '../../context/AuthContext';
+import { useNearMe } from '../../hooks/useNearMe';
 import { api } from '../../services/api';
 
 type Nav = NativeStackNavigationProp<any>;
@@ -33,6 +34,7 @@ interface Listing {
   avg_rating?: number | null;
   images?: string[];
   location?: string | null;
+  distance_miles?: number | null;
   vendor?: { id: string; name: string; vendorProfile?: { business_name?: string | null } | null } | null;
 }
 
@@ -53,6 +55,7 @@ const CATEGORY_ICONS: [RegExp, IconName][] = [
 const iconFor = (name: string): IconName => CATEGORY_ICONS.find(([re]) => re.test(name))?.[1] ?? 'pricetags-outline';
 
 const MAX_TILES = 6;
+const NEAR_RADIUS = 25;
 
 export default function CustomerHome() {
   const nav = useNavigation<Nav>();
@@ -65,6 +68,23 @@ export default function CustomerHome() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const rentalsOn = useFeature('rentals');
+  const nearMe = useNearMe();
+  const [nearby, setNearby] = useState<Listing[] | null>(null);
+
+  // Services close to the phone, once location is on
+  useEffect(() => {
+    if (!nearMe.coords) return;
+    api
+      .get('/marketplace/listings', {
+        params: { near_lat: nearMe.coords.lat, near_lng: nearMe.coords.lng, radius_miles: NEAR_RADIUS, sort: 'distance', limit: 10 },
+      })
+      .then((res) => setNearby(res.data?.data ?? []))
+      .catch(() => setNearby([]));
+  }, [nearMe.coords?.lat, nearMe.coords?.lng]);
+
+  const nearFilters = nearMe.coords
+    ? { near_lat: nearMe.coords.lat, near_lng: nearMe.coords.lng, radius_miles: NEAR_RADIUS, sort: 'distance' as const }
+    : undefined;
 
   useEffect(() => {
     api
@@ -200,6 +220,76 @@ export default function CustomerHome() {
         <Ionicons name="chevron-forward" size={20} color={DARK.muted} />
       </Pressable>}
 
+      {/* Near you: asks for location, then lists the closest services */}
+      {nearMe.status === 'on' ? (
+        <View style={s.section}>
+          <View style={s.sectionRow}>
+            <Text style={s.sectionTitle}>Near you</Text>
+            <Pressable onPress={() => nav.navigate('SearchResults', { filters: nearFilters })} hitSlop={8} accessibilityRole="link" accessibilityLabel="See all services near you">
+              <Text style={s.seeAll}>See all</Text>
+            </Pressable>
+          </View>
+          {nearby === null ? (
+            <View style={{ flexDirection: 'row', gap: 12, marginRight: -20, overflow: 'hidden' }}>
+              <ListingCardSkeleton />
+              <ListingCardSkeleton />
+            </View>
+          ) : nearby.length === 0 ? (
+            <View style={s.empty}>
+              <Ionicons name="navigate-outline" size={36} color={DARK.muted} />
+              <Text style={s.emptyText}>No services within {NEAR_RADIUS} miles yet</Text>
+            </View>
+          ) : (
+            <FlatList
+              horizontal
+              data={nearby}
+              keyExtractor={(l) => l.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 12, paddingRight: 20 }}
+              style={{ marginRight: -20 }}
+              renderItem={({ item }) => <ServiceCard item={item} onPress={() => nav.navigate('ListingDetail', { listingId: item.id })} />}
+            />
+          )}
+        </View>
+      ) : (nearMe.status === 'ask' || nearMe.status === 'denied' || nearMe.status === 'error' || nearMe.status === 'locating') && !nearMe.dismissed ? (
+        <View style={s.locate}>
+          <View style={s.rentalsIcon}>
+            <Ionicons name="navigate" size={24} color={DARK.accent} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={s.rentalsTitle}>Find vendors near you</Text>
+            <Text style={s.rentalsBody}>
+              {nearMe.status === 'denied'
+                ? nearMe.canAskAgain
+                  ? 'Allow location to see services closest to you first.'
+                  : 'Location is off for Vendly. Turn it on in Settings to see services near you.'
+                : nearMe.status === 'error'
+                  ? 'We couldn’t get your location. Try again.'
+                  : 'Share your location to see services closest to you first.'}
+            </Text>
+            <View style={s.locateActions}>
+              <Pressable
+                style={s.locateBtn}
+                onPress={() => (nearMe.status === 'error' ? nearMe.retry() : nearMe.ask())}
+                disabled={nearMe.status === 'locating'}
+                accessibilityRole="button"
+              >
+                {nearMe.status === 'locating' ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={s.locateBtnText}>
+                    {nearMe.status === 'denied' && !nearMe.canAskAgain ? 'Open Settings' : nearMe.status === 'error' ? 'Try again' : 'Turn on location'}
+                  </Text>
+                )}
+              </Pressable>
+              <Pressable onPress={nearMe.dismiss} hitSlop={8} accessibilityRole="button">
+                <Text style={s.locateLater}>Not now</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
       {/* Services */}
       <View style={s.section}>
         <View style={s.sectionRow}>
@@ -266,10 +356,13 @@ function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) 
           <Text style={s.metaText} numberOfLines={1}>{vendor}</Text>
         </View>
       )}
-      {!!item.location && (
+      {(!!item.location || item.distance_miles != null) && (
         <View style={s.meta}>
           <Ionicons name="location-outline" size={14} color={DARK.muted} />
-          <Text style={s.metaText} numberOfLines={1}>{item.location}</Text>
+          <Text style={s.metaText} numberOfLines={1}>
+            {item.distance_miles != null ? `${item.distance_miles < 1 ? 'Under 1' : item.distance_miles} mi away${item.location ? ' · ' : ''}` : ''}
+            {item.location}
+          </Text>
         </View>
       )}
     </Pressable>
@@ -314,6 +407,11 @@ const s = StyleSheet.create({
   rentalsTitle: { color: '#fff', fontSize: 15, fontFamily: FONTS.semibold },
   rentalsBody: { color: DARK.muted, fontSize: 12, lineHeight: 17, fontFamily: FONTS.regular },
   sectionTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  locate: { flexDirection: 'row', gap: 14, marginHorizontal: 20, marginTop: 24, padding: 14, borderRadius: 16, backgroundColor: DARK.card, borderWidth: 1, borderColor: DARK.field },
+  locateActions: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 10 },
+  locateBtn: { minHeight: 36, minWidth: 120, paddingHorizontal: 14, borderRadius: 99, backgroundColor: DARK.accent, alignItems: 'center', justifyContent: 'center' },
+  locateBtnText: { color: '#fff', fontSize: 13, fontFamily: FONTS.semibold },
+  locateLater: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium },
   sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   seeAll: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, rowGap: 12 },

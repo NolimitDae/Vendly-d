@@ -51,7 +51,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Vendly stamps proof-of-work photos with where they were taken, so your work is protected if a booking is disputed."
+          "locationWhenInUsePermission": "Vendly uses your location to show vendors and services near you, and to stamp proof-of-work photos with where they were taken so your work is protected if a booking is disputed."
         }
       ]
     ],

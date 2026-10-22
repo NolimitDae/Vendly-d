@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -51,7 +51,14 @@ export default function SearchFilters({ value, onChange }: { value: Filters; onC
     setLocating(true);
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm.granted) return Alert.alert('Location', 'Allow location access to find vendors near you, or type a city instead.');
+      if (!perm.granted) {
+        return perm.canAskAgain
+          ? Alert.alert('Location', 'Allow location access to find vendors near you, or type a city instead.')
+          : Alert.alert('Location is off', 'Turn on location for Vendly in Settings to find vendors near you, or type a city instead.', [
+              { text: 'Not now', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            ]);
+      }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       set({ near_lat: Number(pos.coords.latitude.toFixed(4)), near_lng: Number(pos.coords.longitude.toFixed(4)), radius_miles: value.radius_miles ?? 25 });
     } catch {
