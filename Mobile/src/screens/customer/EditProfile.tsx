@@ -13,9 +13,11 @@ import { apiMessage } from '../auth/SignIn';
 export default function EditProfile({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
-  const [form, setForm] = useState({ first_name: '', last_name: '', address: '', business_name: '', about_me: '' });
+  const [form, setForm] = useState({ first_name: '', last_name: '', address: '', business_name: '', about_me: '', handle: '' });
   const isVendor = user?.type === 'VENDOR';
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [logo, setLogo] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [saving, setSaving] = useState(false);
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -23,13 +25,14 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
     // /auth/me carries first/last name and address; fall back to splitting the display name.
     const u = user as any;
     const [first = '', ...rest] = (u?.name ?? '').split(' ');
-    setForm({ first_name: u?.first_name ?? first, last_name: u?.last_name ?? rest.join(' '), address: u?.address ?? '', business_name: u?.business_name ?? '', about_me: u?.about_me ?? u?.bio ?? '' });
+    setForm({ first_name: u?.first_name ?? first, last_name: u?.last_name ?? rest.join(' '), address: u?.address ?? '', business_name: u?.business_name ?? '', about_me: u?.about_me ?? u?.bio ?? '', handle: u?.handle ?? '' });
   }, [user]);
 
-  const pickPhoto = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
-    if (!res.canceled) setPhoto(res.assets[0]);
+  const pick = async (aspect: [number, number], done: (a: ImagePicker.ImagePickerAsset) => void) => {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect, quality: 0.7 });
+    if (!res.canceled) done(res.assets[0]);
   };
+  const file = (a: ImagePicker.ImagePickerAsset, name: string) => ({ uri: a.uri, name: a.fileName ?? `${name}.jpg`, type: a.mimeType ?? 'image/jpeg' }) as unknown as Blob;
 
   const save = async () => {
     if (!form.first_name.trim() || !form.last_name.trim()) return Alert.alert('Name', 'First and last name are required.');
@@ -43,8 +46,11 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
       if (isVendor) {
         body.append('business_name', form.business_name.trim());
         body.append('about_me', form.about_me.trim());
+        body.append('handle', form.handle.trim());
+        if (banner) body.append('banner', file(banner, 'banner'));
+        if (logo) body.append('logo', file(logo, 'logo'));
       }
-      if (photo) body.append('image', { uri: photo.uri, name: photo.fileName ?? 'avatar.jpg', type: photo.mimeType ?? 'image/jpeg' } as unknown as Blob);
+      if (photo) body.append('image', file(photo, 'avatar'));
       const res = await api.patch('/auth/update', body, { headers: { 'Content-Type': 'multipart/form-data' } });
       if (res.data?.success === false) throw new Error(res.data?.message);
       await refreshUser();
@@ -57,13 +63,15 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
   };
 
   const avatar = photo?.uri ?? user?.avatar_url;
+  const bannerUri = banner?.uri ?? (user as any)?.banner_url;
+  const logoUri = logo?.uri ?? (user as any)?.logo_url;
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 24 }} keyboardShouldPersistTaps="handled">
         <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
 
-        <Pressable onPress={pickPhoto} style={s.avatar} accessibilityRole="button" accessibilityLabel="Change profile photo">
+        <Pressable onPress={() => pick([1, 1], setPhoto)} style={s.avatar} accessibilityRole="button" accessibilityLabel="Change profile photo">
           {avatar ? <Image source={{ uri: avatar }} style={s.avatarImg} /> : <Ionicons name="person-outline" size={54} color={DARK.muted} />}
           <BrandGradient style={s.badge}>
             <Ionicons name="image-outline" size={16} color="#fff" />
@@ -97,6 +105,45 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
                   <TextInput style={[ui.input, { minHeight: 90, textAlignVertical: 'top' }]} placeholder="Your style, experience, what makes you different…" placeholderTextColor={DARK.muted} value={form.about_me} onChangeText={set('about_me')} multiline maxLength={1000} />
                 </View>
               </View>
+
+              <Text style={[ui.label, { fontSize: 16, marginTop: 8 }]}>Your shop</Text>
+              <View style={{ gap: 8 }}>
+                <Text style={ui.label}>Banner</Text>
+                <Pressable onPress={() => pick([3, 1], setBanner)} style={s.banner} accessibilityRole="button" accessibilityLabel="Change shop banner">
+                  {bannerUri ? <Image source={{ uri: bannerUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <Ionicons name="image-outline" size={28} color={DARK.muted} />}
+                  <BrandGradient style={[s.badge, { right: 8, bottom: 8, borderWidth: 0 }]}>
+                    <Ionicons name="image-outline" size={16} color="#fff" />
+                  </BrandGradient>
+                </Pressable>
+                <Text style={s.hint}>Shown across the top of your shop. A wide photo works best.</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <Pressable onPress={() => pick([1, 1], setLogo)} style={s.logo} accessibilityRole="button" accessibilityLabel="Change shop logo">
+                  {logoUri ? <Image source={{ uri: logoUri }} style={StyleSheet.absoluteFill} /> : <Ionicons name="storefront-outline" size={28} color={DARK.muted} />}
+                </Pressable>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={ui.label}>Logo</Text>
+                  <Text style={s.hint}>Tap to choose a square logo for your shop.</Text>
+                </View>
+              </View>
+              <View style={{ gap: 8 }}>
+                <Text style={ui.label}>Shop link</Text>
+                <View style={ui.field}>
+                  <Text style={s.prefix}>vendlymarketplace.com/v/</Text>
+                  <TextInput
+                    style={ui.input}
+                    placeholder="your-shop"
+                    placeholderTextColor={DARK.muted}
+                    value={form.handle}
+                    onChangeText={(v) => set('handle')(v.toLowerCase())}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={30}
+                    accessibilityLabel="Shop link"
+                  />
+                </View>
+                <Text style={s.hint}>3–30 letters, numbers or dashes. Leave empty for no link.</Text>
+              </View>
             </>
           )}
           <GradientButton title="Save Changes" onPress={save} loading={saving} style={{ marginTop: 12 }} />
@@ -112,4 +159,7 @@ const s = StyleSheet.create({
   avatarImg: { width: 118, height: 118, borderRadius: 59 },
   badge: { position: 'absolute', right: 2, bottom: 6, width: 32, height: 32, borderRadius: 16, borderWidth: 3, borderColor: DARK.bg, alignItems: 'center', justifyContent: 'center' },
   hint: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
+  banner: { height: 120, borderRadius: 14, overflow: 'hidden', backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center' },
+  logo: { width: 72, height: 72, borderRadius: 16, overflow: 'hidden', backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center' },
+  prefix: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium },
 });

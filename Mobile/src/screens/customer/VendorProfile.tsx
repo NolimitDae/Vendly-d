@@ -35,7 +35,7 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
 
   const name = vendor.vendorProfile?.business_name || vendor.name;
   const listings = vendor.vendorListings ?? [];
-  const cover = vendor.avatar_url || listings.find((l) => l.images?.[0])?.images?.[0];
+  const cover = vendor.banner_url || vendor.avatar_url || listings.find((l) => l.images?.[0])?.images?.[0];
   const gallery = listings.flatMap((l) => l.images ?? []).slice(0, 5);
   const about = vendor.vendorProfile?.about_me || vendor.bio;
   const categories = [...new Set(listings.map((l) => l.category?.name).filter(Boolean))].join(', ');
@@ -52,7 +52,10 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
         </View>
 
         <View style={s.body20}>
-          <Text style={s.h1}>{name}</Text>
+          <View style={s.meta}>
+            {!!vendor.logo_url && <Image source={{ uri: vendor.logo_url }} style={s.logo} accessibilityLabel={`${name} logo`} />}
+            <Text style={[s.h1, { flex: 1 }]}>{name}</Text>
+          </View>
           <View style={s.rowBetween}>
             <View style={s.meta}>
               <Ionicons name="pricetag-outline" size={16} color="#fff" />
@@ -142,6 +145,7 @@ const s = StyleSheet.create({
   cover: { height: 315, backgroundColor: DARK.card, justifyContent: 'flex-start' },
   body20: { paddingHorizontal: 20, paddingTop: 20, gap: 8 },
   h1: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
+  logo: { width: 44, height: 44, borderRadius: 10, marginRight: 6, backgroundColor: DARK.card },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   body: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.regular },

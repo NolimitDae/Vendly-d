@@ -38,6 +38,9 @@ export interface VendorProfile {
   id: string;
   name: string;
   avatar_url?: string | null;
+  handle?: string | null;
+  banner_url?: string | null;
+  logo_url?: string | null;
   bio?: string | null;
   location?: string | null;
   created_at: string;
