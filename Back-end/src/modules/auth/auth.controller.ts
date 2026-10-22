@@ -31,6 +31,7 @@ import { memoryStorage } from 'multer';
 import { UserType } from 'prisma/generated/enums';
 import { LocalAuthGuard } from 'src/modules/auth/guards/local-auth.guard';
 import { AuthService } from './auth.service';
+import { SwitchRoleDto } from './dto/switch-role.dto';
 
 // Admin and internal accounts are never self-service: an open ADMIN type would hand anyone the dashboard.
 const SELF_SIGNUP_TYPES: string[] = [UserType.CLIENT, UserType.CUSTOMER, UserType.VENDOR, UserType.EVENT_PLANNER];
@@ -954,6 +955,23 @@ export class AuthController {
     }
   }
   // --------- end 2FA ---------
+
+  @ApiOperation({ summary: 'The roles this login holds, the one in use, and whether my ID is verified' })
+  @UseGuards(JwtAuthGuard)
+  @Get('roles')
+  async roles(@Req() req: Request) {
+    return this.authService.roles(req.user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Switch to (or add) customer, vendor or planner. Needs an approved ID check; returns fresh tokens.',
+  })
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ short: { limit: 5, ttl: 60_000 } })
+  @Post('roles/switch')
+  async switchRole(@Req() req: Request, @Body() body: SwitchRoleDto) {
+    return this.authService.switchRole(req.user.userId, body.role, { business_name: body.business_name });
+  }
 
   @ApiOperation({ summary: 'Delete my account (users with bookings or signed contracts are anonymised)' })
   @UseGuards(JwtAuthGuard)

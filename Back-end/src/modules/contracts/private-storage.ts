@@ -68,6 +68,17 @@ export const PrivateStorage = {
     }
     return fs.readFile(resolveKey(key));
   },
+
+  /** Deletes a file; a missing file is not an error. */
+  async remove(key: string) {
+    const remote = privateBucket();
+    if (remote) {
+      resolveKey(key);
+      await remote.s3.deleteObject({ Bucket: remote.bucket, Key: key }).promise();
+      return;
+    }
+    await fs.rm(resolveKey(key), { force: true });
+  },
 };
 
 function secret() {

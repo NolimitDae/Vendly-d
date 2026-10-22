@@ -93,6 +93,7 @@ export class UserRepository {
           email: email,
           password: password,
           type: UserType.ADMIN,
+          roles: [UserType.ADMIN],
         },
       });
       return user;
@@ -268,6 +269,8 @@ export class UserRepository {
       // Step 6: Prepare VendorProfile if user is VENDOR
       // -------------------------
       const createData: any = { ...data };
+      // the account starts out holding the role it signed up with
+      createData.roles = [data.type ?? UserType.CUSTOMER];
       if (data.type === UserType.VENDOR) {
         const vendorprofile: any = {};
         if (business_name) vendorprofile.business_name = business_name;

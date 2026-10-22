@@ -23,6 +23,11 @@ describe('JwtStrategy.validate', () => {
     });
   });
 
+  it('uses the role from the database, so a role switch applies to older tokens', async () => {
+    findUnique.mockResolvedValue({ id: 'user-1', status: 1, deleted_at: null, type: 'VENDOR' });
+    await expect(strategy.validate(payload)).resolves.toMatchObject({ type: 'VENDOR' });
+  });
+
   it.each([
     ['deleted', { id: 'user-1', status: 1, deleted_at: new Date() }],
     ['deactivated', { id: 'user-1', status: 0, deleted_at: null }],

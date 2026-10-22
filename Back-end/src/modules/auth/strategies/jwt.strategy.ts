@@ -22,13 +22,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, status: true, deleted_at: true },
+      select: { id: true, status: true, deleted_at: true, type: true },
     });
     // status 0 = deactivated (set on account deletion); also covers deleted or unknown users.
     if (!user || user.deleted_at || user.status === 0) {
       throw new UnauthorizedException('This account is no longer active');
     }
     // some controllers read user.id, others user.userId
-    return { id: payload.sub, userId: payload.sub, email: payload.email, type: payload.type };
+    // The role comes from the database, not the token: a user who switches roles gets the new one
+    // straight away on every token they still hold.
+    return { id: payload.sub, userId: payload.sub, email: payload.email, type: user.type ?? payload.type };
   }
 }

@@ -11,6 +11,7 @@ import { MailService } from 'src/mail/mail.service';
 import { UserRepository } from 'src/common/repository/user/user.repository';
 import { UcodeRepository } from 'src/common/repository/ucode/ucode.repository';
 import * as bcrypt from 'bcrypt';
+import { IdentityService } from '../identity/identity.service';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
@@ -81,6 +82,7 @@ describe('AuthService', () => {
         { provide: MailService, useValue: mockMail },
         { provide: UserRepository, useValue: mockUserRepo },
         { provide: UcodeRepository, useValue: mockUcodeRepo },
+        { provide: IdentityService, useValue: { status: jest.fn(), purgeForUser: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: 'default_IORedisModuleConnectionToken',
           useValue: mockRedis,

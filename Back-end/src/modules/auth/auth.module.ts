@@ -8,6 +8,7 @@ import { AuthController } from './auth.controller';
 import appConfig from '../../config/app.config';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../../mail/mail.module';
+import { IdentityModule } from '../identity/identity.module';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
 import { SocialAuthController } from './social/social-auth.controller';
@@ -28,6 +29,7 @@ import { SocialAuthService } from './social/social-auth.service';
     }),
     PrismaModule,
     MailModule,
+    IdentityModule,
   ],
   controllers: [AuthController, SocialAuthController],
   providers: [AuthService, SocialAuthService, LocalStrategy, JwtStrategy, GoogleStrategy, FacebookStrategy],

@@ -1,6 +1,6 @@
 // external imports
 import { InjectRedis } from '@nestjs-modules/ioredis';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import Redis from 'ioredis';
 
@@ -18,6 +18,22 @@ import { UserType } from 'prisma/generated/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { track } from 'src/common/analytics';
 import { normalizeHandle, shopImageUrl } from '../../common/helper/handle';
+import { IdentityService } from '../identity/identity.service';
+
+/** Roles a person can hold on one login and switch between (CLIENT is the older name for CUSTOMER). */
+export const SWITCHABLE_ROLES = ['CUSTOMER', 'VENDOR', 'EVENT_PLANNER'] as const;
+export type SwitchableRole = (typeof SWITCHABLE_ROLES)[number];
+const asRole = (t: string | null | undefined): SwitchableRole | null =>
+  t === 'CLIENT' || t === 'CUSTOMER' ? 'CUSTOMER' : t === 'VENDOR' || t === 'EVENT_PLANNER' ? t : null;
+/** The roles an account holds, as switchable roles (its current one included). */
+export function heldRoles(user: { type?: string | null; roles?: string[] | null }): SwitchableRole[] {
+  const held = new Set<SwitchableRole>();
+  for (const t of [...(user.roles ?? []), user.type]) {
+    const r = asRole(t);
+    if (r) held.add(r);
+  }
+  return SWITCHABLE_ROLES.filter((r) => held.has(r));
+}
 
 @Injectable()
 export class AuthService {
@@ -28,6 +44,7 @@ export class AuthService {
     private userRepository: UserRepository,
     private ucodeRepository: UcodeRepository,
     @InjectRedis() private readonly redis: Redis,
+    private identity: IdentityService,
   ) { }
 
   //
@@ -44,6 +61,8 @@ export class AuthService {
           avatar: true,
           address: true,
           type: true,
+          roles: true,
+          id_verified_at: true,
           first_name: true,
           last_name: true,
           bio: true,
@@ -66,11 +85,14 @@ export class AuthService {
       }
 
       if (user) {
-        const { vendorProfile, ...rest } = user;
+        const { vendorProfile, roles, id_verified_at, ...rest } = user;
         return {
           success: true,
           data: {
             ...rest,
+            // one login, several roles: what this account holds and whether it may switch
+            roles: heldRoles({ type: user.type, roles }),
+            id_verified: !!id_verified_at,
             vendorProfile: vendorProfile ? { business_name: vendorProfile.business_name, about_me: vendorProfile.about_me, license_status: vendorProfile.license_status } : null,
             ...(vendorProfile && {
               business_name: vendorProfile.business_name,
@@ -1057,7 +1079,67 @@ export class AuthService {
     });
   }
 
+  /** The roles this login holds, the one in use, and whether it may switch (ID verified). */
+  async roles(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { type: true, roles: true } });
+    if (!user) throw new UnauthorizedException('User not found');
+    const id = await this.identity.status(userId);
+    return {
+      success: true,
+      data: {
+        active: asRole(user.type),
+        roles: heldRoles(user),
+        available: SWITCHABLE_ROLES,
+        id_verification: id.data,
+      },
+    };
+  }
+
+  /**
+   * Switches the role in use (adding it first if the account doesn't hold it yet) and returns fresh
+   * tokens carrying it. Needs an approved ID check. Becoming a vendor creates the vendor profile,
+   * whose licence still goes through admin approval as for any new vendor.
+   */
+  async switchRole(userId: string, role: string, opts: { business_name?: string } = {}) {
+    const target = asRole(role);
+    if (!target) throw new BadRequestException('Choose customer, vendor or planner.');
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, type: true, roles: true, id_verified_at: true, status: true, deleted_at: true, vendorProfile: { select: { id: true } } },
+    });
+    if (!user || user.deleted_at || user.status === 0) throw new UnauthorizedException('This account is no longer active');
+    if (user.type === 'ADMIN') throw new ForbiddenException('Admin accounts can’t switch roles.');
+
+    const held = heldRoles(user);
+    if (asRole(user.type) === target) {
+      return { ...(await this.login({ email: user.email, userId })), active: target, roles: held, added: false };
+    }
+    if (!user.id_verified_at) {
+      throw new ForbiddenException('Verify your ID before switching between customer, vendor and planner.');
+    }
+
+    // keep the stored spelling for customers who signed up as CLIENT
+    const newType: UserType =
+      target === 'CUSTOMER' ? ((user.roles ?? []).includes('CLIENT' as UserType) || user.type === 'CLIENT' ? 'CLIENT' : 'CUSTOMER') : target;
+    const adding = !held.includes(target);
+    const roles = Array.from(new Set<UserType>([...(user.roles ?? []), ...(user.type ? [user.type] : []), newType]));
+    const businessName = opts.business_name?.trim().slice(0, 255) || undefined;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { type: newType, roles } });
+      if (target === 'VENDOR' && !user.vendorProfile) {
+        await tx.vendorProfile.create({ data: { user_id: userId, license_status: 'PENDING', ...(businessName && { business_name: businessName }) } });
+      }
+    });
+    track(adding ? 'role_added' : 'role_switched', userId, { role: target });
+
+    const tokens = await this.login({ email: user.email, userId });
+    return { ...tokens, message: adding ? `You can now use Vendly as a ${target === 'EVENT_PLANNER' ? 'planner' : target.toLowerCase()}.` : 'Switched.', active: target, roles: heldRoles({ type: newType, roles }), added: adding };
+  }
+
   async deleteAccount(userId: string) {
+    // ID photos are deleted with the account, never kept
+    await this.identity.purgeForUser(userId).catch(() => undefined);
     const result = await this.userRepository.deleteUser(userId);
     if (result.success) {
       await this.redis.del(`refresh_token:${userId}`).catch(() => null);
