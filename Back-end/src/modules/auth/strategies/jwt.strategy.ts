@@ -37,6 +37,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // some controllers read user.id, others user.userId
     // The role comes from the database, not the token: a user who switches roles gets the new one
     // straight away on every token they still hold.
-    return { id: payload.sub, userId: payload.sub, email: payload.email, type: user.type ?? payload.type };
+    // sid: which sign-in (device) the token belongs to; absent on tokens from before sessions
+    return { id: payload.sub, userId: payload.sub, email: payload.email, type: user.type ?? payload.type, ...(typeof payload.sid === 'string' && { sid: payload.sid }) };
   }
 }

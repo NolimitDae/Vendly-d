@@ -11,7 +11,7 @@ function setup(user: Record<string, any>) {
   };
   const jwt: any = { sign: jest.fn().mockReturnValue('token') };
   const userRepo: any = { getUserDetails: jest.fn().mockImplementation(async () => ({ ...user, type: tx.user.update.mock.calls.at(-1)?.[0].data.type ?? user.type })) };
-  const redis: any = { set: jest.fn().mockResolvedValue('OK') };
+  const redis: any = { set: jest.fn().mockResolvedValue('OK'), sadd: jest.fn().mockResolvedValue(1), expire: jest.fn().mockResolvedValue(1) };
   const identity: any = { status: jest.fn().mockResolvedValue({ data: { status: 'APPROVED', verified: true } }) };
   const service = new AuthService(jwt, prisma, {} as any, userRepo, {} as any, redis, identity);
   return { service, tx, jwt };

@@ -136,6 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // end this device's session on the server too (other devices stay signed in); never blocks sign-out
+    const refreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY).catch(() => null);
+    if (refreshToken) await api.post('/auth/logout', { refresh_token: refreshToken }, { timeout: 5000, _skipAuthRefresh: true } as object).catch(() => undefined);
     await clearStorage();
     dispatch({ type: 'LOGOUT' });
   }, []);

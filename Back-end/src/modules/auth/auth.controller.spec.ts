@@ -139,17 +139,18 @@ describe('AuthController', () => {
   });
 
   it('logs the app out with its Bearer token', async () => {
-    (mockAuthService as any).userFromTokens = jest.fn().mockReturnValue('u1');
+    (mockAuthService as any).sessionFromTokens = jest.fn().mockReturnValue({ userId: 'u1', sid: 's1' });
     const res = resMock();
     const result = await controller.logout({ headers: { authorization: 'Bearer app-token' }, method: 'POST' } as any, res as any, {});
-    expect((mockAuthService as any).userFromTokens).toHaveBeenCalledWith({ access: 'app-token', refresh: null });
-    expect(mockAuthService.revokeRefreshToken).toHaveBeenCalledWith('u1');
+    expect((mockAuthService as any).sessionFromTokens).toHaveBeenCalledWith({ access: 'app-token', refresh: null });
+    // only this device's session
+    expect(mockAuthService.revokeRefreshToken).toHaveBeenCalledWith('u1', 's1');
     expect(result.success).toBe(true);
     expect(res.clearCookie).not.toHaveBeenCalled();
   });
 
   it('clears the website cookies on logout, even when the session already expired', async () => {
-    (mockAuthService as any).userFromTokens = jest.fn().mockReturnValue(null);
+    (mockAuthService as any).sessionFromTokens = jest.fn().mockReturnValue(null);
     const res = resMock();
     const result = await controller.logout({ headers: { cookie: 'vendly_session=x', ...webHeaders }, method: 'POST' } as any, res as any, {});
     expect(result.success).toBe(true);

@@ -68,6 +68,10 @@ const mockRedis = {
   set: jest.fn().mockResolvedValue('OK'),
   del: jest.fn().mockResolvedValue(1),
   eval: jest.fn().mockResolvedValue(1),
+  sadd: jest.fn().mockResolvedValue(1),
+  srem: jest.fn().mockResolvedValue(1),
+  smembers: jest.fn().mockResolvedValue([]),
+  expire: jest.fn().mockResolvedValue(1),
 };
 
 /** A tiny Redis (get/set/del, and the rotate script's compare-and-swap) for the refresh tests. */
@@ -79,6 +83,10 @@ function memoryRedis() {
     return 'OK';
   });
   mockRedis.del.mockImplementation(async (...keys: string[]) => keys.filter((k) => store.delete(k)).length);
+  const sets = new Map<string, Set<string>>();
+  mockRedis.sadd.mockImplementation(async (k: string, v: string) => void (sets.get(k) ?? sets.set(k, new Set()).get(k)!).add(v));
+  mockRedis.srem.mockImplementation(async (k: string, v: string) => void sets.get(k)?.delete(v));
+  mockRedis.smembers.mockImplementation(async (k: string) => [...(sets.get(k) ?? [])]);
   mockRedis.eval.mockImplementation(async (_script: string, _n: number, current: string, previous: string, presented: string, next: string, ttl: number, grace: number) => {
     if (store.get(current)?.value !== presented) return 0;
     store.set(current, { value: next, ttl });
@@ -134,7 +142,7 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should return tokens and store the refresh token', async () => {
+    it('should return tokens and store the refresh token as a new session', async () => {
       mockUserRepo.getUserDetails.mockResolvedValue(mockUser);
 
       const result: any = await service.login({ email: 'jane@test.com', userId: 'user-1' });
@@ -142,10 +150,78 @@ describe('AuthService', () => {
       expect(result.success).toBe(true);
       expect(result.authorization).toEqual({ type: 'bearer', access_token: 'mock-token', refresh_token: 'mock-token' });
       expect(mockJwt.sign).toHaveBeenCalledWith(
-        { email: 'jane@test.com', sub: 'user-1', type: 'CUSTOMER' },
+        { email: 'jane@test.com', sub: 'user-1', type: 'CUSTOMER', sid: expect.stringMatching(/^[0-9a-f]{24}$/) },
         expect.any(Object),
       );
-      expect(mockRedis.set).toHaveBeenCalledWith('refresh_token:user-1', 'mock-token', 'EX', 604800);
+      const sid = mockJwt.sign.mock.calls[0][0].sid;
+      expect(mockRedis.set).toHaveBeenCalledWith(`refresh_token:user-1:${sid}`, 'mock-token', 'EX', 604800);
+      expect(mockRedis.sadd).toHaveBeenCalledWith('refresh_sessions:user-1', sid);
+    });
+
+    describe('one session per device', () => {
+      beforeEach(() => mockUserRepo.getUserDetails.mockResolvedValue(mockUser));
+      afterEach(() => {
+        mockJwt.verify.mockReturnValue({ userId: 'user-1' });
+        mockJwt.sign.mockImplementation(() => 'mock-token');
+      });
+
+      /** Signs in and returns the session id and refresh token it was given. */
+      async function signIn(n: number) {
+        mockJwt.sign.mockImplementation((p: any) => (p.typ === 'refresh' ? `refresh-${n}` : `access-${n}`));
+        await service.login({ email: 'jane@test.com', userId: 'user-1' });
+        return { sid: mockJwt.sign.mock.calls.at(-1)![0].sid as string, refresh: `refresh-${n}` };
+      }
+      const refreshWith = (d: { sid: string; refresh: string }) => {
+        mockJwt.verify.mockReturnValueOnce({ sub: 'user-1', typ: 'refresh', sid: d.sid });
+        return service.refreshToken(d.refresh) as Promise<any>;
+      };
+
+      it('signing in on a second device keeps the first one signed in', async () => {
+        memoryRedis();
+        const phone = await signIn(1);
+        const laptop = await signIn(2);
+        expect(phone.sid).not.toBe(laptop.sid);
+        mockJwt.sign.mockImplementation((p: any) => (p.typ === 'refresh' ? 'rotated' : 'a'));
+        expect((await refreshWith(phone)).success).toBe(true);
+        expect((await refreshWith(laptop)).success).toBe(true);
+        // the rotated tokens stay in their own sessions
+        expect(mockJwt.sign).toHaveBeenCalledWith(expect.objectContaining({ sid: phone.sid, typ: 'refresh' }), expect.anything());
+      });
+
+      it('signing out ends only that device', async () => {
+        const store = memoryRedis();
+        const phone = await signIn(1);
+        const laptop = await signIn(2);
+        await service.revokeRefreshToken('user-1', phone.sid);
+        expect((await refreshWith(phone)).success).toBe(false);
+        expect(store.has(`refresh_token:user-1:${laptop.sid}`)).toBe(true);
+        expect((await refreshWith(laptop)).success).toBe(true);
+      });
+
+      it('switching roles renews the same session instead of starting another', async () => {
+        memoryRedis();
+        await service.login({ email: 'jane@test.com', userId: 'user-1', sid: 'abc' });
+        expect(mockJwt.sign).toHaveBeenLastCalledWith(expect.objectContaining({ sid: 'abc', typ: 'refresh' }), expect.anything());
+      });
+
+      it('deleting the account ends every session and the old single slot', async () => {
+        const store = memoryRedis();
+        const phone = await signIn(1);
+        const laptop = await signIn(2);
+        store.set('refresh_token:user-1', { value: 'legacy' });
+        (mockUserRepo as any).deleteUser = jest.fn().mockResolvedValue({ success: true });
+        await service.deleteAccount('user-1');
+        expect([...store.keys()]).toEqual([]);
+        expect((await refreshWith(phone)).success).toBe(false);
+        expect((await refreshWith(laptop)).success).toBe(false);
+      });
+
+      it('reads the session from either token for sign-out', () => {
+        mockJwt.verify.mockReturnValueOnce({ sub: 'user-1', sid: 's1' });
+        expect(service.sessionFromTokens({ access: 'a' })).toEqual({ userId: 'user-1', sid: 's1' });
+        mockJwt.verify.mockReturnValueOnce({ sub: 'user-1' });
+        expect(service.sessionFromTokens({ access: 'old' })).toEqual({ userId: 'user-1' });
+      });
     });
   });
 

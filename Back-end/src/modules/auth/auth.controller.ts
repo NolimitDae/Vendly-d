@@ -727,15 +727,16 @@ export class AuthController {
     // signing out of the website always drops its cookies, even if the session already ended
     if (web || hasAuthCookies(req)) clearAuthCookies(req, res);
     try {
-      const userId = this.authService.userFromTokens({
+      // only this device's session; the user stays signed in elsewhere
+      const session = this.authService.sessionFromTokens({
         access: resolveAuthToken(req)?.token,
         refresh: body?.refresh_token || (web ? readCookie(req, REFRESH_COOKIE) : null),
       });
-      if (!userId) {
+      if (!session) {
         if (web) return { success: true, message: 'Logged out' };
         throw new UnauthorizedException();
       }
-      const response = await this.authService.revokeRefreshToken(userId);
+      const response = await this.authService.revokeRefreshToken(session.userId, session.sid);
       return response;
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
@@ -1009,7 +1010,7 @@ export class AuthController {
   @Post('roles/switch')
   async switchRole(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() body: SwitchRoleDto) {
     // fresh tokens: cookies for the website, in the body for the app
-    return webSession(req, res, await this.authService.switchRole(req.user.userId, body.role, { business_name: body.business_name }));
+    return webSession(req, res, await this.authService.switchRole(req.user.userId, body.role, { business_name: body.business_name, sid: req.user.sid }));
   }
 
   @ApiOperation({

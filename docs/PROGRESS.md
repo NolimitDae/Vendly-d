@@ -23,6 +23,7 @@ _Updated: 2026-10-23. All Build Plan Phase 0 items resolved._
 | B13 | An add-on's extra time moved the booking end on approval, before payment | Moves once, when it's paid (charge and webhook can't both apply it) |
 | B14 | Working hours were checked in the customer's time zone | Hours carry the vendor's time zone; customers see times like "9am–5pm (Chicago time)" |
 | B15 | Old listing photos were deleted before the update saved; receipts that failed to queue were never retried; invoice links worked for suspended accounts | Deleted after the update; the claim is released so the hourly sweep retries; suspended or deleted accounts are refused |
+| B16 | Signing in on one device signed the user out everywhere else (one stored refresh token per user); the app's sign-out never ended its session on the server | Each sign-in is its own session (`sid` in its tokens, `refresh_token:<user>:<sid>` in Redis). Signing out ends only that device, switching roles renews the same session, and deleting the account ends all of them. Tokens from before this keep the old single slot until they expire |
 
 ## Features Added
 

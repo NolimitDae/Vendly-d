@@ -2,6 +2,7 @@
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { randomBytes } from 'crypto';
 import Redis from 'ioredis';
 
 //internal imports
@@ -51,6 +52,20 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
   return 1
 end
 return 0`;
+
+/**
+ * Where a sign-in's refresh token lives. Every sign-in is its own session (`sid`, carried in its
+ * tokens), so signing in on one device never signs another out. Tokens issued before sessions
+ * existed have no `sid` and keep the user's single old slot until they expire or sign out.
+ */
+export function sessionKeys(userId: string, sid?: string | null) {
+  return sid
+    ? { current: `refresh_token:${userId}:${sid}`, previous: `refresh_token_prev:${userId}:${sid}` }
+    : { current: `refresh_token:${userId}`, previous: `refresh_token_prev:${userId}` };
+}
+/** The user's session ids, so deleting the account can end every one. */
+const sessionsKey = (userId: string) => `refresh_sessions:${userId}`;
+const newSessionId = () => randomBytes(12).toString('hex');
 
 @Injectable()
 export class AuthService {
@@ -246,11 +261,12 @@ export class AuthService {
     }
   }
   // done
-  async login({ email, userId }) {
+  /** Signs the user in as a new session, or renews the tokens of `sid` (switching roles on that device). */
+  async login({ email, userId, sid }: { email: string; userId: string; sid?: string | null }) {
     try {
       const user = await this.userRepository.getUserDetails(userId);
 
-      const payload = { email: email, sub: userId, type: user?.type };
+      const payload = { email: email, sub: userId, type: user?.type, sid: sid || newSessionId() };
 
 
       const accessToken = this.jwtService.sign(payload, {
@@ -772,17 +788,19 @@ export class AuthService {
   // ---------------------------------(end)---------------------------------------
 
   /** Signs a refresh token (marked `typ: 'refresh'` so it can't be used as an access token). */
-  private signRefreshToken(payload: { email: string; sub: string; type: unknown }) {
+  private signRefreshToken(payload: { email: string; sub: string; type: unknown; sid?: string }) {
     return this.jwtService.sign(
       { ...payload, typ: 'refresh' },
       { expiresIn: (process.env.JWT_REFRESH_EXPIRY ?? '7d') as any },
     );
   }
 
-  /** Signs a refresh token and stores it as the user's current one. */
-  private async issueRefreshToken(payload: { email: string; sub: string; type: unknown }) {
+  /** Signs a refresh token and stores it as its session's current one. */
+  private async issueRefreshToken(payload: { email: string; sub: string; type: unknown; sid: string }) {
     const refreshToken = this.signRefreshToken(payload);
-    await this.redis.set(`refresh_token:${payload.sub}`, refreshToken, 'EX', REFRESH_TTL_SECONDS);
+    await this.redis.set(sessionKeys(payload.sub, payload.sid).current, refreshToken, 'EX', REFRESH_TTL_SECONDS);
+    await this.redis.sadd(sessionsKey(payload.sub), payload.sid);
+    await this.redis.expire(sessionsKey(payload.sub), REFRESH_TTL_SECONDS);
     return refreshToken;
   }
 
@@ -793,7 +811,7 @@ export class AuthService {
    */
   async refreshToken(refreshToken: string) {
     try {
-      let claims: { sub?: string; typ?: string };
+      let claims: { sub?: string; typ?: string; sid?: string };
       try {
         claims = this.jwtService.verify(refreshToken);
       } catch {
@@ -804,8 +822,8 @@ export class AuthService {
         return { success: false, message: 'Invalid or expired refresh token' };
       }
 
-      const currentKey = `refresh_token:${user_id}`;
-      const previousKey = `refresh_token_prev:${user_id}`;
+      const sid = typeof claims.sid === 'string' && claims.sid ? claims.sid : undefined;
+      const { current: currentKey, previous: previousKey } = sessionKeys(user_id, sid);
       const storedToken = await this.redis.get(currentKey);
       // Two tabs (or a tab and a retry) refreshing at once: the first rotates, the second arrives with
       // the token just replaced. Within a short grace window that one still gets in, with the
@@ -824,6 +842,7 @@ export class AuthService {
         email: userDetails.email,
         sub: userDetails.id,
         type: userDetails.type,
+        ...(sid && { sid }),
       };
       const accessToken = this.jwtService.sign(payload, {
         expiresIn: (process.env.JWT_ACCESS_EXPIRY ?? '1h') as any,
@@ -836,6 +855,7 @@ export class AuthService {
         const rotated = await this.redis.eval(ROTATE_REFRESH_TOKEN, 2, currentKey, previousKey, refreshToken, newRefreshToken, REFRESH_TTL_SECONDS, REFRESH_GRACE_SECONDS);
         if (rotated === 1) {
           refreshTokenOut = newRefreshToken;
+          if (sid) await this.redis.expire(sessionsKey(user_id), REFRESH_TTL_SECONDS);
         } else {
           // another refresh rotated it a moment ago: hand out what it stored
           const now = await this.redis.get(currentKey);
@@ -866,13 +886,18 @@ export class AuthService {
    * The user a sign-out is for: from a valid access token, else from a valid refresh token. Null
    * when neither verifies (nothing to revoke).
    */
-  userFromTokens({ access, refresh }: { access?: string | null; refresh?: string | null }): string | null {
+  userFromTokens(tokens: { access?: string | null; refresh?: string | null }): string | null {
+    return this.sessionFromTokens(tokens)?.userId ?? null;
+  }
+
+  /** The user and session (device) a sign-out is for; `sid` is absent for tokens from before sessions. */
+  sessionFromTokens({ access, refresh }: { access?: string | null; refresh?: string | null }): { userId: string; sid?: string } | null {
     for (const [token, want] of [[access, 'access'], [refresh, 'refresh']] as const) {
       if (!token) continue;
       try {
         const claims: any = this.jwtService.verify(token);
         const typ = claims?.typ === 'refresh' ? 'refresh' : claims?.typ ? 'other' : 'access';
-        if (claims?.sub && typ === want) return claims.sub;
+        if (claims?.sub && typ === want) return { userId: claims.sub, ...(typeof claims.sid === 'string' && claims.sid && { sid: claims.sid }) };
       } catch {
         // expired or not ours: try the next one
       }
@@ -887,9 +912,11 @@ export class AuthService {
     return { success: true, data: { token, user_id, expires_in: expiresIn } };
   }
 
-  async revokeRefreshToken(user_id: string) {
+  /** Ends one session (this device's sign-in); other devices stay signed in. */
+  async revokeRefreshToken(user_id: string, sid?: string) {
     try {
-      const storedToken = await this.redis.get(`refresh_token:${user_id}`);
+      const keys = sessionKeys(user_id, sid);
+      const storedToken = await this.redis.get(keys.current);
       if (!storedToken) {
         return {
           success: false,
@@ -897,7 +924,8 @@ export class AuthService {
         };
       }
 
-      await this.redis.del(`refresh_token:${user_id}`, `refresh_token_prev:${user_id}`);
+      await this.redis.del(keys.current, keys.previous);
+      if (sid) await this.redis.srem(sessionsKey(user_id), sid);
 
       return {
         success: true,
@@ -1194,7 +1222,7 @@ export class AuthService {
    * tokens carrying it. Needs an approved ID check. Becoming a vendor creates the vendor profile,
    * whose licence still goes through admin approval as for any new vendor.
    */
-  async switchRole(userId: string, role: string, opts: { business_name?: string } = {}) {
+  async switchRole(userId: string, role: string, opts: { business_name?: string; sid?: string } = {}) {
     const target = asRole(role);
     if (!target) throw new BadRequestException('Choose customer, vendor or planner.');
     const user = await this.prisma.user.findUnique({
@@ -1206,7 +1234,7 @@ export class AuthService {
 
     const held = heldRoles(user);
     if (asRole(user.type) === target) {
-      return { ...(await this.login({ email: user.email, userId })), active: target, roles: held, added: false };
+      return { ...(await this.login({ email: user.email, userId, sid: opts.sid })), active: target, roles: held, added: false };
     }
     if (!user.id_verified_at) {
       throw new ForbiddenException('Verify your ID before switching between customer, vendor and planner.');
@@ -1229,7 +1257,7 @@ export class AuthService {
 
     // The switch is saved. Fresh tokens are a convenience: existing ones already carry the new role,
     // since the role on each request is read from the database.
-    const tokens = await this.login({ email: user.email, userId });
+    const tokens = await this.login({ email: user.email, userId, sid: opts.sid });
     return { ...tokens, success: true, message: adding ? `You can now use Vendly as a ${target === 'EVENT_PLANNER' ? 'planner' : target.toLowerCase()}.` : 'Switched.', active: target, roles: heldRoles({ type: newType, roles }), added: adding };
   }
 
@@ -1237,9 +1265,14 @@ export class AuthService {
     // ID photos are deleted with the account, never kept
     await this.identity.purgeForUser(userId).catch(() => undefined);
     const result = await this.userRepository.deleteUser(userId);
-    if (result.success) {
-      await this.redis.del(`refresh_token:${userId}`, `refresh_token_prev:${userId}`).catch(() => null);
-    }
+    if (result.success) await this.revokeAllSessions(userId).catch(() => null);
     return result;
+  }
+
+  /** Signs the user out everywhere: every session, and the old single slot. */
+  private async revokeAllSessions(userId: string) {
+    const sids: string[] = (await this.redis.smembers(sessionsKey(userId))) ?? [];
+    const keys = [undefined, ...sids].flatMap((sid) => Object.values(sessionKeys(userId, sid)));
+    await this.redis.del(...keys, sessionsKey(userId));
   }
 }
