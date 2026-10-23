@@ -44,7 +44,32 @@ export interface ConversationInfo {
   event_id?: string | null;
   pinned: ChatMessage | null;
   participants: { id: string; name: string; role?: string | null; avatar_url?: string | null; last_read_at?: string | null }[];
+  /** 1:1 chats only: I blocked them / they blocked me. Either way nobody can send. */
+  blocked_by_me?: boolean;
+  blocked_me?: boolean;
 }
+
+export type ReportReason = "spam" | "harassment" | "scam" | "inappropriate" | "other";
+
+export const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: "spam", label: "Spam" },
+  { value: "harassment", label: "Harassment or bullying" },
+  { value: "scam", label: "Scam or fraud" },
+  { value: "inappropriate", label: "Inappropriate content" },
+  { value: "other", label: "Something else" },
+];
+
+export interface ReportBody {
+  reported_id: string;
+  reason: ReportReason;
+  details?: string;
+  conversation_id?: string;
+  message_id?: string;
+  block?: boolean;
+}
+
+/** Same limit as the API (Back-end/src/modules/chat/message/message.controller.ts). */
+export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 export const ChatService = {
   getConversations: async () =>
@@ -67,8 +92,15 @@ export const ChatService = {
       authHeaders(),
     ),
 
-  sendMessage: async (conversationId: string, text: string) =>
-    Fetch.post("/chat/message/send-message", { conversationId, text }, authHeaders()),
+  /** With a photo the message goes as multipart (`attachments`); text is optional then. */
+  sendMessage: async (conversationId: string, text: string, photos?: File[]) => {
+    if (!photos?.length) return Fetch.post("/chat/message/send-message", { conversationId, text }, authHeaders());
+    const body = new FormData();
+    body.append("conversationId", conversationId);
+    if (text) body.append("text", text);
+    photos.forEach((f) => body.append("attachments", f));
+    return Fetch.post("/chat/message/send-message", body, { headers: { Authorization: `Bearer ${CookieHelper.get({ key: "token" })}` } });
+  },
 
   /** Marks the other side's messages read; they get a `conversationRead` socket event ("Seen"). */
   markAsRead: async (conversationId: string) =>
@@ -83,6 +115,12 @@ export const ChatService = {
   getQuote: (quoteId: string) => Fetch.get(`/chat/quotes/${quoteId}`, authHeaders()),
   declineQuote: (quoteId: string) => Fetch.post(`/chat/quotes/${quoteId}/decline`, {}, authHeaders()),
   withdrawQuote: (quoteId: string) => Fetch.post(`/chat/quotes/${quoteId}/withdraw`, {}, authHeaders()),
+
+  // Block stops messages both ways in a 1:1 chat; bookings and contracts carry on.
+  block: (userId: string) => Fetch.post(`/chat/block/${userId}`, {}, authHeaders()),
+  unblock: (userId: string) => Fetch.delete(`/chat/block/${userId}`, authHeaders()),
+  getBlocks: () => Fetch.get("/chat/blocks", authHeaders()),
+  report: (body: ReportBody) => Fetch.post("/chat/report", body, authHeaders()),
 };
 
 // Mirrors Back-end/src/modules/chat/extras/contact-warning.ts so the site can remind before sending.

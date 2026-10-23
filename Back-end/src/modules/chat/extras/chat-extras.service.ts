@@ -5,6 +5,7 @@ import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { formatMessage, formatQuote, messageInclude } from './format';
 import { track } from 'src/common/analytics';
+import { assertCanMessage } from '../safety/block';
 
 const DAY = 24 * 3600 * 1000;
 /** Bookings that put a vendor in the event chat. */
@@ -112,6 +113,8 @@ export class ChatExtrasService {
     if (!listing) throw new BadRequestException('Pick one of your live packages for this quote.');
     const customerId = conv.is_group ? conv.event?.event_planner_id : conv.participants.find((p) => p.userId !== vendorId)?.userId;
     if (!customerId || customerId === vendorId) throw new BadRequestException('There is no customer in this chat to quote.');
+    // a quote is a chat message: same block rule as any other 1:1 message
+    if (!conv.is_group) await assertCanMessage(this.prisma, vendorId, customerId);
     const amount = Math.round(Number(dto.amount) * 100) / 100;
     if (!(amount >= 1)) throw new BadRequestException('A quote must be at least $1.');
     const days = Math.min(30, Math.max(1, Math.round(dto.expires_in_days ?? 7)));

@@ -9,6 +9,7 @@ const emit = jest.fn();
 const gateway: any = { server: { to: jest.fn(() => ({ emit })) } };
 const push = { sendToUser: jest.fn().mockResolvedValue(undefined) };
 const prisma: any = {
+  userBlock: { findMany: jest.fn().mockResolvedValue([]) },
   event: { findUnique: jest.fn() },
   conversation: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
   participant: { create: jest.fn() },
@@ -92,6 +93,15 @@ describe('ChatExtrasService', () => {
       expect(data.expires_at.getTime()).toBeLessThanOrEqual(Date.now() + 30 * 86400000 + 1000); // capped at 30 days
       expect(prisma.message.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: 'quote', quote_id: 'q1' }) }));
       expect(push.sendToUser).toHaveBeenCalledWith('cust', expect.anything());
+    });
+
+    it('does not send a quote in a 1:1 chat while either person has blocked the other', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(oneToOne);
+      prisma.vendorListing.findFirst.mockResolvedValue({ id: 'l1' });
+      prisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'cust', blocked_id: 'v1' }]);
+      await expect(service.createQuote('c1', 'v1', { listing_id: 'l1', title: 'Bridal party of 6', amount: 900 })).rejects.toThrow(ForbiddenException);
+      expect(prisma.quote.create).not.toHaveBeenCalled();
+      expect(prisma.message.create).not.toHaveBeenCalled();
     });
 
     it('quotes the planner in an event chat', async () => {

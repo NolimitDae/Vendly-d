@@ -17,6 +17,7 @@ jest.mock('src/config/app.config', () =>
 );
 
 const mockPrisma = {
+  userBlock: { findMany: jest.fn().mockResolvedValue([]) },
   conversation: {
     findFirst: jest.fn(),
     findMany: jest.fn(),
@@ -128,6 +129,19 @@ describe('ConversationService', () => {
           where: { participants: { some: { userId: 'user-1' } } },
         }),
       );
+    });
+
+    it('marks 1:1 chats with who has blocked whom', async () => {
+      mockPrisma.conversation.findMany.mockResolvedValue([
+        { id: 'conv-1', updatedAt: new Date(), participants: [mockParticipant('user-1'), mockParticipant('user-2')], messages: [] },
+        { id: 'conv-2', updatedAt: new Date(), participants: [mockParticipant('user-1'), mockParticipant('user-3')], messages: [] },
+      ]);
+      mockPrisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'user-1', blocked_id: 'user-2' }]);
+
+      const result = await service.findAll('user-1');
+
+      expect(result.conversations[0]).toMatchObject({ blocked_by_me: true, blocked_me: false });
+      expect(result.conversations[1]).toMatchObject({ blocked_by_me: false, blocked_me: false });
     });
 
     it('should return empty conversations array when user has none', async () => {

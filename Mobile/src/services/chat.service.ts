@@ -68,11 +68,42 @@ export interface ConversationInfo {
   event_id?: string | null;
   pinned: Message | null;
   participants: Participant[];
+  /** 1:1 chats only: I blocked them / they blocked me. Either way nobody can send. */
+  blocked_by_me?: boolean;
+  blocked_me?: boolean;
+}
+
+/** A photo picked with expo-image-picker, ready for FormData. */
+export interface PhotoFile {
+  uri: string;
+  name: string;
+  type: string;
 }
 
 export interface SendMessageData {
   conversation_id: string;
   content: string;
+  /** Sent as multipart `attachments`; the text is optional then. */
+  photo?: PhotoFile;
+}
+
+export type ReportReason = 'spam' | 'harassment' | 'scam' | 'inappropriate' | 'other';
+
+export const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: 'spam', label: 'Spam' },
+  { value: 'harassment', label: 'Harassment' },
+  { value: 'scam', label: 'Scam or fraud' },
+  { value: 'inappropriate', label: 'Inappropriate' },
+  { value: 'other', label: 'Something else' },
+];
+
+export interface ReportBody {
+  reported_id: string;
+  reason: ReportReason;
+  details?: string;
+  conversation_id?: string;
+  message_id?: string;
+  block?: boolean;
 }
 
 export interface CreateConversationData {
@@ -116,6 +147,8 @@ interface ApiConversationInfo {
   event_id?: string | null;
   pinned: ApiMessage | null;
   participants: { id: string; name: string; role?: string | null; avatar_url?: string | null; last_read_at?: string | null }[];
+  blocked_by_me?: boolean;
+  blocked_me?: boolean;
 }
 
 /** Converts an API message (REST or socket `message` event) to the screens' shape. */
@@ -159,6 +192,8 @@ function toInfo(c: ApiConversationInfo | undefined, conversationId: string): Con
     event_id: c.event_id,
     pinned: c.pinned ? toMessage(c.pinned, conversationId) : null,
     participants: c.participants.map((p) => ({ id: p.id, name: p.name, role: p.role, avatar: p.avatar_url ?? undefined, last_read_at: p.last_read_at })),
+    blocked_by_me: c.blocked_by_me,
+    blocked_me: c.blocked_me,
   };
 }
 
@@ -183,7 +218,16 @@ export const ChatService = {
   },
 
   sendMessage: async (data: SendMessageData) => {
-    const res = await api.post('/chat/message/send-message', { conversationId: data.conversation_id, text: data.content });
+    let body: FormData | { conversationId: string; text: string } = { conversationId: data.conversation_id, text: data.content };
+    if (data.photo) {
+      // FormData gets the long upload timeout from api.ts
+      const form = new FormData();
+      form.append('conversationId', data.conversation_id);
+      if (data.content) form.append('text', data.content);
+      form.append('attachments', data.photo as unknown as Blob);
+      body = form;
+    }
+    const res = await api.post('/chat/message/send-message', body, data.photo ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined);
     return { data: { success: !!res.data?.success, data: toMessage(res.data?.data as ApiMessage, data.conversation_id), warning: res.data?.warning as { text: string } | null } };
   },
 
@@ -202,6 +246,11 @@ export const ChatService = {
     api.post(`/chat/conversation/${conversationId}/quotes`, body),
   declineQuote: (quoteId: string) => api.post(`/chat/quotes/${quoteId}/decline`),
   withdrawQuote: (quoteId: string) => api.post(`/chat/quotes/${quoteId}/withdraw`),
+
+  // Block stops messages both ways in a 1:1 chat; bookings and contracts carry on.
+  block: (userId: string) => api.post(`/chat/block/${userId}`),
+  unblock: (userId: string) => api.delete(`/chat/block/${userId}`),
+  report: (body: ReportBody) => api.post('/chat/report', body),
 };
 
 // Mirrors the backend check (Back-end/src/modules/chat/extras/contact-warning.ts) so the app can

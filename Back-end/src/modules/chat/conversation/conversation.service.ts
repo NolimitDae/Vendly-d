@@ -10,6 +10,7 @@ import appConfig from '../../../config/app.config';
 import { DateHelper } from '../../../common/helper/date.helper';
 import { MessageGateway } from '../message/message.gateway';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+import { blockSets, blockState } from '../safety/block';
 
 @Injectable()
 export class ConversationService {
@@ -169,6 +170,8 @@ export class ConversationService {
       }),
     );
 
+    const blocks = await blockSets(this.prisma, userId);
+
     const formattedConversations = conversations.map((conv) => {
 
       const me = conv.participants.find((p) => p.userId === userId);
@@ -200,6 +203,10 @@ export class ConversationService {
         unread: unread.get(conv.id) ?? 0,
         last_read_at: me?.lastReadAt ?? null,
         opponent: opponentData,
+        // 1:1 only
+        ...(opponentParticipant
+          ? { blocked_by_me: blocks.blockedByMe.has(opponentParticipant.userId), blocked_me: blocks.blockedMe.has(opponentParticipant.userId) }
+          : {}),
         lastMessage: conv.messages[0] ? {
           text: conv.messages[0].text,
           kind: conv.messages[0].kind,
@@ -271,8 +278,11 @@ export class ConversationService {
       );
     }
 
+    const opponent = conversation.is_group ? null : conversation.participants.find((p) => p.userId !== userId);
     const formattedConversation = {
       id: conversation.id,
+      // 1:1 only
+      ...(opponent ? await blockState(this.prisma, userId, opponent.userId) : {}),
       participants: conversation.participants.map((p) => ({
         userId: p.user.id,
         name: p.user.name,

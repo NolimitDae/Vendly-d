@@ -20,6 +20,8 @@ export const useHeaderHeading = ({ path }: { path: string }) => {
             return { heading: "Disputes", description: "Resolve problems customers reported" }
         case "/dashboard/identity":
             return { heading: "ID checks", description: "Verify people before they switch roles" }
+        case "/dashboard/chat-reports":
+            return { heading: "Chat reports", description: "People reported from chat" }
         case "/dashboard/promos":
             return { heading: "Promo Codes", description: "Create and manage discount codes" }
         case "/dashboard/revenue":

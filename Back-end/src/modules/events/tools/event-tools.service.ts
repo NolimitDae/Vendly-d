@@ -4,6 +4,7 @@ import appConfig from 'src/config/app.config';
 import { MailService } from 'src/mail/mail.service';
 import { MessageGateway } from 'src/modules/chat/message/message.gateway';
 import { formatMessage, messageInclude } from 'src/modules/chat/extras/format';
+import { blockSets } from 'src/modules/chat/safety/block';
 import { PrivateStorage, SignedUrl } from 'src/modules/contracts/private-storage';
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -392,8 +393,11 @@ export class EventToolsService {
     const when = event.date ? new Date(event.date).toDateString() : 'a date to confirm';
     const text = `Hi! ${planner?.name ?? 'I'} would love to have you on “${event.name}” (${when}${event.venue ? `, ${event.venue}` : ''}).${note?.trim() ? ` ${note.trim()}` : ''} Can you send me a quote here?`;
     let sent = 0;
+    // no message to anyone either side has blocked
+    const blocks = await blockSets(this.prisma, plannerId);
     for (const vendorId of team.vendor_ids) {
       if (vendorId === plannerId) continue;
+      if (blocks.blockedByMe.has(vendorId) || blocks.blockedMe.has(vendorId)) continue;
       let conv = await this.prisma.conversation.findFirst({
         where: { is_group: false, AND: [{ participants: { some: { userId: plannerId } } }, { participants: { some: { userId: vendorId } } }] },
         select: { id: true },

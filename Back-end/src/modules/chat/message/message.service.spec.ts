@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MessageGateway } from './message.gateway';
@@ -45,6 +45,7 @@ const makeMessage = (overrides = {}) => ({
 });
 
 const mockPrisma = {
+  userBlock: { findMany: jest.fn().mockResolvedValue([]) },
   participant: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
   conversation: {
     findUnique: jest.fn(),
@@ -130,6 +131,46 @@ describe('MessageService', () => {
 
       await expect(service.create(dto, 'user-1')).rejects.toThrow(NotFoundException);
     });
+
+    describe('blocking (1:1)', () => {
+      beforeEach(() => {
+        mockPrisma.participant.findFirst.mockResolvedValue({ userId: 'user-1' });
+        mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+        mockPrisma.message.create.mockResolvedValue(makeMessage());
+      });
+
+      it('refuses when I blocked the other person, and says how to fix it', async () => {
+        mockPrisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'user-1', blocked_id: 'user-2' }]);
+        const err = await service.create(dto, 'user-1').catch((e) => e);
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(err.message).toBe('You blocked this person. Unblock them to send a message.');
+        expect(mockPrisma.message.create).not.toHaveBeenCalled();
+      });
+
+      it('refuses when the other person blocked me', async () => {
+        mockPrisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'user-2', blocked_id: 'user-1' }]);
+        const err = await service.create(dto, 'user-1').catch((e) => e);
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(err.message).toBe("You can't message this person.");
+        expect(mockPrisma.message.create).not.toHaveBeenCalled();
+      });
+
+      it('checks both directions between the two people', async () => {
+        await service.create(dto, 'user-1');
+        expect(mockPrisma.userBlock.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { OR: [{ blocker_id: 'user-1', blocked_id: 'user-2' }, { blocker_id: 'user-2', blocked_id: 'user-1' }] },
+          }),
+        );
+      });
+
+      it('does not filter group chats', async () => {
+        mockPrisma.conversation.findUnique.mockResolvedValue({ ...conversation, is_group: true });
+        const result = await service.create(dto, 'user-1');
+        expect(result.success).toBe(true);
+        expect(mockPrisma.userBlock.findMany).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('findAll', () => {
@@ -152,6 +193,26 @@ describe('MessageService', () => {
       expect(mockPrisma.conversation.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'conv-1' } }),
       );
+    });
+
+    it('tells a 1:1 chat who has blocked whom', async () => {
+      mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+      mockPrisma.$transaction.mockResolvedValue([1, [makeMessage()]]);
+      mockPrisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'user-2', blocked_id: 'user-1' }]);
+
+      const result = await service.findAll('conv-1', 'user-1', paginationDto);
+
+      expect(result.conversation).toMatchObject({ blocked_by_me: false, blocked_me: true });
+    });
+
+    it('leaves the block flags off group chats', async () => {
+      mockPrisma.conversation.findUnique.mockResolvedValue({ ...conversation, is_group: true });
+      mockPrisma.$transaction.mockResolvedValue([1, [makeMessage()]]);
+
+      const result = await service.findAll('conv-1', 'user-1', paginationDto);
+
+      expect(result.conversation).not.toHaveProperty('blocked_by_me');
+      expect(mockPrisma.userBlock.findMany).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when conversation is not found', async () => {

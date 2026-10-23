@@ -114,6 +114,12 @@ export const navItems: NavItem[] = [
     type: "admin",
   },
   {
+    icon: MessageIcon,
+    label: "Chat reports",
+    href: "/dashboard/chat-reports",
+    type: "admin",
+  },
+  {
     icon: WalletIcon,
     label: "Promo codes",
     href: "/dashboard/promos",

@@ -3,13 +3,15 @@ import { ActivityIndicator, Alert, AppState, FlatList, Image, KeyboardAvoidingVi
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { format, parseISO } from 'date-fns';
 import { BrandGradient, ScreenHeader } from '../../components/brand';
 import QuoteCard from '../../components/chat/QuoteCard';
 import SendQuoteSheet from '../../components/chat/SendQuoteSheet';
+import ReportSheet from '../../components/chat/ReportSheet';
 import { createTypingEmitter, typingLabel, useTypingUsers } from '../../components/chat/presence';
 import { DARK, FONTS } from '../../constants/colors';
-import { ChatService, CONTACT_WARNING, sharesContact, toMessage, type ConversationInfo, type Message, type Quote } from '../../services/chat.service';
+import { ChatService, CONTACT_WARNING, sharesContact, toMessage, type ConversationInfo, type Message, type PhotoFile, type Quote } from '../../services/chat.service';
 import { SocketService } from '../../services/socket.service';
 import { apiError } from '../../services/contracts.service';
 import { useAuth } from '../../context/AuthContext';
@@ -28,6 +30,10 @@ export default function ChatDetail() {
   const [quoting, setQuoting] = useState(false);
   const [busyQuote, setBusyQuote] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // one photo per message, previewed before sending
+  const [photo, setPhoto] = useState<PhotoFile | null>(null);
+  // who (and optionally which message) the report sheet is for
+  const [reporting, setReporting] = useState<{ person: { id: string; name: string }; messageId?: string } | null>(null);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -123,23 +129,34 @@ export default function ChatDetail() {
     setSending(true);
     setText('');
     try {
-      const res = await ChatService.sendMessage({ conversation_id: conversationId, content });
+      const res = await ChatService.sendMessage({ conversation_id: conversationId, content, photo: photo ?? undefined });
       if (res.data?.success) {
         const sent = res.data.data;
         setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [sent, ...prev]));
         setWarning(res.data.warning?.text ?? null);
+        setPhoto(null);
       }
-    } catch {
+    } catch (e: any) {
       setText(content);
+      Alert.alert('Message not sent', apiError(e));
+      // blocked since the chat was opened: refresh so the notice shows
+      if (e?.response?.status === 403) fetchMessages();
     } finally {
       setSending(false);
     }
   };
 
+  const pickPhoto = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+    if (res.canceled || !res.assets?.[0]) return;
+    const a = res.assets[0];
+    setPhoto({ uri: a.uri, name: a.fileName ?? `chat_${Date.now()}.jpg`, type: a.mimeType ?? 'image/jpeg' });
+  };
+
   const send = () => {
     const content = text.trim();
-    if (!content || sending) return;
-    if (sharesContact(content)) {
+    if ((!content && !photo) || sending || blocked) return;
+    if (content && sharesContact(content)) {
       Alert.alert('Keep it in Vendly', CONTACT_WARNING, [
         { text: 'Edit message', style: 'cancel' },
         { text: 'Send anyway', onPress: () => doSend(content) },
@@ -157,8 +174,45 @@ export default function ChatDetail() {
   const onLongPress = (m: Message) => {
     if (m.kind === 'system') return;
     const isPinned = info?.pinned?.id === m.id;
-    Alert.alert('Message', m.content.slice(0, 80), [
+    const theirs = m.sender_id && m.sender_id !== user?.id;
+    Alert.alert('Message', m.content.slice(0, 80) || undefined, [
       { text: isPinned ? 'Unpin' : 'Pin for everyone', onPress: () => pin(isPinned ? null : m) },
+      ...(theirs
+        ? [{ text: 'Report message', style: 'destructive' as const, onPress: () => setReporting({ person: { id: m.sender_id, name: m.sender?.name ?? participantName }, messageId: m.id }) }]
+        : []),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const setBlockedByMe = (b: boolean) => setInfo((i) => (i ? { ...i, blocked_by_me: b } : i));
+
+  const toggleBlock = async (person: { id: string; name: string }, unblock: boolean) => {
+    try {
+      if (unblock) await ChatService.unblock(person.id);
+      else await ChatService.block(person.id);
+      setBlockedByMe(!unblock);
+    } catch (e) {
+      Alert.alert(unblock ? 'Could not unblock' : 'Could not block', apiError(e));
+    }
+  };
+
+  // ⋯ in the header of a 1:1 chat
+  const openMenu = () => {
+    if (!opponent) return;
+    const person = { id: opponent.id, name: opponent.name };
+    Alert.alert(person.name, undefined, [
+      blockedByMe
+        ? { text: 'Unblock', onPress: () => toggleBlock(person, true) }
+        : {
+            text: 'Block',
+            style: 'destructive',
+            onPress: () =>
+              Alert.alert(`Block ${person.name}?`, "Neither of you will be able to send messages in this chat. Bookings and contracts aren't affected. You can unblock anytime.", [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Block', style: 'destructive', onPress: () => toggleBlock(person, false) },
+              ]),
+          },
+      { text: 'Report', style: 'destructive', onPress: () => setReporting({ person }) },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
@@ -211,6 +265,10 @@ export default function ChatDetail() {
   }, [messages, info, user?.id]);
 
   const isGroup = !!info?.is_group;
+  const opponent = !isGroup ? info?.participants.find((p) => p.id !== user?.id) : undefined;
+  // 1:1 only: while either person has blocked the other nobody can send
+  const blockedByMe = !isGroup && !!info?.blocked_by_me;
+  const blocked = blockedByMe || (!isGroup && !!info?.blocked_me);
   const title = isGroup ? info?.title ?? 'Event chat' : participantName;
   const memberLine = isGroup ? info?.participants.map((p) => (p.id === user?.id ? 'You' : p.name.split(' ')[0])).join(', ') : null;
   const isVendor = user?.type === 'VENDOR';
@@ -224,7 +282,17 @@ export default function ChatDetail() {
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={{ paddingTop: insets.top + 8, paddingBottom: 8 }}>
-        <ScreenHeader title={title} onBack={() => navigation.goBack()} />
+        <ScreenHeader
+          title={title}
+          onBack={() => navigation.goBack()}
+          right={
+            opponent ? (
+              <Pressable onPress={openMenu} hitSlop={8} accessibilityRole="button" accessibilityLabel="Chat options" style={s.menuBtn}>
+                <Ionicons name="ellipsis-horizontal" size={22} color="#fff" />
+              </Pressable>
+            ) : undefined
+          }
+        />
         {!!memberLine && <Text style={s.members} numberOfLines={1}>{memberLine}</Text>}
       </View>
 
@@ -275,7 +343,7 @@ export default function ChatDetail() {
                       onDecline={() => quoteAction(item.quote!, 'decline')}
                       onWithdraw={() => quoteAction(item.quote!, 'withdraw')}
                     />
-                  ) : me ? (
+                  ) : !item.content ? null : me ? (
                     <BrandGradient style={[s.bubble, s.bubbleMe]}>
                       <Text style={s.bubbleText}>{item.content}</Text>
                     </BrandGradient>
@@ -307,32 +375,72 @@ export default function ChatDetail() {
 
       <Text style={s.typing} numberOfLines={1} accessibilityLiveRegion="polite">{typingLabel(typers) ?? ''}</Text>
 
-      <View style={[s.inputBar, { marginBottom: insets.bottom + 12 }]}>
-        {isVendor && (
-          <Pressable onPress={() => setQuoting(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send a quote" style={s.plus}>
-            <Ionicons name="pricetags-outline" size={20} color={DARK.accent} />
-          </Pressable>
-        )}
-        <TextInput
-          style={s.input}
-          value={text}
-          onChangeText={(v) => {
-            setText(v);
-            if (v.trim()) typing.input();
-            else typing.stop();
-          }}
-          placeholder="Message"
-          placeholderTextColor={DARK.muted}
-          multiline
-          onSubmitEditing={send}
-          blurOnSubmit
-        />
-        <Pressable onPress={send} disabled={!text.trim() || sending} accessibilityRole="button" accessibilityLabel="Send">
-          <BrandGradient style={[s.send, !text.trim() && { opacity: 0.5 }]}>
-            {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="paper-plane-outline" size={22} color="#fff" />}
-          </BrandGradient>
-        </Pressable>
-      </View>
+      {blocked ? (
+        <View style={[s.blocked, { marginBottom: insets.bottom + 12 }]} accessibilityLiveRegion="polite">
+          <Ionicons name="ban-outline" size={18} color={DARK.muted} />
+          {blockedByMe ? (
+            <Text style={s.blockedText}>
+              You blocked {opponent?.name ?? 'this person'} ·{' '}
+              <Text style={s.blockedLink} onPress={() => opponent && toggleBlock({ id: opponent.id, name: opponent.name }, true)} accessibilityRole="button">
+                Unblock
+              </Text>
+            </Text>
+          ) : (
+            <Text style={s.blockedText}>You can&apos;t reply to this conversation</Text>
+          )}
+        </View>
+      ) : (
+        <>
+          {photo && (
+            <View style={s.preview}>
+              <Image source={{ uri: photo.uri }} style={s.previewImg} accessibilityLabel="Photo to send" />
+              <Pressable onPress={() => setPhoto(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Remove photo" style={s.previewRemove}>
+                <Ionicons name="close" size={14} color="#fff" />
+              </Pressable>
+            </View>
+          )}
+          <View style={[s.inputBar, { marginBottom: insets.bottom + 12 }]}>
+            <Pressable onPress={pickPhoto} disabled={sending} hitSlop={6} accessibilityRole="button" accessibilityLabel="Attach a photo" style={s.plus}>
+              <Ionicons name="image-outline" size={22} color={DARK.accent} />
+            </Pressable>
+            {isVendor && (
+              <Pressable onPress={() => setQuoting(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send a quote" style={s.plus}>
+                <Ionicons name="pricetags-outline" size={20} color={DARK.accent} />
+              </Pressable>
+            )}
+            <TextInput
+              style={s.input}
+              value={text}
+              onChangeText={(v) => {
+                setText(v);
+                if (v.trim()) typing.input();
+                else typing.stop();
+              }}
+              placeholder="Message"
+              placeholderTextColor={DARK.muted}
+              multiline
+              onSubmitEditing={send}
+              blurOnSubmit
+            />
+            <Pressable onPress={send} disabled={(!text.trim() && !photo) || sending} accessibilityRole="button" accessibilityLabel="Send">
+              <BrandGradient style={[s.send, !text.trim() && !photo && { opacity: 0.5 }]}>
+                {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="paper-plane-outline" size={22} color="#fff" />}
+              </BrandGradient>
+            </Pressable>
+          </View>
+        </>
+      )}
+      <ReportSheet
+        visible={!!reporting}
+        person={reporting?.person ?? null}
+        conversationId={conversationId}
+        messageId={reporting?.messageId}
+        alreadyBlocked={!isGroup && blockedByMe}
+        onClose={() => setReporting(null)}
+        onReported={(alsoBlocked) => {
+          if (alsoBlocked && !isGroup) setBlockedByMe(true);
+        }}
+      />
       {isVendor && <SendQuoteSheet visible={quoting} conversationId={conversationId} onClose={() => setQuoting(false)} onSent={fetchMessages} />}
     </KeyboardAvoidingView>
   );
@@ -364,4 +472,11 @@ const s = StyleSheet.create({
   plus: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, minHeight: 44, maxHeight: 120, color: '#fff', fontSize: 16, fontFamily: FONTS.regular, paddingVertical: 10, paddingLeft: 6 },
   send: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  menuBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  blocked: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 20, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 28, backgroundColor: DARK.field },
+  blockedText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium, textAlign: 'center', flexShrink: 1 },
+  blockedLink: { color: DARK.accent, fontFamily: FONTS.semibold },
+  preview: { alignSelf: 'flex-start', marginHorizontal: 24, marginBottom: 8 },
+  previewImg: { width: 72, height: 72, borderRadius: 14, backgroundColor: DARK.card },
+  previewRemove: { position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center' },
 });

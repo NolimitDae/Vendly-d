@@ -13,6 +13,7 @@ import { paginateResponse, PaginationDto } from "src/common/pagination";
 import { ChatRepository } from "../../../common/repository/chat/chat.repository";
 import { contactReasons, CONTACT_WARNING } from "../extras/contact-warning";
 import { avatarUrl, formatMessage, messageInclude } from "../extras/format";
+import { assertCanMessage, blockState } from "../safety/block";
 
 // Temporary enum until Prisma generates it
 enum MessageStatus {
@@ -54,6 +55,12 @@ export class MessageService {
 
     if (!conversation) {
       throw new NotFoundException("Conversation not found");
+    }
+
+    // 1:1 chats: nothing gets through while either person has blocked the other
+    if (!conversation.is_group) {
+      const recipient = conversation.participants.find((p) => p.userId !== sender);
+      if (recipient) await assertCanMessage(this.prisma, sender, recipient.userId);
     }
 
     const savedFileNames: string[] = [];
@@ -198,6 +205,8 @@ export class MessageService {
       title: conversation.title,
       event_id: conversation.event_id,
       pinned: pinned ? formatMessage(pinned) : null,
+      // 1:1 only: lets the apps show "You blocked X" / "You can't reply" and turn off the composer
+      ...(receiverParticipant ? await blockState(this.prisma, userId, receiverParticipant.userId) : {}),
       participants: conversation.participants.map((p) => ({
         id: p.user.id,
         name: p.user.name,

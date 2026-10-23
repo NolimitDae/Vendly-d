@@ -19,6 +19,7 @@ const prisma: any = {
   vendorTeam: { findFirst: jest.fn() },
   conversation: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
   message: { create: jest.fn() },
+  userBlock: { findMany: jest.fn().mockResolvedValue([]) },
   bookingContract: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
 };
 const mail = { sendBookingNotification: jest.fn().mockResolvedValue(undefined) };
@@ -175,6 +176,18 @@ describe('EventToolsService', () => {
       expect(res.data.invited).toBe(2);
       expect(prisma.conversation.create).toHaveBeenCalledTimes(1);
       expect(prisma.message.create.mock.calls[0][0].data.text).toMatch(/Ada & Tobi Wedding.*Bridal party of 6\. Can you send me a quote here\?/);
+    });
+
+    it('skips vendors either side has blocked', async () => {
+      prisma.vendorTeam.findFirst.mockResolvedValue({ id: 't1', vendor_ids: ['v1', 'v2', 'v3'] });
+      prisma.user.findUnique.mockResolvedValue({ name: 'Amara' });
+      prisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'planner', blocked_id: 'v1' }, { blocker_id: 'v2', blocked_id: 'planner' }]);
+      prisma.conversation.findFirst.mockResolvedValue({ id: 'c3' });
+      prisma.message.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'm', createdAt: new Date(), ...data, sender: { id: 'planner', name: 'Amara' } }));
+      const res = await service.inviteTeam('e1', 'planner', 't1');
+      expect(res.data.invited).toBe(1);
+      expect(prisma.message.create).toHaveBeenCalledTimes(1);
+      expect(push.sendToUser).toHaveBeenCalledWith('v3', expect.anything());
     });
   });
 });
