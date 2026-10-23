@@ -23,6 +23,9 @@ export const EarningsService = {
     return Fetch.get(`/bookings/my/vendor?${q.toString()}`, authHeaders());
   },
 
+  /** Real earnings: released, held, Vendly commission taken, given back, Vendly balance */
+  getSummary: async () => Fetch.get("/payments/earnings", authHeaders()),
+
   /** Withdrawal transaction history */
   getWithdrawHistory: async () => Fetch.get("/withdraw/history", authHeaders()),
 

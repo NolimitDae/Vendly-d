@@ -19,6 +19,12 @@ export class PaymentsController {
     return this.payments.createSetupIntent(user.id);
   }
 
+  /** The signed-in vendor's earnings: released, held, Vendly commission and money given back. */
+  @Get('earnings')
+  earnings(@GetUser() user: any) {
+    return this.payments.vendorEarningsSummary(user.id);
+  }
+
   @Get('methods')
   methods(@GetUser() user: any) {
     return this.payments.listCards(user.id);

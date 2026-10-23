@@ -22,6 +22,7 @@ jest.mock('next/link', () => ({
 jest.mock('@/service/earnings/earnings.service', () => ({
   EarningsService: {
     getBookings: jest.fn(),
+    getSummary: jest.fn(),
     getTransactions: jest.fn(),
     getWithdrawHistory: jest.fn(),
     getAccountInfo: jest.fn(),
@@ -76,7 +77,23 @@ const accountInfo: any = {
   name: 'Test Vendor',
 };
 
-function setupMocks(overrides: { bookings?: any[]; account?: any } = {}) {
+const summary: any = {
+  earned: 190,
+  held: 75,
+  commission: 10,
+  given_back: 4.5,
+  balance: 42.25,
+  commission_percent: 5,
+  bookings: [
+    { booking_id: 'b-1', earned: 190, held: 0, commission: 10 },
+    { booking_id: 'b-2', earned: 0, held: 75, commission: 0 },
+  ],
+};
+
+function setupMocks(overrides: { bookings?: any[]; account?: any; summary?: any } = {}) {
+  (EarningsService.getSummary as jest.Mock).mockResolvedValue({
+    data: { success: true, data: overrides.summary ?? summary },
+  });
   (EarningsService.getBookings as jest.Mock).mockResolvedValue({
     data: { success: true, data: overrides.bookings ?? bookings },
   });
@@ -118,14 +135,42 @@ describe('EarningsPage', () => {
       });
     });
 
-    it('renders total earnings stat', async () => {
+    it('renders the real earned figure from the backend, not a guessed fee', async () => {
       setupMocks();
       render(<EarningsPage />);
       await waitFor(() => {
-        // $200 completed × 0.9 (after 10% fee) = $180
-        const matches = screen.getAllByText('$180.00');
-        expect(matches.length).toBeGreaterThan(0);
+        // released to the vendor after the commission actually taken
+        expect(screen.getAllByText('$190.00').length).toBeGreaterThan(0);
       });
+      expect(screen.queryByText(/10% fee/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/10% platform fee/i)).not.toBeInTheDocument();
+      expect(screen.queryByText('$180.00')).not.toBeInTheDocument();
+    });
+
+    it('shows held money, commission taken and money given back', async () => {
+      setupMocks();
+      render(<EarningsPage />);
+      await waitFor(() => {
+        expect(screen.getByText('Held until release · 5% commission at payout')).toBeInTheDocument();
+      });
+      expect(screen.getAllByText('$75.00').length).toBeGreaterThan(0);
+      expect(screen.getByText('Released to you · $10.00 Vendly commission')).toBeInTheDocument();
+      expect(screen.getByText(/\$10\.00 Vendly commission · \$4\.50 given back · 2 total bookings/)).toBeInTheDocument();
+      // per booking: the real commission and what is still held
+      expect(screen.getByText('−$10.00')).toBeInTheDocument();
+      expect(screen.getByText('+$75.00 held')).toBeInTheDocument();
+    });
+
+    it('offers the Vendly balance as the full payout amount', async () => {
+      setupMocks();
+      render(<EarningsPage />);
+      expect(await screen.findByRole('button', { name: 'Request full Vendly balance ($42.25)' })).toBeInTheDocument();
+    });
+
+    it('says "Held until release" when no commission is set', async () => {
+      setupMocks({ summary: { ...summary, commission_percent: 0 } });
+      render(<EarningsPage />);
+      expect(await screen.findByText('Held until release')).toBeInTheDocument();
     });
 
     it('renders completed bookings count', async () => {

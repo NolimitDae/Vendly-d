@@ -31,9 +31,6 @@ import { toast } from "react-toastify";
 import { EarningsService } from "@/service/earnings/earnings.service";
 import { cn } from "@/lib/utils";
 
-/* ─── Constants ──────────────────────────────────────────────── */
-const COMMISSION_RATE = 0.1; // 10% platform fee
-
 /* ─── Types ──────────────────────────────────────────────────── */
 interface Booking {
   id: string;
@@ -60,6 +57,17 @@ interface AccountInfo {
   accountId: string | null;
   email: string;
   name: string;
+}
+
+/** GET /payments/earnings: real figures, commission as set in Admin → Settings and taken at payout */
+interface EarningsSummary {
+  earned: number;
+  held: number;
+  commission: number;
+  given_back: number;
+  balance: number;
+  commission_percent: number;
+  bookings: { booking_id: string; earned: number; held: number; commission: number }[];
 }
 
 interface StripeBalance {
@@ -140,6 +148,7 @@ export default function VendorEarningsPage() {
   const [withdrawals, setWithdrawals] = useState<Transaction[]>([]);
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const [stripeBalance, setStripeBalance] = useState<StripeBalance | null>(null);
+  const [summary, setSummary] = useState<EarningsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingBalance, setLoadingBalance] = useState(false);
 
@@ -157,10 +166,11 @@ export default function VendorEarningsPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [bookingsRes, withdrawalsRes, infoRes] = await Promise.allSettled([
+      const [bookingsRes, withdrawalsRes, infoRes, summaryRes] = await Promise.allSettled([
         EarningsService.getBookings({ limit: 500 }),
         EarningsService.getWithdrawHistory(),
         EarningsService.getAccountInfo(),
+        EarningsService.getSummary(),
       ]);
 
       if (bookingsRes.status === "fulfilled" && bookingsRes.value.data?.success) {
@@ -171,6 +181,9 @@ export default function VendorEarningsPage() {
         withdrawalsRes.value.data?.success
       ) {
         setWithdrawals(withdrawalsRes.value.data.data ?? []);
+      }
+      if (summaryRes.status === "fulfilled" && summaryRes.value.data?.success) {
+        setSummary(summaryRes.value.data.data);
       }
       if (infoRes.status === "fulfilled" && infoRes.value.data?.success) {
         const info: AccountInfo = infoRes.value.data.data;
@@ -215,6 +228,7 @@ export default function VendorEarningsPage() {
     [bookings],
   );
 
+  // gross value of completed bookings (average booking value)
   const totalEarned = useMemo(
     () => completed.reduce((s, b) => s + amt(b.amount), 0),
     [completed],
@@ -230,17 +244,16 @@ export default function VendorEarningsPage() {
       .reduce((s, b) => s + amt(b.amount), 0);
   }, [completed]);
 
-  const totalWithdrawn = useMemo(
-    () =>
-      withdrawals
-        .filter((t) => t.status === "completed")
-        .reduce((s, t) => s + amt(t.amount), 0),
-    [withdrawals],
-  );
-
-  const pendingPayouts = useMemo(
-    () => Math.max(0, totalEarned * (1 - COMMISSION_RATE) - totalWithdrawn),
-    [totalEarned, totalWithdrawn],
+  // real figures from the backend (no guessed fee): released to you, held, commission, balance
+  const earned = summary?.earned ?? 0;
+  const held = summary?.held ?? 0;
+  const commissionTaken = summary?.commission ?? 0;
+  const givenBack = summary?.given_back ?? 0;
+  // what can be withdrawn now (the Vendly balance the payout request draws from)
+  const withdrawable = summary?.balance ?? 0;
+  const perBooking = useMemo(
+    () => new Map((summary?.bookings ?? []).map((b) => [b.booking_id, b])),
+    [summary],
   );
 
   const avgBookingValue = completed.length
@@ -286,11 +299,14 @@ export default function VendorEarningsPage() {
         )
         .map((b) => {
           const gross = amt(b.amount);
-          const fee = gross * COMMISSION_RATE;
-          const net = gross - fee;
-          return { ...b, gross, fee, net };
+          const real = perBooking.get(b.id);
+          // commission actually taken, what was released to you, and what is still held
+          const fee = real?.commission ?? 0;
+          const net = real?.earned ?? 0;
+          const heldAmt = real?.held ?? 0;
+          return { ...b, gross, fee, net, held: heldAmt };
         }),
-    [bookings],
+    [bookings, perBooking],
   );
   const paginatedRows = tableRows.slice(
     (txPage - 1) * TX_PER_PAGE,
@@ -305,8 +321,9 @@ export default function VendorEarningsPage() {
       "Customer",
       "Service",
       "Amount",
-      "Platform Fee (10%)",
-      "Net Payout",
+      "Vendly Commission",
+      "Paid to You",
+      "Held",
       "Status",
     ];
     const rows = tableRows.map((r) => [
@@ -316,6 +333,7 @@ export default function VendorEarningsPage() {
       `$${r.gross.toFixed(2)}`,
       `$${r.fee.toFixed(2)}`,
       `$${r.net.toFixed(2)}`,
+      `$${r.held.toFixed(2)}`,
       r.status,
     ]);
     const csv = [header, ...rows]
@@ -429,8 +447,8 @@ export default function VendorEarningsPage() {
             loading={loading}
             icon={<DollarSign className="w-5 h-5 text-white" />}
             label="Total Earned"
-            value={`$${totalEarned.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-            sub="All time gross"
+            value={`$${earned.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            sub={`Released to you · $${commissionTaken.toFixed(2)} Vendly commission`}
           />
           <SummaryCard
             loading={loading}
@@ -443,8 +461,12 @@ export default function VendorEarningsPage() {
             loading={loading}
             icon={<Clock className="w-5 h-5 text-white" />}
             label="Pending Payouts"
-            value={`$${pendingPayouts.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-            sub="Net after 10% fee"
+            value={`$${held.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            sub={
+              summary?.commission_percent
+                ? `Held until release · ${summary.commission_percent}% commission at payout`
+                : "Held until release"
+            }
           />
           <SummaryCard
             loading={loading}
@@ -574,7 +596,7 @@ export default function VendorEarningsPage() {
                 Transaction History
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">
-                10% platform fee applied · {tableRows.length} total bookings
+                ${commissionTaken.toFixed(2)} Vendly commission · ${givenBack.toFixed(2)} given back · {tableRows.length} total bookings
               </p>
             </div>
           </div>
@@ -606,8 +628,8 @@ export default function VendorEarningsPage() {
                         "Customer",
                         "Service",
                         "Gross",
-                        "Platform Fee",
-                        "Net Payout",
+                        "Vendly Commission",
+                        "Paid to You",
                         "Status",
                       ].map((h) => (
                         <th
@@ -642,6 +664,11 @@ export default function VendorEarningsPage() {
                         </td>
                         <td className="px-5 py-3.5 font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
                           ${row.net.toFixed(2)}
+                          {row.held > 0 && (
+                            <span className="block text-xs font-normal text-gray-400">
+                              +${row.held.toFixed(2)} held
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-3.5">
                           <span
@@ -831,17 +858,17 @@ export default function VendorEarningsPage() {
                       />
                     </div>
                   </div>
-                  {pendingPayouts > 0 && (
+                  {withdrawable > 0 && (
                     <button
                       type="button"
                       onClick={() =>
                         setPayoutAmount(
-                          Math.floor(pendingPayouts * 100) / 100 + "",
+                          Math.floor(withdrawable * 100) / 100 + "",
                         )
                       }
                       className="text-xs text-primary hover:opacity-80 transition"
                     >
-                      Request full pending payout (${pendingPayouts.toFixed(2)})
+                      Request full Vendly balance (${withdrawable.toFixed(2)})
                     </button>
                   )}
                   <button

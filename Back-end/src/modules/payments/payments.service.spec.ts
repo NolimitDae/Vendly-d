@@ -29,7 +29,7 @@ jest.mock('src/config/app.config', () => ({ __esModule: true, default: () => ({ 
 const DAY = 24 * 3600 * 1000;
 
 const prisma = {
-  user: { findUnique: jest.fn(), update: jest.fn() },
+  user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
   booking: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), count: jest.fn(), findMany: jest.fn() },
   bookingInstallment: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   bookingProof: { findFirst: jest.fn() },
@@ -575,6 +575,32 @@ describe('PaymentsService', () => {
       prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, vendor: {} });
       expect(await service.payOutLateFor('b1')).toBeNull();
       expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disputes reach the vendor', () => {
+    it('tells the vendor (push and email) and Vendly admins when a customer opens one', async () => {
+      prisma.booking.findUnique
+        .mockResolvedValueOnce({ customer_id: 'c1', status: BookingStatus.COMPLETED, released_at: null, dispute_opened_at: null })
+        .mockResolvedValueOnce({ vendor_id: 'v1', listing: { title: 'Wedding buffet' }, customer: { name: 'Amara' }, vendor: { email: 'v@x.com', name: 'Vee' } });
+      await service.openDispute('b1', 'c1', 'The food arrived two hours late and cold');
+      expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ title: 'A customer reported a problem', body: expect.stringContaining('held') }));
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'v@x.com', status: 'DISPUTED' }));
+      expect(push.sendToUser).toHaveBeenCalledWith('admin1', expect.objectContaining({ title: 'New dispute' }));
+    });
+
+    it('lets the vendor give their side while the dispute is open', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ vendor_id: 'v1', dispute_opened_at: new Date(), dispute_resolved_at: null, listing: { title: 'Buffet' } });
+      const res = await service.replyToDispute('b1', 'v1', '  We arrived on time; photos are in the proof tab.  ');
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { dispute_vendor_reply: 'We arrived on time; photos are in the proof tab.', dispute_vendor_replied_at: expect.any(Date) } });
+      expect(res.data.dispute_vendor_reply).toContain('arrived on time');
+    });
+
+    it('refuses a reply from anyone else, or once the dispute is settled', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ vendor_id: 'v1', dispute_opened_at: new Date(), dispute_resolved_at: null });
+      await expect(service.replyToDispute('b1', 'c1', 'not my booking at all')).rejects.toThrow('Access denied');
+      prisma.booking.findUnique.mockResolvedValue({ vendor_id: 'v1', dispute_opened_at: new Date(), dispute_resolved_at: new Date() });
+      await expect(service.replyToDispute('b1', 'v1', 'too late for this one')).rejects.toThrow('no open dispute');
     });
   });
 

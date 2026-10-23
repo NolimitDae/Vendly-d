@@ -11,11 +11,16 @@ interface Props {
   type: "vendor" | "event_planner";
 }
 
-function toCardData(item: any) {
-  const docs: string[] = Array.isArray(item.license_photo)
-    ? item.license_photo.map((_: any, i: number) => `Document ${i + 1}`)
-    : [];
+// the backend returns public storage URLs for licence files (public/storage/license, event-planner/license)
+function toDocs(photos: unknown) {
+  const urls = Array.isArray(photos) ? photos.filter((u): u is string => typeof u === "string" && !!u) : [];
+  return urls.length > 0
+    ? urls.map((url, i) => ({ label: `Document ${i + 1}`, url }))
+    : ["No documents"];
+}
 
+// vendor rows come from GET /admin/user/pending-license
+function toCardData(item: any) {
   return {
     businessName: item.business_name || item.name || item.email || "—",
     ownerName: item.name || item.email || "—",
@@ -24,7 +29,24 @@ function toCardData(item: any) {
     subscriptionPlan: "Pending Review",
     email: item.email || "—",
     phone: "—",
-    submittedDocuments: docs.length > 0 ? docs : ["No documents"],
+    submittedDocuments: toDocs(item.license_photo),
+    requestedOn: item.created_at
+      ? new Date(item.created_at).toLocaleDateString()
+      : "—",
+  };
+}
+
+// planner rows are event planner profiles from GET /event-planner/admin/pending
+function toPlannerCardData(item: any) {
+  return {
+    businessName: item.business_name || item.user?.name || item.user?.email || "—",
+    ownerName: item.user?.name || item.user?.email || "—",
+    status: "Pending",
+    category: "Event Planner",
+    subscriptionPlan: "Pending Review",
+    email: item.user?.email || "—",
+    phone: "—",
+    submittedDocuments: toDocs(item.license_photo),
     requestedOn: item.created_at
       ? new Date(item.created_at).toLocaleDateString()
       : "—",
@@ -32,6 +54,7 @@ function toCardData(item: any) {
 }
 
 const PendingLicenseContent = ({ type }: Props) => {
+  const isPlanner = type === "event_planner";
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
@@ -39,7 +62,9 @@ const PendingLicenseContent = ({ type }: Props) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await AdminService.getPendingLicense();
+      const res = isPlanner
+        ? await AdminService.getPendingEventPlanners({ limit: 100 })
+        : await AdminService.getPendingLicense();
       const data: any[] = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       setItems(data);
     } catch {
@@ -47,17 +72,26 @@ const PendingLicenseContent = ({ type }: Props) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isPlanner]);
 
   useEffect(() => { load(); }, [load]);
+
+  // vendors are keyed by user id; planner profiles by their user_id
+  const userIdOf = (item: any): string => (isPlanner ? item.user_id : item.id);
 
   const handleAction = async (userId: string, action: "APPROVED" | "SUSPENDED") => {
     setActioningId(userId);
     try {
-      const res = await AdminService.updateLicenseStatus(userId, action);
+      const res = isPlanner
+        ? await AdminService.updateEventPlannerStatus(userId, action)
+        : await AdminService.updateLicenseStatus(userId, action);
       if (res.data?.sucess || res.data?.success) {
-        toast.success(`License ${action.toLowerCase()} successfully`);
-        setItems((prev) => prev.filter((i) => i.id !== userId));
+        toast.success(
+          isPlanner
+            ? `Event planner ${action === "APPROVED" ? "approved" : "rejected"}`
+            : `License ${action.toLowerCase()} successfully`,
+        );
+        setItems((prev) => prev.filter((i) => userIdOf(i) !== userId));
       } else {
         toast.error(res.data?.message || "Action failed");
       }
@@ -94,22 +128,25 @@ const PendingLicenseContent = ({ type }: Props) => {
         <p className="text-center text-gray-400 py-16 text-sm">No pending requests</p>
       ) : (
         <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
-          {items.map((item) => (
-            <PendingRequestCard
-              key={item.id}
-              data={toCardData(item)}
-              onApprove={
-                actioningId === item.id
-                  ? undefined
-                  : () => handleAction(item.id, "APPROVED")
-              }
-              onReject={
-                actioningId === item.id
-                  ? undefined
-                  : () => handleAction(item.id, "SUSPENDED")
-              }
-            />
-          ))}
+          {items.map((item) => {
+            const userId = userIdOf(item);
+            return (
+              <PendingRequestCard
+                key={item.id}
+                data={isPlanner ? toPlannerCardData(item) : toCardData(item)}
+                onApprove={
+                  actioningId === userId
+                    ? undefined
+                    : () => handleAction(userId, "APPROVED")
+                }
+                onReject={
+                  actioningId === userId
+                    ? undefined
+                    : () => handleAction(userId, "SUSPENDED")
+                }
+              />
+            );
+          })}
         </div>
       )}
     </div>

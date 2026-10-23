@@ -9,6 +9,8 @@ interface StatCardProps {
   value: string | number;
   percentage?: string;
   icon?: React.ReactNode;
+  /** says what the value covers; replaces the placeholder growth badge and "From Last Month" */
+  sub?: string;
 }
 
 const SECTION_GRID_CONFIG: Record<string, string> = {
@@ -65,7 +67,7 @@ export default function StatCards({
                   >
                     {card.value}
                   </div>
-                  {section !== "services" && (
+                  {section !== "services" && !card.sub && (
                     <div className="flex px-1.5 py-1   items-center gap-1 border-[0.5px] border-greenBorder bg-greenBg rounded-4xl">
                       {" "}
                       <GrowIcon />
@@ -74,7 +76,7 @@ export default function StatCards({
                   )}
                 </div>
                 <p className="text-grayColor1 leading-[160%] text-sm">
-                  From Last Month
+                  {card.sub ?? "From Last Month"}
                 </p>
               </div>
             </div>

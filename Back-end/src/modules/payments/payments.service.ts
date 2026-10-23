@@ -11,6 +11,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { currentFees } from 'src/modules/platform/platform-settings.service';
 import { AUTO_RELEASE_DAYS, buildSchedule, MAX_ATTEMPTS, PROOF_RELEASE_HOURS, RETRY_INTERVAL_MS } from './payment-schedule';
 import { track } from 'src/common/analytics';
+import { vendorEarnings } from './vendor-earnings';
 
 const HOUR = 3600 * 1000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -402,7 +403,42 @@ export class PaymentsService {
     if (!([BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED] as BookingStatus[]).includes(b.status)) throw new BadRequestException('You can dispute a booking once the service has started.');
     await this.prisma.booking.update({ where: { id: bookingId }, data: { dispute_opened_at: new Date(), dispute_reason: reason } });
     track('dispute_opened', customerId, { booking_id: bookingId });
+    await this.notifyDispute(bookingId, reason).catch((e) => this.logger.error(`dispute notices ${bookingId}`, e));
     return { success: true };
+  }
+
+  /** The vendor and Vendly's admins hear about a new dispute straight away; the payout stays held meanwhile. */
+  private async notifyDispute(bookingId: string, reason: string) {
+    const b = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { vendor_id: true, listing: { select: { title: true } }, customer: { select: { name: true } }, vendor: { select: { email: true, name: true } } },
+    });
+    if (!b) return;
+    const title = b.listing?.title ?? 'a booking';
+    const who = b.customer?.name ?? 'The customer';
+    const body = `${who} reported a problem with ${title}: "${reason.slice(0, 300)}". Your payment for this booking is held while Vendly looks into it. Reply from the booking to give your side.`;
+    void this.push.sendToUser(b.vendor_id, { title: 'A customer reported a problem', body, data: { type: 'booking', bookingId } });
+    if (b.vendor?.email) {
+      await this.mail
+        .sendBookingNotification({ to: b.vendor.email, recipientName: b.vendor.name ?? '', subject: `Problem reported — ${title}`, message: body, status: 'DISPUTED', listingTitle: title, ctaUrl: `${appConfig().app.client_app_url}/vendor/bookings/${bookingId}` })
+        .catch(() => null);
+    }
+    const admins = await this.prisma.user.findMany({ where: { type: 'ADMIN', deleted_at: null }, select: { id: true } });
+    for (const a of admins) void this.push.sendToUser(a.id, { title: 'New dispute', body: `${who} opened a dispute on ${title}.`, data: { type: 'dispute', bookingId } });
+  }
+
+  /** The vendor's side of an open dispute, for Vendly to read before deciding. Can be updated until it's resolved. */
+  async replyToDispute(bookingId: string, vendorId: string, reply: string) {
+    const b = await this.prisma.booking.findUnique({ where: { id: bookingId }, select: { vendor_id: true, dispute_opened_at: true, dispute_resolved_at: true, listing: { select: { title: true } } } });
+    if (!b) throw new NotFoundException('Booking not found');
+    if (b.vendor_id !== vendorId) throw new ForbiddenException('Access denied');
+    if (!b.dispute_opened_at || b.dispute_resolved_at) throw new BadRequestException('This booking has no open dispute.');
+    const text = reply.trim();
+    await this.prisma.booking.update({ where: { id: bookingId }, data: { dispute_vendor_reply: text, dispute_vendor_replied_at: new Date() } });
+    const admins = await this.prisma.user.findMany({ where: { type: 'ADMIN', deleted_at: null }, select: { id: true } });
+    for (const a of admins) void this.push.sendToUser(a.id, { title: 'Vendor replied to a dispute', body: `The vendor answered the dispute on ${b.listing?.title ?? 'a booking'}.`, data: { type: 'dispute', bookingId } });
+    track('dispute_vendor_replied', vendorId, { booking_id: bookingId });
+    return { success: true, data: { dispute_vendor_reply: text } };
   }
 
   /** Hourly: pay vendors for completed bookings whose release time has passed and that aren't disputed. */
@@ -774,6 +810,7 @@ export class PaymentsService {
       orderBy: { dispute_opened_at: 'asc' },
       select: {
         id: true, status: true, amount: true, service_fee: true, currency: true, dispute_opened_at: true, dispute_reason: true, dispute_resolved_at: true, dispute_resolution: true, released_at: true, completed_at: true,
+        dispute_vendor_reply: true, dispute_vendor_replied_at: true,
         listing: { select: { title: true } },
         customer: { select: { id: true, name: true, email: true } },
         vendor: { select: { id: true, name: true, email: true } },
@@ -848,6 +885,30 @@ export class PaymentsService {
     }
     track('dispute_resolved', adminId, { booking_id: bookingId, action: input.action, refunded });
     return { refunded, releaseNow: input.action !== 'refund' && b.status === BookingStatus.COMPLETED };
+  }
+
+  // ─── Vendor earnings (read-only) ─────────────────────────────────────────
+
+  /** A vendor's real earnings: released, held, Vendly commission taken and money given back. */
+  async vendorEarningsSummary(vendorId: string) {
+    const [bookings, givenBack, vendor] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: { vendor_id: vendorId },
+        select: { id: true, status: true, amount: true, paid_at: true, released_at: true, payout_credited_at: true, commission_amount: true, released_gross: true, early_released_amount: true, installments: { select: { status: true, amount: true, fee_amount: true, refunded_amount: true, paid_out_at: true } } },
+      }),
+      this.prisma.paymentTransaction.aggregate({ where: { user_id: vendorId, type: 'vendor_give_back', status: 'succeeded' }, _sum: { amount: true } }),
+      this.prisma.user.findUnique({ where: { id: vendorId }, select: { balance: true } }),
+    ]);
+    return {
+      success: true,
+      data: {
+        ...vendorEarnings(bookings, Number(givenBack._sum.amount ?? 0)),
+        // what can be withdrawn now from the Vendly balance
+        balance: round2(Math.max(0, Number(vendor?.balance ?? 0))),
+        // the rate taken from future payouts (Admin → Settings)
+        commission_percent: currentFees().commission,
+      },
+    };
   }
 
   // ─── Revenue report (admin) ──────────────────────────────────────────────

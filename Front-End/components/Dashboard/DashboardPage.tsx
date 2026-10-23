@@ -12,6 +12,9 @@ import NewSubscription from "./new-subscription/NewSubscription";
 import QuickActions from "./quick-actions/QuickActions";
 import WarningComponent from "./common/WarningComponent";
 import { AdminService } from "@/service/admin/admin.service";
+import { MoneyService } from "@/service/admin/money.service";
+
+const REVENUE_DAYS = 30;
 
 function DashboardPage() {
   const [stats, setStats] = useState({
@@ -23,13 +26,16 @@ function DashboardPage() {
   const [pending, setPending] = useState({ vendor: 0, ep: 0 });
 
   useEffect(() => {
+    // Vendly's own revenue (Protection fees + commission), as on Admin → Revenue
+    const to = new Date();
+    const from = new Date(to.getTime() - REVENUE_DAYS * 24 * 3600 * 1000);
     Promise.allSettled([
       AdminService.getVendors({ limit: 1 }),
       AdminService.getEventPlanners({ limit: 1 }),
       AdminService.getBookings({ limit: 1 }),
-      AdminService.getTransactions(),
+      MoneyService.revenue(from.toISOString(), to.toISOString()),
       AdminService.getPendingLicense(),
-    ]).then(([vendorsRes, epRes, bookingsRes, txRes, pendingRes]) => {
+    ]).then(([vendorsRes, epRes, bookingsRes, revenueRes, pendingRes]) => {
       const vendors =
         vendorsRes.status === "fulfilled"
           ? (vendorsRes.value.data?.meta?.total ?? 0)
@@ -42,14 +48,10 @@ function DashboardPage() {
         bookingsRes.status === "fulfilled"
           ? (bookingsRes.value.data?.meta?.total ?? 0)
           : 0;
-      const txData =
-        txRes.status === "fulfilled"
-          ? (Array.isArray(txRes.value.data) ? txRes.value.data : txRes.value.data?.data ?? [])
-          : [];
-      const revenue = txData.reduce(
-        (sum: number, tx: any) => sum + Number(tx.amount ?? 0),
-        0,
-      );
+      const revenue =
+        revenueRes.status === "fulfilled"
+          ? Number(revenueRes.value.data?.data?.totals?.vendly_revenue ?? 0)
+          : 0;
 
       setStats({ vendors, eventPlanners, bookings, revenue });
 
@@ -84,10 +86,11 @@ function DashboardPage() {
       icon: <MenWithDollarIcon />,
     },
     {
-      title: "Total Revenue",
-      value: `$${stats.revenue.toLocaleString()}`,
+      title: "Vendly Revenue",
+      value: `$${stats.revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       percentage: "",
       icon: <DollarIcon />,
+      sub: `Fees + commission, last ${REVENUE_DAYS} days`,
     },
   ];
 

@@ -16,3 +16,11 @@ export class RetryInstallmentDto {
   @MaxLength(64)
   payment_method_id?: string;
 }
+
+export class DisputeReplyDto {
+  @ApiProperty({ description: 'The vendor’s side of the dispute, read by Vendly' })
+  @IsString()
+  @MinLength(10)
+  @MaxLength(2000)
+  reply: string;
+}

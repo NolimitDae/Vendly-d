@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { BookingStatus } from 'prisma/generated/client';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
@@ -20,7 +20,11 @@ export class AdminBookingController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('status') status?: BookingStatus,
+    // ISO time: only bookings created at or after it (the dashboard's "today")
+    @Query('from') from?: string,
   ) {
-    return this.bookingService.getAllBookings({ page, limit, status });
+    const since = from ? new Date(from) : undefined;
+    if (since && Number.isNaN(since.getTime())) throw new BadRequestException('Use a valid date for from');
+    return this.bookingService.getAllBookings({ page, limit, status, from: since });
   }
 }

@@ -58,7 +58,8 @@ export const AdminService = {
   },
 
   // Bookings
-  getBookings: async (params?: { page?: number; limit?: number; status?: string }) => {
+  // from: ISO time, only bookings created at or after it
+  getBookings: async (params?: { page?: number; limit?: number; status?: string; from?: string }) => {
     const q = new URLSearchParams();
     if (params) Object.entries(params).forEach(([k, v]) => v !== undefined && q.set(k, String(v)));
     return Fetch.get(`/admin/bookings?${q.toString()}`, authHeaders());

@@ -22,7 +22,7 @@ import type { Request } from 'express';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { requestMeta } from 'src/modules/contracts/request-meta';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
-import { DisputeBookingDto, RetryInstallmentDto } from './dto/payments.dto';
+import { DisputeBookingDto, DisputeReplyDto, RetryInstallmentDto } from './dto/payments.dto';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 
 @ApiTags('bookings')
@@ -166,6 +166,13 @@ export class BookingController {
   @Post(':id/dispute')
   dispute(@GetUser() user: any, @Param('id') id: string, @Body() dto: DisputeBookingDto) {
     return this.payments.openDispute(id, user.id, dto.reason);
+  }
+
+  /** Vendor gives their side of an open dispute; Vendly sees it with the customer's report. */
+  @Post(':id/dispute/reply')
+  @Throttle({ short: { limit: 3, ttl: 10_000 } })
+  disputeReply(@GetUser() user: any, @Param('id') id: string, @Body() dto: DisputeReplyDto) {
+    return this.payments.replyToDispute(id, user.id, dto.reply);
   }
 
   /** Vendor takes a paid deposit before the event; it comes off the final payout. */

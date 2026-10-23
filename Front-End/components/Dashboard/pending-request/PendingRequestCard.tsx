@@ -12,7 +12,8 @@ interface PendingRequestCardProps {
         subscriptionPlan: string;
         email: string;
         phone: string;
-        submittedDocuments: string[];
+        // a document with a url opens the uploaded file in a new tab
+        submittedDocuments: Array<string | { label: string; url: string }>;
         requestedOn: string;
     };
     onApprove?: () => void;
@@ -79,14 +80,26 @@ const PendingRequestCard = ({
                 </p>
 
                 <div className="flex flex-wrap gap-2">
-                    {data.submittedDocuments.map((doc, index) => (
-                        <span
-                            key={index}
-                            className="flex bg-white rounded-lg items-center gap-1.5 px-2.5 py-2 text-xs text-blackColor leading-[160%] font-normal border-[0.5px] border-borderColor dark:bg-gray-800"
-                        >
-                            <DocIcon /> <span>{doc}</span>
-                        </span>
-                    ))}
+                    {data.submittedDocuments.map((doc, index) =>
+                        typeof doc === "string" ? (
+                            <span
+                                key={index}
+                                className="flex bg-white rounded-lg items-center gap-1.5 px-2.5 py-2 text-xs text-blackColor leading-[160%] font-normal border-[0.5px] border-borderColor dark:bg-gray-800"
+                            >
+                                <DocIcon /> <span>{doc}</span>
+                            </span>
+                        ) : (
+                            <a
+                                key={index}
+                                href={doc.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex bg-white rounded-lg items-center gap-1.5 px-2.5 py-2 text-xs text-blackColor leading-[160%] font-normal border-[0.5px] border-borderColor dark:bg-gray-800 hover:underline"
+                            >
+                                <DocIcon /> <span>{doc.label}</span>
+                            </a>
+                        ),
+                    )}
                 </div>
 
                 <p className="text-xs text-descriptionColor leading-[160%] font-medium  mt-2">
