@@ -1,3 +1,4 @@
+import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import {
   BadRequestException,
   ForbiddenException,
@@ -357,12 +358,14 @@ export class VendorContractsService implements OnModuleInit {
         guest_count: 100,
         message: 'Sample booking comments: one guest has a nut allergy.',
         amount: 1500,
+        // the platform's current Vendly Protection fee, so the sample total reads like a real booking
+        service_fee: platformServiceFee(1500),
         currency: 'usd',
       },
       listing: { title: 'Sample package', description: 'Description of the package the customer booked.' },
       vendor: vendor ?? {},
+      // a plain customer booking: a sample event would make the other party read as an event planner
       customer: { name: 'Sample Customer', type: 'CUSTOMER' },
-      event: { name: 'Sample Wedding' },
       fieldValues: dto.field_values,
       additionalTerms: dto.additional_terms,
       contractVersion: 1,

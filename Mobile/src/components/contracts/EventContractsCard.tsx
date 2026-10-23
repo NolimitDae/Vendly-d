@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../../constants/colors';
+import { DARK, FONTS } from '../../constants/colors';
 import { ContractsService, apiError, openSignedLink } from '../../services/contracts.service';
 import ContractStatusBadge from './ContractStatusBadge';
 
@@ -51,16 +51,16 @@ export default function EventContractsCard({ eventId }: { eventId: string }) {
     <View style={s.card}>
       <View style={s.header}>
         <View style={s.titleRow}>
-          <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+          <Ionicons name="document-text-outline" size={18} color={DARK.accent} />
           <Text style={s.title}>Vendor contracts</Text>
         </View>
         <TouchableOpacity style={[s.zip, !executed && { opacity: 0.4 }]} onPress={downloadAll} disabled={!executed || zipping}>
-          {zipping ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="download-outline" size={16} color={COLORS.primary} />}
+          {zipping ? <ActivityIndicator size="small" color={DARK.accent} /> : <Ionicons name="download-outline" size={16} color={DARK.accent} />}
           <Text style={s.zipText}>All ({executed})</Text>
         </TouchableOpacity>
       </View>
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} />
+        <ActivityIndicator color={DARK.accent} />
       ) : rows.length === 0 ? (
         <Text style={s.muted}>No vendor bookings on this event yet.</Text>
       ) : (
@@ -93,14 +93,14 @@ export default function EventContractsCard({ eventId }: { eventId: string }) {
 }
 
 const s = StyleSheet.create({
-  card: { backgroundColor: COLORS.white, borderRadius: 14, padding: 16, gap: 10, marginTop: 12 },
+  card: { backgroundColor: DARK.card, borderRadius: 18, padding: 16, gap: 10, marginTop: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  title: { fontSize: 15, fontWeight: '700', color: COLORS.gray[900] },
-  zip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: COLORS.gray[200] },
-  zipText: { color: COLORS.primary, fontWeight: '600', fontSize: 13 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.gray[100] },
-  vendor: { fontSize: 14, fontWeight: '600', color: COLORS.gray[900] },
-  muted: { fontSize: 12, color: COLORS.gray[500] },
-  link: { color: COLORS.primary, fontWeight: '600', fontSize: 12 },
+  title: { fontSize: 15, fontFamily: FONTS.semibold, color: '#fff' },
+  zip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, minHeight: 36, borderRadius: 18, borderWidth: 1, borderColor: DARK.border },
+  zipText: { color: DARK.accent, fontFamily: FONTS.semibold, fontSize: 13 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: DARK.field },
+  vendor: { fontSize: 14, fontFamily: FONTS.semibold, color: '#fff' },
+  muted: { fontSize: 12, color: DARK.muted, fontFamily: FONTS.regular },
+  link: { color: DARK.accent, fontFamily: FONTS.semibold, fontSize: 12 },
 });

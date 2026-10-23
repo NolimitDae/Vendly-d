@@ -4,6 +4,7 @@ import { PDFDocument } from 'pdf-lib';
 import { ContractCategory } from 'prisma/generated/client';
 import { BookingContractsService } from './booking-contracts.service';
 import { withProtectionFeeWording } from './contract-templates';
+import { VendorContractsService } from './vendor-contracts.service';
 import {
   buildMergeData,
   contentHash,
@@ -368,5 +369,21 @@ describe('booking a date the vendor is not free', () => {
     const { prisma, check } = setup();
     await expect(check({})).resolves.toBeUndefined();
     expect(prisma.listingAvailability.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('vendor contract preview', () => {
+  it('reads like a real customer booking: customer label and the Vendly Protection fee in the total', async () => {
+    const template = defaultTemplates().find((t) => t.category === ContractCategory.GENERAL)!;
+    const prisma: any = {
+      contractTemplate: { findFirst: jest.fn().mockResolvedValue({ ...template, status: 'ACTIVE', version: 1 }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ name: 'David', email: 'd@x.com', vendorProfile: { business_name: 'David shots' } }) },
+    };
+    const service = new VendorContractsService(prisma);
+    const res = await service.preview('v1', { category: ContractCategory.GENERAL, field_values: {} } as any);
+    expect(res.data.body).toContain('Sample Customer ("Customer")');
+    expect(res.data.body).not.toContain('Event Planner');
+    expect(res.data.body).toMatch(/Vendly Protection fee: \$(?!0\.00)[\d,]+\.\d\d/);
+    expect(res.data.missing_fields.length).toBeGreaterThan(0);
   });
 });

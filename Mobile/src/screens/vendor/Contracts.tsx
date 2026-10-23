@@ -105,6 +105,8 @@ export default function VendorContracts() {
   const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [confirmOwn, setConfirmOwn] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+  // required fields still blank: they read "Not specified" in the preview
+  const [previewMissing, setPreviewMissing] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -160,6 +162,7 @@ export default function VendorContracts() {
     try {
       const res = await ContractsService.vendorPreview({ category, field_values: values, additional_terms: terms || undefined });
       setPreview(res.data.data.body);
+      setPreviewMissing(res.data.data.missing_fields ?? []);
     } catch (err) {
       Alert.alert('Error', apiError(err));
     } finally {
@@ -262,12 +265,29 @@ export default function VendorContracts() {
         <TouchableOpacity onPress={() => setMode({ kind: 'list' })} style={{ alignItems: 'center', padding: 12 }}>
           <Text style={s.link}>Cancel</Text>
         </TouchableOpacity>
-        <Modal visible={!!preview} animationType="slide" onRequestClose={() => setPreview(null)}>
-          <View style={{ flex: 1, backgroundColor: COLORS.white, paddingTop: 54 }}>
-            <TouchableOpacity onPress={() => setPreview(null)} style={{ paddingHorizontal: 16 }} accessibilityLabel="Close">
-              <Ionicons name="close" size={26} color="#fff" />
-            </TouchableOpacity>
-            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>{preview && <ContractBody body={preview} />}</ScrollView>
+        {/* an iOS page sheet: swipe down or tap Done to close; the contract text is light, so the sheet is dark */}
+        <Modal visible={!!preview} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPreview(null)}>
+          <View style={s.previewRoot}>
+            <View style={s.previewHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.previewTitle}>Contract preview</Text>
+                <Text style={s.previewSub}>With a sample booking. Customers see their own details.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setPreview(null)} style={s.previewDone} accessibilityRole="button" accessibilityLabel="Close preview">
+                <Text style={s.previewDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
+              {previewMissing.length > 0 && (
+                <View style={s.previewMissing}>
+                  <Ionicons name="alert-circle-outline" size={18} color="#fcd34d" />
+                  <Text style={s.previewMissingText}>
+                    Still to fill in: {previewMissing.join(', ')}. These show as "Not specified" until you do.
+                  </Text>
+                </View>
+              )}
+              {preview && <ContractBody body={preview} />}
+            </ScrollView>
           </View>
         </Modal>
       </ScrollView>
@@ -391,4 +411,12 @@ const s = StyleSheet.create({
   warn: { backgroundColor: '#3a2a0a', borderRadius: 16, padding: 16, gap: 10 },
   warnText: { color: '#fcd34d', fontSize: 14, lineHeight: 20, fontFamily: FONTS.medium },
   warnBtn: { height: 48, borderRadius: 24, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  previewRoot: { flex: 1, backgroundColor: DARK.bg },
+  previewHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: DARK.field },
+  previewTitle: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
+  previewSub: { color: DARK.muted, fontSize: 12, marginTop: 2, fontFamily: FONTS.regular },
+  previewDone: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  previewDoneText: { color: DARK.accent, fontSize: 16, fontFamily: FONTS.semibold },
+  previewMissing: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', padding: 14, borderRadius: 16, backgroundColor: '#3a2a0a', marginBottom: 16 },
+  previewMissingText: { flex: 1, color: '#fcd34d', fontSize: 13, lineHeight: 19, fontFamily: FONTS.medium },
 });
