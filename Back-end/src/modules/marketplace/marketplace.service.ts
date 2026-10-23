@@ -5,6 +5,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { shopImageUrl } from 'src/common/helper/handle';
+import { mergeDayRanges, todayUtc } from 'src/modules/calendar-sync/busy-days';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 @Injectable()
@@ -42,6 +43,8 @@ export class MarketplaceService {
     if (query.date) {
       const day = new Date(query.date + 'T00:00:00.000Z');
       where.blockedDates = { none: { start_date: { lte: day }, end_date: { gte: day } } };
+      // and so are vendors whose own calendar is busy that day
+      where.vendor = { calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } };
     }
 
     // near me: a cheap box in the database, then the exact distance below
@@ -235,13 +238,35 @@ export class MarketplaceService {
     return { success: true, data: categories };
   }
 
+  /** Days a package can't be booked: the vendor's manual blocks plus busy time imported from their own calendar. */
   async getBlockedDates(listingId: string) {
-    const blocks = await this.prisma.listingAvailability.findMany({
-      where: { listing_id: listingId },
-      select: { id: true, start_date: true, end_date: true, reason: true },
-      orderBy: { start_date: 'asc' },
-    });
-    return { success: true, data: blocks };
+    const [blocks, listing] = await Promise.all([
+      this.prisma.listingAvailability.findMany({
+        where: { listing_id: listingId },
+        select: { id: true, start_date: true, end_date: true, reason: true },
+        orderBy: { start_date: 'asc' },
+      }),
+      this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { vendor_id: true } }),
+    ]);
+    // imported busy time covers all the vendor's packages; only the days are shared, never what the event was
+    const busy = listing
+      ? await this.prisma.calendarBusyBlock.findMany({
+          where: { user_id: listing.vendor_id, end_date: { gte: todayUtc() } },
+          select: { start_date: true, end_date: true },
+          orderBy: { start_date: 'asc' },
+        })
+      : [];
+    const imported = mergeDayRanges(busy).map((r) => ({
+      id: `calendar-${r.start_date.toISOString().slice(0, 10)}`,
+      start_date: r.start_date,
+      end_date: r.end_date,
+      reason: null,
+      source: 'calendar' as const,
+    }));
+    const data = [...blocks.map((b) => ({ ...b, source: 'manual' as const })), ...imported].sort(
+      (a, b) => a.start_date.getTime() - b.start_date.getTime(),
+    );
+    return { success: true, data };
   }
 
   async getFeaturedListings() {

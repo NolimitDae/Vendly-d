@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Plus, Edit2, Trash2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
+import CalendarSyncSection from "@/components/vendor/CalendarSyncSection";
 
 interface Listing {
   id: string;
@@ -207,6 +208,8 @@ export default function VendorListingsPage() {
             ))}
           </div>
         )}
+
+        <CalendarSyncSection />
       </div>
     </div>
   );

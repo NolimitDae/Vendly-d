@@ -133,6 +133,7 @@ export type VendorProfileStackParams = {
   Notifications: undefined;
   Payouts: undefined;
   License: undefined;
+  CalendarSync: undefined;
   Inbox: undefined;
 };
 
