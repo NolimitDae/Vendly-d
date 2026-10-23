@@ -39,7 +39,21 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 
 ## Cancellations and refunds
 
-- Tiers (`booking/cancellation.ts`) decide how much comes back; `PaymentsService.refundBooking` refunds newest installment first, voids uncaptured holds and cancels unpaid installments. The vendor's kept share, if any, is credited as before.
+- Tiers (`booking/cancellation.ts`) decide how much the vendor is owed; `PaymentsService.refundBooking` refunds newest installment first, voids uncaptured holds and cancels unpaid installments.
+- On a payment plan the settlement is made against what was **actually paid** (`settleAgainstPaid`): a vendor cancelling refunds everything paid, Vendly Protection fee included; a customer cancelling leaves the vendor the smaller of what the policy owes them and what the customer paid towards the vendor price, and refunds the rest of that (the fee stays paid, `keepFees`). Unpaid installments are never charged. Add-ons approved after booking count as price under the policy; approved fees are the vendor's in full.
+- Every cancellation releases card holds (pay-after-service, rental deposits) and cancels add-on/fee requests still waiting (`voidOpenCharges`).
+- Partial dispute refunds come out of the vendor's part (the fee goes back only with a full refund).
+- Payout maths: vendor share = Σ max(0, amount − fee − refunded) over paid installments, so an installment refunded past the vendor part (fee included) never reduces another one.
+- Charges, captures, refunds and payouts on one booking take a Postgres advisory lock (`withBookingLock`), so they never act on the same installments at once. A charge is only claimed at the amount it read, so a lowered balance is never charged at its old price.
+
+## Add-ons, fees and money back
+
+- **Per person / hour / day packages** (`add-ons/pricing.ts`): price × guests (minimum/maximum enforced), × event hours in half hours (minimum charged, end time required), × days spanned. `VendorListing.min_quantity / max_quantity`.
+- **Library** (`/vendor/add-ons`): `VendorAddOn` rows of kind `ADD_ON` or `FEE`, priced once / per person / per hour / each. Bulk attach to packages (`ListingAddOn`); custom add-ons (`in_library = false`) belong to one package and are deleted when removed from it. Up to 40 per package.
+- **At booking:** customers pick a package's add-ons; they are priced into `Booking.amount` (promo applies to the total) and stored as `BookingExtra` rows with status `INCLUDED`. The contract gets a **Schedule A** with how the price was reached, the add-ons, and the package's fees, stating that any fee or later add-on needs the customer's approval. Amendments carry Schedule A over.
+- **After booking** (`BookingExtrasService`): the vendor sends an add-on (from confirmation) or a fee (from the start of the job until 14 days after completion), with a reason. The customer approves (charged on the booking card or another saved card as an installment of `kind = extra`; Vendly Protection % on add-ons, none on fees) or declines with a reason. One reminder after 24 h. A declined fee, or one unanswered for 72 h, can be sent to Vendly review: Admin → Fee reviews charges or waives it with a note; both sides are told. Up to 10 open requests and $25,000 per request.
+- **Extras paid after the payout** are paid out on their own at the booking's commission rate (`payOutLateInstallments`, hourly, and straight after a payment). `BookingInstallment.paid_out_at` records what has been paid out.
+- **Give money back** (`POST /bookings/:id/give-back`, vendor): first lowers what the customer still owes (scheduled or failed charges, uncaptured pay-after-service holds — the hold is then captured for the lower amount), then refunds the vendor's part of what was paid. The Vendly Protection fee is unchanged. If the vendor was already paid for that money, it is taken back from their balance less the commission Vendly took on it (`Booking.released_gross` holds the commission base). Shown to the customer as `given_back` on `/bookings/:id/payments`.
 
 ## Admin tools (Phase C)
 
@@ -61,6 +75,8 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 - Card holds lapse after about 7 days, so a deposit on a rental longer than ~6 days may expire before the return. If capture fails the fees are charged to the saved card instead (and can fail like any charge).
 
 ## Still to do
+
+- A customer cancelling a pay-after-service booking whose card is only held (not captured) owes nothing: the hold is released rather than captured for the vendor's policy share.
 
 - Legacy bookings paid through hosted Checkout before this engine keep the old path: no installments, vendor credited to balance on completion.
 - Amendments that change the price use the platform fee rate, not the category override.

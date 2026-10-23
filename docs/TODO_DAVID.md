@@ -123,6 +123,8 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 - [ ] Have a lawyer review: the contract templates, cancellation tiers, hold-and-release of funds (3 days / 48h after proof),
       early deposit release and clawback, rental security deposits and damage/late fees, the dispute process,
       location stamping on proof photos, and the client read-only sharing of events.
+- [ ] Have a lawyer read **Schedule A** (added to contracts when a package is priced per person/hour/day or has add-ons or fees):
+      it lists the fees a vendor may request after the job and says each is approved by the customer first, or reviewed by Vendly.
 
 ## 7. Set up the business side in the admin dashboard
 
@@ -148,6 +150,14 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 - [ ] **After the next push, update the app** (no new native build needed for this batch): package categories and
       location, the get-set-up checklist and the role-switch fix are JavaScript-only, so an over-the-air update to the
       preview channel delivers them. I need an Expo token saved as the `EXPO_TOKEN` secret in this environment to send it.
+
+- [ ] **Add-ons and fees rules** (built with these defaults; tell me to change any): fees can be requested from the start of
+      a job until 14 days after it's complete; the customer gets one reminder after a day; a vendor can send a fee to Vendly
+      review once it's declined or unanswered for 72 hours; the Vendly Protection % (no minimum) is added to add-ons the
+      vendor sends after booking but not to fees; vendor commission applies to both. Fee reviews are at Admin → Fee reviews.
+- [ ] **Pay-after-service cancellations:** if a customer cancels while their card is only held (not yet charged), the hold is
+      released and the vendor gets nothing, even if the cancellation policy would give them a share. Say if you'd rather
+      capture the policy share from the hold.
 
 ## Good to know
 

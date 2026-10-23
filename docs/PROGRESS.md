@@ -40,6 +40,7 @@ _Updated: 2026-10-23. All Build Plan Phase 0 items resolved._
 | F17 | Admin: dispute contract, categories | Disputes show the booking's contract, signatures and audit log; admins rename/add/delete categories and sub-categories |
 | F18 | Website profile | Settings → Profile: photo, name, city |
 | F19 | Calendar sync | Vendors get a private calendar link (Google/Apple subscribe to their Vendly bookings) and can import their own calendar's busy times, re-synced hourly; busy and blocked days are greyed out for customers and refused by the server |
+| F20 | Catering pricing, add-ons and fees | Per person / hour / day packages charge for every guest, hour or day with minimums and maximums. Vendors keep an add-ons and fees library (Dashboard → Add-ons / Fees), bulk add them to packages or make custom ones in the package form. Customers pick add-ons when booking (priced in, listed on the contract with the package's fees). After booking, vendors send add-ons and fees for approval; approved ones are charged, declined fees can go to Vendly review (Admin → Fee reviews). Vendors can give money back. `/vendor/add-ons`, `/bookings/:id/extras`, `/booking-extras/:id/*`, `/bookings/:id/give-back`, `/admin/booking-extras` |
 
 ## Contracts (docs/CONTRACTS.md)
 
