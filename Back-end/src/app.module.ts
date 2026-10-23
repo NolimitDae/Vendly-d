@@ -1,6 +1,6 @@
 // external imports
 import { MiddlewareConsumer, Module } from '@nestjs/common';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
@@ -24,7 +24,7 @@ import { EmailCaseMiddleware } from './common/middleware/email-case.middleware';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
-// import { ThrottlerBehindProxyGuard } from './common/guard/throttler-behind-proxy.guard';
+import { ThrottlerBehindProxyGuard } from './common/guard/throttler-behind-proxy.guard';
 import { AbilityModule } from './ability/ability.module';
 import { MailModule } from './mail/mail.module';
 import { ApplicationModule } from './modules/application/application.module';
@@ -117,7 +117,8 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      // per visitor: every request reaches the API through Railway's edge (and website calls through the website)
+      useClass: ThrottlerBehindProxyGuard,
     },
     AppService,
   ],

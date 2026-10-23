@@ -45,8 +45,7 @@ const nextConfig: NextConfig = {
   // The browser calls the API at the website's own /api path and Next forwards it to the API.
   // That makes the API's login cookies (HttpOnly, SameSite=Lax) first-party cookies of the website's
   // domain, whatever domains the website and API are on. Next's proxy passes Cookie and Set-Cookie
-  // through unchanged. Don't add a middleware/proxy file matching /api: it would buffer request
-  // bodies (uploads) through it.
+  // through unchanged. proxy.ts adds only the visitor's address (with a shared secret) on the way.
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${apiOrigin}/api/:path*` }];
   },

@@ -12,7 +12,25 @@ import { Server, Socket } from 'socket.io';
 import { Logger, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 import { NotificationService } from './notification.service';
+import * as jwt from 'jsonwebtoken';
 import appConfig from '../../../config/app.config';
+
+/**
+ * Who a socket belongs to: a verified access token or 2-minute socket token from the handshake
+ * (`auth.token`, or an Authorization header from native clients). Refresh tokens don't count.
+ */
+export function socketUserId(client: Pick<Socket, 'handshake'>): string | null {
+  const header = client.handshake.headers?.authorization;
+  const token = (client.handshake.auth as { token?: string } | undefined)?.token ?? (typeof header === 'string' ? header.split(' ')[1] : undefined);
+  if (!token) return null;
+  try {
+    const claims = jwt.verify(token, appConfig().jwt.secret) as { sub?: string; typ?: string };
+    if (!claims?.sub || claims.typ === 'refresh') return null;
+    return claims.sub;
+  } catch {
+    return null;
+  }
+}
 
 @WebSocketGateway({
   cors: {
@@ -47,7 +65,8 @@ export class NotificationGateway
         return;
       }
       const data = JSON.parse(message);
-      this.server.emit('receiveNotification', data);
+      // to that user's own connections only, never to everyone
+      if (typeof data?.userId === 'string') this.server.to(`user_${data.userId}`).emit('receiveNotification', data);
     });
   }
 
@@ -55,35 +74,34 @@ export class NotificationGateway
     this.logger.log('WebSocket server initialised');
   }
 
+  /** Only a signed-in user (access or 2-minute socket token) is registered, and only as themselves. */
   async handleConnection(client: Socket) {
-    const userId = client.handshake.query.userId as string;
-    if (userId) {
-      this.clients.set(userId, client.id);
-      this.logger.debug(`User ${userId} connected`);
-    }
+    const userId = socketUserId(client);
+    if (!userId) return; // the chat gateway on the same connection disconnects unauthenticated sockets
+    client.data.userId = userId;
+    this.clients.set(userId, client.id);
+    client.join(`user_${userId}`);
+    this.logger.debug(`User ${userId} connected`);
   }
 
   handleDisconnect(client: Socket) {
-    const userId = [...this.clients.entries()].find(
-      ([, socketId]) => socketId === client.id,
-    )?.[0];
-    if (userId) {
+    const userId = client.data?.userId as string | undefined;
+    if (userId && this.clients.get(userId) === client.id) {
       this.clients.delete(userId);
       this.logger.debug(`User ${userId} disconnected`);
     }
   }
 
-  @SubscribeMessage('sendNotification')
-  async handleNotification(@MessageBody() data: any) {
-    const targetSocketId = this.clients.get(data.userId);
-    if (targetSocketId) {
-      await this.redisPubClient.publish('notification', JSON.stringify(data));
-    }
+  /** Server-side only: deliver a live notification to one user's open apps. */
+  async notifyUser(userId: string, data: Record<string, unknown>) {
+    await this.redisPubClient.publish('notification', JSON.stringify({ ...data, userId }));
   }
 
   @SubscribeMessage('removeNotification')
   remove(@MessageBody() id: string, @ConnectedSocket() socket: Socket) {
-    const userId = socket.handshake.query.userId as string;
+    // whoever the connection was authenticated as, never a user id the client sends
+    const userId = socket.data?.userId as string | undefined;
+    if (!userId) return { success: false, message: 'Not signed in' };
     return this.notificationService.remove(id, userId);
   }
 }

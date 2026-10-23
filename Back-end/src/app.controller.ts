@@ -1,15 +1,10 @@
 import {
   Controller,
   Get,
-  Post,
   Res,
   StreamableFile,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
 import { AppService } from './app.service';
-import { FileInterceptor } from '@nestjs/platform-express';
-import * as multer from 'multer';
 import { createReadStream } from 'fs';
 import { join } from 'path';
 import { Response } from 'express';
@@ -65,21 +60,5 @@ export class AppController {
       type: 'application/json',
       disposition: 'attachment; filename="package.json"',
     });
-  }
-
-  @Post('test-file-upload')
-  @UseInterceptors(
-    FileInterceptor('image', { storage: multer.memoryStorage() as any }),
-  )
-  async test(@UploadedFile() image?: Express.Multer.File) {
-    try {
-      const result = await this.appService.test(image);
-      return result;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
   }
 }
