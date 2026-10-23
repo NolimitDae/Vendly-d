@@ -66,6 +66,14 @@ export default function LocationPicker({
     }, 300);
   };
 
+  const pick = (p: PickedPlace) => {
+    // a lookup still in flight for the typed text mustn't reopen the list
+    clearTimeout(timer.current);
+    latest.current = '';
+    onChange(p);
+    setSuggestions([]);
+  };
+
   const useCurrent = async () => {
     setLocating(true);
     try {
@@ -82,8 +90,7 @@ export default function LocationPicker({
       const res = await api.get('/geo/reverse', { params: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
       const place = res.data?.data;
       if (!place) return Alert.alert('Location', 'We couldn’t name this spot. Type the city instead.');
-      onChange(place);
-      setSuggestions([]);
+      pick(place);
     } catch {
       Alert.alert('Location', 'We couldn’t get your location. Type the city instead.');
     } finally {
@@ -119,7 +126,7 @@ export default function LocationPicker({
             <Pressable
               key={`${p.label}${p.lat}`}
               style={s.item}
-              onPress={() => { onChange(p); setSuggestions([]); }}
+              onPress={() => pick(p)}
               accessibilityRole="button"
             >
               <Ionicons name="location-outline" size={16} color={DARK.muted} />

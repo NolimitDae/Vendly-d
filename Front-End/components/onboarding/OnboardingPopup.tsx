@@ -23,10 +23,15 @@ export default function OnboardingPopup() {
 
   // a short pause so the popup doesn't land on top of the page as it loads
   useEffect(() => {
-    if (!data?.popup) return;
-    const t = setTimeout(() => setShown(data.popup), 1200);
+    const kind = data?.popup;
+    if (!kind) return;
+    const t = setTimeout(() => {
+      setShown(kind);
+      // recorded as soon as it's on screen, so closing the tab mid-popup doesn't show it again
+      markSeen(kind);
+    }, 1200);
     return () => clearTimeout(t);
-  }, [data?.popup]);
+  }, [data?.popup, markSeen]);
 
   useEffect(() => {
     const d = ref.current;
@@ -38,10 +43,7 @@ export default function OnboardingPopup() {
 
   // every way of closing (button, link, Esc) goes through the dialog's close event
   const close = () => ref.current?.close();
-  const onClose = () => {
-    markSeen(shown);
-    setShown(null);
-  };
+  const onClose = () => setShown(null);
   const next = data.steps.find((s) => s.state === "todo" && stepHref(data.role, s.key));
 
   return (

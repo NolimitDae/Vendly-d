@@ -81,6 +81,9 @@ export default function LocationField({
   };
 
   const pick = (p: Place) => {
+    // a lookup still in flight for the typed text mustn't reopen the list
+    clearTimeout(timer.current);
+    latest.current = "";
     onChange(p);
     setSuggestions([]);
     setOpen(false);

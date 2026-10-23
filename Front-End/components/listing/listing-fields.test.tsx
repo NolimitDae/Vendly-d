@@ -93,6 +93,22 @@ describe('LocationField', () => {
     expect(GeoService.suggest).toHaveBeenCalledWith('Brook', null);
   });
 
+  it("a lookup still running when a place is picked doesn't reopen the list", async () => {
+    let answer: (v: any) => void = () => {};
+    (GeoService.suggest as jest.Mock)
+      .mockResolvedValueOnce({ data: { data: [{ label: 'Austin, Texas, TX', lat: 30.27, lng: -97.74 }] } })
+      .mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+    render(<LocationHarness spy={jest.fn()} />);
+    const box = screen.getByRole('combobox', { name: 'Package location' });
+    await userEvent.type(box, 'Aus');
+    const option = await screen.findByRole('option', { name: 'Austin, Texas, TX' });
+    await userEvent.type(box, 't');
+    await new Promise((r) => setTimeout(r, 350)); // the second lookup starts
+    await userEvent.click(option.isConnected ? option : await screen.findByRole('option', { name: 'Austin, Texas, TX' }));
+    await act(async () => answer({ data: { data: [{ label: 'Austin, Texas, TX', lat: 30.27, lng: -97.74 }] } }));
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
   it('typing again forgets the old position', async () => {
     (GeoService.suggest as jest.Mock).mockResolvedValue({ data: { data: [{ label: 'Austin, Texas, TX', lat: 30.27, lng: -97.74 }] } });
     const spy = jest.fn();

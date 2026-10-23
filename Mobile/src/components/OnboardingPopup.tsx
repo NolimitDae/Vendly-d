@@ -22,17 +22,19 @@ export default function OnboardingPopup() {
 
   // a short pause so the popup doesn't land on top of the screen opening
   useEffect(() => {
-    if (!data?.popup) return;
-    const t = setTimeout(() => setShown(data.popup), 1200);
+    const kind = data?.popup;
+    if (!kind) return;
+    const t = setTimeout(() => {
+      setShown(kind);
+      // recorded as soon as it's on screen, so closing the app mid-popup doesn't show it again
+      markSeen(kind);
+    }, 1200);
     return () => clearTimeout(t);
-  }, [data?.popup]);
+  }, [data?.popup, markSeen]);
 
   if (!data || !shown) return null;
 
-  const close = () => {
-    markSeen(shown);
-    setShown(null);
-  };
+  const close = () => setShown(null);
   const next = data.steps.find((s) => s.state === 'todo' && hasTarget(data.role, s.key));
 
   return (

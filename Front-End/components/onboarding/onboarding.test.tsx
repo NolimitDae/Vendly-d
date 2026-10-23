@@ -75,24 +75,26 @@ describe('OnboardingPopup', () => {
   afterEach(() => jest.useRealTimers());
   const user = () => userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
-  it('shows the welcome checklist once and records it when closed', async () => {
+  it('shows the welcome checklist, records it as soon as it shows, and closes', async () => {
     ctx = { data: customer({ popup: 'intro' }) };
     render(<OnboardingPopup />);
     expect(screen.queryByText('Welcome to Vendly')).not.toBeInTheDocument();
     act(() => jest.advanceTimersByTime(1300));
     expect(screen.getByRole('heading', { name: 'Welcome to Vendly' })).toBeInTheDocument();
+    // recorded on screen, so closing the tab mid-popup doesn't show it again
+    expect(markSeen).toHaveBeenCalledWith('intro');
     expect(screen.getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '/settings/payment-methods');
     await user().click(screen.getByRole('button', { name: 'I’ll do it later'.replace('’', "'") }));
-    expect(markSeen).toHaveBeenCalledWith('intro');
     expect(screen.queryByText('Welcome to Vendly')).not.toBeInTheDocument();
+    expect(markSeen).toHaveBeenCalledTimes(1);
   });
 
-  it('opening a step from the popup also counts as seen', async () => {
+  it('opening a step from the popup closes it', async () => {
     ctx = { data: customer({ popup: 'intro' }) };
     render(<OnboardingPopup />);
     act(() => jest.advanceTimersByTime(1300));
     await user().click(screen.getByRole('link', { name: 'Get started' }));
-    expect(markSeen).toHaveBeenCalledWith('intro');
+    expect(screen.queryByText('Welcome to Vendly')).not.toBeInTheDocument();
   });
 
   it('says "all set" when everything is done', async () => {
@@ -100,8 +102,9 @@ describe('OnboardingPopup', () => {
     render(<OnboardingPopup />);
     act(() => jest.advanceTimersByTime(1300));
     expect(screen.getByRole('heading', { name: 'You’re all set'.replace('’', "'") })).toBeInTheDocument();
-    await user().click(screen.getByRole('button', { name: 'Done' }));
     expect(markSeen).toHaveBeenCalledWith('complete');
+    await user().click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('button', { name: 'Done' })).not.toBeInTheDocument();
   });
 
   it('nothing to show, nothing rendered', () => {

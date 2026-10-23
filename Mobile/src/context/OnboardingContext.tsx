@@ -60,6 +60,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [data, setData] = useState<Onboarding | null>(null);
   const last = useRef(0);
   const inFlight = useRef(false);
+  // popups already shown this session win over a check that was answered before the server recorded them
+  const seenHere = useRef(new Set<'intro' | 'complete'>());
 
   const refresh = useCallback(async (force = false) => {
     if (inFlight.current || (!force && Date.now() - last.current < MIN_GAP_MS)) return;
@@ -67,7 +69,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     last.current = Date.now();
     try {
       const res = await OnboardingService.get();
-      setData(res.data?.data ?? null);
+      const d = res.data?.data ?? null;
+      setData(
+        d && {
+          ...d,
+          popup: d.popup && seenHere.current.has(d.popup) ? null : d.popup,
+          visible: seenHere.current.has('complete') ? false : d.visible,
+        },
+      );
     } catch {
       // keep what we had; the next check tries again
     } finally {
@@ -76,6 +85,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const markSeen = useCallback((kind: 'intro' | 'complete') => {
+    seenHere.current.add(kind);
     setData((d) => (d ? { ...d, popup: null, visible: kind === 'complete' ? false : d.visible } : d));
     OnboardingService.seen(kind).catch(() => {});
   }, []);
