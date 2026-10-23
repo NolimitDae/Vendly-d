@@ -21,6 +21,18 @@ export const AdminService = {
   deleteCategory: async (id: string) =>
     Fetch.delete(`/category/${id}`, authHeaders()),
 
+  renameCategory: async (id: string, name: string) =>
+    Fetch.patch(`/category/${id}`, { name }, { headers: { ...authHeaders().headers, "Content-Type": "application/json" } }),
+
+  // Sub-categories
+  createSubcategory: async (category_id: string, name: string) =>
+    Fetch.post("/subcategory", { category_id, name }, { headers: { ...authHeaders().headers, "Content-Type": "application/json" } }),
+
+  renameSubcategory: async (id: string, name: string) =>
+    Fetch.patch(`/subcategory/${id}`, { name }, { headers: { ...authHeaders().headers, "Content-Type": "application/json" } }),
+
+  deleteSubcategory: async (id: string) => Fetch.delete(`/subcategory/${id}`, authHeaders()),
+
   // Listings (all vendor listings, admin view)
   getListings: async (params?: { page?: number; limit?: number; status?: string; search?: string }) => {
     const q = new URLSearchParams();

@@ -119,15 +119,22 @@ export class SubcategoryService {
       throw new ConflictException('Another subcategory with this name already exists in this category');
     }
 
-    const updatedSubcategory = await this.prisma.serviceSubCategory.update({
-      where: { id },
-      data: {
-        name: updateSubcategoryDto.name,
-        category_id: updateSubcategoryDto.category_id,
-      },
-      include: {
-        category: true,
-      },
+    const updatedSubcategory = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.serviceSubCategory.update({
+        where: { id },
+        data: {
+          name: updateSubcategoryDto.name,
+          category_id: updateSubcategoryDto.category_id,
+        },
+        include: {
+          category: true,
+        },
+      });
+      // packages in a moved sub-category move with it, so their category and sub-category still match
+      if (updated.category_id !== subcategory.category_id) {
+        await tx.vendorListing.updateMany({ where: { sub_category_id: id }, data: { category_id: updated.category_id } });
+      }
+      return updated;
     });
 
     return {

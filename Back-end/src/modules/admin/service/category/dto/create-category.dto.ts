@@ -1,8 +1,11 @@
-import { IsString, IsNotEmpty, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsString, IsNotEmpty, MaxLength, MinLength } from 'class-validator';
 
 export class CreateCategoryDto {
   @IsString()
   @IsNotEmpty()
-  @MinLength(3)
+  @MinLength(2)
+  @MaxLength(100)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   name: string;
 }

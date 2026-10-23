@@ -28,6 +28,9 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  vendorListing: { updateMany: jest.fn() },
+  // runs the callback against this same mock, like a transaction would
+  $transaction: jest.fn((fn: any) => fn(mockPrisma)),
 };
 
 describe('SubcategoryService', () => {
@@ -141,6 +144,25 @@ describe('SubcategoryService', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.name).toBe('Drain Cleaning');
+    });
+
+    it('moving a sub-category to another category moves its packages too', async () => {
+      mockPrisma.serviceSubCategory.findUnique
+        .mockResolvedValueOnce(mockSubcategory)
+        .mockResolvedValueOnce(null);
+      mockPrisma.serviceCategory.findUnique.mockResolvedValue({ id: 'cat-2' });
+      mockPrisma.serviceSubCategory.update.mockResolvedValue({ ...mockSubcategory, category_id: 'cat-2' });
+      await service.update('sub-1', { category_id: 'cat-2' });
+      expect(mockPrisma.vendorListing.updateMany).toHaveBeenCalledWith({ where: { sub_category_id: 'sub-1' }, data: { category_id: 'cat-2' } });
+    });
+
+    it('a rename leaves packages alone', async () => {
+      mockPrisma.serviceSubCategory.findUnique
+        .mockResolvedValueOnce(mockSubcategory)
+        .mockResolvedValueOnce(null);
+      mockPrisma.serviceSubCategory.update.mockResolvedValue({ ...mockSubcategory, name: 'Drain Cleaning' });
+      await service.update('sub-1', { name: 'Drain Cleaning' });
+      expect(mockPrisma.vendorListing.updateMany).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when the subcategory to update does not exist', async () => {

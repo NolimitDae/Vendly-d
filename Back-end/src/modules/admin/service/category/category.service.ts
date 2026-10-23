@@ -39,6 +39,10 @@ export class CategoryService {
     const categories = await this.prisma.serviceCategory.findMany({
       include: {
         _count: { select: { vendor_listings: true, sub_categories: true } },
+        sub_categories: {
+          select: { id: true, name: true, _count: { select: { vendor_listings: true } } },
+          orderBy: { name: 'asc' },
+        },
       },
       orderBy: { name: 'asc' },
     });
