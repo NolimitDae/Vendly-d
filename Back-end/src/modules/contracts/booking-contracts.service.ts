@@ -16,7 +16,9 @@ import { PromoService } from 'src/modules/platform/promo.service';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
 import {
+  AddOnKind,
   BookingContractStatus,
+  BookingExtraStatus,
   BookingStatus,
   ContractAuditAction,
   ContractSignerRole,
@@ -32,6 +34,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import {
   MergeData,
   buildMergeData,
+  buildPricingSchedule,
   contentHash,
   fieldLabel,
   missingFields,
@@ -50,6 +53,8 @@ import {
 import { CONSENT_TEXT, CONSENT_TEXT_VERSION } from './contract-templates';
 import { PrivateStorage, SignedUrl } from './private-storage';
 import { ResolvedVendorContract, VendorContractsService } from './vendor-contracts.service';
+import { AddOnsService } from 'src/modules/add-ons/add-ons.service';
+import { PackageLine, PricingError, priceForPackage, round2 } from 'src/modules/add-ons/pricing';
 import {
   AmendmentChangesDto,
   AmendmentPreviewDto,
@@ -132,6 +137,7 @@ export class BookingContractsService {
     private mail: MailService,
     private push: PushService,
     private promos: PromoService,
+    private addOns: AddOnsService,
   ) {}
 
   // ─── Audit ──────────────────────────────────────────────────────────────
@@ -215,7 +221,9 @@ export class BookingContractsService {
     data: MergeData,
   ) {
     const source = this.vendorContracts.contractSource(vc);
-    const body = renderTemplate(source.body, data);
+    const rendered = renderTemplate(source.body, data);
+    // Schedule A (price details, add-ons, fees) is part of what both sides sign
+    const body = data.pricing_schedule ? `${rendered}\n\n${data.pricing_schedule}` : rendered;
     return {
       title: source.title,
       body,
@@ -261,7 +269,19 @@ export class BookingContractsService {
     const ctx = await this.loadBookingContext(userId, dto);
     await this.assertDateOpen(ctx.listing.id, ctx.listing.vendor_id, dto);
     const quote = await this.quoteFor(userId, dto);
-    const priced = await this.priceAfterPromo(quote ? quote.amount : ctx.listing.price, dto.promo_code);
+    // a quote is the agreed price for the package; otherwise per person / hour / day packages are counted out
+    let pkg: PackageLine;
+    try {
+      pkg = quote
+        ? { unit: 'fixed', unit_price: Number(quote.amount), quantity: 1, amount: round2(Number(quote.amount)), label: `Quote: ${quote.title}` }
+        : priceForPackage(ctx.listing, dto);
+    } catch (e) {
+      if (e instanceof PricingError) throw new BadRequestException(e.message);
+      throw e;
+    }
+    const { lines: addOnLines, fees } = await this.addOns.priceSelection(ctx.listing.id, dto.add_ons, dto);
+    const subtotal = round2(pkg.amount + addOnLines.reduce((s, l) => s + l.amount, 0));
+    const priced = await this.priceAfterPromo(subtotal, dto.promo_code);
     const data = buildMergeData({
       booking: {
         id: bookingId,
@@ -284,8 +304,18 @@ export class BookingContractsService {
       contractVersion: 1,
       timezone: dto.timezone,
     });
+    data.pricing_schedule = buildPricingSchedule({
+      packageLabel: quote || pkg.unit !== 'fixed' ? pkg.label : null,
+      packageAmount: pkg.amount,
+      addOns: addOnLines.map((l) => ({ label: l.label, amount: l.amount, description: l.description })),
+      discount: priced.discount,
+      promoCode: priced.code,
+      vendorPrice: priced.price,
+      fees: fees.map((f) => ({ name: f.name, price_text: f.price_text, description: f.description })),
+      customerRoleLabel: data.customer_role_label,
+    });
     const rendered = this.renderFor(ctx.vc, data);
-    return { ...ctx, quote, priced, data, rendered, missing: missingFields(rendered.required, data) };
+    return { ...ctx, quote, pkg, addOnLines, fees, priced, data, rendered, missing: missingFields(rendered.required, data) };
   }
 
   private consentInfo() {
@@ -293,12 +323,18 @@ export class BookingContractsService {
   }
 
   /** Numbers (not the formatted strings the contract uses) plus the charge schedule the customer will be on. */
-  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null, promo?: { discount: number; code: string | null }) {
+  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null, promo?: { discount: number; code: string | null }, lines?: { pkg: PackageLine; addOns: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[]; fees: unknown[] }) {
     const l = await this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { payment_plan: true, category_id: true, category: { select: { default_payment_plan: true } } } });
     const fee = this.serviceFee(price, l?.category_id);
     const plan = l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
     const schedule = buildSchedule({ plan, price, serviceFee: fee, eventStart: eventStart ? new Date(eventStart) : null }).map((i) => ({ label: i.label, amount: i.amount, due_at: i.due_at, capture_manually: i.capture_manually }));
-    return { price, service_fee: fee, total: Math.round((price + fee) * 100) / 100, plan, schedule, discount: promo?.discount ?? 0, promo_code: promo?.code ?? null };
+    return {
+      price, service_fee: fee, total: Math.round((price + fee) * 100) / 100, plan, schedule, discount: promo?.discount ?? 0, promo_code: promo?.code ?? null,
+      // how the price was reached, for the summary screen
+      package: lines ? { label: lines.pkg.label, unit: lines.pkg.unit, quantity: lines.pkg.quantity, unit_price: lines.pkg.unit_price, amount: lines.pkg.amount } : null,
+      add_ons: lines?.addOns.map((a) => ({ add_on_id: a.add_on_id, name: a.name, label: a.label, quantity: a.quantity, unit_price: a.unit_price, amount: a.amount })) ?? [],
+      fees: lines?.fees ?? [],
+    };
   }
 
   /** Step 1 of a booking request: the filled contract for the customer to review. */
@@ -315,7 +351,7 @@ export class BookingContractsService {
         vendor_contract_version: p.vc.version,
         missing_fields: p.missing,
         missing_message: p.missing.length ? missingFieldsMessage(p.missing) : null,
-        pricing: { ...(await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced)), quote: p.quote ? { id: p.quote.id, title: p.quote.title, amount: Number(p.quote.amount) } : null },
+        pricing: { ...(await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced, { pkg: p.pkg, addOns: p.addOnLines, fees: p.fees })), quote: p.quote ? { id: p.quote.id, title: p.quote.title, amount: Number(p.quote.amount) } : null },
         preview_token: signPreview({ bid: bookingId, lid: dto.listing_id, uid: userId }),
         source_pdf_url: p.vc.file_key
           ? this.vendorContracts.downloadUrl(p.vc.file_key, userId, p.vc.id, p.vc.file_name || 'contract.pdf')
@@ -431,6 +467,23 @@ export class BookingContractsService {
         },
       });
       if (p.event) await tx.eventBooking.create({ data: { event_id: p.event.id, booking_id: b.id } });
+      // the add-ons picked, frozen with the booking (their price is already in the booking amount)
+      if (p.addOnLines.length) {
+        await tx.bookingExtra.createMany({
+          data: p.addOnLines.map((l) => ({
+            booking_id: b.id,
+            add_on_id: l.add_on_id,
+            kind: AddOnKind.ADD_ON,
+            name: l.name,
+            description: l.description,
+            unit_price: l.unit_price,
+            price_unit: l.price_unit,
+            quantity: l.quantity,
+            amount: l.amount,
+            status: BookingExtraStatus.INCLUDED,
+          })),
+        });
+      }
       if (p.priced.code) await this.promos.redeem(tx, p.priced.code);
       if (p.quote) {
         // claim the quote: two requests can't both use it
@@ -1004,6 +1057,8 @@ export class BookingContractsService {
       contractVersion: version,
       timezone: dto.timezone || prevData?.timezone,
     });
+    // Schedule A (how the price was reached at booking, add-ons, fees) carries over unchanged
+    if (prevData?.pricing_schedule) data.pricing_schedule = prevData.pricing_schedule;
     const changed = Object.keys(changes).map(fieldLabel);
     const rendered = this.renderFor(vc, data);
     const body = `${rendered.body}\n\n## Amendment\nThis version replaces contract version ${current.version} (verification ${current.verification_code}). Changed: ${changed.join(', ')}. Until both parties sign this amendment, version ${current.version} remains in force.`;

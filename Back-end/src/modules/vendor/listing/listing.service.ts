@@ -14,6 +14,15 @@ import appConfig from 'src/config/app.config';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
 
+/** Minimum and maximum guests / hours / days, or nulls for a flat price. Throws if they don't make sense. */
+export function quantityLimits(priceUnit: string, min?: number | null, max?: number | null) {
+  if (!['person', 'hour', 'day'].includes(priceUnit)) return { min_quantity: null, max_quantity: null };
+  const lo = min && min > 0 ? Math.floor(min) : null;
+  const hi = max && max > 0 ? Math.floor(max) : null;
+  if (lo && hi && lo > hi) throw new BadRequestException('The minimum can’t be more than the maximum.');
+  return { min_quantity: lo, max_quantity: hi };
+}
+
 @Injectable()
 export class VendorListingService {
   constructor(
@@ -50,6 +59,7 @@ export class VendorListingService {
     }
 
     const categoryId = await this.assertSubCategory(dto.category_id, dto.sub_category_id);
+    const limits = quantityLimits(dto.price_unit ?? 'fixed', dto.min_quantity, dto.max_quantity);
     const listing = await this.prisma.vendorListing.create({
       data: {
         vendor_id: vendorId,
@@ -68,6 +78,8 @@ export class VendorListingService {
         sub_category_id: dto.sub_category_id,
         tags: dto.tags ?? [],
         images: imageNames,
+        payment_plan: dto.payment_plan,
+        ...limits,
       },
       include: {
         category: { select: { id: true, name: true } },
@@ -159,6 +171,17 @@ export class VendorListingService {
       throw new ForbiddenException('Access denied');
 
     const updateData: any = { ...dto };
+    // limits only mean something for per person / hour / day prices; 0 clears one
+    if (dto.min_quantity !== undefined || dto.max_quantity !== undefined || dto.price_unit !== undefined) {
+      Object.assign(
+        updateData,
+        quantityLimits(
+          dto.price_unit ?? listing.price_unit,
+          dto.min_quantity !== undefined ? dto.min_quantity : listing.min_quantity,
+          dto.max_quantity !== undefined ? dto.max_quantity : listing.max_quantity,
+        ),
+      );
+    }
     // forms send an empty value to clear a category or sub-category
     if (dto.category_id === '') updateData.category_id = null;
     if (dto.sub_category_id === '') updateData.sub_category_id = null;

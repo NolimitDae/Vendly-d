@@ -98,6 +98,22 @@ export class CreateVendorListingDto {
   @IsString({ each: true })
   tags?: string[];
 
+  @ApiPropertyOptional({ description: 'Per person / hour / day packages: the fewest guests, hours or days a customer can book (0 = no minimum)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  min_quantity?: number;
+
+  @ApiPropertyOptional({ description: 'Per person / hour / day packages: the most guests, hours or days (0 = no maximum)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  max_quantity?: number;
+
   @ApiPropertyOptional({ enum: PaymentPlan, description: 'How customers pay; defaults to the category setting, else full payment on accept' })
   @IsOptional()
   @IsEnum(PaymentPlan)

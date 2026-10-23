@@ -77,3 +77,38 @@ export function settleCancellation(input: {
     percent,
   };
 }
+
+export interface PaidInstallment {
+  status: string;
+  amount: unknown;
+  fee_amount: unknown;
+  refunded_amount: unknown;
+}
+
+/**
+ * The settlement above assumes the whole price was paid. On a payment plan the customer may have
+ * paid only a deposit, so settle against what was actually paid:
+ * - Vendor cancels: everything paid comes back (Vendly Protection fee included).
+ * - Customer cancels: the vendor keeps what they're owed under the policy, but never more than the
+ *   customer actually paid towards the vendor's price; the rest of that is refunded. The fee stays paid.
+ * Anything not yet charged is simply never charged.
+ */
+export function settleAgainstPaid(
+  owed: Settlement,
+  installments: PaidInstallment[],
+  cancelledBy: 'CUSTOMER' | 'VENDOR',
+  vendorOwed: number,
+): Settlement {
+  const paid = installments.filter((i) => i.status === 'PAID');
+  const left = (i: PaidInstallment) => cents(Math.max(0, Number(i.amount) - Number(i.refunded_amount)));
+  const vendorPart = (i: PaidInstallment) => cents(Math.max(0, Number(i.amount) - Number(i.fee_amount) - Number(i.refunded_amount)));
+  const paidTotal = cents(paid.reduce((s, i) => s + left(i), 0));
+  const vendorPaid = cents(paid.reduce((s, i) => s + vendorPart(i), 0));
+
+  if (cancelledBy === 'VENDOR') {
+    return { refundTotal: paidTotal, refundVendorPrice: vendorPaid, refundFee: cents(paidTotal - vendorPaid), vendorKeeps: 0, percent: 100 };
+  }
+  const vendorKeeps = cents(Math.min(vendorPaid, Math.max(0, vendorOwed)));
+  const refund = cents(vendorPaid - vendorKeeps);
+  return { refundTotal: refund, refundVendorPrice: refund, refundFee: 0, vendorKeeps, percent: owed.percent };
+}

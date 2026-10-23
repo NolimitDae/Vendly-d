@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BookingStatus, ListingStatus } from 'prisma/generated/client';
+import { AddOnKind, BookingExtraStatus, BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
@@ -18,10 +18,12 @@ import { EventToolsService } from 'src/modules/events/tools/event-tools.service'
 import { BookingContractsService, RequestMeta } from 'src/modules/contracts/booking-contracts.service';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
-import { settleCancellation, Settlement } from './cancellation';
+import { settleAgainstPaid, settleCancellation, Settlement } from './cancellation';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { track } from 'src/common/analytics';
 import { requestExpiresAt } from './booking-requests';
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** What the booking is for: the package title, or the rented items. */
 function titleOf(booking: any): string | undefined {
@@ -319,10 +321,14 @@ export class BookingService {
     });
     if (claimed.count !== 1) throw new BadRequestException('This booking has already been cancelled or completed');
     await this.contracts.voidPendingForBooking(bookingId, 'Booking cancelled', userId);
+    // requested add-ons and fees die with the booking
+    await this.prisma.bookingExtra.updateMany({ where: { booking_id: bookingId, status: { in: [BookingExtraStatus.PENDING, BookingExtraStatus.IN_REVIEW] } }, data: { status: BookingExtraStatus.CANCELLED } });
 
     const settlement = booking.paid_at
       ? await this.settlePaidCancellation(booking, isCustomer ? 'CUSTOMER' : 'VENDOR', cancelledAt)
       : null;
+    // nothing paid yet: still release any card hold (pay-after-service, rental deposit) straight away
+    if (!booking.paid_at) await this.payments.voidOpenCharges(bookingId).catch((err) => console.error(`Voiding charges for cancelled booking ${bookingId} failed:`, err));
     const updated = await this.getBookingOrFail(bookingId);
 
     // notify the other party
@@ -368,20 +374,30 @@ export class BookingService {
       select: { merge_data: true },
     });
     const policy = (contract?.merge_data as Record<string, unknown> | null)?.cancellation_policy as string | undefined;
-    const settlement = settleCancellation({
+    const installments = await this.prisma.bookingInstallment.findMany({ where: { booking_id: booking.id } });
+    const approvedExtras = await this.prisma.bookingExtra.findMany({ where: { booking_id: booking.id, status: BookingExtraStatus.APPROVED }, select: { kind: true, amount: true } });
+    // add-ons agreed after booking are part of the price the policy applies to; agreed fees are the vendor's in full
+    const addOnsAfter = approvedExtras.filter((e) => e.kind === AddOnKind.ADD_ON).reduce((s, e) => s + Number(e.amount), 0);
+    const feesAgreed = approvedExtras.filter((e) => e.kind === AddOnKind.FEE).reduce((s, e) => s + Number(e.amount), 0);
+    const owed = settleCancellation({
       cancelledBy,
-      amount: Number(booking.amount ?? 0),
+      amount: Number(booking.amount ?? 0) + addOnsAfter,
       serviceFee: Number(booking.service_fee ?? 0),
       policy,
       eventStart: booking.event_start_at ?? booking.scheduled_at,
       cancelledAt,
     });
     const currency = booking.currency ?? 'usd';
+    // with installments, settle against what was actually paid: the vendor keeps at most what the
+    // customer paid towards their price, and everything else paid comes back
+    const settlement = installments.length ? settleAgainstPaid(owed, installments, cancelledBy, cancelledBy === 'CUSTOMER' ? round2(owed.vendorKeeps + feesAgreed) : 0) : owed;
 
-    const installmentCount = await this.prisma.bookingInstallment.count({ where: { booking_id: booking.id } });
-    if (settlement.refundTotal > 0 && installmentCount > 0) {
+    // nothing more is charged, and card holds are let go
+    await this.payments.voidOpenCharges(booking.id).catch((err) => console.error(`Voiding charges for cancelled booking ${booking.id} failed:`, err));
+    if (settlement.refundTotal > 0 && installments.length > 0) {
       try {
-        const refunded = await this.payments.refundBooking(booking.id, settlement.refundTotal, `cancel-${booking.id}`);
+        // a customer's cancellation keeps the Vendly Protection fee (refunds come from the vendor's part)
+        const refunded = await this.payments.refundBooking(booking.id, settlement.refundTotal, `cancel-${booking.id}`, { keepFees: cancelledBy === 'CUSTOMER' });
         if (refunded < settlement.refundTotal) console.error(`Refund for cancelled booking ${booking.id}: only ${refunded} of ${settlement.refundTotal} could be refunded`);
       } catch (err) {
         console.error(`Refund for cancelled booking ${booking.id} failed:`, err);

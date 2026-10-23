@@ -28,7 +28,7 @@ function setup(contract: any, users: Record<string, string>) {
   };
   const push: any = { sendToUser: jest.fn() };
   const mail: any = { sendBookingNotification: jest.fn().mockResolvedValue(undefined) };
-  const service = new BookingContractsService(prisma, {} as any, mail, push, {} as any);
+  const service = new BookingContractsService(prisma, {} as any, mail, push, {} as any, {} as any);
   return { service, prisma, tx };
 }
 

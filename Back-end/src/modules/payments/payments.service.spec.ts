@@ -33,10 +33,12 @@ const prisma = {
   booking: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), count: jest.fn(), findMany: jest.fn() },
   bookingInstallment: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   bookingProof: { findFirst: jest.fn() },
-  paymentTransaction: { create: jest.fn(), findMany: jest.fn() },
+  paymentTransaction: { create: jest.fn(), findMany: jest.fn(), count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
   vendorListing: { findUnique: jest.fn() },
   rentalReservation: { count: jest.fn().mockResolvedValue(0) },
+  bookingExtra: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
   $transaction: jest.fn(),
+  $queryRaw: jest.fn().mockResolvedValue([]),
 };
 const mail = { sendBookingNotification: jest.fn().mockResolvedValue(undefined) };
 const push = { sendToUser: jest.fn().mockResolvedValue(undefined) };
@@ -378,6 +380,154 @@ describe('PaymentsService', () => {
       expect(await service.refundBooking('b1', 100, 'cancel-b1')).toBe(0);
       expect(StripePayment.cancelPaymentIntent).toHaveBeenCalledWith('pi_h');
       expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('release maths', () => {
+    it('never lets an installment refunded past the vendor part count as minus', async () => {
+      // i1 was refunded in full (fee included); i2 is a $100 add-on paid later
+      prisma.booking.findUnique.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, currency: 'usd', vendor_id: 'v1', amount: 200, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0,
+        vendor: { stripe_connect_id: 'acct_1', balance: 0 },
+        installments: [
+          installment({ id: 'i1', status: InstallmentStatus.REFUNDED, amount: 105, fee_amount: 5, refunded_amount: 105 }),
+          installment({ id: 'i2', status: InstallmentStatus.PAID, amount: 105, fee_amount: 5, refunded_amount: 0 }),
+        ],
+      });
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_1' });
+      await service.releaseBooking('b1');
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 100 }));
+    });
+
+    it('marks what it paid out and records the gross for later refunds', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, currency: 'usd', vendor_id: 'v1', amount: 100, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0,
+        vendor: { stripe_connect_id: null, balance: 0 },
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })],
+      });
+      await service.releaseBooking('b1');
+      expect(prisma.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ released_gross: 100 }) }));
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['i1'] }, paid_out_at: null }, data: { paid_out_at: expect.any(Date) } });
+    });
+
+    it('takes the money lock so payouts, refunds and captures never overlap', async () => {
+      prisma.booking.findUnique.mockResolvedValue(null);
+      await service.releaseBooking('b1');
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+    });
+  });
+
+  describe('captures and charges', () => {
+    it('captures the installment amount (lower than the hold when the vendor gave money off)', async () => {
+      prisma.bookingInstallment.findMany.mockResolvedValue([installment({ capture_manually: true, status: InstallmentStatus.PROCESSING, payment_intent_id: 'pi_h', amount: 180 })]);
+      prisma.bookingProof.findFirst.mockResolvedValue(null);
+      (StripePayment.capturePaymentIntent as jest.Mock).mockResolvedValue({ id: 'pi_h' });
+      await service.onBookingCompleted('b1');
+      expect(StripePayment.capturePaymentIntent).toHaveBeenCalledWith('pi_h', 'capture-i1', 180);
+    });
+
+    it('only claims a charge at the amount it read, so a lowered balance is never charged at the old price', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment());
+      prisma.bookingInstallment.updateMany.mockResolvedValueOnce({ count: 0 });
+      await service.chargeInstallment('i1');
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ amount: 247.5 }) }));
+      expect(StripePayment.chargeSavedCard).not.toHaveBeenCalled();
+    });
+
+    it('releases holds and calls off unpaid charges on a cancelled booking', async () => {
+      prisma.bookingInstallment.findMany.mockResolvedValue([
+        installment({ id: 'h', capture_manually: true, status: InstallmentStatus.PROCESSING, payment_intent_id: 'pi_h' }),
+        installment({ id: 's', status: InstallmentStatus.SCHEDULED }),
+        installment({ id: 'p', status: InstallmentStatus.PROCESSING, payment_intent_id: 'pi_live', capture_manually: false }),
+      ]);
+      (StripePayment.cancelPaymentIntent as jest.Mock).mockResolvedValue({});
+      await service.voidOpenCharges('b1');
+      expect(StripePayment.cancelPaymentIntent).toHaveBeenCalledTimes(1);
+      expect(StripePayment.cancelPaymentIntent).toHaveBeenCalledWith('pi_h');
+      const cancelled = prisma.bookingInstallment.updateMany.mock.calls.map((c: any) => c[0].where.id);
+      expect(cancelled).toEqual(['h', 's']);
+    });
+  });
+
+  describe('refunds that keep the Vendly Protection fee', () => {
+    it('refunds only the vendor part of each installment', async () => {
+      prisma.bookingInstallment.findMany.mockResolvedValue([installment({ status: InstallmentStatus.PAID, amount: 247.5, fee_amount: 22.5, payment_intent_id: 'pi_1' })]);
+      (StripePayment.refundPaymentIntent as jest.Mock).mockResolvedValue({ id: 're_1' });
+      expect(await service.refundBooking('b1', 500, 'k', { keepFees: true })).toBe(225);
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_1', 'k-i1', 225);
+      // the installment keeps its fee, so it stays PAID rather than REFUNDED
+      expect(prisma.bookingInstallment.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: InstallmentStatus.PAID }) }));
+    });
+  });
+
+  describe('vendor gives money back', () => {
+    const booking = (over: Record<string, unknown> = {}) => ({
+      id: 'b1', vendor_id: 'v1', customer_id: 'c1', status: BookingStatus.CONFIRMED, currency: 'usd', released_at: null, commission_amount: null, released_gross: null, dispute_opened_at: null, dispute_resolved_at: null,
+      installments: [
+        installment({ id: 'i1', sequence: 1, status: InstallmentStatus.PAID, amount: 300, fee_amount: 50, payment_intent_id: 'pi_1' }),
+        installment({ id: 'i2', sequence: 2, status: InstallmentStatus.SCHEDULED, amount: 750, fee_amount: 0 }),
+      ],
+      ...over,
+    });
+    beforeEach(() => {
+      (StripePayment.refundPaymentIntent as jest.Mock).mockResolvedValue({ id: 're_1' });
+      prisma.booking.findUnique.mockReset();
+    });
+
+    it('takes it off what the customer still owes first', async () => {
+      prisma.booking.findUnique.mockResolvedValueOnce(booking()).mockResolvedValueOnce({ listing: { title: 'Catering' }, customer: { email: 'c@x.com', name: 'C' }, vendor: { name: 'V' } });
+      const res = await service.giveBack('b1', 'v1', { amount: 100, reason: 'Started late' });
+      expect(res.data).toMatchObject({ amount: 100, lowered: 100, refunded: 0 });
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i2', status: InstallmentStatus.SCHEDULED, amount: 750 }, data: { amount: 650 } });
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Money back from your vendor' }));
+    });
+
+    it('refunds the vendor part of what was paid when nothing is left to pay, keeping the fee', async () => {
+      prisma.booking.findUnique.mockResolvedValueOnce(booking({ status: BookingStatus.COMPLETED, installments: [installment({ id: 'i1', status: InstallmentStatus.PAID, amount: 1050, fee_amount: 50, payment_intent_id: 'pi_1' })] })).mockResolvedValueOnce(null);
+      prisma.bookingInstallment.findMany.mockResolvedValue([installment({ id: 'i1', status: InstallmentStatus.PAID, amount: 1050, fee_amount: 50, payment_intent_id: 'pi_1' })]);
+      const res = await service.giveBack('b1', 'v1', { amount: 200, reason: 'Fewer guests came' });
+      expect(res.data).toMatchObject({ refunded: 200, lowered: 0, recovered_from_balance: 0 });
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_1', 'giveback-b1-1-i1', 200);
+    });
+
+    it('after the payout, takes it back from the vendor balance less the commission Vendly took', async () => {
+      const paidOut = installment({ id: 'i1', status: InstallmentStatus.PAID, amount: 1050, fee_amount: 50, payment_intent_id: 'pi_1', paid_out_at: new Date() });
+      prisma.booking.findUnique.mockResolvedValueOnce(booking({ status: BookingStatus.COMPLETED, released_at: new Date(), commission_amount: 100, released_gross: 1000, installments: [paidOut] })).mockResolvedValueOnce(null);
+      prisma.bookingInstallment.findMany.mockResolvedValue([paidOut]);
+      const res = await service.giveBack('b1', 'v1', { amount: 200, reason: 'Sorry' });
+      expect(res.data.recovered_from_balance).toBe(180);
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { balance: { increment: -180 } } });
+      expect(prisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'vendly_commission', amount: -20 }) });
+    });
+
+    it('never gives back more than the vendor part', async () => {
+      prisma.booking.findUnique.mockResolvedValueOnce(booking());
+      await expect(service.giveBack('b1', 'v1', { amount: 1001, reason: 'x' })).rejects.toThrow('up to $1000.00');
+    });
+
+    it('is only for the booking vendor, and not during a dispute', async () => {
+      prisma.booking.findUnique.mockResolvedValueOnce(booking());
+      await expect(service.giveBack('b1', 'someone', { amount: 10, reason: 'x' })).rejects.toThrow('Access denied');
+      prisma.booking.findUnique.mockResolvedValueOnce(booking({ dispute_opened_at: new Date() }));
+      await expect(service.giveBack('b1', 'v1', { amount: 10, reason: 'x' })).rejects.toThrow('open dispute');
+    });
+  });
+
+  describe('extras paid after the payout', () => {
+    it('pays the vendor their share at the booking commission rate', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: new Date(), vendor_id: 'v1', currency: 'usd', commission_amount: 50, released_gross: 500, dispute_opened_at: null, dispute_resolved_at: null, vendor: { stripe_connect_id: 'acct_1', balance: 0 } });
+      prisma.bookingInstallment.findMany.mockResolvedValue([installment({ id: 'x1', kind: 'extra', status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })]);
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_x' });
+      expect(await service.payOutLateFor('b1')).toBe('tr_x');
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['x1'] }, paid_out_at: null }, data: { paid_out_at: expect.any(Date) } });
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 90, idempotencyKey: 'extras-x1' }));
+    });
+
+    it('waits until the booking itself is paid out', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, vendor: {} });
+      expect(await service.payOutLateFor('b1')).toBeNull();
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
     });
   });
 

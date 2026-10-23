@@ -187,3 +187,40 @@ export function serviceFeeFor(price: unknown, percent: number, minimum = 0) {
   if (!(p > 0)) return 0;
   return Math.max(Math.round(p * percent) / 100, minimum);
 }
+
+export interface PricingScheduleInput {
+  /** "$45.00 per person × 120 guests" (per-unit packages) or the quote's title */
+  packageLabel: string | null;
+  packageAmount: number;
+  addOns: { label: string; amount: number; description?: string | null }[];
+  discount: number;
+  promoCode?: string | null;
+  vendorPrice: number;
+  fees: { name: string; price_text: string; description?: string | null }[];
+  customerRoleLabel: string;
+  currency?: string | null;
+}
+
+/**
+ * "Schedule A" added to the end of the contract when the price isn't a single flat amount, or the
+ * package has add-ons or fees: how the vendor price was worked out, what was added, and the fees the
+ * vendor may ask for after the job (each one approved by the customer first). Empty when not needed.
+ */
+export function buildPricingSchedule(p: PricingScheduleInput): string {
+  if (!p.packageLabel && !p.addOns.length && !p.fees.length) return '';
+  const m = (n: number) => fmtMoney(n, p.currency);
+  const lines = ['## Schedule A: Price details, add-ons and fees'];
+  lines.push(`- Package: ${p.packageLabel ? `${p.packageLabel} = ${m(p.packageAmount)}` : m(p.packageAmount)}`);
+  for (const a of p.addOns) lines.push(`- Add-on: ${a.label} = ${m(a.amount)}${a.description ? ` (${a.description})` : ''}`);
+  if (p.discount > 0) lines.push(`- Promo${p.promoCode ? ` ${p.promoCode}` : ''}: -${m(p.discount)}`);
+  lines.push(`- Vendor price: ${m(p.vendorPrice)}`);
+  if (p.fees.length) {
+    lines.push('', 'Fees the Vendor may request after the service, only if they apply:');
+    for (const f of p.fees) lines.push(`- ${f.name}: ${f.price_text}${f.description ? ` (${f.description})` : ''}`);
+  }
+  lines.push(
+    '',
+    `Any fee, and any add-on requested after this booking is made, is sent to the ${p.customerRoleLabel} through Vendly with its amount and reason, and is charged only once the ${p.customerRoleLabel} approves it. If a fee is declined or left unanswered, the Vendor may ask Vendly to review it under this agreement.`,
+  );
+  return lines.join('\n');
+}

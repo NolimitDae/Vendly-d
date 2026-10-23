@@ -231,6 +231,7 @@ model User {
 
   // Vendor listings
   vendorListings VendorListing[] @relation("VendorListingOwner")
+  vendorAddOns   VendorAddOn[]   @relation("VendorAddOnOwner")
   rentalItems    RentalItem[]    @relation("RentalItemOwner")
   quotesSent     Quote[]         @relation("QuoteVendor")
   timelineItems  EventTimelineItem[] @relation("TimelineVendor")
@@ -779,8 +780,12 @@ model VendorListing {
 
   // null = use the category default, else FULL_ON_ACCEPT
   payment_plan   PaymentPlan?
+  // per person / hour / day packages: the fewest and most a customer can book (guests, hours or days)
+  min_quantity   Int?
+  max_quantity   Int?
 
   bookings       Booking[]
+  add_ons        ListingAddOn[]
   reviews        Review[]
   savedBy        SavedListing[]        @relation("ListingSavedBy")
   blockedDates   ListingAvailability[]
@@ -916,7 +921,11 @@ model Booking {
   review_reminded_at         DateTime?
   review_prompt_dismissed_at DateTime?
 
+  // vendor price + the commission taken when it was paid out (refunds after payout are recovered net of commission)
+  released_gross Decimal?  @db.Decimal(10, 2)
+
   review        Review?
+  extras        BookingExtra[]
   contracts     BookingContract[]
   event_bookings EventBooking[]
   proofs        BookingProof[]
@@ -955,10 +964,128 @@ model BookingInstallment {
   last_error        String?   @db.Text
   paid_at           DateTime?
   refunded_amount   Decimal   @default(0) @db.Decimal(10, 2)
+  // when this installment's vendor share was paid out (with the booking, or later for extras paid after it)
+  paid_out_at       DateTime?
+  extra             BookingExtra?
 
   @@index([booking_id])
   @@index([status, next_attempt_at])
   @@map("booking_installments")
+}
+
+// ─── Add-ons and fees ─────────────────────────────────────────────────────────
+
+/// ADD_ON: something extra a customer can buy (at booking, or requested during the job).
+/// FEE: a charge the vendor may request after the job (late return, cleaning, overtime), shown on the package up front.
+enum AddOnKind {
+  ADD_ON
+  FEE
+}
+
+/// How an add-on's price is counted: once, per guest, per hour of the event, or per item the customer picks.
+enum AddOnPriceUnit {
+  FIXED
+  PER_PERSON
+  PER_HOUR
+  PER_ITEM
+}
+
+enum BookingExtraStatus {
+  // chosen when booking; part of the booking price and contract
+  INCLUDED
+  // requested by the vendor after booking; waiting for the customer
+  PENDING
+  // customer (or Vendly) approved; charged as an installment
+  APPROVED
+  DECLINED
+  // withdrawn by the vendor, or the booking ended first
+  CANCELLED
+  // a declined or unanswered fee sent to Vendly to decide
+  IN_REVIEW
+  // Vendly decided the customer doesn't pay
+  WAIVED
+}
+
+/// A vendor's add-on or fee. Library items are reused across packages; custom ones belong to one package.
+model VendorAddOn {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  vendor_id String
+  vendor    User   @relation("VendorAddOnOwner", fields: [vendor_id], references: [id], onDelete: Cascade)
+
+  kind         AddOnKind      @default(ADD_ON)
+  name         String         @db.VarChar(120)
+  description  String?        @db.VarChar(500)
+  price        Decimal        @db.Decimal(10, 2)
+  price_unit   AddOnPriceUnit @default(FIXED)
+  // PER_ITEM: the most a customer can pick
+  max_quantity Int?
+  // false = made inside one package's form; it isn't offered for other packages
+  in_library   Boolean        @default(true)
+
+  listings ListingAddOn[]
+  extras   BookingExtra[]
+
+  @@index([vendor_id, kind])
+  @@map("vendor_add_ons")
+}
+
+model ListingAddOn {
+  created_at DateTime @default(now())
+
+  listing_id String
+  listing    VendorListing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+  add_on_id  String
+  add_on     VendorAddOn   @relation(fields: [add_on_id], references: [id], onDelete: Cascade)
+  sort       Int           @default(0)
+
+  @@id([listing_id, add_on_id])
+  @@index([add_on_id])
+  @@map("listing_add_ons")
+}
+
+/// An add-on or fee on one booking, with its name and price frozen when it was added.
+model BookingExtra {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  booking_id String
+  booking    Booking      @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+  add_on_id  String?
+  add_on     VendorAddOn? @relation(fields: [add_on_id], references: [id], onDelete: SetNull)
+
+  kind        AddOnKind
+  name        String         @db.VarChar(120)
+  description String?        @db.VarChar(500)
+  unit_price  Decimal        @db.Decimal(10, 2)
+  price_unit  AddOnPriceUnit @default(FIXED)
+  quantity    Decimal        @default(1) @db.Decimal(10, 2)
+  // vendor price: unit_price x quantity
+  amount      Decimal        @db.Decimal(10, 2)
+  // Vendly Protection fee the customer pays on top (add-ons requested after booking; never on fees)
+  fee_amount  Decimal        @default(0) @db.Decimal(10, 2)
+  // the vendor's reason or details, e.g. "Returned 3 hours late"
+  note        String?        @db.Text
+  status      BookingExtraStatus
+
+  responded_at   DateTime?
+  decline_reason String?   @db.Text
+  reminded_at    DateTime?
+  review_requested_at DateTime?
+  review_note    String?   @db.Text
+  reviewed_at    DateTime?
+  reviewed_by    String?
+
+  installment_id String?             @unique
+  installment    BookingInstallment? @relation(fields: [installment_id], references: [id], onDelete: SetNull)
+
+  @@index([booking_id])
+  @@index([status, created_at])
+  @@map("booking_extras")
 }
 
 // ─── Rentals (Phase D) ───────────────────────────────────────────────────────

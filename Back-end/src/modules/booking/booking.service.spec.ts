@@ -48,7 +48,8 @@ const mockPrisma = {
   },
   paymentTransaction: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn() },
   bookingContract: { findFirst: jest.fn() },
-  bookingInstallment: { count: jest.fn().mockResolvedValue(0) },
+  bookingInstallment: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+  bookingExtra: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), findMany: jest.fn().mockResolvedValue([]) },
   $transaction: jest.fn((fn: any) => fn(mockPrisma)),
   bookingProof: {
     create: jest.fn(),
@@ -67,6 +68,7 @@ const mockPayments = {
   onBookingCompleted: jest.fn().mockResolvedValue(undefined),
   onProofUploaded: jest.fn().mockResolvedValue(undefined),
   refundBooking: jest.fn().mockResolvedValue(0),
+  voidOpenCharges: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockContracts = {
@@ -311,6 +313,68 @@ describe('BookingService', () => {
 
       expect(result.data.refund).toMatchObject({ refundTotal: 0, vendorKeeps: 450 });
       expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+    });
+
+    describe('on a payment plan, settles against what was actually paid', () => {
+      // $1,000 price, $50 fee; only the 25% deposit ($250 + $50 fee) has been charged
+      const deposit = { id: 'i1', status: 'PAID', amount: 300, fee_amount: 50, refunded_amount: 0, kind: 'charge' };
+      const balance = { id: 'i2', status: 'SCHEDULED', amount: 750, fee_amount: 0, refunded_amount: 0, kind: 'charge' };
+      beforeEach(() => {
+        mockPrisma.bookingInstallment.findMany.mockResolvedValue([deposit, balance]);
+        mockPayments.refundBooking.mockImplementation((_id: string, amount: number) => Promise.resolve(amount));
+      });
+      afterEach(() => mockPrisma.bookingInstallment.findMany.mockResolvedValue([]));
+
+      it('customer cancels with nothing refundable: the vendor keeps the deposit, never the unpaid balance', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(paidBooking({ amount: 1000, service_fee: 50 }));
+        mockPrisma.bookingContract.findFirst.mockResolvedValue({ merge_data: { cancellation_policy: 'strict' } });
+
+        const result = await service.cancel('booking-1', 'customer-1', {});
+
+        expect(result.data.refund).toMatchObject({ refundTotal: 0, vendorKeeps: 250 });
+        expect(mockPayments.voidOpenCharges).toHaveBeenCalledWith('booking-1');
+        expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 250 } } });
+      });
+
+      it('customer cancels at 50%: owed $500 but only $250 was paid, so the vendor keeps $250 and nothing is refunded', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(paidBooking({ amount: 1000, service_fee: 50 }));
+
+        const result = await service.cancel('booking-1', 'customer-1', {});
+
+        expect(result.data.refund).toMatchObject({ refundTotal: 0, vendorKeeps: 250, percent: 50 });
+        expect(mockPayments.refundBooking).not.toHaveBeenCalled();
+      });
+
+      it('customer cancels with a full refund: the deposit comes back, the Vendly Protection fee stays', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(paidBooking({ amount: 1000, service_fee: 50, event_start_at: new Date(Date.now() + 30 * DAY) }));
+
+        const result = await service.cancel('booking-1', 'customer-1', {});
+
+        expect(result.data.refund).toMatchObject({ refundTotal: 250, refundFee: 0, vendorKeeps: 0 });
+        expect(mockPayments.refundBooking).toHaveBeenCalledWith('booking-1', 250, 'cancel-booking-1', { keepFees: true });
+      });
+
+      it('vendor cancels: everything paid comes back, fee included, and nothing more is charged', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(paidBooking({ amount: 1000, service_fee: 50 }));
+
+        const result = await service.cancel('booking-1', 'vendor-1', {});
+
+        expect(result.data.refund).toMatchObject({ refundTotal: 300, refundFee: 50, vendorKeeps: 0 });
+        expect(mockPayments.refundBooking).toHaveBeenCalledWith('booking-1', 300, 'cancel-booking-1', { keepFees: false });
+        expect(mockPayments.voidOpenCharges).toHaveBeenCalled();
+      });
+
+      it('cancels add-ons and fees still waiting on the customer', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(paidBooking({ amount: 1000, service_fee: 50 }));
+        await service.cancel('booking-1', 'vendor-1', {});
+        expect(mockPrisma.bookingExtra.updateMany).toHaveBeenCalledWith({ where: { booking_id: 'booking-1', status: { in: ['PENDING', 'IN_REVIEW'] } }, data: { status: 'CANCELLED' } });
+      });
+    });
+
+    it('releases a card hold when an unpaid (pay-after-service) booking is cancelled', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED, paid_at: null });
+      await service.cancel('booking-1', 'customer-1', {});
+      expect(mockPayments.voidOpenCharges).toHaveBeenCalledWith('booking-1');
     });
 
     it('records a failed refund instead of losing it', async () => {

@@ -292,7 +292,7 @@ describe('contract access control', () => {
     contractAuditEvent: { create: jest.fn() },
     user: { findUnique: jest.fn(({ where }: any) => Promise.resolve(where.id === 'admin' ? { type: 'ADMIN', deleted_at: null } : { type: 'CUSTOMER', deleted_at: null })) },
   };
-  const service = new BookingContractsService(prisma, { downloadUrl: () => 'url' } as any, {} as any, {} as any, {} as any);
+  const service = new BookingContractsService(prisma, { downloadUrl: () => 'url' } as any, {} as any, {} as any, {} as any, {} as any);
   const stranger = { userId: 'stranger', type: 'CUSTOMER' };
   const meta = {};
   const sig = { legal_name: 'Sam Stranger', consent: true, content_sha256: 'a'.repeat(64) };
@@ -339,7 +339,7 @@ describe('booking a date the vendor is not free', () => {
       listingAvailability: { findFirst: jest.fn().mockResolvedValue(blocked) },
       calendarBusyBlock: { findFirst: jest.fn().mockResolvedValue(busy) },
     };
-    const service = new BookingContractsService(prisma, {} as any, {} as any, {} as any, {} as any);
+    const service = new BookingContractsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any);
     return { prisma, check: (dto: any) => (service as any).assertDateOpen('l1', 'v1', dto) };
   };
   const day = (s: string) => new Date(`${s}T00:00:00.000Z`);

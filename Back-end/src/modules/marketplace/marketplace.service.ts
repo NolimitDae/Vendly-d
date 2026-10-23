@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { MAX_SERVICE_RADIUS, boundingBox, milesBetween, withoutPosition } from 'src/modules/geo/geo';
 import { ListingStatus } from 'prisma/generated/client';
+import { formatAddOn } from 'src/modules/add-ons/add-ons.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
@@ -143,6 +144,7 @@ export class MarketplaceService {
           },
         },
         _count: { select: { reviews: true, bookings: true } },
+        add_ons: { where: { add_on: { deleted_at: null } }, include: { add_on: true }, orderBy: [{ sort: 'asc' }, { created_at: 'asc' }] },
       },
     });
 
@@ -334,7 +336,14 @@ export class MarketplaceService {
   }
 
   private formatFullListing(listing: any) {
-    const formatted = this.formatListingCard(listing);
+    const { add_ons: links, ...rest } = listing;
+    const offered = ((links ?? []) as any[]).map((l) => formatAddOn(l.add_on));
+    const formatted = {
+      ...this.formatListingCard(rest),
+      // extras customers can pick when booking, and fees the vendor may charge after the job (shown up front)
+      add_ons: offered.filter((a) => a.kind === 'ADD_ON'),
+      fees: offered.filter((a) => a.kind === 'FEE'),
+    };
     if (formatted.reviews) {
       formatted.reviews = listing.reviews.map((r: any) => ({
         ...r,

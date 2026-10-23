@@ -21,6 +21,7 @@ import {
 } from 'class-validator';
 import { ContractCategory } from 'prisma/generated/client';
 import { MAX_ADDITIONAL_TERMS } from '../contract-templates';
+import { AddOnSelectionDto } from 'src/modules/add-ons/dto/add-ons.dto';
 
 // read the raw input: the global implicit conversion turns any non-empty string into true
 const toBool = ({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
@@ -176,6 +177,14 @@ export class BookingContractFieldsDto {
   @IsString()
   @MaxLength(64)
   payment_method_id?: string;
+
+  @ApiPropertyOptional({ type: [AddOnSelectionDto], description: 'Add-ons the customer picked from the package' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => AddOnSelectionDto)
+  add_ons?: AddOnSelectionDto[];
 }
 
 export class SignedBookingRequestDto extends BookingContractFieldsDto {

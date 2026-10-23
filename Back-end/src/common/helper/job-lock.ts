@@ -20,3 +20,19 @@ export async function withJobLock<T>(prisma: PrismaService, name: string, job: (
     { maxWait: 5000, timeout: HOUR_MS },
   );
 }
+
+/**
+ * Runs `work` while holding a lock on one booking's money (charges, captures, refunds, payouts), so
+ * two of them never act on the same installments at once. Waits for the lock rather than skipping.
+ * Never call another locked function from inside `work`: it would wait on itself.
+ */
+export async function withBookingLock<T>(prisma: PrismaService, bookingId: string, work: () => Promise<T>): Promise<T> {
+  const key = createHash('sha1').update(`vendly-booking-money:${bookingId}`).digest().readBigInt64BE(0);
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(${key})`;
+      return work();
+    },
+    { maxWait: 10_000, timeout: 5 * 60 * 1000 },
+  );
+}
