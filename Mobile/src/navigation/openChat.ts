@@ -8,7 +8,9 @@ export async function openChatWith(nav: { navigate: (...args: any[]) => void }, 
     const id = res.data?.data?.id;
     if (!res.data?.success || !id) throw new Error();
     nav.navigate('MessagesTab', { screen: 'ChatDetail', params: { conversationId: id, participantName }, initial: false });
-  } catch {
-    Alert.alert('Could not open chat', 'Try again in a moment.');
+  } catch (err: any) {
+    // the server's reason when it has one (e.g. it's your own account), otherwise a plain retry
+    const reason = err?.response?.data?.message;
+    Alert.alert('Could not open chat', typeof reason === 'string' ? reason : 'Try again in a moment.');
   }
 }

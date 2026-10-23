@@ -8,10 +8,12 @@ import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { MarketplaceService, type VendorProfile as Vendor } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
 
 export default function VendorProfile({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'VendorProfile'>) {
   const { vendorId } = route.params;
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,9 +125,12 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
           )}
         </View>
       </ScrollView>
-      <View style={{ position: 'absolute', right: 20, bottom: insets.bottom + 20 }}>
-        <ChatBubble onPress={() => openChatWith(navigation, vendor.id, name)} />
-      </View>
+      {/* no "message yourself" on your own shop (one login, several roles) */}
+      {vendor.id !== user?.id && (
+        <View style={{ position: 'absolute', right: 20, bottom: insets.bottom + 20 }}>
+          <ChatBubble onPress={() => openChatWith(navigation, vendor.id, name)} />
+        </View>
+      )}
     </View>
   );
 }

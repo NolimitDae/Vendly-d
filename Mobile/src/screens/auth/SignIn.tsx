@@ -22,8 +22,12 @@ export async function signIn(email: string, password: string, login: AuthContext
 }
 
 export const apiMessage = (err: any, fallback: string): string => {
-  const m = err?.response?.data?.message ?? err?.message;
-  return Array.isArray(m) ? m[0] : m || fallback;
+  const m = err?.response?.data?.message;
+  if (m) return Array.isArray(m) ? m[0] : typeof m === 'string' ? m : fallback;
+  // no answer from the server: say what happened in plain words instead of axios's wording
+  if (err?.code === 'ECONNABORTED' || /timeout of \d+ms/i.test(err?.message ?? '')) return 'This is taking too long. Check your connection and try again.';
+  if (err?.isAxiosError && !err?.response) return 'Can’t reach Vendly right now. Check your connection and try again.';
+  return err?.message || fallback;
 };
 
 export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackParams, 'SignIn'>) {

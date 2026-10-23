@@ -13,6 +13,9 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+/** How long a multipart upload (photos, documents) may take. */
+export const UPLOAD_TIMEOUT_MS = 120_000;
+
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean; _skipAuthRefresh?: boolean };
 
 /** True when the JWT expires within 30s (or can't be read, so the server decides). */
@@ -33,6 +36,8 @@ api.interceptors.request.use(async (config) => {
   if (token && !(config as RetriableConfig)._skipAuthRefresh && expiresSoon(token)) token = (await refreshOnce()) ?? token;
   // Don't overwrite an Authorization header the caller set explicitly (e.g. the /auth/me bootstrap).
   if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
+  // Photo uploads over a phone connection can take well over 15 s; give them two minutes.
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData && (config.timeout ?? 0) < UPLOAD_TIMEOUT_MS) config.timeout = UPLOAD_TIMEOUT_MS;
   return config;
 });
 

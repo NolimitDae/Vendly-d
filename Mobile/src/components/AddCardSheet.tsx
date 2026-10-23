@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Alert, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { GradientButton } from './brand';
@@ -32,9 +33,16 @@ export default function AddCardSheet({ visible, onClose, onSaved }: { visible: b
       const secret = res.data?.data?.client_secret;
       if (!secret) throw new Error('Could not start card setup');
       const { setupIntent, error } = await confirmSetupIntent(secret, { paymentMethodType: 'Card' });
-      if (error) throw new Error(error.message);
+      if (error) {
+        // Stripe's own wording ("Your card was declined.") is the useful part; a key mix-up between the
+        // app and the server reads "No such setupintent", which the customer can't act on.
+        const setupProblem = /no such (setup_?intent|customer)|api key|publishable/i.test(error.message ?? '');
+        Sentry.captureMessage(`Card setup failed: ${error.message}`, setupProblem ? 'error' : 'warning');
+        throw new Error(setupProblem ? 'Card payments aren’t available right now. We’ve been told and are fixing it.' : error.message);
+      }
       const id = setupIntent?.paymentMethodId ?? setupIntent?.paymentMethod?.id;
       if (!id) throw new Error('Card was not saved');
+      Keyboard.dismiss();
       onSaved(id);
       onClose();
     } catch (err) {
@@ -46,8 +54,10 @@ export default function AddCardSheet({ visible, onClose, onSaved }: { visible: b
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.overlay} onPress={onClose}>
-        <Pressable style={[s.sheet, { paddingBottom: insets.bottom + 24 }]} onPress={() => {}}>
+      {/* the sheet rides up with the keyboard so Save card stays visible */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <Pressable style={s.overlay} onPress={() => (Keyboard.isVisible() ? Keyboard.dismiss() : onClose())}>
+        <Pressable style={[s.sheet, { paddingBottom: insets.bottom + 24 }]} onPress={Keyboard.dismiss}>
           <View style={s.handle} />
           <Text style={s.title}>Add Your Payment Information</Text>
           <Text style={s.body}>Your card is saved securely with Stripe. Nothing is charged until the vendor accepts your request.</Text>
@@ -68,6 +78,7 @@ export default function AddCardSheet({ visible, onClose, onSaved }: { visible: b
           <GradientButton title="Save card" onPress={save} loading={saving} disabled={!supported || !complete} />
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

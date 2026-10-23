@@ -9,6 +9,7 @@ import { useSaved } from '../../hooks/useSaved';
 import { openChatWith } from '../../navigation/openChat';
 import { MarketplaceService, vendorName, type Listing } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams, ListingSummary } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
 
 export const toSummary = (l: Listing): ListingSummary => ({
   id: l.id,
@@ -30,6 +31,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
   const [loading, setLoading] = useState(true);
   const [slide, setSlide] = useState(0);
   const saved = useSaved();
+  const { user } = useAuth();
 
   useEffect(() => {
     MarketplaceService.getListing(listingId)
@@ -51,6 +53,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
   const reviews = listing._count?.reviews ?? listing.reviews?.length ?? 0;
   const vendor = vendorName(listing.vendor);
   const unit = listing.price_unit && listing.price_unit !== 'fixed' ? ` / ${listing.price_unit}` : '';
+  const isMine = !!user?.id && listing.vendor?.id === user.id;
 
   return (
     <View style={s.root}>
@@ -146,10 +149,20 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
       </ScrollView>
 
       <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
-        <View style={{ alignItems: 'flex-end', marginBottom: 14 }}>
-          <ChatBubble onPress={() => openChatWith(navigation, listing.vendor.id, vendor)} />
-        </View>
-        <GradientButton title={eventId ? 'Book for this event' : 'Book Service'} onPress={() => navigation.navigate('SelectDate', { listing: { ...toSummary(listing), eventId } })} />
+        {isMine ? (
+          // one login, several roles: your own package, seen from your customer side
+          <View style={s.mine}>
+            <Ionicons name="storefront-outline" size={18} color={DARK.accent} />
+            <Text style={s.mineText}>This is your package. This is how customers see it; you can’t book or message yourself.</Text>
+          </View>
+        ) : (
+          <>
+            <View style={{ alignItems: 'flex-end', marginBottom: 14 }}>
+              <ChatBubble onPress={() => openChatWith(navigation, listing.vendor.id, vendor)} />
+            </View>
+            <GradientButton title={eventId ? 'Book for this event' : 'Book Service'} onPress={() => navigation.navigate('SelectDate', { listing: { ...toSummary(listing), eventId } })} />
+          </>
+        )}
       </View>
     </View>
   );
@@ -188,4 +201,6 @@ const s = StyleSheet.create({
   avatarText: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
   vendorName: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
+  mine: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 16, backgroundColor: DARK.card, borderWidth: 1, borderColor: DARK.border },
+  mineText: { flex: 1, color: '#fff', fontSize: 13, lineHeight: 19, fontFamily: FONTS.medium },
 });

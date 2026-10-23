@@ -70,7 +70,8 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
 
   const send = async () => {
     if (!lines.length) return Alert.alert('Nothing selected', 'Add at least one item.');
-    if (!card) return Alert.alert('Payment method', 'Add a card first. It is only charged once the vendor accepts.');
+    // no card yet: go straight to adding one (it's only charged once the vendor accepts)
+    if (!card) return setAddingCard(true);
     if (quote && !quote.available) return Alert.alert('Not enough stock', 'Lower the quantity of the items marked in red, or pick other dates.');
     setBusy(true);
     try {

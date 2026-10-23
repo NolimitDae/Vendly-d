@@ -24,7 +24,7 @@ export class ConversationService {
     const { participant_id } = createConversationDto;
 
     if (participant_id === sender) {
-      throw new ConflictException('Cannot create conversation with yourself');
+      throw new ConflictException('That’s your own account, so there’s no one to message.');
     }
 
     // check if conversation already exists between the two users

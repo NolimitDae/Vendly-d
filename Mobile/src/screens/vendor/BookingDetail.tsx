@@ -87,7 +87,7 @@ export default function VendorBookingDetail() {
   ]);
 
   const pickProofPhotos = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.8 });
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 0.6 });
     // added to any photos already taken with the camera
     if (!res.canceled) setProofPhotos((prev) => [...prev, ...res.assets]);
   };
@@ -96,7 +96,7 @@ export default function VendorBookingDetail() {
   const takeProofPhoto = async () => {
     const cam = await ImagePicker.requestCameraPermissionsAsync();
     if (!cam.granted) return Alert.alert('Camera', 'Allow camera access in Settings to take proof photos.');
-    const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+    const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 });
     if (res.canceled) return;
     setProofPhotos((prev) => [...prev, ...res.assets]);
     const takenAt = new Date();

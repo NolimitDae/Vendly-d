@@ -94,7 +94,8 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
   }, [loadPreview]);
 
   const review = () => {
-    if (!card) return Alert.alert('Payment method', 'Add a card first. It is only charged once the vendor accepts.');
+    // no card yet: go straight to adding one (it's only charged once the vendor accepts)
+    if (!card) return setAddingCard(true);
     if (!preview) return loadPreview();
     if (preview.missing_message) return Alert.alert('More details needed', preview.missing_message);
     setSigning(true);

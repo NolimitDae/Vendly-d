@@ -56,7 +56,7 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
   const pickImages = async () => {
     const total = images.length + existing.length;
     if (total >= 10) return Alert.alert('Limit reached', 'An item can have up to 10 photos.');
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 10 - total, quality: 0.8 });
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 10 - total, quality: 0.6 });
     if (!res.canceled) setImages((p) => [...p, ...res.assets.map((a, i) => ({ uri: a.uri, type: a.mimeType ?? 'image/jpeg', name: a.fileName ?? `rental_${Date.now()}_${i}.jpg` }))]);
   };
 
