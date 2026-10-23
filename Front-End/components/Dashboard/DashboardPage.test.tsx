@@ -6,7 +6,10 @@ import TodaysBooking from './todays-booking/TodaysBooking';
 jest.mock('./overview/ReveneuOverview', () => ({ __esModule: true, default: () => null }));
 jest.mock('./new-subscription/NewSubscription', () => ({ __esModule: true, default: () => null }));
 jest.mock('./quick-actions/QuickActions', () => ({ __esModule: true, default: () => null }));
-jest.mock('./common/WarningComponent', () => ({ __esModule: true, default: () => null }));
+jest.mock('./common/WarningComponent', () => ({
+  __esModule: true,
+  default: (p: { vendorPending: number; epPending: number }) => require('react').createElement('p', null, `pending vendors ${p.vendorPending}, planners ${p.epPending}`),
+}));
 jest.mock('@/service/admin/admin.service', () => ({
   AdminService: {
     getVendors: jest.fn(),
@@ -14,6 +17,7 @@ jest.mock('@/service/admin/admin.service', () => ({
     getBookings: jest.fn(),
     getTransactions: jest.fn(),
     getPendingLicense: jest.fn(),
+    getPendingEventPlanners: jest.fn(),
   },
 }));
 jest.mock('@/service/admin/money.service', () => ({ MoneyService: { revenue: jest.fn() } }));
@@ -30,7 +34,8 @@ beforeEach(() => {
   }));
   // every transaction (payouts, refunds, deposits) would add up to far more than Vendly earned
   (AdminService.getTransactions as jest.Mock).mockResolvedValue({ data: [{ amount: 1000 }, { amount: 500 }] });
-  (AdminService.getPendingLicense as jest.Mock).mockResolvedValue({ data: [] });
+  (AdminService.getPendingLicense as jest.Mock).mockResolvedValue({ data: [{ type: 'VENDOR' }] });
+  (AdminService.getPendingEventPlanners as jest.Mock).mockResolvedValue({ data: { data: [{}], meta: { total: 3 } } });
   (MoneyService.revenue as jest.Mock).mockResolvedValue({ data: { success: true, data: { totals: { fees: 120, commission: 5.5, vendly_revenue: 125.5 } } } });
 });
 
@@ -46,6 +51,20 @@ describe('DashboardPage', () => {
     const [from, to] = (MoneyService.revenue as jest.Mock).mock.calls[0];
     const days = (new Date(to).getTime() - new Date(from).getTime()) / (24 * 3600 * 1000);
     expect(Math.round(days)).toBe(30);
+  });
+});
+
+describe('DashboardPage counts and cards', () => {
+  it('counts planners waiting for approval from their own list', async () => {
+    render(<DashboardPage />);
+    expect(await screen.findByText('pending vendors 1, planners 3')).toBeInTheDocument();
+  });
+
+  it('shows no made-up growth badge on the cards', async () => {
+    render(<DashboardPage />);
+    await screen.findByText('$125.50');
+    expect(screen.queryByText('0.1%')).not.toBeInTheDocument();
+    expect(screen.queryByText('From Last Month')).not.toBeInTheDocument();
   });
 });
 

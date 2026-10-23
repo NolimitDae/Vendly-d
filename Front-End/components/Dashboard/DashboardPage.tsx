@@ -35,7 +35,8 @@ function DashboardPage() {
       AdminService.getBookings({ limit: 1 }),
       MoneyService.revenue(from.toISOString(), to.toISOString()),
       AdminService.getPendingLicense(),
-    ]).then(([vendorsRes, epRes, bookingsRes, revenueRes, pendingRes]) => {
+      AdminService.getPendingEventPlanners({ limit: 1 }),
+    ]).then(([vendorsRes, epRes, bookingsRes, revenueRes, pendingRes, pendingEpRes]) => {
       const vendors =
         vendorsRes.status === "fulfilled"
           ? (vendorsRes.value.data?.meta?.total ?? 0)
@@ -60,8 +61,12 @@ function DashboardPage() {
           ? pendingRes.value.data
           : (pendingRes.value.data?.data ?? []);
         const vendorCount = list.filter((u: any) => u.type === "VENDOR").length;
-        const epCount = list.filter((u: any) => u.type === "EVENT_PLANNER").length;
-        setPending({ vendor: vendorCount, ep: epCount });
+        setPending((p) => ({ ...p, vendor: vendorCount }));
+      }
+      // planners waiting for approval come from their own list (the licence list only holds vendors)
+      if (pendingEpRes.status === "fulfilled") {
+        const total = Number(pendingEpRes.value.data?.meta?.total ?? pendingEpRes.value.data?.data?.length ?? 0);
+        setPending((p) => ({ ...p, ep: total }));
       }
     });
   }, []);

@@ -8,12 +8,12 @@ import { CreateMessageDto } from "./dto/create-message.dto";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { TanvirStorage } from '../../../common/lib/Disk/TanvirStorage';
 import { MessageGateway } from "./message.gateway";
-import { StringHelper } from "src/common/helper/string.helper";
 import { paginateResponse, PaginationDto } from "src/common/pagination";
 import { ChatRepository } from "../../../common/repository/chat/chat.repository";
 import { contactReasons, CONTACT_WARNING } from "../extras/contact-warning";
 import { avatarUrl, formatMessage, messageInclude } from "../extras/format";
 import { assertCanMessage, blockState } from "../safety/block";
+import { safeAttachmentNames } from "../safety/attachments";
 
 // Temporary enum until Prisma generates it
 enum MessageStatus {
@@ -66,13 +66,14 @@ export class MessageService {
     const savedFileNames: string[] = [];
 
     if (files && files.length > 0) {
-      for (const file of files) {
-        const fileName = `${StringHelper.randomString(8)}_${file.originalname}`;
+      // photos and PDFs only, checked by content; stored under random names (never the uploaded name)
+      const names = safeAttachmentNames(files);
+      for (const [i, file] of files.entries()) {
         await TanvirStorage.put(
-          appConfig().storageUrl.attachment + "/" + fileName,
+          appConfig().storageUrl.attachment + "/" + names[i],
           file.buffer,
         );
-        savedFileNames.push(fileName);
+        savedFileNames.push(names[i]);
       }
     }
 

@@ -117,19 +117,14 @@ const SecurityPrivacyContent = () => {
     if (code.length !== 6) { toast.error("Enter a 6-digit code"); return; }
     setBusy(true);
     try {
-      // check the code first: the disable route itself does not
-      const check = await TwoFAService.verifyToken(code);
-      if (!check.data?.success) {
-        toast.error(check.data?.message || "Invalid code — try again");
-        return;
-      }
+      // the server checks the code before turning 2FA off
       const res = await TwoFAService.disable(code);
       if (res.data?.success) {
         setEnabled(false);
         reset();
         toast.success("Two-factor authentication disabled");
       } else {
-        toast.error(res.data?.message || "Failed to disable 2FA");
+        toast.error(res.data?.message || "Invalid code — try again");
       }
     } catch {
       toast.error("Failed to disable 2FA");

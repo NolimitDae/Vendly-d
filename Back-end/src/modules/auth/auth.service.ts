@@ -1036,10 +1036,16 @@ export class AuthService {
     }
   }
 
-  async disable2FA(user_id: string) {
+  async disable2FA(user_id: string, token?: string) {
     try {
       const user = await this.userRepository.getUserDetails(user_id);
       if (user) {
+        if (!token?.trim() || !(await this.userRepository.verify2FA(user_id, token.trim()))) {
+          return {
+            success: false,
+            message: 'Enter the current code from your authenticator app to turn off two-step login.',
+          };
+        }
         await this.userRepository.disable2FA(user_id);
         return {
           success: true,

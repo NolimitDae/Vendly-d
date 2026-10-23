@@ -26,7 +26,8 @@ export default function NewEventPage() {
       const payload: Parameters<typeof EventsService.create>[0] = {
         name: values.name,
         type: values.type || undefined,
-        date: values.date || undefined,
+        // the picker gives the planner's local time with no zone; send the exact moment
+        date: values.date ? new Date(values.date).toISOString() : undefined,
         venue: values.venue || undefined,
         guest_count: values.guest_count ? Number(values.guest_count) : undefined,
         total_budget: values.total_budget ? Number(values.total_budget) : undefined,

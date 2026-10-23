@@ -2,14 +2,13 @@
 
 import VendorsIcon from "@/icons/VendorsIcon";
 import { Skeleton } from "../ui/skeleton";
-import GrowIcon from "@/icons/GrowIcon";
 
 interface StatCardProps {
   title: string;
   value: string | number;
   percentage?: string;
   icon?: React.ReactNode;
-  /** says what the value covers; replaces the placeholder growth badge and "From Last Month" */
+  /** says what the value covers, shown under it */
   sub?: string;
 }
 
@@ -67,17 +66,9 @@ export default function StatCards({
                   >
                     {card.value}
                   </div>
-                  {section !== "services" && !card.sub && (
-                    <div className="flex px-1.5 py-1   items-center gap-1 border-[0.5px] border-greenBorder bg-greenBg rounded-4xl">
-                      {" "}
-                      <GrowIcon />
-                      <span className="text-greenText ">0.1%</span>
-                    </div>
-                  )}
                 </div>
-                <p className="text-grayColor1 leading-[160%] text-sm">
-                  {card.sub ?? "From Last Month"}
-                </p>
+                {/* no growth badge: there is no month-on-month figure behind it yet */}
+                {card.sub && <p className="text-grayColor1 leading-[160%] text-sm">{card.sub}</p>}
               </div>
             </div>
           ))}

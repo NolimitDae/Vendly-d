@@ -938,15 +938,16 @@ export class AuthController {
   @ApiOperation({
     summary: 'Disable 2FA',
     description:
-      'Disables Two-Factor Authentication for the authenticated user.',
+      'Disables Two-Factor Authentication for the authenticated user. Needs a current code from the authenticator app (`token`).',
   })
   @ApiResponse({ status: 200, description: '2FA disabled successfully.' })
   @UseGuards(JwtAuthGuard)
   @Post('disable-2fa')
-  async disable2FA(@Req() req: Request) {
+  async disable2FA(@Req() req: Request, @Body() data: { token?: string } = {}) {
     try {
       const user_id = req.user.userId;
-      return await this.authService.disable2FA(user_id);
+      // a current code is required, so a stolen session alone can't switch 2FA off
+      return await this.authService.disable2FA(user_id, data?.token);
     } catch (error) {
       return {
         success: false,

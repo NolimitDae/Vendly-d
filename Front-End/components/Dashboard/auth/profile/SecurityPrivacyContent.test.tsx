@@ -83,7 +83,20 @@ describe('SecurityPrivacyContent', () => {
     await user.click(screen.getByRole('button', { name: 'Disable 2FA' }));
 
     await waitFor(() => expect(TwoFAService.disable).toHaveBeenCalledWith('654321'));
-    expect(TwoFAService.verifyToken).toHaveBeenCalledWith('654321');
     await waitFor(() => expect(screen.getByRole('checkbox')).not.toBeChecked());
+  });
+
+  it('keeps 2FA on when the server refuses the code', async () => {
+    status(true);
+    (TwoFAService.disable as jest.Mock).mockResolvedValueOnce({ data: { success: false, message: 'Enter the current code from your authenticator app to turn off two-step login.' } });
+    const user = userEvent.setup();
+    render(<SecurityPrivacyContent />);
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeChecked());
+    await user.click(screen.getByRole('checkbox'));
+    await user.type(await screen.findByLabelText('Authenticator code'), '111111');
+    await user.click(screen.getByRole('button', { name: 'Disable 2FA' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Enter the current code from your authenticator app to turn off two-step login.'));
+    expect(screen.getByRole('checkbox')).toBeChecked();
   });
 });
