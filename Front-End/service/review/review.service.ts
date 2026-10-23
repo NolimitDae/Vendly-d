@@ -8,7 +8,19 @@ const authHeaders = () => ({
   },
 });
 
+export interface PendingReview {
+  booking_id: string;
+  completed_at: string;
+  listing: { id: string; title: string; image: string | null } | null;
+  vendor: { id: string; name: string; avatar_url: string | null };
+}
+
 export const ReviewService = {
+  /** Finished bookings waiting for a rating, for the "how was it?" prompt. */
+  pending: async () => Fetch.get("/reviews/pending", authHeaders()),
+  /** "Not now": stop asking about this booking. */
+  dismiss: async (bookingId: string) => Fetch.post(`/reviews/pending/${bookingId}/dismiss`, {}, authHeaders()),
+
   create: async (data: { booking_id: string; rating: number; comment?: string }) =>
     Fetch.post("/reviews", data, authHeaders()),
 

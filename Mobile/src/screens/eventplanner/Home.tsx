@@ -10,6 +10,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { BookingService, type Booking } from '../../services/booking.service';
 import { EventsService, type Event, type EventStatus } from '../../services/events.service';
+import ReviewPrompt from '../../components/ReviewPrompt';
 
 export const EVENT_STATUS: Record<EventStatus, { label: string; color: string }> = {
   PLANNING: { label: 'Planning', color: '#fcd34d' },
@@ -89,6 +90,8 @@ export default function EPHome() {
           {user?.avatar_url ? <Image source={{ uri: user.avatar_url }} style={StyleSheet.absoluteFill} /> : <Text style={s.avatarText}>{(firstName[0] ?? 'P').toUpperCase()}</Text>}
         </Pressable>
       </View>
+
+      <ReviewPrompt />
 
       <View style={{ gap: 12 }}>
         <Text style={s.sectionTitle}>Analytics</Text>

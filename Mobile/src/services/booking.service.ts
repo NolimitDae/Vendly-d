@@ -10,6 +10,8 @@ export type BookingStatus =
   | 'REJECTED';
 
 export interface Booking {
+  /** an open request closes on its own at this time */
+  request_expires_at?: string | null;
   id: string;
   status: BookingStatus;
   scheduled_at?: string;

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { BookingService } from "@/service/booking/booking.service";
 import { ReviewService } from "@/service/review/review.service";
+import ReviewPrompt from "@/components/reviews/ReviewPrompt";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -120,6 +121,7 @@ export default function CustomerBookingsPageContent() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">My Bookings</h1>
+        <ReviewPrompt className="mb-6" />
 
         {/* Filters */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-1">

@@ -16,6 +16,7 @@ import {
   Camera,
   X,
   CalendarHeart,
+  Clock,
 } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import { toast } from "react-toastify";
@@ -23,6 +24,7 @@ import BookingContractSection from "@/components/contracts/BookingContractSectio
 import RentalReturnPanel, { type RentalBookingFields } from "@/components/rentals/RentalReturnPanel";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
+import { closesIn } from "@/lib/requests";
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
@@ -57,6 +59,8 @@ interface Booking {
   scheduled_at?: string;
   message?: string;
   created_at: string;
+  /** an open request closes on its own at this time */
+  request_expires_at?: string | null;
   listing?: { id: string; title: string; images: string[] };
   customer?: { id: string; name: string; avatar_url?: string; email: string };
   is_rental?: boolean;
@@ -207,6 +211,14 @@ export default function VendorBookingDetailPage() {
               <p className="text-gray-400 text-xs">Amount</p>
               <p className="font-medium text-gray-800 dark:text-gray-200">
                 ${Number(booking.amount).toFixed(2)}
+              </p>
+            </div>
+          )}
+          {booking.status === "PENDING" && closesIn(booking.request_expires_at) && (
+            <div className="col-span-2 flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-amber-800 dark:text-amber-300">
+              <Clock className="w-4 h-4 flex-shrink-0" aria-hidden />
+              <p>
+                {closesIn(booking.request_expires_at)}. Accept or decline before then, or the request closes automatically.
               </p>
             </div>
           )}

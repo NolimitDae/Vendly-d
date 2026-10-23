@@ -22,6 +22,7 @@ import { useFeature } from '../../hooks/useFeature';
 import { useAuth } from '../../context/AuthContext';
 import { useNearMe } from '../../hooks/useNearMe';
 import { api } from '../../services/api';
+import ReviewPrompt from '../../components/ReviewPrompt';
 
 type Nav = NativeStackNavigationProp<any>;
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -164,6 +165,9 @@ export default function CustomerHome() {
           <Ionicons name="options-outline" size={22} color="#fff" />
         </Pressable>
       </View>
+
+      {/* "How was it?" for a finished booking that hasn't been rated */}
+      <ReviewPrompt style={{ marginHorizontal: 20, marginTop: 16 }} />
 
       {/* Banner: brand promise rather than Figma's $20-off promo, since there are no promo codes yet */}
       <BrandGradient style={s.banner}>

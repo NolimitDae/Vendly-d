@@ -33,6 +33,8 @@ jest.mock('@/service/booking/booking.service', () => ({
 jest.mock('@/service/review/review.service', () => ({
   ReviewService: {
     create: jest.fn(),
+    pending: jest.fn().mockResolvedValue({ data: { data: [] } }),
+    dismiss: jest.fn(),
   },
 }));
 

@@ -14,6 +14,7 @@ import {
 import dayjs from "dayjs";
 import { EventsService } from "@/service/events/events.service";
 import { cn } from "@/lib/utils";
+import ReviewPrompt from "@/components/reviews/ReviewPrompt";
 
 interface EventSummary {
   id: string;
@@ -88,6 +89,8 @@ export default function EventPlannerDashboardPage() {
             New Event
           </Link>
         </div>
+
+        <ReviewPrompt className="mb-8" />
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">

@@ -16,6 +16,7 @@ import { PaymentsService } from '../../services/payments.service';
 import RentalReturnCard from '../../components/RentalReturnCard';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
+import { closesIn } from '../../utils/requests';
 
 interface Proof { id: string; photos: string[]; notes?: string; created_at: string }
 interface Deliverable { id: string; title: string; message?: string; files: string[]; links: string[]; created_at: string }
@@ -347,7 +348,10 @@ export default function VendorBookingDetail() {
         <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
           {st === 'PENDING' && (
             <>
-              <Text style={s.footerHint}>Accept & Sign is in the Contract card above</Text>
+              <Text style={s.footerHint}>
+                Accept & Sign is in the Contract card above
+                {closesIn(booking.request_expires_at) ? `. ${closesIn(booking.request_expires_at)}, then it closes on its own.` : ''}
+              </Text>
               <Pressable style={s.decline} onPress={decline} disabled={busy} accessibilityRole="button">
                 <Text style={s.declineText}>Decline</Text>
               </Pressable>
