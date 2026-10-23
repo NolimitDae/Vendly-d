@@ -10,6 +10,7 @@ import { openChatWith } from '../../navigation/openChat';
 import { MarketplaceService, vendorName, type Listing } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams, ListingSummary } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
+import { rangeText, unitSuffix, type AddOn } from '../../services/addons.service';
 
 export const toSummary = (l: Listing): ListingSummary => ({
   id: l.id,
@@ -52,7 +53,10 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
   const images = listing.images ?? [];
   const reviews = listing._count?.reviews ?? listing.reviews?.length ?? 0;
   const vendor = vendorName(listing.vendor);
-  const unit = listing.price_unit && listing.price_unit !== 'fixed' ? ` / ${listing.price_unit}` : '';
+  const unit = unitSuffix(listing.price_unit);
+  const range = rangeText(listing.price_unit, listing.min_quantity, listing.max_quantity);
+  const addOns = listing.add_ons ?? [];
+  const fees = listing.fees ?? [];
   const isMine = !!user?.id && listing.vendor?.id === user.id;
 
   return (
@@ -100,6 +104,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
               <Text style={s.price}>
                 ${Number(listing.price).toLocaleString()}
                 <Text style={s.unit}>{unit}</Text>
+                {!!range && <Text style={s.unit}>{` · ${range}`}</Text>}
               </Text>
             </View>
             <Pressable
@@ -120,6 +125,26 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
             <Card>
               <Text style={s.cardTitle}>Description</Text>
               <Text style={s.body}>{listing.description}</Text>
+            </Card>
+          )}
+
+          {addOns.length > 0 && (
+            <Card style={{ gap: 12 }}>
+              <View style={{ gap: 2 }}>
+                <Text style={s.cardTitle}>Add-ons</Text>
+                <Text style={s.muted}>Pick any of these when you book.</Text>
+              </View>
+              {addOns.map((a) => <AddOnLine key={a.id} item={a} />)}
+            </Card>
+          )}
+
+          {fees.length > 0 && (
+            <Card style={{ gap: 12 }}>
+              <View style={{ gap: 2 }}>
+                <Text style={s.cardTitle}>Possible fees after the service</Text>
+                <Text style={s.muted}>Each is only charged if it applies, and only after you approve it.</Text>
+              </View>
+              {fees.map((a) => <AddOnLine key={a.id} item={a} />)}
             </Card>
           )}
 
@@ -168,6 +193,18 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
   );
 }
 
+function AddOnLine({ item }: { item: AddOn }) {
+  return (
+    <View style={s.addOn} accessible accessibilityLabel={`${item.name}, ${item.price_text}${item.description ? `. ${item.description}` : ''}`}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.addOnName}>{item.name}</Text>
+        {!!item.description && <Text style={s.muted}>{item.description}</Text>}
+      </View>
+      <Text style={s.addOnPrice}>{item.price_text}{item.max_quantity ? `\nup to ${item.max_quantity}` : ''}</Text>
+    </View>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={s.rowBetween}>
@@ -194,6 +231,9 @@ const s = StyleSheet.create({
   muted: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium },
   body: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.regular },
   cardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  addOn: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: DARK.field },
+  addOnName: { color: '#fff', fontSize: 14, fontFamily: FONTS.semibold },
+  addOnPrice: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold, textAlign: 'right' },
   rowLabel: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.medium },
   rowValue: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.semibold, flexShrink: 1 },
   vendorRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, backgroundColor: DARK.card },

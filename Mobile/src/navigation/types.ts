@@ -47,6 +47,8 @@ export type BookingDraft = {
   venue: string;
   guests?: number;
   notes?: string;
+  /** Add-ons picked when booking; sent as-is to both the contract preview and the booking request. */
+  addOns?: { add_on_id: string; quantity?: number }[];
 };
 
 export type CustomerHomeStackParams = {
@@ -112,6 +114,8 @@ export type VendorDashboardStackParams = {
   RentalInventory: undefined;
   RentalItemForm: { itemId?: string } | undefined;
   RentalItemDetail: { itemId: string };
+  /** The vendor's add-on and fee library; opens on the given tab. */
+  AddOns: { tab?: 'ADD_ON' | 'FEE' } | undefined;
 };
 
 /** Kept for the listing form's route typing; the screens now live in the dashboard stack. */

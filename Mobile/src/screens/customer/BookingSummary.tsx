@@ -15,6 +15,7 @@ import { haptic } from '../../utils/haptics';
 import { BookingService } from '../../services/booking.service';
 import { ContractsService, apiError, deviceTimezone, type BookingFields, type SignaturePayload } from '../../services/contracts.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
+import type { AddOn } from '../../services/addons.service';
 
 interface Preview {
   title: string;
@@ -24,7 +25,24 @@ interface Preview {
   source_pdf_url: string | null;
   consent_text: string;
   missing_message: string | null;
-  pricing?: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean }[]; discount?: number; promo_code?: string | null; quote?: { id: string; title: string; amount: number } | null };
+  pricing?: Pricing;
+}
+
+interface Pricing {
+  /** vendor price including add-ons, after any promo */
+  price: number;
+  service_fee: number;
+  total: number;
+  plan?: PaymentPlan;
+  schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean }[];
+  discount?: number;
+  promo_code?: string | null;
+  quote?: { id: string; title: string; amount: number } | null;
+  /** the package line, e.g. "$45.00 per person × 120 guests" */
+  package?: { label: string; unit: string; quantity: number; unit_price: number; amount: number } | null;
+  add_ons?: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[];
+  /** fees the vendor may request after the service */
+  fees?: AddOn[];
 }
 
 const money = (n: number | undefined) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
@@ -42,6 +60,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
   const [addingCard, setAddingCard] = useState(false);
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<string | undefined>(undefined);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     PaymentsService.cards()
@@ -67,21 +86,28 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
     payment_method_id: card ?? undefined,
     promo_code: promo,
     quote_id: listing.quoteId,
+    // the same picks go to the preview and the booking request
+    add_ons: draft.addOns?.length ? draft.addOns : undefined,
   };
 
   // The contract preview is also where the real price breakdown comes from.
   const loadPreview = useCallback(async () => {
     setLoading(true);
+    setPreviewError(null);
     try {
       const res = await ContractsService.bookingPreview(fields);
       setPreview(res.data?.data ?? null);
     } catch (err) {
+      const status = (err as any)?.response?.status;
       if (promo) {
         // a bad code shouldn't block the booking: tell the customer and price it without the code
         Alert.alert('Promo code', apiError(err));
         setPromo(undefined);
       } else {
-        Alert.alert('Could not prepare the contract', apiError(err));
+        // e.g. too few guests or an add-on no longer offered: the server's words say what to change
+        setPreview(null);
+        if (status === 400) setPreviewError(apiError(err));
+        Alert.alert(status === 400 ? 'Check your booking' : 'Could not prepare the contract', apiError(err));
       }
     } finally {
       setLoading(false);
@@ -95,6 +121,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
 
   const review = () => {
     // no card yet: go straight to adding one (it's only charged once the vendor accepts)
+    if (previewError) return Alert.alert('Check your booking', previewError, [{ text: 'Go back and change it', onPress: () => navigation.goBack() }, { text: 'OK', style: 'cancel' }]);
     if (!card) return setAddingCard(true);
     if (!preview) return loadPreview();
     if (preview.missing_message) return Alert.alert('More details needed', preview.missing_message);
@@ -164,11 +191,22 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
           <Text style={s.h2}>Price Details</Text>
           {loading ? (
             <ActivityIndicator color={DARK.accent} />
+          ) : previewError ? (
+            <View style={s.errorBox} accessibilityRole="alert">
+              <Ionicons name="alert-circle-outline" size={18} color="#fca5a5" />
+              <Text style={s.errorText}>{previewError}</Text>
+            </View>
           ) : (
             <>
-              {!!price?.discount && <Row label={`Promo ${price.promo_code ?? ''}`} value={`-${money(price.discount)}`} />}
               {!!price?.quote && <Row icon="pricetags-outline" label="Quote" value={price.quote.title} />}
-              <Row label={price?.quote ? 'Quoted price' : 'Service price'} value={money(price?.price ?? listing.price)} />
+              {price?.package ? (
+                <Row label={price.quote ? 'Quoted price' : price.package.unit === 'fixed' ? 'Service price' : price.package.label} value={money(price.package.amount)} />
+              ) : (
+                !price?.add_ons?.length && <Row label={price?.quote ? 'Quoted price' : 'Service price'} value={money(price?.price ?? listing.price)} />
+              )}
+              {price?.add_ons?.map((a) => <Row key={a.add_on_id} label={a.label} value={money(a.amount)} />)}
+              {!!price?.discount && <Row label={`Promo ${price.promo_code ?? ''}`} value={`-${money(price.discount)}`} />}
+              {(!!price?.add_ons?.length || !!price?.discount) && <Row label="Subtotal" value={money(price?.price)} />}
               <Row label="Vendly Protection fee" value={money(price?.service_fee)} />
               <View style={s.line} />
               <Row label="Total" value={money(price?.total ?? listing.price)} bold />
@@ -181,6 +219,18 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
                 <View key={idx} style={s.row}>
                   <Text style={s.rowLabel}>{i.label} · {idx === 0 && !i.capture_manually ? 'when the vendor accepts' : format(parseISO(i.due_at), 'dd MMM yyyy')}</Text>
                   <Text style={s.rowValue}>{money(i.amount)}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {!!price?.fees?.length && (
+            <View style={{ gap: 6, marginTop: 4 }}>
+              <Text style={s.planText}>Possible fees after the service</Text>
+              <Text style={s.noteText}>Each is only charged if it applies, and only after you approve it.</Text>
+              {price.fees.map((f) => (
+                <View key={f.id} style={s.row}>
+                  <Text style={[s.rowLabel, { fontSize: 14, flexShrink: 1 }]}>{f.name}</Text>
+                  <Text style={[s.rowValue, { fontSize: 14 }]}>{f.price_text}</Text>
                 </View>
               ))}
             </View>
@@ -295,6 +345,8 @@ const s = StyleSheet.create({
   line: { height: 1, backgroundColor: DARK.field },
   note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 4 },
   noteText: { flex: 1, color: DARK.muted, fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
+  errorBox: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', padding: 12, borderRadius: 12, backgroundColor: DARK.field },
+  errorText: { flex: 1, color: '#fff', fontSize: 13, lineHeight: 19, fontFamily: FONTS.medium },
   planText: { color: DARK.accent, fontSize: 13, fontFamily: FONTS.medium },
   addCard: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   promoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 52, paddingHorizontal: 16, borderRadius: 26, backgroundColor: DARK.field },

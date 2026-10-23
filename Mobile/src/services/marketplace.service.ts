@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { AddOn } from './addons.service';
 
 export interface Listing {
   id: string;
@@ -6,6 +7,13 @@ export interface Listing {
   description: string;
   price: number;
   price_unit: string;
+  /** per person / hour / day packages: fewest and most guests, hours or days */
+  min_quantity?: number | null;
+  max_quantity?: number | null;
+  /** extras the customer can pick when booking, in the vendor's order */
+  add_ons?: AddOn[];
+  /** fees the vendor may request after the service (only with the customer's approval) */
+  fees?: AddOn[];
   images: string[];
   location?: string | null;
   /** set when searching near a point */

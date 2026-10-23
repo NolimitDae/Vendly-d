@@ -58,6 +58,8 @@ export default function VendorDashboard() {
   const actions: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }[] = [
     { icon: 'add-circle-outline', label: 'Add package', onPress: () => nav.navigate('ListingForm') },
     { icon: 'albums-outline', label: 'My packages', onPress: () => nav.navigate('VendorListings') },
+    { icon: 'pricetags-outline', label: 'Add-ons', onPress: () => nav.navigate('AddOns', { tab: 'ADD_ON' }) },
+    { icon: 'receipt-outline', label: 'Fees', onPress: () => nav.navigate('AddOns', { tab: 'FEE' }) },
     ...(rentalsOn ? [{ icon: 'cube-outline' as const, label: 'Rental stock', onPress: () => nav.navigate('RentalInventory') }] : []),
     { icon: 'calendar-outline', label: 'Bookings', onPress: () => nav.navigate('BookingsTab') },
     { icon: 'wallet-outline', label: 'Payouts', onPress: () => nav.navigate('ProfileTab', { screen: 'Payouts', initial: false }) },
@@ -106,7 +108,7 @@ export default function VendorDashboard() {
         <Text style={s.sectionTitle}>Quick actions</Text>
         <View style={s.grid}>
           {actions.map((a) => (
-            <Pressable key={a.label} style={s.action} onPress={a.onPress} accessibilityRole="button">
+            <Pressable key={a.label} style={s.action} onPress={a.onPress} accessibilityRole="button" accessibilityLabel={a.label}>
               <Ionicons name={a.icon} size={26} color={DARK.accent} />
               <Text style={s.actionText}>{a.label}</Text>
             </Pressable>

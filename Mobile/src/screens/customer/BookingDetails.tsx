@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import type { CustomerHomeStackParams } from '../../navigation/types';
+import { haptic } from '../../utils/haptics';
+import { MarketplaceService } from '../../services/marketplace.service';
+import { countedUnit, estimate, money, plural, rangeText, type AddOn } from '../../services/addons.service';
 
 // Half-hour start times from 7am to 9pm, shown as one-tap chips like Figma's time slots.
 const TIMES = Array.from({ length: 29 }, (_, i) => ({ hours: 7 + Math.floor(i / 2), minutes: (i % 2) * 30 }));
@@ -29,6 +32,48 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const [venue, setVenue] = useState('');
   const [guests, setGuests] = useState('');
   const [notes, setNotes] = useState('');
+  // the package's limits and add-ons come from the listing itself (the summary passed in doesn't carry them)
+  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[] } | null>(null);
+  const [picks, setPicks] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    MarketplaceService.getListing(listing.id)
+      .then((r) => {
+        const l = r.data?.data;
+        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [] });
+      })
+      .catch(() => {});
+  }, [listing.id]);
+
+  // a vendor quote replaces the package price, so its guest/hour limits don't apply
+  const unit = listing.quoteId ? null : countedUnit(pkg?.price_unit ?? listing.priceUnit);
+  const min = pkg?.min_quantity && pkg.min_quantity > 0 ? pkg.min_quantity : null;
+  const max = pkg?.max_quantity && pkg.max_quantity > 0 ? pkg.max_quantity : null;
+  const durations = unit === 'hour' && max ? DURATIONS.filter((d) => d.hours <= max) : DURATIONS;
+  const addOns = pkg?.add_ons ?? [];
+  const picked = addOns.filter((a) => picks[a.id] != null).map((a) => ({ addOn: a, quantity: picks[a.id] }));
+  const needsGuests = unit === 'person' || picked.some((p) => p.addOn.price_unit === 'PER_PERSON');
+  const guestCount = guests ? Number(guests) : undefined;
+
+  // keep the chosen duration valid for an hourly package's maximum
+  useEffect(() => {
+    if (durations.length && !durations.some((d) => d.label === duration.label)) setDuration(durations[durations.length - 1]);
+  }, [durations, duration.label]);
+
+  const togglePick = (a: AddOn) => {
+    haptic.select();
+    setPicks((prev) => {
+      const next = { ...prev };
+      if (next[a.id] != null) delete next[a.id];
+      else next[a.id] = 1;
+      return next;
+    });
+  };
+  const step = (a: AddOn, by: number) => {
+    haptic.select();
+    const cap = a.max_quantity ?? 1000;
+    setPicks((prev) => ({ ...prev, [a.id]: Math.min(cap, Math.max(1, (prev[a.id] ?? 1) + by)) }));
+  };
 
   const startAt = start ? set(day, { ...start, seconds: 0, milliseconds: 0 }) : null;
   const endAt = startAt ? addHours(startAt, duration.hours) : null;
@@ -36,6 +81,11 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const proceed = () => {
     if (!startAt || !endAt) return Alert.alert('Start time', 'Choose when the service should start.');
     if (!venue.trim()) return Alert.alert('Service address', 'Tell the vendor where the service happens.');
+    if (needsGuests && !(guestCount && guestCount >= 1)) {
+      return Alert.alert('Guest count', unit === 'person' ? 'This package is priced per person. Enter how many guests are coming.' : 'Some add-ons you picked are priced per person. Enter how many guests are coming.');
+    }
+    if (unit === 'person' && guestCount && min && guestCount < min) return Alert.alert('Guest count', `This package is for at least ${plural(min, 'guest')}.`);
+    if (unit === 'person' && guestCount && max && guestCount > max) return Alert.alert('Guest count', `This package is for up to ${plural(max, 'guest')}. Message the vendor about a bigger event.`);
     navigation.navigate('BookingSummary', {
       listing,
       draft: {
@@ -46,6 +96,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
         venue: venue.trim(),
         guests: guests ? Number(guests) : undefined,
         notes: notes.trim() || undefined,
+        addOns: picked.length ? picked.map(({ addOn, quantity }) => (addOn.price_unit === 'PER_ITEM' ? { add_on_id: addOn.id, quantity } : { add_on_id: addOn.id })) : undefined,
       },
     });
   };
@@ -83,7 +134,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Service Duration</Text>
             <View style={s.chips}>
-              {DURATIONS.map((d) => (
+              {durations.map((d) => (
                 <Chip key={d.label} label={d.label} active={d.label === duration.label} onPress={() => setDuration(d)} />
               ))}
             </View>
@@ -92,11 +143,76 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
                 {format(startAt!, 'h:mm a')} – {format(endAt, 'h:mm a')}
               </Text>
             )}
+            {unit === 'hour' && (
+              <Text style={s.hint}>Priced per hour{rangeText('hour', min, max) ? ` · ${rangeText('hour', min, max)}` : ''}{min ? '. Shorter bookings pay the minimum.' : ''}</Text>
+            )}
           </View>
 
           <Field label="Service Address" placeholder="Where should the vendor come?" value={venue} onChangeText={setVenue} autoComplete="street-address" />
 
-          <Field label="Guest Count" placeholder="e.g. 120 (optional)" value={guests} onChangeText={(t) => setGuests(t.replace(/\D/g, ''))} keyboardType="number-pad" />
+          <View style={{ gap: 8 }}>
+            <Field
+              label={needsGuests ? 'Guest Count (required)' : 'Guest Count'}
+              placeholder={unit === 'person' && rangeText('person', min, max) ? rangeText('person', min, max)! : needsGuests ? 'e.g. 120' : 'e.g. 120 (optional)'}
+              value={guests}
+              onChangeText={(t) => setGuests(t.replace(/\D/g, ''))}
+              keyboardType="number-pad"
+              accessibilityLabel={needsGuests ? 'Guest count, required' : 'Guest count, optional'}
+            />
+            {unit === 'person' && <Text style={s.hint}>Priced per person{rangeText('person', min, max) ? ` · ${rangeText('person', min, max)}` : ''}</Text>}
+          </View>
+
+          {addOns.length > 0 && (
+            <View style={{ gap: 8 }}>
+              <Text style={ui.label}>Add-ons</Text>
+              <Text style={s.hint}>Optional extras from {listing.vendorName}.</Text>
+              {addOns.map((a) => {
+                const on = picks[a.id] != null;
+                const q = picks[a.id] ?? 1;
+                return (
+                  <View key={a.id} style={[s.addOn, on && s.addOnOn]}>
+                    <Pressable
+                      style={s.addOnMain}
+                      onPress={() => togglePick(a)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}
+                      accessibilityLabel={`${a.name}, ${a.price_text}`}
+                    >
+                      <Ionicons name={on ? 'checkbox' : 'square-outline'} size={24} color={on ? DARK.accent : DARK.muted} />
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={s.addOnName}>{a.name}</Text>
+                        <Text style={s.addOnPrice}>{a.price_text}</Text>
+                        {!!a.description && <Text style={s.hint}>{a.description}</Text>}
+                      </View>
+                    </Pressable>
+                    {on && a.price_unit === 'PER_ITEM' && (
+                      <View style={s.stepper}>
+                        <Pressable onPress={() => step(a, -1)} disabled={q <= 1} style={[s.stepBtn, q <= 1 && { opacity: 0.4 }]} accessibilityRole="button" accessibilityLabel={`Fewer ${a.name}`}>
+                          <Ionicons name="remove" size={20} color="#fff" />
+                        </Pressable>
+                        <Text style={s.stepValue} accessibilityLabel={`${q} selected`}>{q}</Text>
+                        <Pressable
+                          onPress={() => step(a, 1)}
+                          disabled={!!a.max_quantity && q >= a.max_quantity}
+                          style={[s.stepBtn, !!a.max_quantity && q >= a.max_quantity && { opacity: 0.4 }]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`More ${a.name}`}
+                        >
+                          <Ionicons name="add" size={20} color="#fff" />
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {(unit || picked.length > 0) && startAt && (!needsGuests || !!guestCount) && (
+            <Text style={s.estimate}>
+              About {money(estimate({ price: listing.price, price_unit: pkg?.price_unit ?? listing.priceUnit, min_quantity: min, quote: !!listing.quoteId }, { guests: guestCount, hours: duration.hours }, picked))} before the Vendly Protection fee. You’ll see the exact price next.
+            </Text>
+          )}
 
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Notes for the vendor</Text>
@@ -138,4 +254,13 @@ const s = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   hint: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
   textarea: { height: undefined, paddingVertical: 12, alignItems: 'flex-start' },
+  addOn: { borderRadius: 16, backgroundColor: DARK.card, borderWidth: 1, borderColor: 'transparent' },
+  addOnOn: { borderColor: DARK.border },
+  addOnMain: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, minHeight: 44 },
+  addOnName: { color: '#fff', fontSize: 15, fontFamily: FONTS.semibold },
+  addOnPrice: { color: DARK.accent, fontSize: 13, fontFamily: FONTS.medium },
+  stepper: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 12, paddingHorizontal: 14, paddingBottom: 12 },
+  stepBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  stepValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold, minWidth: 28, textAlign: 'center' },
+  estimate: { color: '#fff', fontSize: 13, lineHeight: 19, fontFamily: FONTS.medium },
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,8 @@ import { api } from '../../services/api';
 import { BookingService, type Booking } from '../../services/booking.service';
 import type { CustomerBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from './Bookings';
+import CustomerExtras, { ExtrasBanner } from '../../components/extras/CustomerExtras';
+import { useBookingExtras } from '../../services/addons.service';
 
 interface Proof { id: string; photos: string[]; notes?: string; created_at: string }
 interface Deliverable { id: string; title: string; message?: string; files: string[]; links: string[]; created_at: string }
@@ -34,6 +36,13 @@ export default function BookingDetail() {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [reviewed, setReviewed] = useState(false);
+  const extras = useBookingExtras(bookingId);
+  const scrollRef = useRef<ScrollView>(null);
+  // where the add-ons section sits in the scroll content: its column's offset plus its own
+  const bodyY = useRef(0);
+  const extrasY = useRef(0);
+  // bumped when an add-on or fee is paid, so the payments card shows the new charge
+  const [paymentsKey, setPaymentsKey] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -135,12 +144,17 @@ export default function BookingDetail() {
   return (
     <View style={s.root}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); extras.reload(); }} tintColor={DARK.accent} />}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
       >
         <ScreenHeader title={headerTitle} onBack={() => nav.goBack()} />
 
-        <View style={{ paddingHorizontal: 20, gap: 20 }}>
+        <ExtrasBanner meta={extras.meta} vendor={vendor} onPress={() => scrollRef.current?.scrollTo({ y: Math.max(0, bodyY.current + extrasY.current - 12), animated: true })} />
+
+        <View style={{ paddingHorizontal: 20, gap: 20 }} onLayout={(e) => { bodyY.current = e.nativeEvent.layout.y; }}>
           <Card style={s.hero}>
             {hero.icon === 'spinner' ? (
               <ActivityIndicator size="large" color={DARK.accent} style={{ transform: [{ scale: 1.8 }], marginVertical: 24 }} />
@@ -206,9 +220,24 @@ export default function BookingDetail() {
             <Text style={s.paidNote}>{paid ? `Paid on ${format(parseISO(booking.paid_at!), 'dd MMM yyyy')} · held by Vendly until the service is done` : st === 'PENDING' ? 'Nothing is charged until the vendor accepts' : ''}</Text>
           </Card>
 
+          {extras.extras.length > 0 && (
+            <View onLayout={(e) => { extrasY.current = e.nativeEvent.layout.y; }}>
+              <CustomerExtras
+                bookingId={booking.id}
+                vendor={vendor}
+                extras={extras.extras}
+                reload={extras.reload}
+                onChanged={() => {
+                  load();
+                  setPaymentsKey((k) => k + 1);
+                }}
+              />
+            </View>
+          )}
+
           <RentalReturnCard booking={booking} role="CUSTOMER" onDone={load} />
 
-          <PaymentTimeline bookingId={booking.id} bookingStatus={booking.status} onChanged={load} />
+          <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} onChanged={() => { load(); extras.reload(); }} />
 
           <BookingContractCard bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
 

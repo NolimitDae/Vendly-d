@@ -14,6 +14,7 @@ import { openChatWith } from '../../navigation/openChat';
 import { BookingService, type Booking } from '../../services/booking.service';
 import { PaymentsService } from '../../services/payments.service';
 import RentalReturnCard from '../../components/RentalReturnCard';
+import VendorExtras from '../../components/extras/VendorExtras';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
 import { closesIn } from '../../utils/requests';
@@ -231,6 +232,8 @@ export default function VendorBookingDetail() {
           </Card>
 
           <RentalReturnCard booking={booking} role="VENDOR" onDone={load} />
+
+          <VendorExtras booking={booking} onChanged={load} />
 
           {!!booking.event_bookings?.length && ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'].includes(st) && (
             <Pressable style={s.eventCard} onPress={() => nav.navigate('EventShared', { eventId: booking.event_bookings![0].event.id })} accessibilityRole="button">

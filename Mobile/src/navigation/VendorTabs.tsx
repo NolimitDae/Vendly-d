@@ -10,6 +10,7 @@ import { BrandGradient } from '../components/brand';
 import VendorDashboard from '../screens/vendor/Dashboard';
 import VendorListings from '../screens/vendor/Listings';
 import ListingForm from '../screens/vendor/ListingForm';
+import AddOns from '../screens/vendor/AddOns';
 import Availability from '../screens/vendor/Availability';
 import RentalInventory from '../screens/vendor/RentalInventory';
 import RentalItemForm from '../screens/vendor/RentalItemForm';
@@ -57,6 +58,7 @@ function DashboardNavigator() {
       <DashStack.Screen name="RentalInventory" component={RentalInventory} />
       <DashStack.Screen name="RentalItemForm" component={RentalItemForm} />
       <DashStack.Screen name="RentalItemDetail" component={RentalItemDetail} />
+      <DashStack.Screen name="AddOns" component={AddOns} />
     </DashStack.Navigator>
   );
 }

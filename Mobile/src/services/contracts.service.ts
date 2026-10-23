@@ -30,6 +30,8 @@ export interface BookingFields {
   message?: string;
   event_id?: string;
   timezone?: string;
+  /** Add-ons picked when booking. Must be identical in the preview and the booking request (the contract covers them). */
+  add_ons?: { add_on_id: string; quantity?: number }[];
 }
 
 export interface AmendmentChanges {
