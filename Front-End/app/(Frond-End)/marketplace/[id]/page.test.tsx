@@ -364,4 +364,36 @@ describe('ListingDetailPage', () => {
       expect(screen.queryByText('Unavailable Dates')).not.toBeInTheDocument();
     });
   });
+
+  describe('per-unit price, add-ons and fees', () => {
+    it('shows the guest range, the add-ons and the possible fees', async () => {
+      setupNotLoggedIn();
+      setupListingMock({
+        price: 45,
+        price_unit: 'person',
+        min_quantity: 50,
+        max_quantity: 300,
+        add_ons: [{ id: 'ao-1', kind: 'ADD_ON', name: 'Bartender', description: 'Mixes drinks', price: 40, price_unit: 'PER_HOUR', price_text: '$40.00 per hour', max_quantity: null, in_library: true }],
+        fees: [{ id: 'fee-1', kind: 'FEE', name: 'Late return', description: 'Items back after the agreed time', price: 50, price_unit: 'PER_HOUR', price_text: '$50.00 per hour', max_quantity: null, in_library: true }],
+      });
+      render(<ListingDetailPage />);
+      expect(await screen.findByText('$45.00')).toBeInTheDocument();
+      expect(screen.getByText(/\/ person/)).toBeInTheDocument();
+      expect(screen.getByText('50–300 guests')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Add-ons' })).toBeInTheDocument();
+      expect(screen.getByText('Bartender')).toBeInTheDocument();
+      expect(screen.getByText('$40.00 per hour')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Possible fees after the service' })).toBeInTheDocument();
+      expect(screen.getByText(/only charged if they apply/i)).toBeInTheDocument();
+      expect(screen.getByText('Late return')).toBeInTheDocument();
+    });
+
+    it('hides the add-ons section when the package has none', async () => {
+      setupNotLoggedIn();
+      setupListingMock();
+      render(<ListingDetailPage />);
+      await screen.findByText('Professional Photography');
+      expect(screen.queryByText('Possible fees after the service')).not.toBeInTheDocument();
+    });
+  });
 });

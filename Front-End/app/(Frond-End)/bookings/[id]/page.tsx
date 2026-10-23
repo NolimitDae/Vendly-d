@@ -17,6 +17,7 @@ import { toast } from "react-toastify";
 import PaymentTimeline from "@/components/payments/PaymentTimeline";
 import BookingContractSection from "@/components/contracts/BookingContractSection";
 import RentalReturnPanel, { type RentalBookingFields } from "@/components/rentals/RentalReturnPanel";
+import BookingExtrasSection from "@/components/addons/BookingExtrasSection";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +73,8 @@ export default function CustomerBookingDetailPage() {
   const [proofs, setProofs] = useState<Proof[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [loading, setLoading] = useState(true);
+  // bumped when an add-on or fee is paid, so the payments list reloads
+  const [paymentsKey, setPaymentsKey] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -173,7 +176,9 @@ export default function CustomerBookingDetailPage() {
 
       <RentalReturnPanel booking={booking} role="CUSTOMER" />
 
-      <PaymentTimeline bookingId={booking.id} bookingStatus={booking.status} />
+      <BookingExtrasSection bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} onChanged={() => setPaymentsKey((k) => k + 1)} />
+
+      <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} />
 
       {!booking.payment_plan && ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
         <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">

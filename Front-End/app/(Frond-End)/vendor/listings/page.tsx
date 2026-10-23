@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { VendorListingService } from "@/service/vendor/vendor-listing.service";
 import Image from "next/image";
 import Link from "next/link";
-import { Plus, Edit2, Trash2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Eye, EyeOff, Loader2, PlusSquare, Receipt } from "lucide-react";
 import { toast } from "react-toastify";
 import CalendarSyncSection from "@/components/vendor/CalendarSyncSection";
+import { packagePriceText, perUnit } from "@/lib/addons";
 
 interface Listing {
   id: string;
@@ -100,6 +101,30 @@ export default function VendorListingsPage() {
           </Link>
         </div>
 
+        {/* Quick actions */}
+        <nav aria-label="Quick actions" className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          <Link
+            href="/vendor/add-ons"
+            className="flex items-center gap-3 p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-primary/40 transition"
+          >
+            <PlusSquare className="w-5 h-5 text-primary" aria-hidden />
+            <span>
+              <span className="block font-semibold text-gray-900 dark:text-white">Add-ons</span>
+              <span className="block text-xs text-gray-500 dark:text-gray-400">Make extras and add them to packages</span>
+            </span>
+          </Link>
+          <Link
+            href="/vendor/add-ons?tab=fees"
+            className="flex items-center gap-3 p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-primary/40 transition"
+          >
+            <Receipt className="w-5 h-5 text-primary" aria-hidden />
+            <span>
+              <span className="block font-semibold text-gray-900 dark:text-white">Fees</span>
+              <span className="block text-xs text-gray-500 dark:text-gray-400">Late return, cleaning and more, sent after the job</span>
+            </span>
+          </Link>
+        </nav>
+
         {loading ? (
           <div className="flex justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -130,7 +155,7 @@ export default function VendorListingsPage() {
                     <div>
                       <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-1">{listing.title}</h3>
                       <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        <span>${Number(listing.price).toFixed(2)} / {listing.price_unit}</span>
+                        <span>{packagePriceText(listing.price, listing.price_unit)}{!perUnit(listing.price_unit) && listing.price_unit && listing.price_unit !== "fixed" ? ` / ${listing.price_unit}` : ""}</span>
                         {listing.category && <span>• {listing.category.name}</span>}
                         {listing._count && (
                           <span>• {listing._count.bookings} bookings · {listing._count.reviews} reviews</span>

@@ -103,6 +103,12 @@ export const navItems: NavItem[] = [
   },
   {
     icon: PendingApprovalIcon,
+    label: "Fee reviews",
+    href: "/dashboard/fee-reviews",
+    type: "admin",
+  },
+  {
+    icon: PendingApprovalIcon,
     label: "ID checks",
     href: "/dashboard/identity",
     type: "admin",

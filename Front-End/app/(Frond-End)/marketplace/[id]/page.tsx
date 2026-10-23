@@ -27,6 +27,8 @@ import { AuthService } from "@/service/auth/auth.service";
 import { EventsService } from "@/service/events/events.service";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
+import { perUnit, quantityRangeText } from "@/lib/addons";
+import type { AddOn } from "@/service/add-ons/add-ons.service";
 
 interface Listing {
   id: string;
@@ -34,6 +36,11 @@ interface Listing {
   description: string;
   price: number;
   price_unit: string;
+  /** per person / hour / day packages: fewest and most guests, hours or days */
+  min_quantity?: number | null;
+  max_quantity?: number | null;
+  add_ons?: AddOn[];
+  fees?: AddOn[];
   images: string[];
   tags: string[];
   location?: string;
@@ -342,6 +349,48 @@ export default function ListingDetailPage() {
               )}
             </div>
 
+            {/* Add-ons and fees */}
+            {(!!listing.add_ons?.length || !!listing.fees?.length) && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 space-y-5">
+                {!!listing.add_ons?.length && (
+                  <section aria-labelledby="addons-heading">
+                    <h3 id="addons-heading" className="font-semibold text-gray-900 dark:text-white">Add-ons</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Pick any of these when you book.</p>
+                    <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {listing.add_ons.map((a) => (
+                        <li key={a.id} className="py-2.5 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{a.name}</p>
+                            {a.description && <p className="text-xs text-gray-500 dark:text-gray-400">{a.description}</p>}
+                          </div>
+                          <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{a.price_text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                {!!listing.fees?.length && (
+                  <section aria-labelledby="fees-heading">
+                    <h3 id="fees-heading" className="font-semibold text-gray-900 dark:text-white">Possible fees after the service</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      These are only charged if they apply. The vendor sends each one with a reason, and you approve it before you pay.
+                    </p>
+                    <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {listing.fees.map((f) => (
+                        <li key={f.id} className="py-2.5 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{f.name}</p>
+                            {f.description && <p className="text-xs text-gray-500 dark:text-gray-400">{f.description}</p>}
+                          </div>
+                          <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{f.price_text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            )}
+
             {/* Blocked dates */}
             {blockedDates.length > 0 && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl p-6">
@@ -372,8 +421,20 @@ export default function ListingDetailPage() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm sticky top-24">
               <div className="text-3xl font-bold text-gray-900 dark:text-white">
                 ${Number(listing.price).toFixed(2)}
-                <span className="text-base font-normal text-gray-400 ml-1">/ {listing.price_unit}</span>
+                {listing.price_unit && listing.price_unit !== "fixed" && (
+                  <span className="text-base font-normal text-gray-400 ml-1">/ {listing.price_unit}</span>
+                )}
               </div>
+              {quantityRangeText(listing.price_unit, listing.min_quantity, listing.max_quantity) && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {quantityRangeText(listing.price_unit, listing.min_quantity, listing.max_quantity)}
+                </p>
+              )}
+              {perUnit(listing.price_unit) && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {listing.price_unit === "person" ? "Priced per guest." : listing.price_unit === "hour" ? "Priced by the hour." : "Priced by the day."} You&apos;ll see the total before you sign.
+                </p>
+              )}
 
               <div className="mt-4 space-y-2 text-sm text-gray-500 dark:text-gray-400">
                 {listing._count?.bookings !== undefined && (

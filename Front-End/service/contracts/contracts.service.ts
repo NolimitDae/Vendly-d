@@ -30,6 +30,10 @@ export interface BookingFields {
   message?: string;
   event_id?: string;
   timezone?: string;
+  /** Add-ons picked for the booking; the preview and the request must send the same list */
+  add_ons?: { add_on_id: string; quantity?: number }[];
+  /** A vendor's quote from chat: its amount replaces the package price */
+  quote_id?: string;
 }
 
 export interface AmendmentChanges {

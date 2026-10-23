@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Calendar, MessageSquare, Loader2, CheckCircle, MapPin, Users, Clock } from "lucide-react";
+import { X, Calendar, MessageSquare, Loader2, CheckCircle, MapPin, Users, Clock, Minus, Plus } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import {
   ContractsService,
@@ -13,6 +13,8 @@ import SignContractPanel from "@/components/contracts/SignContractPanel";
 import SavedCards from "@/components/payments/SavedCards";
 import { PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
 import { toast } from "react-toastify";
+import type { AddOn } from "@/service/add-ons/add-ons.service";
+import { packagePriceText, perUnit, quantityRangeText } from "@/lib/addons";
 
 interface Props {
   listing: {
@@ -20,6 +22,11 @@ interface Props {
     title: string;
     price: number;
     price_unit: string;
+    /** per person / hour / day packages: fewest and most guests, hours or days */
+    min_quantity?: number | null;
+    max_quantity?: number | null;
+    add_ons?: AddOn[];
+    fees?: AddOn[];
     vendor?: { id: string; name: string };
   };
   /** Planner bookings: attach to this event (pre-fills venue and guest count). */
@@ -40,7 +47,18 @@ interface Preview {
   source_pdf_url: string | null;
   consent_text: string;
   missing_message: string | null;
-  pricing: { price: number; service_fee: number; total: number; plan?: PaymentPlan; schedule?: ScheduleLine[]; discount?: number; promo_code?: string | null };
+  pricing: {
+    price: number;
+    service_fee: number;
+    total: number;
+    plan?: PaymentPlan;
+    schedule?: ScheduleLine[];
+    discount?: number;
+    promo_code?: string | null;
+    quote?: { id: string; title: string; amount: number } | null;
+    package?: { label: string; unit: string; quantity: number; unit_price: number; amount: number } | null;
+    add_ons?: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[];
+  };
 }
 
 const inputCls =
@@ -67,6 +85,32 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState<string | null>(null);
   const [promo, setPromo] = useState("");
+  // add-on id -> quantity (1 unless priced "each")
+  const [picked, setPicked] = useState<Record<string, number>>({});
+  const addOns = listing.add_ons ?? [];
+  const fees = listing.fees ?? [];
+  // a quote is the agreed price, so the package isn't counted out by guests or hours
+  const unit = quote ? null : perUnit(listing.price_unit);
+  const minQ = listing.min_quantity && listing.min_quantity > 0 ? listing.min_quantity : null;
+  const maxQ = listing.max_quantity && listing.max_quantity > 0 ? listing.max_quantity : null;
+  const range = quote ? null : quantityRangeText(listing.price_unit, minQ, maxQ);
+
+  const togglePick = (a: AddOn) =>
+    setPicked((p) => {
+      const next = { ...p };
+      if (next[a.id]) delete next[a.id];
+      else next[a.id] = 1;
+      return next;
+    });
+  const setQty = (a: AddOn, q: number) => {
+    const cap = a.max_quantity && a.max_quantity > 0 ? a.max_quantity : 1000;
+    setPicked((p) => ({ ...p, [a.id]: Math.max(1, Math.min(cap, q)) }));
+  };
+  // listing order, so the preview and the request always send the same list
+  const pickedList = () =>
+    addOns
+      .filter((a) => picked[a.id])
+      .map((a) => (a.price_unit === "PER_ITEM" ? { add_on_id: a.id, quantity: picked[a.id] } : { add_on_id: a.id }));
 
   const fields = () => {
     const end = endTime ? toIso(date, endTime) : undefined;
@@ -87,13 +131,31 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
       payment_method_id: card ?? undefined,
       promo_code: promo.trim() || undefined,
       quote_id: quote?.id,
+      add_ons: pickedList().length ? pickedList() : undefined,
     };
+  };
+
+  /** What the package and the picked add-ons need before the contract can be priced. */
+  const missingForPrice = (): string | null => {
+    const g = guests ? Number(guests) : 0;
+    const chosen = addOns.filter((a) => picked[a.id]);
+    if (unit === "person" || chosen.some((a) => a.price_unit === "PER_PERSON")) {
+      if (!(g >= 1)) return unit === "person" ? "Enter how many guests are coming. This package is priced per person." : "Enter how many guests are coming.";
+    }
+    if (unit === "person" && minQ && g < minQ) return `This package is for at least ${minQ} guests.`;
+    if (unit === "person" && maxQ && g > maxQ) return `This package is for up to ${maxQ} guests. Message the vendor about a bigger event.`;
+    if (unit === "hour" || chosen.some((a) => a.price_unit === "PER_HOUR")) {
+      if (!startTime || !endTime) return unit === "hour" ? "Add a start and end time. This package is priced by the hour." : "Add a start and end time for the add-ons priced by the hour.";
+    }
+    return null;
   };
 
   const loadContract = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!listing.vendor) return;
     if (!date) return toast.error("Choose the event date");
+    const missing = missingForPrice();
+    if (missing) return toast.error(missing);
     if (!card) return toast.error("Add a card first. It is only charged once the vendor accepts.");
     setLoading(true);
     try {
@@ -162,14 +224,27 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
             <div className="flex justify-between text-sm">
               <span className="text-gray-600 dark:text-gray-300">{quote ? `Quote: ${quote.title}` : "Service price"}</span>
               <span className="font-bold text-gray-900 dark:text-white">
-                {quote ? `${quote.amount.toFixed(2)}` : <>${Number(listing.price).toFixed(2)} / {listing.price_unit}</>}
+                {quote ? `$${quote.amount.toFixed(2)}` : unit ? packagePriceText(listing.price, listing.price_unit) : <>${Number(listing.price).toFixed(2)}{listing.price_unit && listing.price_unit !== "fixed" ? ` / ${listing.price_unit}` : ""}</>}
               </span>
             </div>
+            {range && <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">{range}</p>}
             <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">A Vendly Protection fee is added. You&apos;ll see the total in the contract.</p>
           </div>
         )}
         {step === "contract" && preview?.pricing && (
           <div className="mb-4 p-4 bg-primary/5 rounded-xl text-sm space-y-1">
+            {preview.pricing.package && (
+              <div className="flex justify-between gap-3 text-gray-700 dark:text-gray-300">
+                <span>{preview.pricing.package.unit === "fixed" && !preview.pricing.quote ? "Package" : preview.pricing.package.label}</span>
+                <span>{money(preview.pricing.package.amount)}</span>
+              </div>
+            )}
+            {preview.pricing.add_ons?.map((a) => (
+              <div key={a.add_on_id} className="flex justify-between gap-3 text-gray-700 dark:text-gray-300">
+                <span>{a.label}</span>
+                <span>{money(a.amount)}</span>
+              </div>
+            ))}
             {!!preview.pricing.discount && <div className="flex justify-between text-green-600"><span>Promo {preview.pricing.promo_code}</span><span>-{money(preview.pricing.discount)}</span></div>}
             <div className="flex justify-between"><span>Vendor price</span><span>{money(preview.pricing.price)}</span></div>
             <div className="flex justify-between"><span>Vendly Protection fee</span><span>{money(preview.pricing.service_fee)}</span></div>
@@ -214,8 +289,20 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                 <label htmlFor="end-time" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   End time
                 </label>
-                <input id="end-time" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
+                <input
+                  id="end-time"
+                  type="time"
+                  value={endTime}
+                  aria-required={unit === "hour"}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className={inputCls}
+                />
               </div>
+              {unit === "hour" && (
+                <p className="col-span-2 text-xs text-gray-500 dark:text-gray-400 -mt-1">
+                  Priced by the hour, so add start and end times{range ? ` (${range})` : ""}.
+                </p>
+              )}
             </div>
             <div>
               <label htmlFor="venue" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
@@ -227,10 +314,62 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
             <div>
               <label htmlFor="guests" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 <Users className="w-4 h-4 inline mr-1" />
-                Guest count
+                Guest count{unit === "person" ? " (required)" : ""}
               </label>
-              <input id="guests" type="number" min={1} value={guests} onChange={(e) => setGuests(e.target.value)} className={inputCls} />
+              <input
+                id="guests"
+                type="number"
+                min={1}
+                aria-required={unit === "person"}
+                aria-describedby={unit === "person" && range ? "guests-hint" : undefined}
+                value={guests}
+                onChange={(e) => setGuests(e.target.value)}
+                className={inputCls}
+              />
+              {unit === "person" && range && <p id="guests-hint" className="text-xs text-gray-500 dark:text-gray-400 mt-1">This package is for {range}.</p>}
             </div>
+            {addOns.length > 0 && (
+              <fieldset className="space-y-2">
+                <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Add-ons (optional)</legend>
+                {addOns.map((a) => {
+                  const on = !!picked[a.id];
+                  const cap = a.max_quantity && a.max_quantity > 0 ? a.max_quantity : 1000;
+                  return (
+                    <div key={a.id} className={`p-3 rounded-xl border ${on ? "border-primary bg-primary/5" : "border-gray-200 dark:border-gray-700"}`}>
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" checked={on} onChange={() => togglePick(a)} className="w-4 h-4 mt-0.5 accent-primary" />
+                        <span className="flex-1 min-w-0">
+                          <span className="flex justify-between gap-2 text-sm">
+                            <span className="font-medium text-gray-900 dark:text-white">{a.name}</span>
+                            <span className="text-gray-600 dark:text-gray-300 whitespace-nowrap">{a.price_text}</span>
+                          </span>
+                          {a.description && <span className="block text-xs text-gray-500 dark:text-gray-400">{a.description}</span>}
+                        </span>
+                      </label>
+                      {on && a.price_unit === "PER_ITEM" && (
+                        <div className="flex items-center gap-3 mt-2 ml-7" role="group" aria-label={`How many ${a.name}`}>
+                          <button type="button" aria-label={`Fewer ${a.name}`} disabled={picked[a.id] <= 1} onClick={() => setQty(a, picked[a.id] - 1)} className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center disabled:opacity-40">
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <span aria-live="polite" className="min-w-6 text-center text-sm font-semibold text-gray-900 dark:text-white">{picked[a.id]}</span>
+                          <button type="button" aria-label={`More ${a.name}`} disabled={picked[a.id] >= cap} onClick={() => setQty(a, picked[a.id] + 1)} className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center disabled:opacity-40">
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          {a.max_quantity ? <span className="text-xs text-gray-500 dark:text-gray-400">up to {a.max_quantity}</span> : null}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </fieldset>
+            )}
+            {fees.length > 0 && (
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 text-xs text-gray-600 dark:text-gray-300">
+                <p className="font-medium text-gray-700 dark:text-gray-200">Possible fees after the service</p>
+                <p>{fees.map((f) => `${f.name} (${f.price_text})`).join(" · ")}</p>
+                <p className="mt-1 text-gray-500 dark:text-gray-400">Only charged if they apply, and only after you approve each one.</p>
+              </div>
+            )}
             <div>
               <label htmlFor="comments" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 <MessageSquare className="w-4 h-4 inline mr-1" />

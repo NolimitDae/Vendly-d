@@ -40,6 +40,14 @@ jest.mock('@/service/vendor/vendor-listing.service', () => ({
   },
 }));
 
+jest.mock('@/service/add-ons/add-ons.service', () => ({
+  AddOnsService: {
+    list: jest.fn().mockResolvedValue({ data: { data: [] } }),
+    create: jest.fn(),
+    setForListing: jest.fn(),
+  },
+}));
+
 jest.mock('@/service/geo/geo.service', () => ({
   GeoService: { suggest: jest.fn().mockResolvedValue({ data: { data: [] } }), reverse: jest.fn() },
 }));
@@ -52,6 +60,7 @@ import { SubscriptionService } from '@/service/subscription/subscription.service
 import { MarketplaceService } from '@/service/marketplace/marketplace.service';
 import { VendorListingService } from '@/service/vendor/vendor-listing.service';
 import { toast } from 'react-toastify';
+import { AddOnsService } from '@/service/add-ons/add-ons.service';
 
 const mockCategories = [{ id: 'cat-1', name: 'Photography', sub_categories: [] }];
 
@@ -317,5 +326,92 @@ describe('NewListingPage', () => {
       expect(screen.queryByText('Subscription Required')).not.toBeInTheDocument();
     });
     expect(SubscriptionService.getCurrentPlan).not.toHaveBeenCalled();
+  });
+
+  describe('per-unit pricing and add-ons', () => {
+    const library = [
+      { id: 'ao-1', kind: 'ADD_ON', name: 'Bartender', description: null, price: 40, price_unit: 'PER_HOUR', price_text: '$40.00 per hour', max_quantity: null, in_library: true },
+      { id: 'fee-1', kind: 'FEE', name: 'Cleaning', description: null, price: 100, price_unit: 'FIXED', price_text: '$100.00', max_quantity: null, in_library: true },
+    ];
+
+    async function fillBasics(user: ReturnType<typeof userEvent.setup>) {
+      await user.type(screen.getByPlaceholderText(/professional wedding photography/i), 'Taco Catering');
+      await user.type(screen.getByPlaceholderText(/describe your service/i), 'Tacos for your event');
+      await user.type(screen.getByPlaceholderText(/0\.00/), '45');
+    }
+
+    it('asks for minimum and maximum guests on a per-person package and sends them', async () => {
+      setupActivePlan();
+      (VendorListingService.create as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'new-1' } } });
+      const user = userEvent.setup();
+      render(<NewListingPage />);
+      await waitFor(() => screen.getByText('Create New Listing'));
+      await fillBasics(user);
+      expect(screen.queryByLabelText(/minimum guests/i)).not.toBeInTheDocument();
+      await user.selectOptions(screen.getByLabelText('Per'), 'person');
+      expect(screen.getByText('$45 per person')).toBeInTheDocument();
+      expect(screen.getByLabelText(/price per person/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/minimum guests/i), '50');
+      await user.type(screen.getByLabelText(/maximum guests/i), '300');
+      await user.click(screen.getByRole('button', { name: /save as draft/i }));
+
+      await waitFor(() => expect(VendorListingService.create).toHaveBeenCalled());
+      const fd = (VendorListingService.create as jest.Mock).mock.calls[0][0] as FormData;
+      expect(fd.get('price_unit')).toBe('person');
+      expect(fd.get('min_quantity')).toBe('50');
+      expect(fd.get('max_quantity')).toBe('300');
+      // nothing picked: the package's add-ons aren't touched
+      expect(AddOnsService.setForListing).not.toHaveBeenCalled();
+    });
+
+    it('stops a minimum above the maximum', async () => {
+      setupActivePlan();
+      const user = userEvent.setup();
+      render(<NewListingPage />);
+      await waitFor(() => screen.getByText('Create New Listing'));
+      await fillBasics(user);
+      await user.selectOptions(screen.getByLabelText('Per'), 'person');
+      await user.type(screen.getByLabelText(/minimum guests/i), '300');
+      await user.type(screen.getByLabelText(/maximum guests/i), '50');
+      await user.click(screen.getByRole('button', { name: /save as draft/i }));
+      expect(toast.error).toHaveBeenCalledWith("The minimum can't be more than the maximum.");
+      expect(VendorListingService.create).not.toHaveBeenCalled();
+    });
+
+    it('saves chosen library add-ons and a custom one after the package is created', async () => {
+      setupActivePlan();
+      (AddOnsService.list as jest.Mock).mockResolvedValue({ data: { data: library } });
+      (AddOnsService.create as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'ao-new' } } });
+      (AddOnsService.setForListing as jest.Mock).mockResolvedValue({ data: { success: true } });
+      (VendorListingService.create as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'new-1' } } });
+      const user = userEvent.setup();
+      render(<NewListingPage />);
+      await waitFor(() => screen.getByText('Create New Listing'));
+      await fillBasics(user);
+
+      await user.click(await screen.findByRole('checkbox', { name: /cleaning/i }));
+      await user.click(screen.getByRole('checkbox', { name: /bartender/i }));
+      await user.click(screen.getByRole('button', { name: /new add-on for this package/i }));
+      await user.type(screen.getByLabelText('Name'), 'Churro bar');
+      await user.type(screen.getByLabelText('Price'), '6');
+      await user.selectOptions(screen.getByLabelText(/how the add-on is priced/i), 'PER_PERSON');
+      await user.click(screen.getByRole('button', { name: 'Add add-on' }));
+      expect(screen.getByText('$6.00 per person')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /save as draft/i }));
+      await waitFor(() => expect(AddOnsService.setForListing).toHaveBeenCalled());
+      expect(AddOnsService.create).toHaveBeenCalledWith({
+        kind: 'ADD_ON',
+        name: 'Churro bar',
+        description: undefined,
+        price: 6,
+        price_unit: 'PER_PERSON',
+        in_library: false,
+        listing_ids: ['new-1'],
+      });
+      // order kept: picked first, then the new one
+      expect(AddOnsService.setForListing).toHaveBeenCalledWith('new-1', ['fee-1', 'ao-1', 'ao-new']);
+      expect(mockPush).toHaveBeenCalledWith('/vendor/listings');
+    });
   });
 });

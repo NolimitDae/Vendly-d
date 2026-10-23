@@ -98,6 +98,9 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
         <span>Paid {money(t.paid)} of {money(t.total)}</span>
         {t.outstanding > 0 && <span>{money(t.outstanding)} to go</span>}
       </div>
+      {!!t.given_back && t.given_back > 0 && (
+        <p className="text-xs text-green-600 flex gap-2"><RotateCcw className="w-4 h-4" />The vendor gave you {money(t.given_back)} back. It came off what you owe or was refunded to your card.</p>
+      )}
 
       {t.dispute && !t.dispute.resolved_at ? (
         <p className="text-xs text-amber-600 flex gap-2"><ShieldCheck className="w-4 h-4" />You reported a problem on {dayjs(t.dispute.opened_at).format("MMM D")}. The vendor isn&apos;t paid until Vendly resolves it.</p>

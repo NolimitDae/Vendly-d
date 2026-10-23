@@ -11,6 +11,9 @@ import Link from "next/link";
 import CategoryCombobox from "@/components/listing/CategoryCombobox";
 import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
 import type { PickerCategory } from "@/lib/categories";
+import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
+import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
+import { apiError } from "@/service/contracts/contracts.service";
 
 interface BlockedDate {
   id: string;
@@ -56,6 +59,8 @@ export default function EditListingPage() {
   });
   const [place, setPlace] = useState<PickedPlace>({ label: "" });
   const [radius, setRadius] = useState<number | null>(null);
+  const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
+  const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
 
   const fetchBlockedDates = async () => {
     try {
@@ -88,6 +93,7 @@ export default function EditListingPage() {
         });
         setPlace({ label: l.location ?? "", lat: l.lat ?? undefined, lng: l.lng ?? undefined });
         setRadius(l.service_radius_miles ?? null);
+        setLimits({ min: l.min_quantity ? String(l.min_quantity) : "", max: l.max_quantity ? String(l.max_quantity) : "" });
       } else {
         toast.error("Listing not found");
         router.push("/vendor/listings");
@@ -127,6 +133,11 @@ export default function EditListingPage() {
       toast.error("Title, description, and price are required");
       return;
     }
+    const limitProblem = limitsError(form.price_unit, limits);
+    if (limitProblem) {
+      toast.error(limitProblem);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -134,6 +145,7 @@ export default function EditListingPage() {
       // empty category values clear what was there
       Object.entries(form).forEach(([k, v]) => { if (v || k === "category_id" || k === "sub_category_id") fd.append(k, v); });
       appendPlace(fd, place, radius, true);
+      appendLimits(fd, form.price_unit, limits, true);
 
       // Only send images if the user picked new ones (replaces all old images on backend)
       if (newImages.length > 0) {
@@ -142,6 +154,12 @@ export default function EditListingPage() {
 
       const res = await VendorListingService.update(id, fd);
       if (res.data?.success) {
+        try {
+          await savePackageAddOns(id, addOns, true);
+        } catch (err) {
+          toast.error(`Listing saved, but the add-ons weren't: ${apiError(err, (err as Error)?.message || "please try again")}`);
+          return;
+        }
         toast.success("Listing updated!");
         router.push("/vendor/listings");
       } else {
@@ -330,12 +348,13 @@ export default function EditListingPage() {
             <h2 className="font-semibold text-gray-900 dark:text-white">Pricing</h2>
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  Price <span className="text-red-500">*</span>
+                <label htmlFor="listing-price" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  {form.price_unit === "person" ? "Price per person" : form.price_unit === "hour" ? "Price per hour" : form.price_unit === "day" ? "Price per day" : "Price"} <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                   <input
+                    id="listing-price"
                     type="number"
                     value={form.price}
                     onChange={(e) => set("price", e.target.value)}
@@ -347,8 +366,9 @@ export default function EditListingPage() {
                 </div>
               </div>
               <div className="w-40">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Per</label>
+                <label htmlFor="listing-price-unit" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Per</label>
                 <select
+                  id="listing-price-unit"
                   value={form.price_unit}
                   onChange={(e) => set("price_unit", e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none text-gray-900 dark:text-white"
@@ -361,6 +381,7 @@ export default function EditListingPage() {
                 </select>
               </div>
             </div>
+            <PackageQuantityFields unit={form.price_unit} price={form.price} limits={limits} onChange={setLimits} />
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">How customers pay</label>
               <select
@@ -376,6 +397,8 @@ export default function EditListingPage() {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Vendly holds the money until the job is done, then pays you.</p>
             </div>
           </div>
+
+          <PackageAddOns listingId={id} value={addOns} onChange={setAddOns} />
 
           {/* Category */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">

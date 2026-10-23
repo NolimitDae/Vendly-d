@@ -128,7 +128,7 @@ export default function DisputesPageContent() {
 }
 
 /** The booking's signed contract, loaded on demand (admin views are recorded in its audit log). */
-function DisputeContract({ bookingId }: { bookingId: string }) {
+export function DisputeContract({ bookingId }: { bookingId: string }) {
   const [contracts, setContracts] = useState<any[] | null>(null);
   const [shown, setShown] = useState(false);
   const [loading, setLoading] = useState(false);
