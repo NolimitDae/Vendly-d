@@ -15,6 +15,7 @@ const blankUser = {
   avatar: null,
   location: null,
   city: null,
+  address: null,
   billing_id: null,
   stripe_connect_id: null,
   onboarding_seen: {},
@@ -140,6 +141,13 @@ describe('OnboardingService.get', () => {
     expect((await service.get('u1')).data!.popup).toBe('intro');
   });
 
+  it('website customers (stored as CLIENT) get the customer checklist, and an address counts as their city', async () => {
+    const { service } = setup({ type: 'CLIENT', address: 'Austin, TX' });
+    const { data } = await service.get('u1');
+    expect(data!.role).toBe('CUSTOMER');
+    expect(stateOf(data).add_location).toBe('done');
+  });
+
   it('admins have no checklist', async () => {
     const { service } = setup({ type: 'ADMIN' });
     expect((await service.get('u1')).data).toBeNull();
@@ -159,6 +167,12 @@ describe('OnboardingService.markSeen', () => {
     const { service, prisma } = setup({ onboarding_seen: { CUSTOMER: { complete: 'first' } } });
     await service.markSeen('u1', 'complete');
     expect(prisma.user.update.mock.calls[0][0].data.onboarding_seen.CUSTOMER).toEqual({ complete: 'first', intro: 'first' });
+  });
+
+  it('CLIENT accounts record under CUSTOMER', async () => {
+    const { service, prisma } = setup({ type: 'CLIENT' });
+    await service.markSeen('u1', 'intro');
+    expect(Object.keys(prisma.user.update.mock.calls[0][0].data.onboarding_seen)).toEqual(['CUSTOMER']);
   });
 
   it('refuses unknown kinds', async () => {

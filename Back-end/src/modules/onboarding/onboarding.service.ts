@@ -53,7 +53,8 @@ const STEPS: Record<OnboardingRole, StepKey[]> = {
   EVENT_PLANNER: ['verify_email', 'planner_profile', 'business_license', 'verify_id', 'add_card', 'first_event'],
 };
 
-const isRole = (t: unknown): t is OnboardingRole => ROLES.includes(t as OnboardingRole);
+/** The checklist for an account type (CLIENT is the older name for CUSTOMER); null for admins. */
+const roleOf = (t: unknown): OnboardingRole | null => (t === 'CLIENT' ? 'CUSTOMER' : ROLES.includes(t as OnboardingRole) ? (t as OnboardingRole) : null);
 
 /**
  * The "get set up" checklist for the role in use. Each step is worked out from the account itself,
@@ -77,16 +78,17 @@ export class OnboardingService {
         avatar: true,
         location: true,
         city: true,
+        address: true,
         billing_id: true,
         stripe_connect_id: true,
         onboarding_seen: true,
       },
     });
     if (!user) throw new NotFoundException('User not found');
+    const role = roleOf(user.type);
     // admins have no checklist
-    if (!isRole(user.type)) return { success: true, data: null };
+    if (!role) return { success: true, data: null };
 
-    const role = user.type;
     const keys = STEPS[role];
     const states = await this.states(userId, role, keys, user);
     const steps: OnboardingStep[] = keys.map((key) => ({ key, ...COPY[key], ...states[key] }));
@@ -123,13 +125,14 @@ export class OnboardingService {
     if (kind !== 'intro' && kind !== 'complete') throw new BadRequestException('kind must be intro or complete');
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { type: true, onboarding_seen: true } });
     if (!user) throw new NotFoundException('User not found');
-    if (!isRole(user.type)) return { success: true };
+    const role = roleOf(user.type);
+    if (!role) return { success: true };
     const seen = { ...((user.onboarding_seen ?? {}) as Seen) };
-    const forRole = { ...(seen[user.type] ?? {}) };
+    const forRole = { ...(seen[role] ?? {}) };
     if (!forRole[kind]) forRole[kind] = new Date().toISOString();
     // a finished checklist never shows the intro afterwards
     if (kind === 'complete' && !forRole.intro) forRole.intro = forRole.complete;
-    seen[user.type] = forRole;
+    seen[role] = forRole;
     await this.prisma.user.update({ where: { id: userId }, data: { onboarding_seen: seen as Prisma.InputJsonValue } });
     return { success: true };
   }
@@ -144,6 +147,7 @@ export class OnboardingService {
       avatar: string | null;
       location: string | null;
       city: string | null;
+      address: string | null;
       billing_id: string | null;
       stripe_connect_id: string | null;
     },
@@ -176,7 +180,8 @@ export class OnboardingService {
       verify_email: done(!!user.email_verified_at),
       add_card: done(card),
       profile_photo: done(!!user.avatar),
-      add_location: done(!!(user.location?.trim() || user.city?.trim())),
+      // the app and website save the city to address; older accounts have location or city
+      add_location: done(!!(user.address?.trim() || user.location?.trim() || user.city?.trim())),
       first_package: done(published > 0),
       payouts: done(payouts),
       booking_contract: done(contract > 0),
