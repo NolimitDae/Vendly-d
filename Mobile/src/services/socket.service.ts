@@ -6,7 +6,9 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
 let socket: Socket | null = null;
 
 async function getSocket(): Promise<Socket> {
-  if (socket?.connected) return socket;
+  // `active` covers a socket that is still connecting or reconnecting; opening another one then
+  // would split listeners and joined rooms across two connections.
+  if (socket?.connected || socket?.active) return socket;
 
   const token = await AsyncStorage.getItem('token');
 
@@ -44,7 +46,7 @@ export const SocketService = {
     }
   },
 
-  /** Any other server event: conversationRead, pinned, quoteUpdated. */
+  /** Any other server event: conversationRead, userTyping, userStoppedTyping, pinned, quoteUpdated, connect. */
   async on(event: string, cb: (data: any) => void) {
     const s = await getSocket();
     s.on(event, cb);
@@ -54,14 +56,15 @@ export const SocketService = {
     socket?.off(event, cb);
   },
 
-  async emitTyping(to: string, data: any) {
+  /** Typing indicator: the server checks we're in the conversation and tells the others. */
+  async emitTyping(conversationId: string) {
     const s = await getSocket();
-    s.emit('typing', { to, data });
+    s.emit('typing', { conversation_id: conversationId });
   },
 
-  async emitStopTyping(to: string, data: any) {
+  async emitStopTyping(conversationId: string) {
     const s = await getSocket();
-    s.emit('stopTyping', { to, data });
+    s.emit('stopTyping', { conversation_id: conversationId });
   },
 
   disconnect() {

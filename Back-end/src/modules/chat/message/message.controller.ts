@@ -88,7 +88,16 @@ export class MessageController {
     return this.messageService.getUnreadMessage(user, conversationId);
   }
 
-  // read messages
+  // read messages (POST for new clients; GET kept for app builds already in the wild).
+  // Marks the other side's messages read and emits `conversationRead` so senders see "Seen".
+  @Post('read-message/:conversationId')
+  async markRead(
+    @Param('conversationId') conversationId: string,
+    @Req() req: any,
+  ) {
+    return this.messageService.readMessages(req.user.userId, conversationId);
+  }
+
   @Get('read-message/:conversationId')
   async readMessages(
     @Param('conversationId') conversationId: string,

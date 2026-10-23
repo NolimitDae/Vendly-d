@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format, isToday, parseISO } from 'date-fns';
 import { DARK, FONTS } from '../../constants/colors';
 import { ChatService, type Conversation } from '../../services/chat.service';
+import { SocketService } from '../../services/socket.service';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ChatList() {
@@ -28,6 +29,16 @@ export default function ChatList() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // I read a chat (here or on another device): its unread badge goes
+  useEffect(() => {
+    const onRead = (e: { conversation_id: string; user_id: string }) => {
+      if (e?.user_id !== user?.id) return;
+      setConversations((list) => list.map((c) => (c.id === e.conversation_id && c.unread ? { ...c, unread: 0 } : c)));
+    };
+    SocketService.on('conversationRead', onRead);
+    return () => SocketService.off('conversationRead', onRead);
+  }, [user?.id]);
 
   const other = (c: Conversation) => c.participants.find((p) => p.id !== user?.id) ?? c.participants[0];
   const when = (iso: string) => {

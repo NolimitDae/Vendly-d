@@ -13,6 +13,8 @@ import { errorMessage } from "@/service/rentals/rentals.service";
 import { useSocket } from "@/hooks/useSocket";
 import QuoteCard from "@/components/chat/QuoteCard";
 import SendQuoteModal from "@/components/chat/SendQuoteModal";
+import TypingIndicator from "@/components/chat/TypingIndicator";
+import { CHAT_READ_EVENT, createTypingEmitter, readReceipt, useTypingUsers } from "@/components/chat/presence";
 import { cn } from "@/lib/utils";
 
 function tokenClaims(token: string): { sub?: string; type?: string } {
@@ -43,11 +45,11 @@ export default function ConversationPage() {
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [busyQuote, setBusyQuote] = useState<string | null>(null);
-  const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // a message arrived while the tab was hidden; mark it read once the tab is visible again
+  const unseen = useRef(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -77,21 +79,45 @@ export default function ConversationPage() {
     }
   }, [conversationId, router]);
 
+  // Only counts as read while someone can see it: a background tab waits until it's visible.
+  const markRead = useCallback(() => {
+    if (document.visibilityState !== "visible") {
+      unseen.current = true;
+      return;
+    }
+    unseen.current = false;
+    ChatService.markAsRead(conversationId)
+      .then(() => window.dispatchEvent(new CustomEvent(CHAT_READ_EVENT, { detail: { conversation_id: conversationId } })))
+      .catch(() => {});
+  }, [conversationId]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && unseen.current) markRead();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [markRead]);
+
   useEffect(() => {
     if (!conversationId) return;
     setLoading(true);
-    load().then(() => ChatService.markAsRead(conversationId).catch(() => {}));
-  }, [conversationId, load]);
+    load().then(markRead);
+  }, [conversationId, load, markRead]);
 
   // Socket: join room, live messages, read receipts, pins, quote updates
   useEffect(() => {
     if (!socket || !conversationId) return;
-    socket.emit("joinroom", { room_id: conversationId });
+    // rooms don't survive a reconnect, so join again each time the socket (re)connects
+    const join = () => socket.emit("joinroom", { room_id: conversationId });
+    join();
 
     const handleMessage = (payload: { from: string; data: ChatMessage }) => {
       if (!payload?.data?.id) return;
+      // this socket may still be in rooms of chats opened earlier
+      if (payload.data.conversation_id && payload.data.conversation_id !== conversationId) return;
       setMessages((prev) => (prev.some((m) => m.id === payload.data.id) ? prev : [...prev, payload.data]));
-      if (payload.data.sender?.id !== me.id) ChatService.markAsRead(conversationId).catch(() => {});
+      if (payload.data.sender?.id !== me.id) markRead();
     };
     const handleRead = (e: { conversation_id: string; user_id: string; read_at: string }) => {
       if (e.conversation_id !== conversationId) return;
@@ -103,24 +129,28 @@ export default function ConversationPage() {
     const handleQuote = (e: { quote_id: string; status: Quote["status"] }) => {
       setMessages((prev) => prev.map((m) => (m.quote?.id === e.quote_id ? { ...m, quote: { ...m.quote, status: e.status } } : m)));
     };
-    const handleTyping = () => setIsTyping(true);
-    const handleStopTyping = () => setIsTyping(false);
 
+    socket.on("connect", join);
     socket.on("message", handleMessage);
     socket.on("conversationRead", handleRead);
     socket.on("pinned", handlePinned);
     socket.on("quoteUpdated", handleQuote);
-    socket.on("userTyping", handleTyping);
-    socket.on("userStoppedTyping", handleStopTyping);
     return () => {
+      socket.off("connect", join);
       socket.off("message", handleMessage);
       socket.off("conversationRead", handleRead);
       socket.off("pinned", handlePinned);
       socket.off("quoteUpdated", handleQuote);
-      socket.off("userTyping", handleTyping);
-      socket.off("userStoppedTyping", handleStopTyping);
     };
-  }, [socket, conversationId, me.id]);
+  }, [socket, conversationId, me.id, markRead]);
+
+  // Typing indicator: who else is typing, and throttled typing / stopTyping events from me
+  const typers = useTypingUsers(socket, conversationId, me.id);
+  const typing = useMemo(
+    () => (socket && conversationId ? createTypingEmitter((on) => socket.emit(on ? "typing" : "stopTyping", { conversation_id: conversationId })) : null),
+    [socket, conversationId],
+  );
+  useEffect(() => () => typing?.stop(), [typing]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -131,17 +161,11 @@ export default function ConversationPage() {
   const opponent = !isGroup ? others[0] : undefined;
   const title = isGroup ? info?.title ?? "Event chat" : opponent?.name ?? "Conversation";
 
-  const emitTyping = useCallback(() => {
-    if (!socket || !opponent) return;
-    socket.emit("typing", { to: opponent.id, data: {} });
-    if (typingTimeout.current) clearTimeout(typingTimeout.current);
-    typingTimeout.current = setTimeout(() => socket.emit("stopTyping", { to: opponent.id, data: {} }), 2000);
-  }, [socket, opponent]);
-
   const send = async () => {
     const content = text.trim();
     if (!content || sending) return;
     if (sharesContact(content) && !confirm(`${CONTACT_WARNING}\n\nSend anyway?`)) return;
+    typing?.stop();
     setText("");
     setSending(true);
     try {
@@ -185,14 +209,7 @@ export default function ConversationPage() {
   };
 
   // read receipt under my latest message
-  const receipt = useMemo(() => {
-    const mine = [...messages].reverse().find((m) => m.sender?.id === me.id && m.kind !== "system");
-    if (!mine) return null;
-    const readers = others.filter((p) => p.last_read_at && p.last_read_at >= mine.createdAt);
-    if (!readers.length) return { id: mine.id, label: "Sent" };
-    if (!isGroup) return { id: mine.id, label: "Seen" };
-    return { id: mine.id, label: readers.length === others.length ? "Seen by everyone" : `Seen by ${readers.map((r) => r.name.split(" ")[0]).join(", ")}` };
-  }, [messages, others, isGroup, me.id]);
+  const receipt = useMemo(() => readReceipt(messages, others, isGroup, me.id), [messages, others, isGroup, me.id]);
 
   const groups = useMemo(() => {
     const out: { date: string; messages: ChatMessage[] }[] = [];
@@ -219,9 +236,7 @@ export default function ConversationPage() {
         )}
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{title}</p>
-          {isTyping ? (
-            <p className="text-xs text-primary animate-pulse">typing...</p>
-          ) : isGroup ? (
+          {isGroup ? (
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{info?.participants.map((p) => (p.id === me.id ? "You" : p.name)).join(", ")}</p>
           ) : null}
         </div>
@@ -309,6 +324,7 @@ export default function ConversationPage() {
             </div>
           ))
         )}
+        {!loading && <TypingIndicator names={typers} />}
         <div ref={bottomRef} />
       </div>
 
@@ -328,7 +344,8 @@ export default function ConversationPage() {
             value={text}
             onChange={(e) => {
               setText(e.target.value);
-              emitTyping();
+              if (e.target.value.trim()) typing?.input();
+              else typing?.stop();
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

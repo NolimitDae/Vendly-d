@@ -45,7 +45,7 @@ const makeMessage = (overrides = {}) => ({
 });
 
 const mockPrisma = {
-  participant: { findFirst: jest.fn(), update: jest.fn() },
+  participant: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn() },
   conversation: {
     findUnique: jest.fn(),
     update: jest.fn(),
@@ -252,12 +252,50 @@ describe('MessageService', () => {
       expect(result.message).toBe('Messages marked as read successfully');
     });
 
+    it("marks only the other side's messages since the last read, up to now", async () => {
+      const lastReadAt = new Date('2026-10-01T10:00:00Z');
+      mockPrisma.participant.findFirst.mockResolvedValue({ id: 'part-1', userId: 'user-1', lastReadAt });
+      mockPrisma.participant.findMany.mockResolvedValue([{ userId: 'user-1' }, { userId: 'user-2' }]);
+      mockPrisma.$transaction.mockImplementation(async (fn) => fn(mockPrisma));
+
+      const result = await service.readMessages('user-1', 'conv-1');
+
+      const readAt = result.data.read_at;
+      expect(mockPrisma.message.updateMany).toHaveBeenCalledWith({
+        where: {
+          conversationId: 'conv-1',
+          senderId: { not: 'user-1' },
+          status: { not: 'READ' },
+          createdAt: { gt: lastReadAt, lte: readAt },
+        },
+        data: { status: 'READ' },
+      });
+      expect(mockPrisma.participant.update).toHaveBeenCalledWith({ where: { id: 'part-1' }, data: { lastReadAt: readAt } });
+    });
+
+    it('tells the conversation and every participant (so the sender sees "Seen")', async () => {
+      mockPrisma.participant.findFirst.mockResolvedValue({ id: 'part-2', userId: 'user-2', lastReadAt: null });
+      mockPrisma.participant.findMany.mockResolvedValue([{ userId: 'user-1' }, { userId: 'user-2' }]);
+      mockPrisma.$transaction.mockImplementation(async (fn) => fn(mockPrisma));
+
+      const result = await service.readMessages('user-2', 'conv-1');
+
+      expect(mockServer.to).toHaveBeenCalledWith(['conv-1', 'user_user-1', 'user_user-2']);
+      expect(mockServer.emit).toHaveBeenCalledWith('conversationRead', {
+        conversation_id: 'conv-1',
+        user_id: 'user-2',
+        read_at: result.data.read_at,
+      });
+    });
+
     it('should throw UnauthorizedException when user is not a participant', async () => {
       mockPrisma.participant.findFirst.mockResolvedValue(null);
 
       await expect(service.readMessages('outsider', 'conv-1')).rejects.toThrow(
         UnauthorizedException,
       );
+      expect(mockPrisma.message.updateMany).not.toHaveBeenCalled();
+      expect(mockServer.emit).not.toHaveBeenCalled();
     });
   });
 });

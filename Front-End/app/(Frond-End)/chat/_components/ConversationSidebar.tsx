@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { ChatService } from "@/service/chat/chat.service";
+import { CHAT_READ_EVENT } from "@/components/chat/presence";
 import { cn } from "@/lib/utils";
 
 dayjs.extend(relativeTime);
@@ -66,6 +67,16 @@ export default function ConversationSidebar() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, []);
+
+  // the open chat marked itself read: drop its unread badge
+  useEffect(() => {
+    const onRead = (e: Event) => {
+      const id = (e as CustomEvent<{ conversation_id: string }>).detail?.conversation_id;
+      setConversations((list) => list.map((c) => (c.conversation_id === id && c.unread ? { ...c, unread: 0 } : c)));
+    };
+    window.addEventListener(CHAT_READ_EVENT, onRead);
+    return () => window.removeEventListener(CHAT_READ_EVENT, onRead);
   }, []);
 
   const openNewChat = () => {

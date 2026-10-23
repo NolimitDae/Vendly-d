@@ -99,6 +99,7 @@ interface ApiConversation {
 
 interface ApiMessage {
   id: string;
+  conversation_id?: string;
   text?: string | null;
   kind?: string;
   createdAt: string;
@@ -121,7 +122,7 @@ interface ApiConversationInfo {
 export function toMessage(raw: ApiMessage, conversationId = ''): Message {
   return {
     id: raw.id,
-    conversation_id: conversationId,
+    conversation_id: raw.conversation_id ?? conversationId,
     sender_id: raw.sender?.id ?? '',
     content: raw.text ?? '',
     file: raw.attachments_url?.[0],
@@ -186,7 +187,8 @@ export const ChatService = {
     return { data: { success: !!res.data?.success, data: toMessage(res.data?.data as ApiMessage, data.conversation_id), warning: res.data?.warning as { text: string } | null } };
   },
 
-  markRead: (conversationId: string) => api.get(`/chat/message/read-message/${conversationId}`),
+  /** Marks the other side's messages read; they get a `conversationRead` socket event ("Seen"). */
+  markRead: (conversationId: string) => api.post(`/chat/message/read-message/${conversationId}`),
 
   createConversation: async (data: CreateConversationData) => {
     const res = await api.post('/chat/conversation/create-conversation', { participant_id: data.participant_id });

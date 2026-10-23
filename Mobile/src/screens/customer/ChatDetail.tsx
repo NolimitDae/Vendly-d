@@ -1,12 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { BrandGradient, ScreenHeader } from '../../components/brand';
 import QuoteCard from '../../components/chat/QuoteCard';
 import SendQuoteSheet from '../../components/chat/SendQuoteSheet';
+import { createTypingEmitter, typingLabel, useTypingUsers } from '../../components/chat/presence';
 import { DARK, FONTS } from '../../constants/colors';
 import { ChatService, CONTACT_WARNING, sharesContact, toMessage, type ConversationInfo, type Message, type Quote } from '../../services/chat.service';
 import { SocketService } from '../../services/socket.service';
@@ -42,15 +43,46 @@ export default function ChatDetail() {
     }
   }, [conversationId]);
 
+  // Only counts as read while someone can see it: in the background (or under another screen) it
+  // waits until the app is active and this chat is in front again.
+  const unseen = useRef(false);
   const markRead = useCallback(() => {
+    if (AppState.currentState !== 'active' || !navigation.isFocused()) {
+      unseen.current = true;
+      return;
+    }
+    unseen.current = false;
     ChatService.markRead(conversationId).catch(() => {});
-  }, [conversationId]);
+  }, [conversationId, navigation]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && unseen.current) markRead();
+    });
+    return () => sub.remove();
+  }, [markRead]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (unseen.current) markRead();
+    }, [markRead]),
+  );
+
+  // Typing indicator: who else is typing, and throttled typing / stopTyping events from me
+  const typers = useTypingUsers(conversationId, user?.id);
+  const typing = useMemo(
+    () => createTypingEmitter((on) => (on ? SocketService.emitTyping(conversationId) : SocketService.emitStopTyping(conversationId))),
+    [conversationId],
+  );
+  useEffect(() => () => typing.stop(), [typing]);
 
   useEffect(() => {
     fetchMessages().then(markRead);
     const onMessage = (data: any) => {
       // Socket events carry the raw API message ({ from, data }); translate like the REST responses.
       const raw = data?.data ?? data;
+      // the socket may still be in rooms of chats opened earlier
+      if (raw?.conversation_id && raw.conversation_id !== conversationId) return;
       const incoming = raw?.id ? toMessage(raw, conversationId) : null;
       if (!incoming) return;
       setMessages((prev) => (prev.some((m) => m.id === incoming.id) ? prev : [incoming, ...prev]));
@@ -67,14 +99,18 @@ export default function ChatDetail() {
     const onQuote = (e: { quote_id: string; status: Quote['status'] }) => {
       setMessages((prev) => prev.map((m) => (m.quote?.id === e.quote_id ? { ...m, quote: { ...m.quote, status: e.status } } : m)));
     };
+    // rooms don't survive a reconnect, so join again each time the socket (re)connects
+    const join = () => SocketService.joinRoom(conversationId);
     (async () => {
-      await SocketService.joinRoom(conversationId);
+      await join();
+      await SocketService.on('connect', join);
       await SocketService.onMessage(onMessage);
       await SocketService.on('conversationRead', onRead);
       await SocketService.on('pinned', onPinned);
       await SocketService.on('quoteUpdated', onQuote);
     })();
     return () => {
+      SocketService.off('connect', join);
       SocketService.offMessage(onMessage);
       SocketService.off('conversationRead', onRead);
       SocketService.off('pinned', onPinned);
@@ -83,6 +119,7 @@ export default function ChatDetail() {
   }, [conversationId, fetchMessages, markRead, user?.id]);
 
   const doSend = async (content: string) => {
+    typing.stop();
     setSending(true);
     setText('');
     try {
@@ -166,7 +203,8 @@ export default function ChatDetail() {
     const mine = messages.find((m) => m.sender_id === user?.id && m.kind !== 'system');
     if (!mine || !info) return null;
     const others = info.participants.filter((p) => p.id !== user?.id);
-    const readers = others.filter((p) => p.last_read_at && p.last_read_at >= mine.created_at);
+    const sentAt = new Date(mine.created_at).getTime();
+    const readers = others.filter((p) => p.last_read_at && new Date(p.last_read_at).getTime() >= sentAt);
     if (!readers.length) return { id: mine.id, label: 'Sent' };
     if (!info.is_group) return { id: mine.id, label: 'Seen' };
     return { id: mine.id, label: readers.length === others.length ? 'Seen by everyone' : `Seen by ${readers.map((r) => r.name.split(' ')[0]).join(', ')}` };
@@ -267,13 +305,28 @@ export default function ChatDetail() {
         </Pressable>
       )}
 
+      <Text style={s.typing} numberOfLines={1} accessibilityLiveRegion="polite">{typingLabel(typers) ?? ''}</Text>
+
       <View style={[s.inputBar, { marginBottom: insets.bottom + 12 }]}>
         {isVendor && (
           <Pressable onPress={() => setQuoting(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send a quote" style={s.plus}>
             <Ionicons name="pricetags-outline" size={20} color={DARK.accent} />
           </Pressable>
         )}
-        <TextInput style={s.input} value={text} onChangeText={setText} placeholder="Message" placeholderTextColor={DARK.muted} multiline onSubmitEditing={send} blurOnSubmit />
+        <TextInput
+          style={s.input}
+          value={text}
+          onChangeText={(v) => {
+            setText(v);
+            if (v.trim()) typing.input();
+            else typing.stop();
+          }}
+          placeholder="Message"
+          placeholderTextColor={DARK.muted}
+          multiline
+          onSubmitEditing={send}
+          blurOnSubmit
+        />
         <Pressable onPress={send} disabled={!text.trim() || sending} accessibilityRole="button" accessibilityLabel="Send">
           <BrandGradient style={[s.send, !text.trim() && { opacity: 0.5 }]}>
             {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="paper-plane-outline" size={22} color="#fff" />}
@@ -304,6 +357,7 @@ const s = StyleSheet.create({
   bubbleText: { color: '#fff', fontSize: 16, lineHeight: 24, fontFamily: FONTS.regular },
   attachment: { width: 200, height: 150, borderRadius: 16, backgroundColor: DARK.card },
   time: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular },
+  typing: { color: DARK.accent, fontSize: 12, lineHeight: 16, minHeight: 16, fontFamily: FONTS.medium, marginHorizontal: 28, marginBottom: 6 },
   warning: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 8, padding: 12, borderRadius: 14, backgroundColor: 'rgba(245,183,0,0.12)' },
   warningText: { flex: 1, color: '#F7E2A0', fontSize: 12, lineHeight: 17, fontFamily: FONTS.medium },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginHorizontal: 20, paddingLeft: 10, paddingRight: 6, paddingVertical: 6, borderRadius: 28, backgroundColor: DARK.field, borderWidth: 1, borderColor: DARK.border },
