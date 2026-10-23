@@ -51,9 +51,7 @@ describe('OnboardingChecklist', () => {
     expect(screen.getByText(/Verify your email/)).toHaveTextContent('(done)');
     expect(screen.getByText('In review')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Add a card/ })).toHaveAttribute('href', '/settings/payment-methods');
-    // no web page for the photo yet: points to the app instead of a dead link
-    expect(screen.queryByRole('link', { name: /profile photo/ })).not.toBeInTheDocument();
-    expect(screen.getByText('In the Vendly app')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /profile photo/ })).toHaveAttribute('href', '/settings#profile');
   });
 
   it('vendor steps link to their pages', () => {

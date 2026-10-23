@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import DeleteAccountCard from "@/components/contracts/DeleteAccountCard";
 import AccountRoles from "@/components/settings/AccountRoles";
+import ProfileSection from "@/components/settings/ProfileSection";
 
 type SetupStep = "idle" | "qr" | "verify";
 
@@ -122,8 +123,10 @@ export default function SettingsPage() {
             Account Settings
           </h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">
-            Manage your security preferences
+            Your profile, payment methods, roles and security
           </p>
+
+          <ProfileSection />
 
           {/* Payment methods */}
           <Link

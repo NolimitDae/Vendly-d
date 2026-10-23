@@ -16,6 +16,8 @@ const LINKS: Record<OnboardingRole, Record<string, string>> = {
   CUSTOMER: {
     verify_id: "/settings/verify-id",
     add_card: "/settings/payment-methods",
+    profile_photo: "/settings#profile",
+    add_location: "/settings#profile",
   },
   VENDOR: {
     business_license: "/vendor/profile",
