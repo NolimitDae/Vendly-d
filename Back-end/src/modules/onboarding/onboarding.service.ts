@@ -96,14 +96,14 @@ export class OnboardingService {
     const complete = completed === steps.length;
     const seen = ((user.onboarding_seen ?? {}) as Seen)[role] ?? {};
 
-    // Someone who finished before ever seeing the intro (accounts from before the checklist) gets neither popup.
-    const popup: 'intro' | 'complete' | null = complete
-      ? seen.intro && !seen.complete
-        ? 'complete'
-        : null
-      : seen.intro
-        ? null
-        : 'intro';
+    // Once finished, the checklist stays gone, even if a step later reads as not done
+    // (a paused package, a licence under review again, Stripe not answering).
+    const finished = !!seen.complete;
+    const popup: 'intro' | 'complete' | null = finished ? null : complete ? (seen.intro ? 'complete' : null) : seen.intro ? null : 'intro';
+    if (complete && !finished && !seen.intro) {
+      // already set up before the checklist existed: no popups, and remembered as finished
+      void this.markSeen(userId, 'complete').catch((err) => this.logger.warn(`Couldn't record onboarding: ${(err as Error).message}`));
+    }
 
     return {
       success: true,
@@ -115,7 +115,7 @@ export class OnboardingService {
         complete,
         popup,
         // stays in notifications until it's finished and the "all set" popup has been seen
-        visible: !complete || popup === 'complete',
+        visible: !finished && (!complete || popup === 'complete'),
       },
     };
   }

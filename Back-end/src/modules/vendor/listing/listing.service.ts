@@ -22,12 +22,14 @@ export class VendorListingService {
   ) {}
 
   /** A sub-category must belong to the package's category. */
+  /** Checks the sub-category belongs to the category; returns the category to save (the sub-category's own when none was chosen). */
   private async assertSubCategory(categoryId?: string | null, subCategoryId?: string | null) {
-    if (!subCategoryId) return;
+    if (!subCategoryId) return categoryId;
     const sub = await this.prisma.serviceSubCategory.findUnique({ where: { id: subCategoryId }, select: { category_id: true } });
     if (!sub || (categoryId && sub.category_id !== categoryId)) {
       throw new BadRequestException('That sub-category doesn’t belong to the chosen category.');
     }
+    return sub.category_id;
   }
 
   async create(
@@ -47,7 +49,7 @@ export class VendorListingService {
       }
     }
 
-    await this.assertSubCategory(dto.category_id, dto.sub_category_id);
+    const categoryId = await this.assertSubCategory(dto.category_id, dto.sub_category_id);
     const listing = await this.prisma.vendorListing.create({
       data: {
         vendor_id: vendorId,
@@ -62,7 +64,7 @@ export class VendorListingService {
         service_radius_miles: dto.service_radius_miles,
         availability: dto.availability,
         delivery_time: dto.delivery_time,
-        category_id: dto.category_id,
+        category_id: categoryId,
         sub_category_id: dto.sub_category_id,
         tags: dto.tags ?? [],
         images: imageNames,
@@ -167,7 +169,9 @@ export class VendorListingService {
     if (dto.category_id === '' && updateData.sub_category_id) {
       throw new BadRequestException('Choose a category for that sub-category.');
     }
-    await this.assertSubCategory(updateData.category_id !== undefined ? updateData.category_id : listing.category_id, updateData.sub_category_id);
+    const currentCategory = updateData.category_id !== undefined ? updateData.category_id : listing.category_id;
+    const categoryId = await this.assertSubCategory(currentCategory, updateData.sub_category_id);
+    if (categoryId !== currentCategory) updateData.category_id = categoryId;
     const moved = dto.location !== undefined && (dto.location || null) !== (listing.location || null);
     const pinned = dto.lat !== undefined && dto.lng !== undefined && !!(dto.location ?? listing.location);
     if (pinned) {

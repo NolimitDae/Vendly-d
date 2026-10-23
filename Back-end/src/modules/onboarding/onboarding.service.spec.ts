@@ -130,10 +130,19 @@ describe('OnboardingService.get', () => {
     expect((await after.service.get('u1')).data).toMatchObject({ complete: true, popup: null, visible: false });
   });
 
-  it('accounts that were already set up before the checklist see no popup', async () => {
+  it('accounts that were already set up before the checklist see no popup, and are remembered as finished', async () => {
     listCards.mockResolvedValue([{ id: 'pm_1' }]);
-    const { service } = setup({ email_verified_at: now, id_verified_at: now, billing_id: 'cus_1', avatar: 'a.jpg', location: 'Austin' });
+    const { service, prisma } = setup({ email_verified_at: now, id_verified_at: now, billing_id: 'cus_1', avatar: 'a.jpg', location: 'Austin' });
     expect((await service.get('u1')).data).toMatchObject({ complete: true, popup: null, visible: false });
+    await new Promise((r) => setImmediate(r));
+    expect(prisma.user.update.mock.calls[0][0].data.onboarding_seen.CUSTOMER).toEqual({ complete: expect.any(String), intro: expect.any(String) });
+  });
+
+  it('stays gone once finished, even if a step later reads as not done', async () => {
+    listCards.mockRejectedValue(new Error('Stripe timeout'));
+    const { service, prisma } = setup({ email_verified_at: now, id_verified_at: now, billing_id: 'cus_1', avatar: 'a.jpg', location: 'Austin', onboarding_seen: { CUSTOMER: { intro: 'x', complete: 'y' } } });
+    expect((await service.get('u1')).data).toMatchObject({ complete: false, popup: null, visible: false });
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it('each role has its own popups: adding a role shows its intro', async () => {

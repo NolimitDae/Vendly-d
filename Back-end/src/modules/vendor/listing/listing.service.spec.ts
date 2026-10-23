@@ -138,6 +138,18 @@ describe('VendorListingService', () => {
       expect(mockPrisma.vendorListing.update.mock.calls[0][0].data).toMatchObject({ category_id: 'cat-music', sub_category_id: null });
     });
 
+    it('a sub-category on its own brings its category with it', async () => {
+      mockPrisma.serviceSubCategory.findUnique.mockResolvedValue({ category_id: 'cat-music' });
+      mockPrisma.vendorListing.create.mockResolvedValue(mockListing);
+      await service.create('vendor-1', { title: 'DJ', description: 'x', price: 100, sub_category_id: 'sub-dj' });
+      expect(mockPrisma.vendorListing.create.mock.calls[0][0].data).toMatchObject({ category_id: 'cat-music', sub_category_id: 'sub-dj' });
+
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, category_id: null, sub_category_id: null });
+      mockPrisma.vendorListing.update.mockResolvedValue(mockListing);
+      await service.update('listing-1', 'vendor-1', { sub_category_id: 'sub-dj' });
+      expect(mockPrisma.vendorListing.update.mock.calls[0][0].data).toMatchObject({ category_id: 'cat-music', sub_category_id: 'sub-dj' });
+    });
+
     it('an empty category clears both', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, category_id: 'cat-music', sub_category_id: 'sub-dj' });
       mockPrisma.vendorListing.update.mockResolvedValue(mockListing);
