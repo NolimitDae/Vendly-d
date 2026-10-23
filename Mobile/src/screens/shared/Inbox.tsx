@@ -8,6 +8,8 @@ import { ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
+import { useOnboarding } from '../../context/OnboardingContext';
+import OnboardingChecklist from '../../components/OnboardingChecklist';
 
 interface Item {
   id: string;
@@ -31,6 +33,8 @@ export default function Inbox() {
   const { user } = useAuth();
   const [items, setItems] = useState<Item[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const onboarding = useOnboarding();
+  const checklist = onboarding.data?.visible ? onboarding.data : null;
 
   const load = useCallback(async () => {
     try {
@@ -43,7 +47,7 @@ export default function Inbox() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => { load(); void onboarding.refresh(); }, [load, onboarding.refresh]));
 
   const open = (n: Item) => {
     if (!n.read_at) {
@@ -89,13 +93,16 @@ export default function Inbox() {
           data={items}
           keyExtractor={(n) => n.id}
           contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: insets.bottom + 24 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); void onboarding.refresh(true); }} tintColor={DARK.accent} />}
+          ListHeaderComponent={checklist ? <OnboardingChecklist data={checklist} /> : null}
           ListEmptyComponent={
-            <View style={s.empty}>
-              <Ionicons name="notifications-outline" size={42} color={DARK.accent} />
-              <Text style={s.emptyTitle}>You’re all caught up</Text>
-              <Text style={s.muted}>Booking updates, payments, quotes and event changes show up here.</Text>
-            </View>
+            checklist ? null : (
+              <View style={s.empty}>
+                <Ionicons name="notifications-outline" size={42} color={DARK.accent} />
+                <Text style={s.emptyTitle}>You’re all caught up</Text>
+                <Text style={s.muted}>Booking updates, payments, quotes and event changes show up here.</Text>
+              </View>
+            )
           }
           renderItem={({ item: n }) => {
             const [title, ...rest] = (n.notification_event?.text ?? '').split(': ');

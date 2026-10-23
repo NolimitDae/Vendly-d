@@ -6,6 +6,8 @@ import { COLORS, DARK } from '../constants/colors';
 import { LogoMark } from '../components/brand';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { navigationRef } from './navigationRef';
+import { OnboardingProvider } from '../context/OnboardingContext';
+import OnboardingPopup from '../components/OnboardingPopup';
 
 import AuthScreens from './AuthScreens';
 import CustomerTabs from './CustomerTabs';
@@ -32,11 +34,11 @@ export default function RootNavigator() {
         <AuthScreens />
       ) : user.type === 'CUSTOMER' || user.type === 'CLIENT' ? (
         // The website registers customers as CLIENT; both are the same kind of account.
-        <CustomerTabs />
+        <WithOnboarding><CustomerTabs /></WithOnboarding>
       ) : user.type === 'VENDOR' ? (
-        <VendorTabs />
+        <WithOnboarding><VendorTabs /></WithOnboarding>
       ) : user.type === 'EVENT_PLANNER' ? (
-        <EventPlannerTabs />
+        <WithOnboarding><EventPlannerTabs /></WithOnboarding>
       ) : user.type === 'ADMIN' ? (
         <View style={s.adminMsg}>
           <Text style={s.adminTitle}>Admin Portal</Text>
@@ -49,6 +51,16 @@ export default function RootNavigator() {
         <EventPlannerTabs />
       )}
     </NavigationContainer>
+  );
+}
+
+/** The role's "get set up" checklist (shown in notifications) and its welcome / all-set popups. */
+function WithOnboarding({ children }: { children: React.ReactNode }) {
+  return (
+    <OnboardingProvider>
+      {children}
+      <OnboardingPopup />
+    </OnboardingProvider>
   );
 }
 
