@@ -204,6 +204,13 @@ describe('EventsService on a cancelled event (read-only)', () => {
     expect(prisma.budgetItem.delete).not.toHaveBeenCalled();
   });
 
+  it("can't link a booking to it", async () => {
+    const withBookings = { ...prisma, booking: { findFirst: jest.fn().mockResolvedValue({ id: 'bk1' }) }, eventBooking: { upsert: jest.fn() } };
+    const svc = new EventsService(withBookings as any);
+    await expect(svc.linkBooking('evt-1', 'bk1', 'planner-1')).rejects.toThrow(new BadRequestException(READ_ONLY));
+    expect(withBookings.eventBooking.upsert).not.toHaveBeenCalled();
+  });
+
   it('can still read the budget', async () => {
     prisma.budgetItem.findMany.mockResolvedValue([{ allocated: 100, spent: 40 }]);
     await expect(service.getBudget('evt-1', 'planner-1')).resolves.toMatchObject({ data: { total_allocated: 100, remaining: 60 } });

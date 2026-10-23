@@ -67,7 +67,26 @@ const mockRedis = {
   get: jest.fn(),
   set: jest.fn().mockResolvedValue('OK'),
   del: jest.fn().mockResolvedValue(1),
+  eval: jest.fn().mockResolvedValue(1),
 };
+
+/** A tiny Redis (get/set/del, and the rotate script's compare-and-swap) for the refresh tests. */
+function memoryRedis() {
+  const store = new Map<string, { value: string; ttl?: number }>();
+  mockRedis.get.mockImplementation(async (k: string) => store.get(k)?.value ?? null);
+  mockRedis.set.mockImplementation(async (k: string, value: string, _ex?: string, ttl?: number) => {
+    store.set(k, { value, ttl });
+    return 'OK';
+  });
+  mockRedis.del.mockImplementation(async (...keys: string[]) => keys.filter((k) => store.delete(k)).length);
+  mockRedis.eval.mockImplementation(async (_script: string, _n: number, current: string, previous: string, presented: string, next: string, ttl: number, grace: number) => {
+    if (store.get(current)?.value !== presented) return 0;
+    store.set(current, { value: next, ttl });
+    store.set(previous, { value: presented, ttl: grace });
+    return 1;
+  });
+  return store;
+}
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -157,17 +176,72 @@ describe('AuthService', () => {
 
   describe('refreshToken', () => {
     it('authenticates with the refresh token alone and rotates it', async () => {
+      const store = memoryRedis();
+      store.set('refresh_token:user-1', { value: 'valid-refresh' });
       mockJwt.verify.mockReturnValueOnce({ sub: 'user-1', typ: 'refresh' });
-      mockRedis.get.mockResolvedValue('valid-refresh');
+      mockJwt.sign.mockReturnValueOnce('new-access').mockReturnValueOnce('new-refresh');
       mockUserRepo.getUserDetails.mockResolvedValue(mockUser);
 
       const result: any = await service.refreshToken('valid-refresh');
       expect(result.success).toBe(true);
-      expect(result.authorization.access_token).toBe('mock-token');
-      expect(result.authorization.refresh_token).toBe('mock-token');
-      // new refresh token is stored (rotation) and marked as a refresh token
-      expect(mockRedis.set).toHaveBeenCalledWith('refresh_token:user-1', 'mock-token', 'EX', expect.any(Number));
+      expect(result.authorization.access_token).toBe('new-access');
+      expect(result.authorization.refresh_token).toBe('new-refresh');
+      // new refresh token is stored (rotation) and marked as a refresh token; the old one is kept 30 s
+      expect(store.get('refresh_token:user-1')).toEqual({ value: 'new-refresh', ttl: 604800 });
+      expect(store.get('refresh_token_prev:user-1')).toEqual({ value: 'valid-refresh', ttl: 30 });
       expect(mockJwt.sign).toHaveBeenCalledWith(expect.objectContaining({ typ: 'refresh' }), expect.anything());
+    });
+
+    describe('two tabs refreshing at once', () => {
+      beforeEach(() => {
+        mockUserRepo.getUserDetails.mockResolvedValue(mockUser);
+        mockJwt.verify.mockReturnValue({ sub: 'user-1', typ: 'refresh' });
+      });
+      afterEach(() => mockJwt.verify.mockReturnValue({ userId: 'user-1' }));
+
+      it('lets the token just replaced in, with the current refresh token and no second rotation', async () => {
+        const store = memoryRedis();
+        store.set('refresh_token:user-1', { value: 'r1' });
+        mockJwt.sign.mockReturnValueOnce('a2').mockReturnValueOnce('r2');
+        const first: any = await service.refreshToken('r1');
+        expect(first.authorization).toMatchObject({ access_token: 'a2', refresh_token: 'r2' });
+
+        // the other tab still had r1
+        mockJwt.sign.mockReturnValueOnce('a3').mockReturnValueOnce('never-used');
+        const second: any = await service.refreshToken('r1');
+        expect(second.success).toBe(true);
+        expect(second.authorization).toEqual({ type: 'bearer', access_token: 'a3', refresh_token: 'r2' });
+        expect(store.get('refresh_token:user-1')?.value).toBe('r2');
+        expect(mockRedis.eval).toHaveBeenCalledTimes(1);
+      });
+
+      it('handles both arriving before either rotated: one rotates, the other gets its token', async () => {
+        const store = memoryRedis();
+        store.set('refresh_token:user-1', { value: 'r1' });
+        let n = 0;
+        mockJwt.sign.mockImplementation(() => `t${++n}`);
+        const [a, b]: any[] = await Promise.all([service.refreshToken('r1'), service.refreshToken('r1')]);
+        mockJwt.sign.mockImplementation(() => 'mock-token');
+        expect(a.success && b.success).toBe(true);
+        const current = store.get('refresh_token:user-1')!.value;
+        expect(a.authorization.refresh_token).toBe(current);
+        expect(b.authorization.refresh_token).toBe(current);
+      });
+
+      it('refuses an older token, the replaced one after the grace window, and any after sign-out', async () => {
+        const store = memoryRedis();
+        store.set('refresh_token:user-1', { value: 'r3' });
+        store.set('refresh_token_prev:user-1', { value: 'r2' });
+        expect(((await service.refreshToken('r1')) as any).success).toBe(false);
+        store.delete('refresh_token_prev:user-1'); // 30 seconds later
+        expect(((await service.refreshToken('r2')) as any).success).toBe(false);
+
+        store.set('refresh_token_prev:user-1', { value: 'r2' });
+        await service.revokeRefreshToken('user-1');
+        expect(store.has('refresh_token:user-1') || store.has('refresh_token_prev:user-1')).toBe(false);
+        expect(((await service.refreshToken('r2')) as any).success).toBe(false);
+        expect(((await service.refreshToken('r3')) as any).success).toBe(false);
+      });
     });
 
     it('rejects a refresh token that does not match the stored one', async () => {

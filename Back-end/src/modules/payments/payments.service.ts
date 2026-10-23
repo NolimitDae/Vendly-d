@@ -2,7 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { withBookingLock, withJobLock } from 'src/common/helper/job-lock';
 import * as Sentry from '@sentry/nestjs';
-import { BookingExtraStatus, BookingStatus, InstallmentStatus, PaymentPlan } from 'prisma/generated/enums';
+import { AddOnKind, BookingExtraStatus, BookingStatus, InstallmentStatus, PaymentPlan } from 'prisma/generated/enums';
+import type { Prisma } from 'prisma/generated/client';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import appConfig from 'src/config/app.config';
 import { MailService } from 'src/mail/mail.service';
@@ -262,12 +263,24 @@ export class PaymentsService {
   /** PAID (or authorized, for pay-after-service) and the booking's paid_at on the first success. */
   private async markPaid(installmentId: string, paymentIntentId: string, authorizedOnly: boolean) {
     const marked = await this.prisma.$transaction(async (tx) => {
-      const inst = await tx.bookingInstallment.update({
-        where: { id: installmentId },
-        data: authorizedOnly
-          ? { status: InstallmentStatus.PROCESSING, payment_intent_id: paymentIntentId, last_error: null, next_attempt_at: null }
-          : { status: InstallmentStatus.PAID, payment_intent_id: paymentIntentId, paid_at: new Date(), last_error: null, next_attempt_at: null },
-      });
+      let inst: Awaited<ReturnType<typeof tx.bookingInstallment.findUniqueOrThrow>>;
+      if (authorizedOnly) {
+        inst = await tx.bookingInstallment.update({
+          where: { id: installmentId },
+          data: { status: InstallmentStatus.PROCESSING, payment_intent_id: paymentIntentId, last_error: null, next_attempt_at: null },
+        });
+      } else {
+        // the charge call and the webhook can both get here: only the call that actually moves it to
+        // PAID records the payment and applies what the payment unlocks
+        const moved = await tx.bookingInstallment.updateMany({
+          where: { id: installmentId, status: { not: InstallmentStatus.PAID } },
+          data: { status: InstallmentStatus.PAID, payment_intent_id: paymentIntentId, paid_at: new Date(), last_error: null, next_attempt_at: null },
+        });
+        inst = await tx.bookingInstallment.findUniqueOrThrow({ where: { id: installmentId } });
+        if (moved.count !== 1) return inst;
+        // a paid add-on that adds time moves the booking's end (only once it's paid)
+        if (inst.kind === 'extra') await this.extendForPaidExtra(tx, installmentId);
+      }
       await tx.paymentTransaction.create({
         data: {
           user_id: (await tx.booking.findUnique({ where: { id: inst.booking_id }, select: { customer_id: true } }))?.customer_id,
@@ -286,6 +299,17 @@ export class PaymentsService {
     // the customer's receipt; never lets an email problem touch the payment (the hourly sweep catches misses)
     if (!authorizedOnly) await this.sendReceipt(installmentId);
     return marked;
+  }
+
+  /** Moves the booking's end later for a paid add-on that adds time; a booking with only a start ends that long after it starts. */
+  private async extendForPaidExtra(tx: Prisma.TransactionClient, installmentId: string) {
+    const extra = await tx.bookingExtra.findFirst({ where: { installment_id: installmentId }, select: { kind: true, extends_minutes: true, booking_id: true } });
+    if (!extra || extra.kind !== AddOnKind.ADD_ON || !extra.extends_minutes) return;
+    const b = await tx.booking.findUnique({ where: { id: extra.booking_id }, select: { status: true, event_start_at: true, event_end_at: true } });
+    if (!b || b.status === BookingStatus.CANCELLED || b.status === BookingStatus.REJECTED) return;
+    const from = b.event_end_at ?? b.event_start_at;
+    if (!from) return;
+    await tx.booking.update({ where: { id: extra.booking_id }, data: { event_end_at: new Date(from.getTime() + extra.extends_minutes * 60_000) } });
   }
 
   private async recordFailure(
@@ -418,7 +442,7 @@ export class PaymentsService {
     const reason = d.reason.trim();
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { customer_id: true, status: true, released_at: true, dispute_opened_at: true, installments: { select: { status: true, amount: true, refunded_amount: true } } },
+      select: { customer_id: true, status: true, amount: true, service_fee: true, paid_at: true, released_at: true, dispute_opened_at: true, installments: { select: { status: true, amount: true, refunded_amount: true } } },
     });
     if (!b) throw new NotFoundException('Booking not found');
     if (b.customer_id !== customerId) throw new ForbiddenException('Access denied');
@@ -431,15 +455,17 @@ export class PaymentsService {
     if (d.requested_amount != null && d.outcome !== 'partial_refund') throw new BadRequestException('An amount is only needed for a partial refund.');
     if (d.outcome === 'partial_refund') {
       requested = round2(Number(d.requested_amount ?? 0));
-      const paid = round2((b.installments ?? []).filter(isPaid).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0));
+      const paid = await this.paidSoFar(bookingId, b);
       if (!(requested > 0)) throw new BadRequestException('Enter how much you’d like back.');
       if (requested > paid) throw new BadRequestException(`You can ask for up to $${paid.toFixed(2)}, what you’ve paid so far.`);
     }
     const exts = checkDisputePhotos(photos);
     const keys = photos.length ? await storeDisputePhotos(bookingId, photos, exts) : [];
+    let claimed = false;
     try {
-      await this.prisma.booking.update({
-        where: { id: bookingId },
+      // claimed only if no other report got there first (two submissions at once must not overwrite each other)
+      const res = await this.prisma.booking.updateMany({
+        where: { id: bookingId, dispute_opened_at: null },
         data: {
           dispute_opened_at: new Date(),
           dispute_reason: reason,
@@ -449,13 +475,36 @@ export class PaymentsService {
           dispute_photos: keys,
         },
       });
+      claimed = res.count === 1;
     } catch (err) {
       await removeDisputePhotos(keys);
       throw err;
     }
+    if (!claimed) {
+      await removeDisputePhotos(keys);
+      throw new BadRequestException('A problem was already reported on this booking.');
+    }
     track('dispute_opened', customerId, { booking_id: bookingId, category: d.category ?? null, outcome: d.outcome ?? null, photos: keys.length });
     await this.notifyDispute(bookingId, reason, { category: d.category, outcome: d.outcome, requested_amount: requested, photos: keys.length }).catch((e) => this.logger.error(`dispute notices ${bookingId}`, e));
     return { success: true };
+  }
+
+  /**
+   * What the customer has paid for a booking, less what was already refunded. Bookings paid through
+   * hosted Checkout before installments have none: their payment is the booking's amount plus fee,
+   * and their refunds are `booking_refund` transaction rows (order_id = the booking).
+   */
+  private async paidSoFar(
+    bookingId: string,
+    b: { amount?: unknown; service_fee?: unknown; paid_at?: Date | null; installments?: { status: InstallmentStatus; amount: unknown; refunded_amount: unknown }[] },
+  ): Promise<number> {
+    const installments = b.installments ?? [];
+    if (installments.length || !b.paid_at) {
+      return round2(installments.filter(isPaid).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0));
+    }
+    const legacy = await this.prisma.paymentTransaction.aggregate({ where: { type: 'booking_refund', status: 'refunded', order_id: bookingId }, _sum: { amount: true } });
+    const refunded = Number(legacy?._sum?.amount ?? 0);
+    return Math.max(0, round2(Number(b.amount ?? 0) + Number(b.service_fee ?? 0) - refunded));
   }
 
   /** The vendor and Vendly's admins hear about a new dispute straight away; the payout stays held meanwhile. */
@@ -967,12 +1016,15 @@ export class PaymentsService {
    * mail problem can't affect the payment it describes.
    */
   async sendReceipt(installmentId: string): Promise<boolean> {
+    const claimedAt = new Date();
+    let claimedIt = false;
     try {
       const claimed = await this.prisma.bookingInstallment.updateMany({
         where: { id: installmentId, status: InstallmentStatus.PAID, receipt_sent_at: null },
-        data: { receipt_sent_at: new Date() },
+        data: { receipt_sent_at: claimedAt },
       });
       if (claimed?.count !== 1) return false;
+      claimedIt = true;
       const i = await this.prisma.bookingInstallment.findUniqueOrThrow({
         where: { id: installmentId },
         select: {
@@ -986,7 +1038,7 @@ export class PaymentsService {
       const title = bookingTitle(b);
       const card = await this.cardLabel(b.payment_method_id);
       const amount = money(i.amount, i.currency);
-      await this.mail.sendBookingNotification({
+      const queued = await this.mail.sendBookingNotification({
         to: b.customer.email,
         recipientName: b.customer.name ?? '',
         subject: `Receipt — ${title}`,
@@ -1002,9 +1054,16 @@ export class PaymentsService {
         ],
         ctaUrl: `${appConfig().app.client_app_url}/bookings/${b.id}`,
       });
+      if (queued === false) throw new Error('The receipt email could not be queued');
       return true;
     } catch (e) {
       this.logger.error(`receipt for ${installmentId}`, e as Error);
+      // let go of the claim so the hourly sweep tries again
+      if (claimedIt) {
+        await this.prisma.bookingInstallment
+          .updateMany({ where: { id: installmentId, receipt_sent_at: claimedAt }, data: { receipt_sent_at: null } })
+          .catch((err) => this.logger.error(`receipt claim for ${installmentId}`, err as Error));
+      }
       return false;
     }
   }
@@ -1015,12 +1074,15 @@ export class PaymentsService {
    * The email links to the booking, where the PDF is downloaded (GET /bookings/:id/invoice). Never throws.
    */
   async sendFinalInvoice(bookingId: string): Promise<boolean> {
+    const claimedAt = new Date();
+    let claimedIt = false;
     try {
       const claimed = await this.prisma.booking.updateMany({
         where: { id: bookingId, invoice_sent_at: null, paid_at: { not: null }, OR: [{ released_at: { not: null } }, { status: BookingStatus.CANCELLED }] },
-        data: { invoice_sent_at: new Date() },
+        data: { invoice_sent_at: claimedAt },
       });
       if (claimed?.count !== 1) return false;
+      claimedIt = true;
       const b = await this.prisma.booking.findUniqueOrThrow({
         where: { id: bookingId },
         select: { id: true, status: true, currency: true, listing: { select: { title: true } }, rental_reservations: { select: { item: { select: { title: true } } } }, customer: { select: { email: true, name: true } }, installments: { select: { status: true, amount: true, refunded_amount: true } } },
@@ -1037,7 +1099,7 @@ export class PaymentsService {
             { label: 'Total paid', value: money(charged - refunded, b.currency) },
           ]
         : [];
-      await this.mail.sendBookingNotification({
+      const queued = await this.mail.sendBookingNotification({
         to: b.customer.email,
         recipientName: b.customer.name ?? '',
         subject: `Your invoice — ${title}`,
@@ -1048,9 +1110,16 @@ export class PaymentsService {
         ctaUrl: `${appConfig().app.client_app_url}/bookings/${b.id}`,
         ctaLabel: 'Download invoice',
       });
+      if (queued === false) throw new Error('The invoice email could not be queued');
       return true;
     } catch (e) {
       this.logger.error(`invoice email for ${bookingId}`, e as Error);
+      // let go of the claim so the hourly sweep tries again
+      if (claimedIt) {
+        await this.prisma.booking
+          .updateMany({ where: { id: bookingId, invoice_sent_at: claimedAt }, data: { invoice_sent_at: null } })
+          .catch((err) => this.logger.error(`invoice claim for ${bookingId}`, err as Error));
+      }
       return false;
     }
   }

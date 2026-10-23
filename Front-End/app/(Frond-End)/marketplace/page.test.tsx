@@ -359,4 +359,33 @@ describe('MarketplacePage', () => {
       expect(screen.queryByText('Find vendors near you')).not.toBeInTheDocument();
     });
   });
+
+  describe('filters from a link (event plan "Find vendors")', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it('applies category, date, place and event from the URL, and lets them be removed', async () => {
+      window.history.replaceState(null, '', '/marketplace?category_id=cat-2&date=2027-06-12&near_lat=29.76&near_lng=-95.37&radius_miles=50&near=Houston%2C%20TX&event=ev-1');
+      setupMocks();
+      const user = userEvent.setup();
+      render(<MarketplacePage />);
+
+      await waitFor(() =>
+        expect(MarketplaceService.searchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ category_id: 'cat-2', date: '2027-06-12', near_lat: 29.76, near_lng: -95.37, radius_miles: 50, sort: 'distance' }),
+        ),
+      );
+      // the first search already has the link's filters
+      expect((MarketplaceService.searchListings as jest.Mock).mock.calls[0][0]).toMatchObject({ category_id: 'cat-2', date: '2027-06-12' });
+      expect(await screen.findByText(/Free on Jun 12, 2027/)).toBeInTheDocument();
+      expect(screen.getByText('Near Houston, TX')).toBeInTheDocument();
+      // listing links carry the event so the booking is made for it
+      const card = (await screen.findByText('Service 0')).closest('a');
+      expect(card).toHaveAttribute('href', '/marketplace/listing-0?event=ev-1');
+
+      await user.click(screen.getByRole('button', { name: 'Remove date filter' }));
+      await waitFor(() => expect((MarketplaceService.searchListings as jest.Mock).mock.lastCall[0].date).toBeUndefined());
+      await user.click(screen.getByRole('button', { name: 'Remove location filter' }));
+      await waitFor(() => expect((MarketplaceService.searchListings as jest.Mock).mock.lastCall[0].near_lat).toBeUndefined());
+    });
+  });
 });

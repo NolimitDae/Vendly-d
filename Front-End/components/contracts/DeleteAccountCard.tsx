@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { clearSession } from "@/lib/session";
+import { signOut } from "@/lib/session";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { CookieHelper } from "@/helper/cookie.helper";
@@ -21,7 +21,7 @@ export default function DeleteAccountCard() {
         data: { confirm: "DELETE" },
       });
       // wait for the login cookies to be cleared before leaving the page
-      await clearSession();
+      await signOut();
       toast.success("Your account was deleted.");
       window.location.href = "/";
     } catch (err) {

@@ -51,7 +51,31 @@ export default function MarketplacePage() {
   const isLoggedIn = hasSession();
   const nearMe = useNearMe();
   const [radius, setRadius] = useState(25);
-  const near = nearMe.active ? nearMe.coords : null;
+  // filters a link can set (e.g. "Find vendors" on an event plan): a day, a place and the planner's event
+  const [linkRead, setLinkRead] = useState(false);
+  const [date, setDate] = useState("");
+  const [place, setPlace] = useState<{ lat: number; lng: number; label: string } | null>(null);
+  const [eventId, setEventId] = useState("");
+  const near = nearMe.active ? nearMe.coords : place;
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const cat = q.get("category_id");
+    if (cat) setCategoryId(cat);
+    const day = q.get("date");
+    if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) setDate(day);
+    const lat = Number(q.get("near_lat"));
+    const lng = Number(q.get("near_lng"));
+    if (q.get("near_lat") && q.get("near_lng") && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      setPlace({ lat, lng, label: q.get("near") || "the event" });
+      const r = Number(q.get("radius_miles"));
+      if (RADII.includes(r)) setRadius(r);
+      setSort("distance");
+    }
+    const ev = q.get("event");
+    if (ev) setEventId(ev);
+    setLinkRead(true);
+  }, []);
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -66,6 +90,7 @@ export default function MarketplacePage() {
         sort: !near && sort === "distance" ? "newest" : sort,
         page,
         limit: 12,
+        ...(date ? { date } : {}),
         ...(near ? { near_lat: near.lat, near_lng: near.lng, radius_miles: radius } : {}),
       });
       if (res.data?.success) {
@@ -77,7 +102,7 @@ export default function MarketplacePage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, categoryId, minPrice, maxPrice, sort, page, near?.lat, near?.lng, radius]);
+  }, [debouncedSearch, categoryId, minPrice, maxPrice, sort, page, near?.lat, near?.lng, radius, date]);
 
   const askForLocation = async () => {
     const ok = await nearMe.locate();
@@ -95,7 +120,7 @@ export default function MarketplacePage() {
     } else void askForLocation();
   };
 
-  useEffect(() => { fetchListings(); }, [fetchListings]);
+  useEffect(() => { if (linkRead) fetchListings(); }, [fetchListings, linkRead]);
 
   useEffect(() => {
     MarketplaceService.getCategories().then((res) => {
@@ -250,8 +275,36 @@ export default function MarketplacePage() {
           </div>
         )}
 
+        {/* Filters from a link: shown so they can be taken off */}
+        {(date || (place && !nearMe.active)) && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            {date && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100">
+                Free on {new Date(date + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                <button type="button" onClick={() => { setDate(""); setPage(1); }} aria-label="Remove date filter" className="p-0.5 text-gray-500 hover:text-gray-800 dark:hover:text-white">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+            {place && !nearMe.active && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-gray-800 dark:text-gray-100">
+                <MapPin className="w-3.5 h-3.5 text-primary" />
+                Near {place.label}
+                <button
+                  type="button"
+                  onClick={() => { setPlace(null); if (sort === "distance") setSort("newest"); setPage(1); }}
+                  aria-label="Remove location filter"
+                  className="p-0.5 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Ask for location: shown until the visitor turns it on or says not now */}
-        {!nearMe.active && nearMe.status !== "unsupported" && (nearMe.status === "denied" || !nearMe.dismissed) && (
+        {!near && !nearMe.active && nearMe.status !== "unsupported" && (nearMe.status === "denied" || !nearMe.dismissed) && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6 p-4 rounded-2xl border border-primary/20 bg-primary/5 dark:bg-primary/10">
             <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
               <MapPin className="w-5 h-5 text-primary" />
@@ -292,7 +345,7 @@ export default function MarketplacePage() {
 
         {/* Results count */}
         <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">
-          {meta.total} services found{near ? ` within ${radius} miles` : ""}
+          {meta.total} services found{near ? ` within ${radius} miles${!nearMe.active && place ? ` of ${place.label}` : ""}` : ""}
         </p>
 
         {/* Listings grid */}
@@ -323,6 +376,7 @@ export default function MarketplacePage() {
               <ListingCard
                 key={listing.id}
                 listing={listing}
+                eventId={eventId || undefined}
                 isSaved={savedIds.has(listing.id)}
                 onToggleSave={(e) => toggleSave(e, listing.id)}
               />
@@ -357,15 +411,18 @@ function ListingCard({
   listing,
   isSaved,
   onToggleSave,
+  eventId,
 }: {
   listing: Listing;
   isSaved: boolean;
   onToggleSave: (e: React.MouseEvent) => void;
+  /** a planner finding vendors for one of their events: the listing page books for it */
+  eventId?: string;
 }) {
   const coverImage = listing.images?.[0];
 
   return (
-    <Link href={`/marketplace/${listing.id}`}>
+    <Link href={`/marketplace/${listing.id}${eventId ? `?event=${encodeURIComponent(eventId)}` : ""}`}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition group cursor-pointer border border-gray-100 dark:border-gray-700">
         <div className="relative h-48 bg-gray-100 dark:bg-gray-700 overflow-hidden">
           {coverImage ? (

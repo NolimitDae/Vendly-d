@@ -160,8 +160,9 @@ export class InvoiceService {
   async resolveLink(token: string) {
     const claims = SignedUrl.verify(token);
     if (!claims || !claims.key.startsWith('invoice:')) throw new ForbiddenException('This download link has expired.');
-    const user = await this.prisma.user.findUnique({ where: { id: claims.uid }, select: { id: true, type: true } });
-    if (!user) throw new ForbiddenException('This download link has expired.');
+    const user = await this.prisma.user.findUnique({ where: { id: claims.uid }, select: { id: true, type: true, deleted_at: true, status: true } });
+    // the account must still be active (as for a login: not deleted, not suspended)
+    if (!user || user.deleted_at || user.status === 0) throw new ForbiddenException('This download link has expired.');
     return this.pdfFor(claims.key.slice('invoice:'.length), { id: user.id, type: user.type });
   }
 }

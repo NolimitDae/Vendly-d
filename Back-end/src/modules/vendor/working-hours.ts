@@ -1,15 +1,35 @@
 /**
  * A vendor's weekly working hours (VendorProfile.working_hours).
  *
- * Shape: `{ mon: { open: '09:00', close: '17:00' } | null, tue: …, …, sun: … }`: null is a closed day.
- * No hours at all (null / absent column) means "not set": any day, any time, as before.
- * Times are wall-clock times where the event is (the customer's time zone on the request).
+ * Shape: `{ mon: { open: '09:00', close: '17:00' } | null, tue: …, …, sun: …, timezone?: 'America/Chicago' }`:
+ * null is a closed day. No hours at all (null / absent column) means "not set": any day, any time.
+ * Times are wall-clock times in the vendor's time zone (`timezone`, an IANA name the vendor's device
+ * sends when the hours are saved). Hours saved before the zone was kept have none: they are read in
+ * the customer's time zone from the request.
  */
 
 export const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 export type DayKey = (typeof DAY_KEYS)[number];
 export type DayHours = { open: string; close: string } | null;
-export type WorkingHours = Record<DayKey, DayHours>;
+export type WorkingHours = Record<DayKey, DayHours> & { timezone?: string };
+
+export const UNKNOWN_TIMEZONE = 'Your time zone wasn’t recognised. Please refresh and try again.';
+
+/** An IANA zone name ("America/Chicago", "UTC") Intl knows, as Intl spells it; null otherwise (offsets like "+05:00" too). */
+export function validTimeZone(tz: unknown): string | null {
+  if (typeof tz !== 'string' || !tz || tz.length > 64 || !/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/.test(tz)) return null;
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: tz }).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+}
+
+/** "America/Chicago" -> "Chicago time", "UTC" -> "UTC". */
+export function zoneLabel(tz: string): string {
+  const city = tz.split('/').pop()!.replace(/_/g, ' ');
+  return /^(UTC|GMT|Etc\/)/i.test(tz) ? city : `${city} time`;
+}
 
 const DAY_NAMES: Record<DayKey, string> = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -45,7 +65,12 @@ export function parseWorkingHours(input: unknown): { hours: WorkingHours | null 
     if (value === null) return { hours: null };
   }
   if (typeof value !== 'object' || Array.isArray(value)) return { error: 'Working hours must be an object with a key for each day.' };
-  const obj = value as Record<string, unknown>;
+  const { timezone, ...obj } = value as Record<string, unknown>;
+  let zone: string | null = null;
+  if (timezone !== undefined && timezone !== null && timezone !== '') {
+    zone = validTimeZone(timezone);
+    if (!zone) return { error: 'Working hours: that time zone isn’t recognised. Use a name like America/Chicago.' };
+  }
   const extra = Object.keys(obj).filter((k) => !(DAY_KEYS as readonly string[]).includes(k));
   if (extra.length) return { error: `Unknown day in working hours: ${extra[0]}. Use mon, tue, wed, thu, fri, sat and sun.` };
   const hours = {} as WorkingHours;
@@ -65,6 +90,7 @@ export function parseWorkingHours(input: unknown): { hours: WorkingHours | null 
     if (minutesOf(open) >= minutesOf(close)) return { error: `${DAY_NAMES[day]}: the closing time must be after the opening time.` };
     hours[day] = { open, close };
   }
+  if (zone) hours.timezone = zone;
   return { hours };
 }
 
@@ -93,36 +119,54 @@ export function localWeekdayAndMinutes(at: Date, timeZone?: string | null): { da
   return { day, minutes: hour * 60 + Number(get('minute')), ymd: `${get('year')}-${get('month')}-${get('day')}` };
 }
 
-/** "The vendor works 9am–5pm on Saturdays." / "The vendor doesn't work on Sundays." */
-export function hoursMessage(hours: WorkingHours, day: DayKey): string {
+/**
+ * "The vendor works 9am–5pm on Saturdays." / "The vendor doesn't work on Sundays." With `zone` (the
+ * vendor's, when it isn't the customer's): "The vendor works 9am–5pm (Chicago time) on Saturdays."
+ */
+export function hoursMessage(hours: WorkingHours, day: DayKey, zone?: string | null): string {
   const h = hours[day];
+  const where = zone ? ` (${zoneLabel(zone)})` : '';
   return h
-    ? `The vendor works ${formatTime(h.open)}–${formatTime(h.close)} on ${DAY_NAMES[day]}s.`
-    : `The vendor doesn't work on ${DAY_NAMES[day]}s. Please pick another day.`;
+    ? `The vendor works ${formatTime(h.open)}–${formatTime(h.close)}${where} on ${DAY_NAMES[day]}s.`
+    : `The vendor doesn't work on ${DAY_NAMES[day]}s${where}. Please pick another day.`;
 }
 
 /**
  * Why a booking at these times falls outside the vendor's hours, or null when it fits (or no hours
  * are set). The start day must be open, and start and end must both fall within that day's hours
- * in the customer's time zone. With no end time only the start is checked.
+ * in `timeZone` (the vendor's; see hoursZone). With no end time only the start is checked.
+ * `zoneNote` names the zone in the message (when it isn't the customer's).
  */
-export function outsideWorkingHours(hours: WorkingHours | null, start: Date, end: Date | null | undefined, timeZone?: string | null): string | null {
+export function outsideWorkingHours(hours: WorkingHours | null, start: Date, end: Date | null | undefined, timeZone?: string | null, zoneNote?: string | null): string | null {
   if (!hours) return null;
   const s = localWeekdayAndMinutes(start, timeZone);
   const day = hours[s.day];
-  if (!day) return hoursMessage(hours, s.day);
+  if (!day) return hoursMessage(hours, s.day, zoneNote);
   const open = minutesOf(day.open);
   const close = minutesOf(day.close);
-  if (s.minutes < open || s.minutes >= close) return hoursMessage(hours, s.day);
+  if (s.minutes < open || s.minutes >= close) return hoursMessage(hours, s.day, zoneNote);
   if (end && end > start) {
     const e = localWeekdayAndMinutes(end, timeZone);
     const nextDay = new Date(Date.parse(`${s.ymd}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
     const sameDay = e.ymd === s.ymd && e.minutes <= close;
     // open until midnight: ending exactly at 00:00 the next day is fine
     const atMidnight = close === 24 * 60 && e.ymd === nextDay && e.minutes === 0;
-    if (!sameDay && !atMidnight) return hoursMessage(hours, s.day);
+    if (!sameDay && !atMidnight) return hoursMessage(hours, s.day, zoneNote);
   }
   return null;
+}
+
+/**
+ * The zone a booking is checked against the vendor's hours in: the vendor's own when their hours
+ * carry one, else the customer's from the request when it's a real IANA zone. `error` when neither
+ * (hours are never checked in a zone nobody chose). `differs`: the vendor's zone isn't the customer's.
+ */
+export function hoursZone(hours: WorkingHours, customerZone: unknown): { zone: string; differs: boolean } | { error: string } {
+  const customer = validTimeZone(customerZone);
+  const vendor = validTimeZone(hours.timezone);
+  if (vendor) return { zone: vendor, differs: vendor !== customer };
+  if (customer) return { zone: customer, differs: false };
+  return { error: UNKNOWN_TIMEZONE };
 }
 
 /** "Mon–Fri 9am–5pm · Sat 10am–2pm", for listing pages; null when no hours are set. */

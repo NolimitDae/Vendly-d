@@ -30,6 +30,7 @@ import { ChatService } from "@/service/chat/chat.service";
 import { MessagesSquare } from "lucide-react";
 import EventStatusActions, { EventCancelledBanner, EventCompletedBanner, canEditEvent, isEventReadOnly } from "@/components/events/EventStatusActions";
 import EditEventDialog from "@/components/events/EditEventDialog";
+import SuggestedServicesCard, { type AddedBudgetLine } from "@/components/planning/SuggestedServicesCard";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -256,6 +257,16 @@ export default function EventDetailPage() {
     }
   };
 
+  // "Add to budget" from the suggested services: the new line shows in the budget tab too
+  const handleSuggestedBudget = (line: AddedBudgetLine) => {
+    setEvent((prev) => (prev ? { ...prev, budget_items: [...prev.budget_items, line] } : prev));
+    setBudget((prev) =>
+      prev
+        ? { ...prev, items: [...prev.items, line], total_allocated: prev.total_allocated + line.allocated, remaining: prev.remaining - line.allocated }
+        : prev,
+    );
+  };
+
   // ── Loading ────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -437,6 +448,7 @@ export default function EventDetailPage() {
 
         {/* ── TAB: Overview ── */}
         {tab === "overview" && (
+          <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 space-y-5">
             <div>
               <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
@@ -492,6 +504,13 @@ export default function EventDetailPage() {
                 Add a vendor from marketplace
               </Link>
             </div>
+          </div>
+          <SuggestedServicesCard
+            eventId={event.id}
+            readOnly={readOnly}
+            refreshKey={`${toolsKey}-${event.updated_at ?? ""}-${event.bookings.length}`}
+            onBudgetAdded={handleSuggestedBudget}
+          />
           </div>
         )}
 

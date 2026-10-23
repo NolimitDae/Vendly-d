@@ -25,17 +25,24 @@ const position = (maximumAge: number) =>
     navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 10000, maximumAge }),
   );
 
-/** Package location with address suggestions as you type, "use my current location", and how far the vendor travels. */
+/**
+ * Package location with address suggestions as you type, "use my current location", and how far the vendor travels.
+ * Without `onRadiusChange` it is just the location (e.g. where an event is); `inputId` ties it to an outside <label>.
+ */
 export default function LocationField({
   value,
   onChange,
-  radius,
+  radius = null,
   onRadiusChange,
+  label = "Package location",
+  inputId,
 }: {
   value: PickedPlace;
   onChange: (p: PickedPlace) => void;
-  radius: number | null;
-  onRadiusChange: (miles: number) => void;
+  radius?: number | null;
+  onRadiusChange?: (miles: number) => void;
+  label?: string;
+  inputId?: string;
 }) {
   const id = useId();
   const [suggestions, setSuggestions] = useState<Place[]>([]);
@@ -144,7 +151,8 @@ export default function LocationField({
           aria-controls={`${id}-list`}
           aria-autocomplete="list"
           aria-activedescendant={showList && active >= 0 ? `${id}-opt-${active}` : undefined}
-          aria-label="Package location"
+          id={inputId}
+          aria-label={inputId ? undefined : label}
           value={value.label}
           onChange={(e) => type(e.target.value)}
           onFocus={() => setOpen(true)}
@@ -211,21 +219,22 @@ export default function LocationField({
         </p>
       )}
 
-      <fieldset>
-        <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">How far will you travel?</legend>
-        <div className="flex flex-wrap gap-2">
-          {SERVICE_RADII.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              aria-pressed={radius === r.value}
-              onClick={() => onRadiusChange(r.value)}
-              className={cn(
-                "px-3 py-1.5 rounded-full text-sm border transition",
-                radius === r.value
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-primary",
-              )}
+      {onRadiusChange && (
+        <fieldset>
+          <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">How far will you travel?</legend>
+          <div className="flex flex-wrap gap-2">
+            {SERVICE_RADII.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                aria-pressed={radius === r.value}
+                onClick={() => onRadiusChange(r.value)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-sm border transition",
+                  radius === r.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-primary",
+                )}
             >
               {r.label}
             </button>
@@ -239,6 +248,7 @@ export default function LocationField({
               : "Customers come to you at this location."}
         </p>
       </fieldset>
+      )}
     </div>
   );
 }

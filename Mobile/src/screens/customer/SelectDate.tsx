@@ -9,7 +9,7 @@ import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../compone
 import { DARK, FONTS } from '../../constants/colors';
 import { MarketplaceService } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
-import { isOpenDay, summariseHours, type WorkingHours } from '../../utils/workingHours';
+import { isOpenDay, summariseHours, withZone, type WorkingHours } from '../../utils/workingHours';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const BOOKED = '#F7B1B8';
@@ -51,7 +51,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
         <View style={s.note}>
           <Ionicons name="information-circle-outline" size={16} color={DARK.accent} />
           <Text style={s.noteText}>
-            {hours ? `${listing.vendorName} works ${summariseHours(hours)}. ` : ''}
+            {hours ? `${listing.vendorName} works ${withZone(summariseHours(hours) ?? '', hours)}. ` : ''}
             {blockedThisMonth > 0
               ? `${listing.vendorName} has ${blockedThisMonth} unavailable period${blockedThisMonth === 1 ? '' : 's'} this month`
               : hours

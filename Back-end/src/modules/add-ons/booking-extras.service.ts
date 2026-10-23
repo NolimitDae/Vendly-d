@@ -46,9 +46,9 @@ export function formatExtra(e: ExtraRow | Prisma.BookingExtraGetPayload<{}>) {
     fee_amount: Number(e.fee_amount),
     total: round2(Number(e.amount) + Number(e.fee_amount)),
     note: e.note,
-    // add-ons that add time move the booking's end when approved
+    // add-ons that add time move the booking's end once paid
     extends_minutes: e.extends_minutes ?? null,
-    extends_label: e.extends_minutes ? `Adds ${durationText(e.extends_minutes)}` : null,
+    extends_label: e.extends_minutes ? `Adds ${durationText(e.extends_minutes)}${inst?.status === InstallmentStatus.PAID || inst?.status === InstallmentStatus.REFUNDED ? '' : ' once paid'}` : null,
     status: e.status,
     created_at: e.created_at,
     responded_at: e.responded_at,
@@ -210,7 +210,7 @@ export class BookingExtrasService {
       bookingId,
       dto.kind === AddOnKind.FEE ? 'A fee needs your approval' : 'An add-on needs your approval',
       `Approve ${KIND_WORD[dto.kind]}: ${name} — ${title}`,
-      `${this.vendorName(b)} sent ${dto.kind === AddOnKind.FEE ? 'a fee' : 'an add-on'} for ${title}: ${what}, $${total.toFixed(2)}${extra.note ? ` (${extra.note})` : ''}.${extendsMinutes ? ` It adds ${durationText(extendsMinutes)} to the booking.` : ''} Nothing is charged until you approve it.`,
+      `${this.vendorName(b)} sent ${dto.kind === AddOnKind.FEE ? 'a fee' : 'an add-on'} for ${title}: ${what}, $${total.toFixed(2)}${extra.note ? ` (${extra.note})` : ''}.${extendsMinutes ? ` It adds ${durationText(extendsMinutes)} to the booking once paid.` : ''} Nothing is charged until you approve it.`,
       title,
       total,
     );
@@ -289,7 +289,7 @@ export class BookingExtrasService {
       e.booking_id,
       `${e.kind === AddOnKind.FEE ? 'Fee' : 'Add-on'} approved`,
       `${e.name} approved — ${title}`,
-      `${b.customer.name ?? 'The customer'} approved ${e.name} ($${Number(e.amount).toFixed(2)}) on ${title}.${e.kind === AddOnKind.ADD_ON && e.extends_minutes ? ` The booking now runs ${durationText(e.extends_minutes)} longer.` : ''}${result.paid ? ' It has been paid and will reach you with your payout.' : ' We’re taking the payment now.'}`,
+      `${b.customer.name ?? 'The customer'} approved ${e.name} ($${Number(e.amount).toFixed(2)}) on ${title}.${e.kind === AddOnKind.ADD_ON && e.extends_minutes ? (result.paid ? ` The booking now runs ${durationText(e.extends_minutes)} longer.` : ` The booking will run ${durationText(e.extends_minutes)} longer once it’s paid.`) : ''}${result.paid ? ' It has been paid and will reach you with your payout.' : ' We’re taking the payment now.'}`,
       title,
       Number(e.amount),
     );
@@ -337,9 +337,8 @@ export class BookingExtrasService {
           kind: 'extra',
         },
       });
+      // an add-on that adds time moves the booking's end once this installment is paid (PaymentsService.markPaid)
       await tx.bookingExtra.update({ where: { id: extraId }, data: { installment_id: row.id } });
-      // an approved add-on that adds time moves the booking's end (once: the claim above is atomic)
-      if (e.kind === AddOnKind.ADD_ON && e.extends_minutes) await this.extendBooking(tx, e.booking_id, e.extends_minutes);
       return row;
     });
     const charged = await this.payments.chargeInstallment(inst.id, paymentMethodId ?? undefined).catch((err) => {
@@ -352,14 +351,6 @@ export class BookingExtrasService {
     const fresh = await this.prisma.bookingExtra.findUniqueOrThrow({ where: { id: extraId }, include: { installment: true } });
     const ends = e.kind === AddOnKind.ADD_ON && e.extends_minutes ? await this.prisma.booking.findUnique({ where: { id: e.booking_id }, select: { event_end_at: true } }) : null;
     return { ...formatExtra(fresh), paid, ...(ends ? { event_end_at: ends.event_end_at } : {}) };
-  }
-
-  /** Moves the booking's end later; a booking with only a start ends that long after it starts. */
-  private async extendBooking(tx: Prisma.TransactionClient, bookingId: string, minutes: number) {
-    const b = await tx.booking.findUnique({ where: { id: bookingId }, select: { event_start_at: true, event_end_at: true } });
-    const from = b?.event_end_at ?? b?.event_start_at;
-    if (!from) return;
-    await tx.booking.update({ where: { id: bookingId }, data: { event_end_at: new Date(from.getTime() + minutes * 60_000) } });
   }
 
   // ─── Vendly review (admin) ─────────────────────────────────────────────────

@@ -21,6 +21,8 @@ import EventContractsCard from '../../components/contracts/EventContractsCard';
 import RunOfShow from '../../components/events/RunOfShow';
 import EventFiles from '../../components/events/EventFiles';
 import { BookingsBudget, ClientShareCard, TeamsCard } from '../../components/events/PlannerExtras';
+import { SuggestedServicesCard } from '../../components/planning/PlanItems';
+import { searchParamsFor } from '../../services/planning.service';
 import EventStatusActions, { EventCancelledBanner, EventCompletedBanner, isEventReadOnly } from '../../components/events/EventStatusActions';
 import { EventToolsService, type TimelineItem } from '../../services/eventTools.service';
 import { ChatService } from '../../services/chat.service';
@@ -171,6 +173,13 @@ export default function EventDetail() {
               onChanged={load}
             />
             <OverviewTab event={event} completedTasks={completedTasks} totalTasks={totalTasks} />
+            <SuggestedServicesCard
+              eventId={event.id}
+              readOnly={readOnly}
+              refreshKey={budgetKey}
+              onFind={(item) => navigation.navigate('SearchResults', searchParamsFor(item, event.id))}
+              onBudgetAdded={load}
+            />
             <ClientShareCard eventId={event.id} email={event.client_email} seesBudget={event.client_sees_budget} onChanged={load} />
           </View>
         )}

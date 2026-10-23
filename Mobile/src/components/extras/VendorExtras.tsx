@@ -322,7 +322,7 @@ function RequestSheet({ kind, booking, onClose, onSent }: { kind: AddOnKind | nu
               <Chip key={m ?? 'none'} label={m === null ? 'No extra time' : extendChip(m)} active={extendsMinutes === m} onPress={() => setExtendPick(m)} />
             ))}
           </View>
-          {!!extendsMinutes && <Text style={x.muted}>When the customer approves, the booking ends {durationText(extendsMinutes)} later.</Text>}
+          {!!extendsMinutes && <Text style={x.muted}>Once the customer approves and pays, the booking ends {durationText(extendsMinutes)} later.</Text>}
         </View>
       )}
       <View style={{ gap: 8 }}>

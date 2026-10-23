@@ -10,7 +10,7 @@ import type { CustomerHomeStackParams } from '../../navigation/types';
 import { haptic } from '../../utils/haptics';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { countedUnit, estimate, money, plural, rangeText, type AddOn } from '../../services/addons.service';
-import { dayKeyOf, hoursMessage, minutesOf, startTimesOn, type WorkingHours } from '../../utils/workingHours';
+import { dayKeyOf, fitsHours, hoursMessage, minutesOf, otherZone, startTimesOn, type WorkingHours } from '../../utils/workingHours';
 
 // Half-hour start times from 7am to 9pm, shown as one-tap chips like Figma's time slots.
 const TIMES = Array.from({ length: 29 }, (_, i) => ({ hours: 7 + Math.floor(i / 2), minutes: (i % 2) * 30 }));
@@ -59,7 +59,19 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
     ? (startTimesOn(hours, date, 30, shortest) ?? []).map((t) => ({ hours: Number(t.slice(0, 2)), minutes: Number(t.slice(3, 5)) }))
     : TIMES;
   const fromMinutes = start ? start.hours * 60 + start.minutes : dayHours ? minutesOf(dayHours.open) : 0;
-  const durations = dayHours ? packageDurations.filter((d) => fromMinutes + d.hours * 60 <= minutesOf(dayHours.close)) : packageDurations;
+  // hours in another zone than this phone's are checked moment by moment in the vendor's zone
+  const zoned = !!otherZone(hours);
+  const startText = start ? `${String(start.hours).padStart(2, '0')}:${String(start.minutes).padStart(2, '0')}` : null;
+  const durations =
+    hours && zoned
+      ? startText
+        ? packageDurations.filter((d) => fitsHours(hours, date, startText, d.hours * 60))
+        : packageDurations
+      : dayHours
+        ? packageDurations.filter((d) => fromMinutes + d.hours * 60 <= minutesOf(dayHours.close))
+        : packageDurations;
+  // nothing on this day fits the vendor's hours
+  const closedDay = hours ? (zoned ? times.length === 0 : dayHours === null) : false;
   const addOns = pkg?.add_ons ?? [];
   const picked = addOns.filter((a) => picks[a.id] != null).map((a) => ({ addOn: a, quantity: picks[a.id] }));
   const needsGuests = unit === 'person' || picked.some((p) => p.addOn.price_unit === 'PER_PERSON');
@@ -94,7 +106,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
 
   const proceed = () => {
     if (!startAt || !endAt) return Alert.alert('Start time', 'Choose when the service should start.');
-    if (hours && (dayHours === null || !durations.some((d) => d.label === duration.label))) {
+    if (hours && (closedDay || !durations.some((d) => d.label === duration.label))) {
       return Alert.alert('Working hours', `${hoursMessage(hours, dayKeyOf(date))} Pick a time and length inside those hours.`);
     }
     if (!venue.trim()) return Alert.alert('Service address', 'Tell the vendor where the service happens.');
@@ -132,8 +144,8 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
 
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Service Start Time</Text>
-            {hours && dayHours && <Text style={s.hint}>{hoursMessage(hours, dayKeyOf(date))}</Text>}
-            {hours && dayHours === null && <Text style={s.hint}>{hoursMessage(hours, dayKeyOf(date))} Go back and pick another day.</Text>}
+            {hours && !closedDay && dayHours && <Text style={s.hint}>{hoursMessage(hours, dayKeyOf(date))}</Text>}
+            {hours && closedDay && <Text style={s.hint}>{hoursMessage(hours, dayKeyOf(date))} Go back and pick another day.</Text>}
             <FlatList
               key={hours ? 'hours' : 'any'}
               horizontal

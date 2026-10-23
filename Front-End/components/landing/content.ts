@@ -17,6 +17,7 @@ export const hero = {
   headline: ["Book", "trusted", "vendors.", "Protected", "until", "the", "job", "is", "done."],
   sub: "Vendly brings beauty, decor, DJs, catering, rentals, photography and venues into one app. Every payment goes through Vendly, so you're protected until the work is done.",
   primary: "List your business free",
+  plan: "Planning an event? Get a free checklist and budget split",
   secondary: "App coming soon to iPhone and Android",
   chips: [
     { label: "Contract signed", tone: "green" },

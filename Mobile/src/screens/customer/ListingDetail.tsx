@@ -11,7 +11,7 @@ import { MarketplaceService, vendorName, type Listing } from '../../services/mar
 import type { CustomerHomeStackParams, ListingSummary } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { rangeText, unitSuffix, type AddOn } from '../../services/addons.service';
-import { summariseHours } from '../../utils/workingHours';
+import { summariseHours, withZone } from '../../utils/workingHours';
 
 export const toSummary = (l: Listing): ListingSummary => ({
   id: l.id,
@@ -155,7 +155,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
                 <Ionicons name="time-outline" size={18} color={DARK.accent} />
                 <Text style={s.cardTitle}>Working hours</Text>
               </View>
-              <Text style={s.muted}>Works {listing.working_hours_summary ?? summariseHours(listing.working_hours)}</Text>
+              <Text style={s.muted}>Works {withZone(listing.working_hours_summary ?? summariseHours(listing.working_hours) ?? '', listing.working_hours)}</Text>
             </Card>
           )}
 

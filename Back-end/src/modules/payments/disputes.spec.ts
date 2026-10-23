@@ -46,8 +46,10 @@ function setup(booking: Record<string, unknown> = {}) {
         })
         .mockResolvedValue({ vendor_id: 'v1', listing: { title: 'Wedding buffet' }, customer: { name: 'Amara' }, vendor: { email: 'v@x.com', name: 'Vee' } }),
       update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findMany: jest.fn(),
     },
+    paymentTransaction: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
   };
   const mail: any = { sendBookingNotification: jest.fn().mockResolvedValue(undefined) };
@@ -65,7 +67,7 @@ describe('Disputes with details and photos', () => {
     const { service, prisma, push, mail } = setup();
     await service.openDispute('b1', 'c1', { reason: '  The cake arrived smashed and late  ', category: 'damage', outcome: 'partial_refund', requested_amount: 120 }, [photo(JPEG), photo(PNG)]);
 
-    const data = prisma.booking.update.mock.calls[0][0].data;
+    const data = prisma.booking.updateMany.mock.calls[0][0].data;
     expect(data).toMatchObject({ dispute_reason: 'The cake arrived smashed and late', dispute_category: 'damage', dispute_outcome: 'partial_refund', dispute_requested_amount: 120 });
     expect(data.dispute_photos).toHaveLength(2);
     for (const key of data.dispute_photos) {
@@ -83,8 +85,8 @@ describe('Disputes with details and photos', () => {
   it('still takes the reason alone (older apps)', async () => {
     const { service, prisma } = setup();
     await service.openDispute('b1', 'c1', 'The DJ never showed up at all');
-    expect(prisma.booking.update).toHaveBeenCalledWith({
-      where: { id: 'b1' },
+    expect(prisma.booking.updateMany).toHaveBeenCalledWith({
+      where: { id: 'b1', dispute_opened_at: null },
       data: expect.objectContaining({ dispute_reason: 'The DJ never showed up at all', dispute_category: null, dispute_outcome: null, dispute_requested_amount: null, dispute_photos: [] }),
     });
     expect(PrivateStorage.put).not.toHaveBeenCalled();
@@ -97,7 +99,7 @@ describe('Disputes with details and photos', () => {
     await expect(setup().service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'full_refund', requested_amount: 50 })).rejects.toThrow('only needed for a partial refund');
     const ok = setup();
     await ok.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 360 });
-    expect(ok.prisma.booking.update.mock.calls[0][0].data.dispute_requested_amount).toBe(360);
+    expect(ok.prisma.booking.updateMany.mock.calls[0][0].data.dispute_requested_amount).toBe(360);
   });
 
   it('refuses files that are not photos by their content, and more than 10, before storing any', async () => {
@@ -105,16 +107,39 @@ describe('Disputes with details and photos', () => {
     const { service, prisma } = setup();
     await expect(service.openDispute('b1', 'c1', { reason: 'See the photos of the damage' }, [photo(JPEG), pdfNamedJpg])).rejects.toThrow('JPEG, PNG, WebP or GIF');
     expect(PrivateStorage.put).not.toHaveBeenCalled();
-    expect(prisma.booking.update).not.toHaveBeenCalled();
+    expect(prisma.booking.updateMany).not.toHaveBeenCalled();
     expect(() => checkDisputePhotos(Array.from({ length: 11 }, () => photo(JPEG)))).toThrow('up to 10 photos');
     expect(() => checkDisputePhotos([{ buffer: JPEG, size: 11 * 1024 * 1024 }])).toThrow('under 10 MB');
   });
 
   it('removes stored photos when the booking can’t be updated', async () => {
     const { service, prisma } = setup();
-    prisma.booking.update.mockRejectedValueOnce(new Error('db down'));
+    prisma.booking.updateMany.mockRejectedValueOnce(new Error('db down'));
     await expect(service.openDispute('b1', 'c1', { reason: 'Broken chairs everywhere' }, [photo(JPEG)])).rejects.toThrow('db down');
     expect(store.size).toBe(0);
+  });
+
+  it('lets only one of two simultaneous reports through, and drops the loser’s photos without telling anyone', async () => {
+    const { service, prisma, push, mail } = setup();
+    // another submission claimed the booking between our read and our write
+    prisma.booking.updateMany.mockResolvedValueOnce({ count: 0 });
+    await expect(service.openDispute('b1', 'c1', { reason: 'The cake arrived smashed and late' }, [photo(JPEG)])).rejects.toThrow('A problem was already reported on this booking.');
+    expect(prisma.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'b1', dispute_opened_at: null } }));
+    expect(PrivateStorage.put).toHaveBeenCalledTimes(1);
+    expect(store.size).toBe(0);
+    expect(push.sendToUser).not.toHaveBeenCalled();
+    expect(mail.sendBookingNotification).not.toHaveBeenCalled();
+  });
+
+  it('caps a partial refund on a booking paid before installments at its amount and fee, less refunds', async () => {
+    const legacy = { installments: [], paid_at: new Date('2025-01-01'), amount: 400, service_fee: 20 };
+    const a = setup(legacy);
+    a.prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: 100 } });
+    await expect(a.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 320.01 })).rejects.toThrow('up to $320.00');
+    expect(a.prisma.paymentTransaction.aggregate).toHaveBeenCalledWith({ where: { type: 'booking_refund', status: 'refunded', order_id: 'b1' }, _sum: { amount: true } });
+    const b = setup(legacy);
+    await b.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 420 });
+    expect(b.prisma.booking.updateMany.mock.calls[0][0].data.dispute_requested_amount).toBe(420);
   });
 
   it('keeps the old checks: only the customer, once, after the service started', async () => {

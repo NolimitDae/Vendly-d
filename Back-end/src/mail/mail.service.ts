@@ -95,7 +95,7 @@ export class MailService {
     ctaLabel?: string;
     /** extra label / value rows, e.g. a receipt's card and date */
     lines?: { label: string; value: string }[];
-  }) {
+  }): Promise<boolean> {
     try {
       const from = `${process.env.APP_NAME} <${appConfig().mail.from}>`;
       await this.queue.add('sendBookingNotification', {
@@ -105,8 +105,11 @@ export class MailService {
         template: 'booking-notification',
         context: { ...params },
       });
+      return true;
     } catch (error) {
       console.log(error);
+      // false when the email couldn't be queued, for callers that retry later (receipts, invoices)
+      return false;
     }
   }
 }

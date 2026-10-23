@@ -109,10 +109,9 @@ describe('receipts and the final invoice email', () => {
         id: 'i1', booking_id: 'b1', label: 'Full payment', amount: 100, currency: 'usd', status: InstallmentStatus.SCHEDULED, attempts: 0, capture_manually: false, updated_at: new Date(),
         booking: { id: 'b1', customer_id: 'c1', payment_method_id: 'pm_1', status: BookingStatus.CONFIRMED, listing: { title: 'Bridal Glam' }, customer: { email: 'amara@x.com', name: 'Amara', billing_id: 'cus_1' } },
       });
-      prisma.bookingInstallment.update.mockResolvedValue({ id: 'i1', booking_id: 'b1', amount: 100, currency: 'usd', status: InstallmentStatus.PAID });
       prisma.booking.findUnique.mockResolvedValue({ customer_id: 'c1' });
       prisma.bookingInstallment.updateMany.mockResolvedValue({ count: 1 });
-      prisma.bookingInstallment.findUniqueOrThrow.mockResolvedValue(paidInstallment());
+      prisma.bookingInstallment.findUniqueOrThrow.mockResolvedValue({ ...paidInstallment(), id: 'i1', booking_id: 'b1', kind: 'charge', status: InstallmentStatus.PAID });
       (StripePayment.chargeSavedCard as jest.Mock).mockResolvedValue({ id: 'pi_1', status: 'succeeded' });
       mail.sendBookingNotification.mockRejectedValue(new Error('mail queue down'));
       jest.spyOn((service as any).logger, 'error').mockImplementation(() => undefined);
@@ -122,6 +121,30 @@ describe('receipts and the final invoice email', () => {
       expect(res).toMatchObject({ status: InstallmentStatus.PAID });
       expect(prisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'booking_installment', order_id: 'b1' }) });
       expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { receipt_sent_at: expect.any(Date) } }));
+      // the email never left: the claim is let go so the hourly sweep sends it
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i1', receipt_sent_at: expect.any(Date) }, data: { receipt_sent_at: null } });
+    });
+
+    it('lets go of the claim when the email could not be queued, so the sweep retries it', async () => {
+      prisma.bookingInstallment.updateMany.mockResolvedValue({ count: 1 });
+      prisma.bookingInstallment.findUniqueOrThrow.mockResolvedValue(paidInstallment());
+      (StripePayment.retrievePaymentMethod as jest.Mock).mockResolvedValue({ card: { brand: 'visa', last4: '4242' } });
+      mail.sendBookingNotification.mockResolvedValue(false);
+      jest.spyOn((service as any).logger, 'error').mockImplementation(() => undefined);
+
+      expect(await service.sendReceipt('i1')).toBe(false);
+
+      const [claim, release] = prisma.bookingInstallment.updateMany.mock.calls.map((c: any) => c[0]);
+      expect(claim.data.receipt_sent_at).toBeInstanceOf(Date);
+      // only our own claim is let go
+      expect(release).toEqual({ where: { id: 'i1', receipt_sent_at: claim.data.receipt_sent_at }, data: { receipt_sent_at: null } });
+    });
+
+    it('keeps the claim when there is deliberately nothing to send', async () => {
+      prisma.bookingInstallment.updateMany.mockResolvedValue({ count: 1 });
+      prisma.bookingInstallment.findUniqueOrThrow.mockResolvedValue(paidInstallment({ status: BookingStatus.CANCELLED }));
+      await service.sendReceipt('i1');
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -165,6 +188,21 @@ describe('receipts and the final invoice email', () => {
         ctaUrl: 'https://app.test/bookings/b1',
         lines: [{ label: 'Total charged', value: '$300.00' }, { label: 'Refunded', value: '$250.00' }, { label: 'Total paid', value: '$50.00' }],
       }));
+    });
+
+    it('lets go of the claim when the email could not be queued, so the sweep retries it', async () => {
+      prisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      prisma.booking.findUniqueOrThrow.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, currency: 'usd', listing: { title: 'Bridal Glam' }, rental_reservations: [], customer: { email: 'amara@x.com', name: 'Amara' },
+        installments: [{ status: InstallmentStatus.PAID, amount: 300, refunded_amount: 0 }],
+      });
+      mail.sendBookingNotification.mockResolvedValue(false);
+      jest.spyOn((service as any).logger, 'error').mockImplementation(() => undefined);
+
+      expect(await service.sendFinalInvoice('b1')).toBe(false);
+
+      const [claim, release] = prisma.booking.updateMany.mock.calls.map((c: any) => c[0]);
+      expect(release).toEqual({ where: { id: 'b1', invoice_sent_at: claim.data.invoice_sent_at }, data: { invoice_sent_at: null } });
     });
 
     it('sends nothing twice, or before the money is final', async () => {

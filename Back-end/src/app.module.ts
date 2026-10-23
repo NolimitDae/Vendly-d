@@ -15,6 +15,7 @@ import { GeoModule } from './modules/geo/geo.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { CalendarSyncModule } from './modules/calendar-sync/calendar-sync.module';
 import { AddOnsModule } from './modules/add-ons/add-ons.module';
+import { PlanningModule } from './modules/planning/planning.module';
 
 // internal imports
 import appConfig from './config/app.config';
@@ -112,6 +113,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     OnboardingModule,
     CalendarSyncModule,
     AddOnsModule,
+    PlanningModule,
   ],
   controllers: [AppController],
   providers: [

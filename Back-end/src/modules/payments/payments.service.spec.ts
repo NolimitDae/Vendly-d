@@ -36,7 +36,7 @@ const prisma = {
   paymentTransaction: { create: jest.fn(), findMany: jest.fn(), count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
   vendorListing: { findUnique: jest.fn() },
   rentalReservation: { count: jest.fn().mockResolvedValue(0) },
-  bookingExtra: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  bookingExtra: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), findFirst: jest.fn().mockResolvedValue(null) },
   $transaction: jest.fn(),
   $queryRaw: jest.fn().mockResolvedValue([]),
 };
@@ -80,6 +80,7 @@ describe('PaymentsService', () => {
     prisma.$transaction.mockImplementation((fn: any) => (typeof fn === 'function' ? fn(prisma) : Promise.all(fn)));
     prisma.bookingInstallment.updateMany.mockResolvedValue({ count: 1 });
     prisma.bookingInstallment.update.mockImplementation(({ data }: any) => Promise.resolve({ ...installment(), ...data }));
+    prisma.bookingInstallment.findUniqueOrThrow.mockImplementation(({ where }: any) => Promise.resolve(installment({ id: where.id, status: InstallmentStatus.PAID, payment_intent_id: 'pi_1' })));
     prisma.booking.updateMany.mockResolvedValue({ count: 1 });
     prisma.booking.findUnique.mockResolvedValue({ customer_id: 'c1' });
     const module = await Test.createTestingModule({
@@ -96,7 +97,8 @@ describe('PaymentsService', () => {
       await service.chargeInstallment('i1');
 
       expect(StripePayment.chargeSavedCard).toHaveBeenCalledWith(expect.objectContaining({ amount: 247.5, customerId: 'cus_1', paymentMethodId: 'pm_1', captureManually: false, idempotencyKey: 'inst-i1-1-0' }));
-      expect(prisma.bookingInstallment.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: InstallmentStatus.PAID, payment_intent_id: 'pi_1' }) }));
+      // guarded: only a call that actually moves it to PAID counts
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'i1', status: { not: InstallmentStatus.PAID } }, data: expect.objectContaining({ status: InstallmentStatus.PAID, payment_intent_id: 'pi_1' }) }));
       expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', paid_at: null }, data: { paid_at: expect.any(Date) } });
       expect(prisma.paymentTransaction.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'booking_installment', status: 'succeeded', amount: 247.5 }) }));
     });
@@ -554,6 +556,54 @@ describe('PaymentsService', () => {
         .mockResolvedValueOnce(installment({ status: InstallmentStatus.PAID, payment_intent_id: 'pi_ok', booking: { status: BookingStatus.CONFIRMED, dispute_resolution: null } }));
       await service.reconcilePaymentIntent({ id: 'pi_ok', status: 'succeeded', metadata: { installment_id: 'i1' } });
       expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('add-ons that add time', () => {
+    const start = new Date('2026-12-01T18:00:00Z');
+    const end = new Date('2026-12-01T22:00:00Z');
+    const extraInstallment = () => installment({ id: 'ix', kind: 'extra', status: InstallmentStatus.PROCESSING, payment_intent_id: 'pi_x' });
+    beforeEach(() => {
+      prisma.bookingInstallment.findUniqueOrThrow.mockImplementation(() => Promise.resolve({ ...extraInstallment(), status: InstallmentStatus.PAID }));
+      prisma.bookingExtra.findFirst.mockResolvedValue({ kind: 'ADD_ON', extends_minutes: 120, booking_id: 'b1' });
+      prisma.booking.findUnique.mockResolvedValue({ customer_id: 'c1', status: BookingStatus.CONFIRMED, event_start_at: start, event_end_at: end });
+    });
+
+    it('moves the booking end when the add-on’s installment is paid', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(extraInstallment());
+      await service.reconcilePaymentIntent({ id: 'pi_x', status: 'succeeded', metadata: { installment_id: 'ix' } });
+      expect(prisma.bookingExtra.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { installment_id: 'ix' } }));
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { event_end_at: new Date('2026-12-02T00:00:00Z') } });
+    });
+
+    it('a booking with only a start ends that long after it starts', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ customer_id: 'c1', status: BookingStatus.CONFIRMED, event_start_at: start, event_end_at: null });
+      prisma.bookingInstallment.findUnique.mockResolvedValue(extraInstallment());
+      await service.reconcilePaymentIntent({ id: 'pi_x', status: 'succeeded', metadata: { installment_id: 'ix' } });
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { event_end_at: new Date('2026-12-01T20:00:00Z') } });
+    });
+
+    it('moves it once even when the charge call and the webhook both mark it paid', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(extraInstallment());
+      // the charge call wins the PAID transition; the webhook racing it finds it already PAID
+      prisma.bookingInstallment.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+      await Promise.all([
+        service.reconcilePaymentIntent({ id: 'pi_x', status: 'succeeded', metadata: { installment_id: 'ix' } }),
+        service.reconcilePaymentIntent({ id: 'pi_x', status: 'succeeded', metadata: { installment_id: 'ix' } }),
+      ]);
+      const moves = prisma.booking.update.mock.calls.filter((c: any) => c[0].data?.event_end_at);
+      expect(moves).toHaveLength(1);
+      // and the payment is recorded once
+      expect(prisma.paymentTransaction.create.mock.calls.filter((c: any) => c[0].data.type === 'booking_installment')).toHaveLength(1);
+    });
+
+    it('leaves the end alone while the add-on is only authorized, and for fees', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue({ ...extraInstallment(), status: InstallmentStatus.SCHEDULED });
+      await service.reconcilePaymentIntent({ id: 'pi_x', status: 'requires_capture', metadata: { installment_id: 'ix' } });
+      prisma.bookingExtra.findFirst.mockResolvedValue({ kind: 'FEE', extends_minutes: null, booking_id: 'b1' });
+      prisma.bookingInstallment.findUnique.mockResolvedValue(extraInstallment());
+      await service.reconcilePaymentIntent({ id: 'pi_x', status: 'succeeded', metadata: { installment_id: 'ix' } });
+      expect(prisma.booking.update.mock.calls.filter((c: any) => c[0].data?.event_end_at)).toHaveLength(0);
     });
   });
 

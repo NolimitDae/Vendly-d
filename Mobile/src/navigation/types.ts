@@ -59,6 +59,8 @@ export type CustomerHomeStackParams = {
   CustomerHome: undefined;
   Notifications: undefined;
   FindVendors: { eventId?: string } | undefined;
+  /** "Plan your event": suggested services, budget split and vendors available */
+  PlanEvent: undefined;
   SearchResults: { q?: string; categoryId?: string; categoryName?: string; location?: string; eventId?: string; filters?: import('../components/SearchFilters').Filters };
   ListingDetail: { listingId: string; eventId?: string };
   VendorProfile: { vendorId: string };

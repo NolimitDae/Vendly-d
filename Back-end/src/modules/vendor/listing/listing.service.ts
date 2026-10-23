@@ -205,31 +205,51 @@ export class VendorListingService {
       updateData.geocoded_at = null;
     }
 
+    // new photos are stored first and the old ones deleted only once the listing points at the new
+    // ones, so a failed save never leaves the listing without its photos
+    const stored: string[] = [];
+    const dropStored = async () => {
+      for (const name of stored) await TanvirStorage.delete(`listings/${name}`).catch(() => null);
+    };
     if (images?.length) {
-      // checked before the old images are deleted
       const imageNames = safeStoredNames(images, PHOTOS);
-      // delete old images
-      for (const img of listing.images) {
-        await TanvirStorage.delete(`listings/${img}`).catch(() => null);
-      }
-      for (const [i, file] of images.entries()) {
-        await TanvirStorage.put(`listings/${imageNames[i]}`, file.buffer);
+      try {
+        for (const [i, file] of images.entries()) {
+          await TanvirStorage.put(`listings/${imageNames[i]}`, file.buffer);
+          stored.push(imageNames[i]);
+        }
+      } catch (err) {
+        await dropStored();
+        throw err;
       }
       updateData.images = imageNames;
     }
 
-    const updated = await this.prisma.vendorListing.update({
+    const updated = await this.findUpdated(id, updateData).catch(async (err) => {
+      // the listing still points at its old photos: drop the new ones instead
+      await dropStored();
+      throw err;
+    });
+    if (stored.length) {
+      for (const img of listing.images) {
+        if (!stored.includes(img)) await TanvirStorage.delete(`listings/${img}`).catch(() => null);
+      }
+    }
+
+    if (moved && !pinned && updated.location) void this.geocoder?.listing(id);
+
+    return { success: true, data: this.formatListing(updated) };
+  }
+
+  private findUpdated(id: string, data: any) {
+    return this.prisma.vendorListing.update({
       where: { id },
-      data: updateData,
+      data,
       include: {
         category: { select: { id: true, name: true } },
         sub_category: { select: { id: true, name: true } },
       },
     });
-
-    if (moved && !pinned && updated.location) void this.geocoder?.listing(id);
-
-    return { success: true, data: this.formatListing(updated) };
   }
 
   async remove(id: string, vendorId: string) {

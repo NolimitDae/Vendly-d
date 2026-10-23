@@ -1,3 +1,4 @@
+import type { WorkingHours } from "@/lib/working-hours";
 import { CookieHelper } from "../../helper/cookie.helper";
 import { Fetch } from "../../lib/Fetch";
 
@@ -36,7 +37,7 @@ export const AuthService = {
     }),
 
   /** Vendors: weekly working hours (all 7 days, null = closed day), or null to clear them. */
-  updateWorkingHours: async (working_hours: Record<string, { open: string; close: string } | null> | null) =>
+  updateWorkingHours: async (working_hours: WorkingHours | null) =>
     Fetch.patch("/auth/update", { working_hours }, {
       headers: {
         Authorization: `Bearer ${CookieHelper.get({ key: "token" })}`,

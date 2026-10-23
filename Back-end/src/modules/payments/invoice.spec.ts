@@ -131,4 +131,13 @@ describe('final invoice', () => {
     expect(file.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     await expect(service.resolveLink(`${token}x`)).rejects.toThrow(ForbiddenException);
   });
+
+  it('stops serving a link once the account is deleted or suspended', async () => {
+    for (const user of [{ id: 'c1', type: 'CUSTOMER', deleted_at: new Date(), status: 1 }, { id: 'c1', type: 'CUSTOMER', deleted_at: null, status: 0 }, null]) {
+      const service = setup(booking(), { user: { id: 'c1', type: 'CUSTOMER', deleted_at: null, status: 1 } });
+      const token = (await service.linkFor('ckbooking12345678', { id: 'c1' })).data.url.split('/').pop()!;
+      const gone = setup(booking(), { user });
+      await expect(gone.resolveLink(token)).rejects.toThrow('This download link has expired.');
+    }
+  });
 });

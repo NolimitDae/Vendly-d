@@ -32,6 +32,13 @@ describe('vendor working hours on the profile update', () => {
     expect(create).toMatchObject({ user_id: 'v1', working_hours: hours });
   });
 
+  it('keeps the time zone the vendor’s device sends with the hours', async () => {
+    await service.updateUser('v1', { working_hours: { ...hours, timezone: 'America/Chicago' } } as any);
+    expect(prisma.vendorProfile.upsert.mock.calls[0][0].update).toEqual({ working_hours: { ...hours, timezone: 'America/Chicago' } });
+    const bad = await service.updateUser('v1', { working_hours: { ...hours, timezone: 'Nowhere/Land' } } as any);
+    expect(bad.success).toBe(false);
+  });
+
   it('takes the hours as a JSON string from a multipart form', async () => {
     await service.updateUser('v1', { working_hours: JSON.stringify(hours) } as any);
     expect(prisma.vendorProfile.upsert.mock.calls[0][0].update).toEqual({ working_hours: hours });

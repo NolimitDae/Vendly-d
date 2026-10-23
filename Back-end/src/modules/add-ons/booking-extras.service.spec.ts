@@ -185,7 +185,7 @@ describe('BookingExtrasService', () => {
       const { service, prisma, push } = setup();
       const res = await service.request('b1', 'v1', { kind: 'ADD_ON', name: 'Extra time', unit_price: 150, price_unit: 'PER_HOUR', quantity: 2, extends_minutes: 120 } as any);
       expect(prisma.bookingExtra.create).toHaveBeenCalledWith({ data: expect.objectContaining({ extends_minutes: 120 }) });
-      expect(res.data).toMatchObject({ extends_minutes: 120, extends_label: 'Adds 2 hours' });
+      expect(res.data).toMatchObject({ extends_minutes: 120, extends_label: 'Adds 2 hours once paid' });
       expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ body: expect.stringContaining('adds 2 hours to the booking') }));
     });
 
@@ -196,23 +196,20 @@ describe('BookingExtrasService', () => {
       expect(prisma.bookingExtra.create).not.toHaveBeenCalled();
     });
 
-    it('approval moves the end time later once, inside the charge', async () => {
-      const { service, prisma } = withTime();
+    it('approval alone never moves the end time: that waits for the payment (PaymentsService.markPaid)', async () => {
+      const { service, prisma, payments } = withTime();
+      payments.chargeInstallment.mockResolvedValue({ status: 'FAILED' });
       const res = await service.approve('e1', 'c1');
-      expect(prisma.booking.update).toHaveBeenCalledTimes(1);
-      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { event_end_at: new Date('2026-12-02T00:00:00Z') } });
-      expect(res.data).toMatchObject({ paid: true, extends_minutes: 120 });
-
-      // answered already: the claim fails and nothing moves again
-      prisma.bookingExtra.updateMany.mockResolvedValue({ count: 0 });
-      await expect(service.approve('e1', 'c1')).rejects.toThrow('already been answered');
-      expect(prisma.booking.update).toHaveBeenCalledTimes(1);
+      expect(prisma.booking.update).not.toHaveBeenCalled();
+      expect(res.data).toMatchObject({ paid: false, extends_minutes: 120, extends_label: 'Adds 2 hours once paid' });
     });
 
-    it('a booking with only a start ends that long after it starts', async () => {
-      const { service, prisma } = withTime({ event_end_at: null });
-      await service.approve('e1', 'c1');
-      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { event_end_at: new Date('2026-12-01T20:00:00Z') } });
+    it('says the time is added once the installment is paid', async () => {
+      const { service, prisma } = withTime();
+      prisma.bookingExtra.findUniqueOrThrow.mockResolvedValue(extra({ kind: 'ADD_ON', name: 'Extra time', extends_minutes: 120, status: 'APPROVED', installment: { id: 'inst', status: 'PAID', paid_at: new Date(), last_error: null, refunded_amount: 0 } }));
+      const res = await service.approve('e1', 'c1');
+      expect(res.data).toMatchObject({ paid: true, extends_label: 'Adds 2 hours' });
+      expect(prisma.booking.update).not.toHaveBeenCalled();
     });
 
     it('declining or withdrawing leaves the end time alone', async () => {

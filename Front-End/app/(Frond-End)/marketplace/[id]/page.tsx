@@ -29,7 +29,7 @@ import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import { perUnit, quantityRangeText } from "@/lib/addons";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
-import { summariseHours, type WorkingHours } from "@/lib/working-hours";
+import { summariseHours, withZone, type WorkingHours } from "@/lib/working-hours";
 
 interface Listing {
   id: string;
@@ -165,7 +165,10 @@ export default function ListingDetailPage() {
           (e) => !["COMPLETED", "CANCELLED"].includes(e.status),
         );
         setEvents(active);
-        if (active.length > 0) setSelectedEventId(active[0].id);
+        // arriving from "Find vendors" on an event's suggested services (?event=ID): that event first
+        const fromLink = new URLSearchParams(window.location.search).get("event");
+        const preferred = active.find((e) => e.id === fromLink) ?? active[0];
+        if (preferred) setSelectedEventId(preferred.id);
       }
     } catch {
       toast.error("Failed to load events");
@@ -350,7 +353,7 @@ export default function ListingDetailPage() {
                     <Clock className="w-4 h-4 text-primary" />
                     Working hours
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Works {listing.working_hours_summary ?? summariseHours(listing.working_hours)}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Works {withZone(listing.working_hours_summary ?? summariseHours(listing.working_hours) ?? "", listing.working_hours)}</p>
                 </div>
               )}
 

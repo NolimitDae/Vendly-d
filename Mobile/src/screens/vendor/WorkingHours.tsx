@@ -7,7 +7,7 @@ import { Card, GradientButton, ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { AuthService } from '../../services/auth.service';
 import { apiMessage } from '../auth/SignIn';
-import { DAY_KEYS, DAY_NAMES, DEFAULT_WEEK, formatTime, hoursProblem, minutesOf, summariseHours, type DayKey, type WorkingHours as Week } from '../../utils/workingHours';
+import { DAY_KEYS, DAY_NAMES, DEFAULT_WEEK, deviceTimeZone, formatTime, hoursProblem, minutesOf, summariseHours, withDeviceZone, zoneLabel, type DayKey, type WorkingHours as Week } from '../../utils/workingHours';
 
 const STEP = 30;
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -73,11 +73,13 @@ export default function WorkingHours() {
   const setTime = (day: DayKey, which: 'open' | 'close', value: string) =>
     setWeek((w) => (w[day] ? { ...w, [day]: { ...w[day]!, [which]: value } } : w));
 
-  const save = async (hours: Week | null) => {
-    if (hours) {
-      const problem = hoursProblem(hours);
+  const save = async (week: Week | null) => {
+    if (week) {
+      const problem = hoursProblem(week);
       if (problem) return Alert.alert('Working hours', problem);
     }
+    // the times are this phone's wall-clock times: the zone goes with them
+    const hours = week ? withDeviceZone(week) : null;
     setBusy(true);
     try {
       const res = await AuthService.updateWorkingHours(hours);
@@ -98,7 +100,9 @@ export default function WorkingHours() {
       { text: 'Remove', style: 'destructive', onPress: () => save(null) },
     ]);
 
-  const changed = JSON.stringify(saved) !== JSON.stringify(week);
+  // also true when the saved hours have no zone yet, or another one than this phone's
+  const changed = JSON.stringify(saved) !== JSON.stringify(withDeviceZone(week));
+  const zone = deviceTimeZone();
 
   return (
     <View style={s.root}>
@@ -107,7 +111,7 @@ export default function WorkingHours() {
         <View style={{ paddingHorizontal: 20, gap: 16 }}>
           <View style={s.note}>
             <Ionicons name="time-outline" size={16} color={DARK.accent} />
-            <Text style={s.noteText}>Customers can only request bookings on your open days, inside these hours (in the event's local time).</Text>
+            <Text style={s.noteText}>Customers can only request bookings on your open days, inside these hours{zone ? ` (${zoneLabel(zone)})` : ''}. Customers in other time zones see them in yours.</Text>
           </View>
 
           {loading ? (

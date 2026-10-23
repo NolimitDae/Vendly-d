@@ -10,10 +10,13 @@ import {
   DAY_NAMES,
   DEFAULT_WEEK,
   TIME_STEPS,
+  deviceTimeZone,
   formatTime,
   hoursProblem,
   minutesOf,
   summariseHours,
+  withDeviceZone,
+  zoneLabel,
   type DayKey,
   type WorkingHours,
 } from "@/lib/working-hours";
@@ -70,11 +73,13 @@ export default function WorkingHoursSection() {
     setDay(day, next);
   };
 
-  const save = async (hours: WorkingHours | null) => {
-    if (hours) {
-      const problem = hoursProblem(hours);
+  const save = async (week: WorkingHours | null) => {
+    if (week) {
+      const problem = hoursProblem(week);
       if (problem) return void toast.error(problem);
     }
+    // the times are this device's wall-clock times: the zone goes with them
+    const hours = week ? withDeviceZone(week) : null;
     setBusy(true);
     try {
       const res = await AuthService.updateWorkingHours(hours);
@@ -89,7 +94,9 @@ export default function WorkingHoursSection() {
     }
   };
 
-  const changed = JSON.stringify(saved) !== JSON.stringify(week);
+  // also true when the saved hours have no zone yet, or another one than this device's
+  const changed = JSON.stringify(saved) !== JSON.stringify(withDeviceZone(week));
+  const zone = deviceTimeZone();
 
   return (
     <section aria-labelledby="working-hours-title" className="mt-10 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -100,7 +107,7 @@ export default function WorkingHoursSection() {
         <div>
           <h2 id="working-hours-title" className="font-semibold text-gray-900 dark:text-white">Working hours</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Customers can only request bookings on your open days, inside these hours (in the event&apos;s local time).
+            Customers can only request bookings on your open days, inside these hours{zone ? ` (${zoneLabel(zone)})` : ""}. Customers in other time zones see them in yours.
           </p>
         </div>
       </div>

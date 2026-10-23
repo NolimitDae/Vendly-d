@@ -21,17 +21,22 @@ export const SERVICE_RADII = [
   { value: 100, label: '100 mi' },
 ];
 
-/** Location with address suggestions as you type, "use my current location", and how far the vendor travels. */
+/**
+ * Location with address suggestions as you type, "use my current location", and how far the vendor travels.
+ * Without `onRadiusChange` it is just the location (e.g. where an event is).
+ */
 export default function LocationPicker({
   value,
   onChange,
-  radius,
+  radius = null,
   onRadiusChange,
+  label = 'Package location',
 }: {
   value: PickedPlace;
   onChange: (p: PickedPlace) => void;
-  radius: number | null;
-  onRadiusChange: (miles: number) => void;
+  radius?: number | null;
+  onRadiusChange?: (miles: number) => void;
+  label?: string;
 }) {
   const [suggestions, setSuggestions] = useState<{ label: string; lat: number; lng: number }[]>([]);
   const [focused, setFocused] = useState(false);
@@ -111,7 +116,7 @@ export default function LocationPicker({
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
           autoCorrect={false}
-          accessibilityLabel="Package location"
+          accessibilityLabel={label}
         />
         {!!value.label && (
           <Pressable onPress={() => { onChange({ label: '' }); setSuggestions([]); }} hitSlop={8} accessibilityLabel="Clear location">
@@ -141,19 +146,23 @@ export default function LocationPicker({
         <Text style={s.currentText}>Use my current location</Text>
       </Pressable>
 
-      <Text style={[ui.label, { marginTop: 8 }]}>How far will you travel?</Text>
-      <View style={s.chips}>
-        {SERVICE_RADII.map((r) => (
-          <Chip key={r.value} label={r.label} active={radius === r.value} onPress={() => onRadiusChange(r.value)} />
-        ))}
-      </View>
-      <Text style={s.hint}>
-        {radius == null
-          ? 'Pick how far you travel so customers nearby find this package with Near me.'
-          : radius
-            ? `Customers within ${radius} miles of this location will find this package with Near me.`
-            : 'Customers come to you at this location.'}
-      </Text>
+      {onRadiusChange && (
+        <>
+          <Text style={[ui.label, { marginTop: 8 }]}>How far will you travel?</Text>
+          <View style={s.chips}>
+            {SERVICE_RADII.map((r) => (
+              <Chip key={r.value} label={r.label} active={radius === r.value} onPress={() => onRadiusChange(r.value)} />
+            ))}
+          </View>
+          <Text style={s.hint}>
+            {radius == null
+              ? 'Pick how far you travel so customers nearby find this package with Near me.'
+              : radius
+                ? `Customers within ${radius} miles of this location will find this package with Near me.`
+                : 'Customers come to you at this location.'}
+          </Text>
+        </>
+      )}
     </View>
   );
 }

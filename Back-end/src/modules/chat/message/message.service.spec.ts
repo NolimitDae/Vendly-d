@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MessageGateway } from './message.gateway';
@@ -119,11 +119,11 @@ describe('MessageService', () => {
       );
     });
 
-    it('should throw UnauthorizedException when sender is not a participant', async () => {
+    it('should throw ForbiddenException (403, not a sign-in problem) when sender is not a participant', async () => {
       mockPrisma.participant.findFirst.mockResolvedValue(null);
 
       await expect(service.create(dto, 'outsider')).rejects.toThrow(
-        UnauthorizedException,
+        ForbiddenException,
       );
     });
 
@@ -225,7 +225,7 @@ describe('MessageService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw UnauthorizedException when user is not a participant', async () => {
+    it('should throw ForbiddenException (403, not a sign-in problem) when user is not a participant', async () => {
       mockPrisma.conversation.findUnique.mockResolvedValue({
         ...conversation,
         participants: [{ userId: 'user-2', user: { id: 'user-2', name: 'Bob', email: 'bob@test.com', avatar: null } }],
@@ -233,7 +233,7 @@ describe('MessageService', () => {
 
       await expect(
         service.findAll('conv-1', 'outsider', paginationDto),
-      ).rejects.toThrow(UnauthorizedException);
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should return empty message response when conversation has no messages', async () => {
@@ -281,11 +281,11 @@ describe('MessageService', () => {
       );
     });
 
-    it('should throw UnauthorizedException when user is not the message sender', async () => {
+    it('should throw ForbiddenException (403, not a sign-in problem) when user is not the message sender', async () => {
       mockPrisma.message.findUnique.mockResolvedValue(makeMessage({ senderId: 'other-user' }));
 
       await expect(service.deleteMessage('user-1', 'msg-1')).rejects.toThrow(
-        UnauthorizedException,
+        ForbiddenException,
       );
     });
   });
@@ -308,12 +308,12 @@ describe('MessageService', () => {
       expect(result.data.count).toBe(2);
     });
 
-    it('should throw UnauthorizedException when user is not a participant', async () => {
+    it('should throw ForbiddenException (403, not a sign-in problem) when user is not a participant', async () => {
       mockPrisma.participant.findFirst.mockResolvedValue(null);
 
       await expect(
         service.getUnreadMessage('outsider', 'conv-1'),
-      ).rejects.toThrow(UnauthorizedException);
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -365,11 +365,11 @@ describe('MessageService', () => {
       });
     });
 
-    it('should throw UnauthorizedException when user is not a participant', async () => {
+    it('should throw ForbiddenException (403, not a sign-in problem) when user is not a participant', async () => {
       mockPrisma.participant.findFirst.mockResolvedValue(null);
 
       await expect(service.readMessages('outsider', 'conv-1')).rejects.toThrow(
-        UnauthorizedException,
+        ForbiddenException,
       );
       expect(mockPrisma.message.updateMany).not.toHaveBeenCalled();
       expect(mockServer.emit).not.toHaveBeenCalled();

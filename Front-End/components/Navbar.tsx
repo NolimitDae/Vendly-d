@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { clearSession, isLoggedIn as hasSession } from "@/lib/session";
+import { isLoggedIn as hasSession, signOut } from "@/lib/session";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
 import Logo from "@/components/brand/Logo";
 import { nav, VENDOR_SIGNUP_HREF } from "@/components/landing/content";
-import { FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat, PlusSquare, Receipt, Star } from "lucide-react";
+import { ClipboardList, FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat, PlusSquare, Receipt, Star } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
@@ -26,6 +26,7 @@ const homeItems = nav.map((item) => ({ en: item.label, href: `/#${item.hash}`, h
 const appLinks = [
   { en: "Marketplace", href: "/marketplace", icon: Store },
   { en: "Event Planners", href: "/event-planner", icon: Calendar },
+  { en: "Plan your event", href: "/plan", icon: ClipboardList },
 ] as const;
 
 function scrollToSection(hash: string) {
@@ -97,7 +98,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     // revokes the refresh token and clears the HttpOnly login cookies (and any old readable ones)
-    await clearSession();
+    await signOut();
     setUser(null);
     setUserMenuOpen(false);
     router.push("/");

@@ -1,4 +1,4 @@
-import { formatTime, outsideWorkingHours, parseWorkingHours, readWorkingHours, summariseWorkingHours, type WorkingHours } from './working-hours';
+import { formatTime, hoursZone, outsideWorkingHours, parseWorkingHours, readWorkingHours, summariseWorkingHours, validTimeZone, zoneLabel, type WorkingHours } from './working-hours';
 
 const nineToFive = { open: '09:00', close: '17:00' };
 const week = (over: Partial<WorkingHours> = {}): WorkingHours => ({
@@ -36,6 +36,45 @@ describe('parseWorkingHours (what vendors send)', () => {
   ])('refuses %s', (_label, input, message) => {
     const r = parseWorkingHours(input);
     expect('error' in r && r.error).toMatch(message);
+  });
+});
+
+describe('the vendor’s time zone with the hours', () => {
+  it('keeps a real IANA zone, spelled the way Intl does', () => {
+    expect(parseWorkingHours({ ...week(), timezone: 'America/Chicago' })).toEqual({ hours: { ...week(), timezone: 'America/Chicago' } });
+    expect(parseWorkingHours(JSON.stringify({ ...week(), timezone: 'america/chicago' }))).toEqual({ hours: { ...week(), timezone: 'America/Chicago' } });
+    expect(readWorkingHours({ ...week(), timezone: 'Europe/London' })).toEqual({ ...week(), timezone: 'Europe/London' });
+  });
+
+  it('is optional (hours saved before it was kept)', () => {
+    expect(parseWorkingHours({ ...week(), timezone: null })).toEqual({ hours: week() });
+    expect(parseWorkingHours({ ...week(), timezone: '' })).toEqual({ hours: week() });
+  });
+
+  it.each(['Mars/Olympus_Mons', '+05:00', 'not a zone', 42, 'x'.repeat(80)])('refuses %p', (timezone) => {
+    const r = parseWorkingHours({ ...week(), timezone });
+    expect('error' in r && r.error).toMatch(/time zone isn’t recognised/);
+    expect(validTimeZone(timezone)).toBeNull();
+  });
+
+  it('names a zone the way people say it', () => {
+    expect(zoneLabel('America/Chicago')).toBe('Chicago time');
+    expect(zoneLabel('America/Los_Angeles')).toBe('Los Angeles time');
+    expect(zoneLabel('UTC')).toBe('UTC');
+  });
+
+  it('checks in the vendor’s zone first, else a real customer zone, else refuses', () => {
+    expect(hoursZone({ ...week(), timezone: 'America/Chicago' }, 'America/New_York')).toEqual({ zone: 'America/Chicago', differs: true });
+    expect(hoursZone({ ...week(), timezone: 'America/Chicago' }, 'America/Chicago')).toEqual({ zone: 'America/Chicago', differs: false });
+    expect(hoursZone({ ...week(), timezone: 'America/Chicago' }, undefined)).toEqual({ zone: 'America/Chicago', differs: true });
+    expect(hoursZone(week(), 'Asia/Tokyo')).toEqual({ zone: 'Asia/Tokyo', differs: false });
+    expect(hoursZone(week(), 'Not/AZone')).toEqual({ error: 'Your time zone wasn’t recognised. Please refresh and try again.' });
+    expect(hoursZone(week(), undefined)).toEqual({ error: expect.any(String) });
+  });
+
+  it('names the zone in the refusal when asked', () => {
+    expect(outsideWorkingHours(week(), new Date('2026-10-26T12:30:00Z'), null, 'America/Chicago', 'America/Chicago')).toBe('The vendor works 9am–5pm (Chicago time) on Mondays.');
+    expect(outsideWorkingHours(week(), new Date('2026-10-25T15:00:00Z'), null, 'America/Chicago', 'America/Chicago')).toBe("The vendor doesn't work on Sundays (Chicago time). Please pick another day.");
   });
 });
 

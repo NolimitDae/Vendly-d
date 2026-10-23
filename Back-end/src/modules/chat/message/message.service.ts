@@ -1,7 +1,7 @@
 import {
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from "@nestjs/common";
 import appConfig from "../../../config/app.config";
 import { CreateMessageDto } from "./dto/create-message.dto";
@@ -44,7 +44,7 @@ export class MessageService {
     });
 
     if (!participant) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "You are not a participant of this conversation.",
       );
     }
@@ -163,7 +163,7 @@ export class MessageService {
       (p) => p.userId === userId,
     );
     if (!isParticipant) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "You are not a participant of this conversation.",
       );
     }
@@ -261,7 +261,7 @@ export class MessageService {
     }
 
     if (message.senderId !== userId) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "You are not authorized to delete this message.",
       );
     }
@@ -298,7 +298,7 @@ export class MessageService {
     });
 
     if (!participant) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "You are not a participant of this conversation.",
       );
     }
@@ -351,7 +351,7 @@ export class MessageService {
     });
 
     if (!participant) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         "You are not a participant of this conversation.",
       );
     }

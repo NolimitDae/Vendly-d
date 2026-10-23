@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import WorkingHoursSection from "./WorkingHoursSection";
-import { endTimesOn, startTimesOn, summariseHours, type WorkingHours } from "@/lib/working-hours";
+import { endTimesOn, isOpenDay, otherZone, startTimesOn, summariseHours, withDeviceZone, withZone, zoneLabel, type WorkingHours } from "@/lib/working-hours";
 
 jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 jest.mock("@/service/auth/auth.service", () => ({ AuthService: { me: jest.fn(), updateWorkingHours: jest.fn() } }));
@@ -12,6 +12,7 @@ import { toast } from "react-toastify";
 
 const nineToFive = { open: "09:00", close: "17:00" };
 const week: WorkingHours = { mon: nineToFive, tue: nineToFive, wed: nineToFive, thu: nineToFive, fri: nineToFive, sat: null, sun: null };
+const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 describe("working hours helpers", () => {
   it("summarises the week", () => {
@@ -26,6 +27,41 @@ describe("working hours helpers", () => {
     expect(endTimesOn(week, "2030-06-03", "16:00")).toEqual(["16:30", "17:00"]);
     expect(startTimesOn(week, "2030-06-02")).toEqual([]); // Sunday: closed
     expect(startTimesOn(null, "2030-06-03")).toBeNull(); // no hours: any time
+  });
+});
+
+describe("hours in the vendor's time zone", () => {
+  const prevTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = "UTC";
+  });
+  afterAll(() => {
+    process.env.TZ = prevTz;
+  });
+  const chicago: WorkingHours = { ...week, timezone: "America/Chicago" };
+
+  it("names the zone only when it isn't this device's", () => {
+    expect(zoneLabel("America/Los_Angeles")).toBe("Los Angeles time");
+    expect(otherZone(chicago)).toBe("America/Chicago");
+    expect(otherZone({ ...week, timezone: "UTC" })).toBeNull();
+    expect(otherZone(week)).toBeNull();
+    expect(withZone("Mon–Fri 9am–5pm", chicago)).toBe("Mon–Fri 9am–5pm (Chicago time)");
+    expect(withZone("Mon–Fri 9am–5pm", week)).toBe("Mon–Fri 9am–5pm");
+  });
+
+  it("turns the vendor's hours into this device's times", () => {
+    // Monday June 3 2030: 9am–5pm in Chicago (CDT) is 14:00–22:00 UTC
+    const starts = startTimesOn(chicago, "2030-06-03")!;
+    expect(starts[0]).toBe("14:00");
+    expect(starts.at(-1)).toBe("21:30");
+    expect(endTimesOn(chicago, "2030-06-03", "21:00")).toEqual(["21:30", "22:00"]);
+    // Sunday here: Chicago's Saturday evening and Sunday, both closed
+    expect(isOpenDay(chicago, "2030-06-02")).toBe(false);
+    expect(isOpenDay(chicago, "2030-06-03")).toBe(true);
+  });
+
+  it("saves the week with this device's zone", () => {
+    expect(withDeviceZone({ ...week, timezone: "Asia/Tokyo" })).toEqual({ ...week, timezone: "UTC" });
   });
 });
 
@@ -47,7 +83,8 @@ describe("WorkingHoursSection", () => {
     await user.selectOptions(screen.getByLabelText("Saturday closes"), "14:00");
     await user.click(screen.getByRole("button", { name: "Save working hours" }));
 
-    await waitFor(() => expect(AuthService.updateWorkingHours).toHaveBeenCalledWith({ ...week, sat: { open: "10:00", close: "14:00" } }));
+    // with this browser's time zone, so customers elsewhere see the hours in the vendor's time
+    await waitFor(() => expect(AuthService.updateWorkingHours).toHaveBeenCalledWith({ ...week, sat: { open: "10:00", close: "14:00" }, timezone: zone }));
     expect(await screen.findByText("Mon–Fri 9am–5pm · Sat 10am–2pm")).toBeInTheDocument();
   });
 
@@ -69,8 +106,17 @@ describe("WorkingHoursSection", () => {
     expect(screen.queryByLabelText("Friday opens")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Save working hours" }));
     await waitFor(() =>
-      expect(AuthService.updateWorkingHours).toHaveBeenCalledWith({ ...week, tue: { open: "18:00", close: "18:30" }, fri: null }),
+      expect(AuthService.updateWorkingHours).toHaveBeenCalledWith({ ...week, tue: { open: "18:00", close: "18:30" }, fri: null, timezone: zone }),
     );
+  });
+
+  it("offers to save hours from before the zone was kept, adding it", async () => {
+    (AuthService.me as jest.Mock).mockResolvedValue({ data: { data: { working_hours: week } } });
+    const user = userEvent.setup();
+    render(<WorkingHoursSection />);
+    await screen.findByText("Mon–Fri 9am–5pm");
+    await user.click(screen.getByRole("button", { name: "Save working hours" }));
+    await waitFor(() => expect(AuthService.updateWorkingHours).toHaveBeenCalledWith({ ...week, timezone: zone }));
   });
 
   it("removes the hours", async () => {

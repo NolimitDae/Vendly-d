@@ -53,13 +53,22 @@ export function saveSession(accessToken?: string, refreshToken?: string) {
 }
 
 /**
- * Signs the browser out: drops the readable cookies here and asks the API to clear the HttpOnly
- * ones and revoke the refresh token. Never throws.
+ * Forgets the login on this browser only: the readable "logged in" flag and any old readable
+ * cookies. Nothing is sent to the API, so the session stays valid server side (another tab, or the
+ * HttpOnly cookies, can still use it). For when a request found the session gone.
  */
-export async function clearSession(): Promise<void> {
-  const legacyRefresh = CookieHelper.get({ key: REFRESH_TOKEN_COOKIE });
+export function clearLocalSession(): void {
   clearLegacySession();
   CookieHelper.destroy({ key: LOGGED_IN_COOKIE });
+}
+
+/**
+ * The "Log out" action: drops the readable cookies here and asks the API to clear the HttpOnly
+ * ones and revoke the refresh token. Never throws.
+ */
+export async function signOut(): Promise<void> {
+  const legacyRefresh = CookieHelper.get({ key: REFRESH_TOKEN_COOKIE });
+  clearLocalSession();
   if (typeof window === "undefined") return;
   try {
     await axios.post(`${apiBase()}/auth/logout`, legacyRefresh ? { refresh_token: legacyRefresh } : {}, {

@@ -162,7 +162,7 @@ export class EventsService {
   }
 
   async linkBooking(eventId: string, bookingId: string, plannerId: string) {
-    await this.getEventOrFail(eventId, plannerId);
+    assertNotCancelled(await this.getEventOrFail(eventId, plannerId));
 
     const booking = await this.prisma.booking.findFirst({
       where: { id: bookingId, customer_id: plannerId },

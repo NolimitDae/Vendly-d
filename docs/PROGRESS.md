@@ -16,6 +16,13 @@ _Updated: 2026-10-23. All Build Plan Phase 0 items resolved._
 | B7 | Mobile sent deliverable `links` as an array; backend only parsed a JSON string | Backend accepts both |
 | S6 | Deliverable links rendered as `href` / `Linking.openURL` allowed `javascript:` URLs (stored XSS) | Backend keeps only `http(s)://` links |
 | B8 | A failed proofs/deliverables/availability request blanked the whole booking or listing page | Secondary requests are now non-fatal (web + mobile) |
+| B9 | Two website tabs refreshing the login at once signed the user out | The replaced refresh token keeps working for 30 seconds (rotation is atomic in Redis); tabs share one refresh through a browser lock |
+| B10 | Any 401 signed the user out on the server; chat permission errors were 401 | A 401 only clears the local session; chat permission errors are 403 |
+| B11 | Two problem reports at once could overwrite each other; legacy bookings had no partial-refund cap | Only the first report is kept (the second's photos are deleted); legacy bookings are capped at what was paid less refunds |
+| B12 | Cancelled events could still get new vendor bookings, clients and linked bookings | Refused |
+| B13 | An add-on's extra time moved the booking end on approval, before payment | Moves once, when it's paid (charge and webhook can't both apply it) |
+| B14 | Working hours were checked in the customer's time zone | Hours carry the vendor's time zone; customers see times like "9am–5pm (Chicago time)" |
+| B15 | Old listing photos were deleted before the update saved; receipts that failed to queue were never retried; invoice links worked for suspended accounts | Deleted after the update; the claim is released so the hourly sweep retries; suspended or deleted accounts are refused |
 
 ## Features Added
 
@@ -47,6 +54,7 @@ _Updated: 2026-10-23. All Build Plan Phase 0 items resolved._
 | F24 | Money clarity | `GET /bookings/:id/cancel-preview` (same maths as cancel) before cancelling, refund card and email/push after; receipt email for every charge; final invoice PDF (`GET /bookings/:id/invoice`) emailed when the money is final; transaction history for vendors and customers (`GET /payments/transactions`) on web and app; legacy credits take commission |
 | F25 | Complaints and vendor tools | Complaints with category, up to 10 private photos and the outcome asked for; vendor Refunds / Complaints tabs; vendor reviews screen with replies (`GET /reviews/my`); add-ons can add time to a booking |
 | F26 | Chat, events, hours | Report a single message on the web; reported messages are kept as evidence; up to 10 photos per message; cancelled events are read-only and completed ones can't be cancelled; vendor weekly working hours shown to customers and enforced on new requests |
+| F27 | Planning checklist | Rule-based (no AI) list of the services an event usually needs, by event type, guests and budget: priority, budget share, when to book, a practical tip and links to matching vendors on the date and near the venue. Public `/plan` page and app screen; planners see it on each event with what's already booked ticked off (`POST /planning/checklist`, `GET /events/:id/plan`) |
 
 ## Contracts (docs/CONTRACTS.md)
 

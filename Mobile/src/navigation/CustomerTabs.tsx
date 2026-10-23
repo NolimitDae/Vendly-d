@@ -11,6 +11,7 @@ import { BrandGradient } from '../components/brand';
 import CustomerHome from '../screens/customer/Home';
 import ListingDetail from '../screens/customer/ListingDetail';
 import FindVendors from '../screens/customer/FindVendors';
+import PlanEvent from '../screens/customer/PlanEvent';
 import SearchResults from '../screens/customer/SearchResults';
 import VendorProfile from '../screens/customer/VendorProfile';
 import SelectDate from '../screens/customer/SelectDate';
@@ -64,6 +65,7 @@ function HomeNavigator() {
       <HomeStack.Screen name="CustomerHome" component={CustomerHome} options={{ headerShown: false }} />
       <HomeStack.Screen name="Notifications" component={Inbox} options={{ headerShown: false }} />
       <HomeStack.Screen name="FindVendors" component={FindVendors} options={{ headerShown: false }} />
+      <HomeStack.Screen name="PlanEvent" component={PlanEvent} options={{ headerShown: false }} />
       <HomeStack.Screen name="SearchResults" component={SearchResults} options={{ headerShown: false }} />
       <HomeStack.Screen name="ListingDetail" component={ListingDetail} options={{ headerShown: false }} />
       <HomeStack.Screen name="VendorProfile" component={VendorProfile} options={{ headerShown: false }} />

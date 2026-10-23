@@ -60,6 +60,9 @@ export default function Hero() {
               {hero.primary}
               <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
             </Link>
+            <Link href="/plan" className="text-center text-sm font-semibold text-orchid-300 underline-offset-4 hover:underline sm:text-left">
+              {hero.plan}
+            </Link>
             <div>
               <p className="mb-3 text-center text-sm text-white/60 sm:text-left">{hero.secondary}</p>
               <StoreBadges className="grid grid-cols-2 sm:flex" />

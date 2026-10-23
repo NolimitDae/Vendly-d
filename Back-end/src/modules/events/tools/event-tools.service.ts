@@ -311,6 +311,7 @@ export class EventToolsService {
 
   async setClient(eventId: string, userId: string, dto: { email?: string | null; sees_budget?: boolean }) {
     const { event } = await this.planner(eventId, userId);
+    assertNotCancelled(event);
     const email = dto.email === undefined ? event.client_email : dto.email?.trim().toLowerCase() || null;
     const changed = email !== (event.client_email?.toLowerCase() ?? null);
     const updated = await this.prisma.event.update({

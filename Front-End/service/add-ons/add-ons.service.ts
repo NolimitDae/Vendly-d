@@ -62,9 +62,9 @@ export interface Extra {
   fee_amount: number;
   total: number;
   note: string | null;
-  /** add-ons only: minutes it adds to the booking (moves the end time once approved) */
+  /** add-ons only: minutes it adds to the booking (moves the end time once paid) */
   extends_minutes?: number | null;
-  /** "Adds 2 hours" */
+  /** "Adds 2 hours once paid", or "Adds 2 hours" once it is */
   extends_label?: string | null;
   status: ExtraStatus;
   created_at: string;

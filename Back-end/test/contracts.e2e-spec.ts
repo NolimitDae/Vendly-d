@@ -309,6 +309,15 @@ run('Contracts (e2e)', () => {
     expect(Object.keys(zip.files)).toHaveLength(1);
   });
 
+  it('a cancelled event takes no new vendor bookings', async () => {
+    const cancelled = `e2-${id}`;
+    await prisma.event.create({ data: { id: cancelled, event_planner_id: U.planner, name: 'Called off', status: 'CANCELLED', cancelled_at: new Date() } });
+    const res = await http().post('/api/contracts/booking-preview').auth(T.planner, { type: 'bearer' })
+      .send({ listing_id: L.tent, vendor_id: U.vendor2, event_id: cancelled, event_start_at: start, event_end_at: end, timezone: 'UTC' });
+    expect(res.status).toBe(400);
+    expect(msg(res)).toBe("This event was cancelled, so vendors can't be booked for it.");
+  });
+
   it('admin sees the audit log (and is logged) and can disable an uploaded contract', async () => {
     const res = await http().get(`/api/admin/contracts/bookings/${bookingId}`).auth(T.admin, { type: 'bearer' });
     const again = await http().get(`/api/admin/contracts/bookings/${bookingId}`).auth(T.admin, { type: 'bearer' });

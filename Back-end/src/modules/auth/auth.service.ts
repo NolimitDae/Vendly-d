@@ -36,6 +36,22 @@ export function heldRoles(user: { type?: string | null; roles?: string[] | null 
   return SWITCHABLE_ROLES.filter((r) => held.has(r));
 }
 
+/** How long a refresh token lives in Redis (matches JWT_REFRESH_EXPIRY's default of 7 days). */
+const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 7;
+/** How long a just-replaced refresh token still works (another tab refreshing at the same moment). */
+export const REFRESH_GRACE_SECONDS = 30;
+/**
+ * Rotates the user's refresh token only if KEYS[1] still holds the one presented (ARGV[1]): stores
+ * the new one (ARGV[2], ttl ARGV[3]) and keeps the old one in KEYS[2] for the grace window (ARGV[4]).
+ */
+const ROTATE_REFRESH_TOKEN = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
+  redis.call('SET', KEYS[2], ARGV[1], 'EX', tonumber(ARGV[4]))
+  return 1
+end
+return 0`;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -755,18 +771,18 @@ export class AuthService {
 
   // ---------------------------------(end)---------------------------------------
 
-  /** Signs a refresh token (marked `typ: 'refresh'` so it can't be used as an access token) and stores it. */
-  private async issueRefreshToken(payload: { email: string; sub: string; type: unknown }) {
-    const refreshToken = this.jwtService.sign(
+  /** Signs a refresh token (marked `typ: 'refresh'` so it can't be used as an access token). */
+  private signRefreshToken(payload: { email: string; sub: string; type: unknown }) {
+    return this.jwtService.sign(
       { ...payload, typ: 'refresh' },
       { expiresIn: (process.env.JWT_REFRESH_EXPIRY ?? '7d') as any },
     );
-    await this.redis.set(
-      `refresh_token:${payload.sub}`,
-      refreshToken,
-      'EX',
-      60 * 60 * 24 * 7, // 7 days in seconds
-    );
+  }
+
+  /** Signs a refresh token and stores it as the user's current one. */
+  private async issueRefreshToken(payload: { email: string; sub: string; type: unknown }) {
+    const refreshToken = this.signRefreshToken(payload);
+    await this.redis.set(`refresh_token:${payload.sub}`, refreshToken, 'EX', REFRESH_TTL_SECONDS);
     return refreshToken;
   }
 
@@ -788,8 +804,14 @@ export class AuthService {
         return { success: false, message: 'Invalid or expired refresh token' };
       }
 
-      const storedToken = await this.redis.get(`refresh_token:${user_id}`);
-      if (!storedToken || storedToken !== refreshToken) {
+      const currentKey = `refresh_token:${user_id}`;
+      const previousKey = `refresh_token_prev:${user_id}`;
+      const storedToken = await this.redis.get(currentKey);
+      // Two tabs (or a tab and a retry) refreshing at once: the first rotates, the second arrives with
+      // the token just replaced. Within a short grace window that one still gets in, with the
+      // current refresh token (no second rotation), instead of signing the user out.
+      const justRotated = !!storedToken && storedToken !== refreshToken && (await this.redis.get(previousKey)) === refreshToken;
+      if (!storedToken || (storedToken !== refreshToken && !justRotated)) {
         return { success: false, message: 'Invalid or expired refresh token' };
       }
 
@@ -806,14 +828,30 @@ export class AuthService {
       const accessToken = this.jwtService.sign(payload, {
         expiresIn: (process.env.JWT_ACCESS_EXPIRY ?? '1h') as any,
       });
-      const newRefreshToken = await this.issueRefreshToken(payload);
+      let refreshTokenOut = storedToken;
+      if (!justRotated) {
+        // rotate only if the token is still the current one (atomic: a concurrent refresh can't
+        // rotate it a second time), remembering the old one for the grace window
+        const newRefreshToken = this.signRefreshToken(payload);
+        const rotated = await this.redis.eval(ROTATE_REFRESH_TOKEN, 2, currentKey, previousKey, refreshToken, newRefreshToken, REFRESH_TTL_SECONDS, REFRESH_GRACE_SECONDS);
+        if (rotated === 1) {
+          refreshTokenOut = newRefreshToken;
+        } else {
+          // another refresh rotated it a moment ago: hand out what it stored
+          const now = await this.redis.get(currentKey);
+          if (!now || (await this.redis.get(previousKey)) !== refreshToken) {
+            return { success: false, message: 'Invalid or expired refresh token' };
+          }
+          refreshTokenOut = now;
+        }
+      }
 
       return {
         success: true,
         authorization: {
           type: 'bearer',
           access_token: accessToken,
-          refresh_token: newRefreshToken,
+          refresh_token: refreshTokenOut,
         },
       };
     } catch (error) {
@@ -859,7 +897,7 @@ export class AuthService {
         };
       }
 
-      await this.redis.del(`refresh_token:${user_id}`);
+      await this.redis.del(`refresh_token:${user_id}`, `refresh_token_prev:${user_id}`);
 
       return {
         success: true,
@@ -1200,7 +1238,7 @@ export class AuthService {
     await this.identity.purgeForUser(userId).catch(() => undefined);
     const result = await this.userRepository.deleteUser(userId);
     if (result.success) {
-      await this.redis.del(`refresh_token:${userId}`).catch(() => null);
+      await this.redis.del(`refresh_token:${userId}`, `refresh_token_prev:${userId}`).catch(() => null);
     }
     return result;
   }

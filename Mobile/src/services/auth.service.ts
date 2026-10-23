@@ -1,3 +1,4 @@
+import type { WorkingHours } from '../utils/workingHours';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, TOKEN_KEY, USER_KEY } from './api';
 
@@ -62,6 +63,6 @@ export const AuthService = {
   },
 
   /** Vendors: weekly working hours (all 7 days, null = closed day), or null to clear them. */
-  updateWorkingHours: (working_hours: Record<string, { open: string; close: string } | null> | null) =>
+  updateWorkingHours: (working_hours: WorkingHours | null) =>
     api.patch<{ success: boolean; message?: string }>('/auth/update', { working_hours }),
 };

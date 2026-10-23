@@ -26,6 +26,17 @@ describe('MailService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('sendBookingNotification', () => {
+    const params = { to: 'a@x.com', recipientName: 'Amara', subject: 'Receipt', message: 'Thanks', status: 'RECEIPT', listingTitle: 'Buffet' };
+
+    it('says whether the email was queued', async () => {
+      expect(await service.sendBookingNotification(params)).toBe(true);
+      mockQueue.add.mockRejectedValueOnce(new Error('redis down'));
+      jest.spyOn(console, 'log').mockImplementationOnce(() => undefined);
+      expect(await service.sendBookingNotification(params)).toBe(false);
+    });
+  });
+
   describe('sendOtpCodeToEmail', () => {
     it('should add job to the mail queue', async () => {
       await service.sendOtpCodeToEmail({

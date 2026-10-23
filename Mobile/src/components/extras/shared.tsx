@@ -60,7 +60,7 @@ export function ExtraLine({ extra, role, children }: { extra: Extra; role: Role;
       {extra.kind === 'ADD_ON' && !!extra.extends_minutes && (
         <View style={s.meta}>
           <Ionicons name="time-outline" size={14} color={DARK.accent} />
-          <Text style={[s.status, { color: DARK.accent }]}>{extra.extends_label ?? `Adds ${durationText(extra.extends_minutes)}`}</Text>
+          <Text style={[s.status, { color: DARK.accent }]}>{extra.extends_label ?? `Adds ${durationText(extra.extends_minutes)}${extra.payment?.status === 'PAID' ? '' : ' once paid'}`}</Text>
         </View>
       )}
       {!!extra.note && <Text style={s.note}>“{extra.note}”</Text>}
@@ -77,9 +77,9 @@ export function ExtraLine({ extra, role, children }: { extra: Extra; role: Role;
   );
 }
 
-/** Once an add-on that adds time is approved: when the booking now ends. */
+/** Once an add-on that adds time is paid: when the booking now ends. */
 export function NewEndTime({ extras, meta }: { extras: Extra[]; meta: ExtrasMeta | null }) {
-  if (!meta?.event_end_at || !extras.some((e) => e.kind === 'ADD_ON' && !!e.extends_minutes && e.status === 'APPROVED')) return null;
+  if (!meta?.event_end_at || !extras.some((e) => e.kind === 'ADD_ON' && !!e.extends_minutes && e.payment?.status === 'PAID')) return null;
   return (
     <View style={[s.meta, { gap: 8 }]}>
       <Ionicons name="time-outline" size={16} color={DARK.accent} />

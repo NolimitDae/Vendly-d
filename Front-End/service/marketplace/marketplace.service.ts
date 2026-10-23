@@ -19,6 +19,8 @@ export const MarketplaceService = {
     page?: number;
     limit?: number;
     sort?: string;
+    /** yyyy-MM-dd: only packages free that day */
+    date?: string;
     /** "near me": only listings within radius_miles of this point */
     near_lat?: number;
     near_lng?: number;

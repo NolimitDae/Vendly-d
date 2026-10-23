@@ -185,7 +185,7 @@ run('Add-ons and fees (e2e)', () => {
     expect(after.status).toBe('WAIVED');
   });
 
-  it('an add-on that adds time moves the end once approved; a declined one does not', async () => {
+  it('an add-on that adds time moves the end once paid (exactly once); an unpaid or declined one does not', async () => {
     await prisma.booking.update({ where: { id: bookingId }, data: { payment_method_id: 'pm_e2e_card' } });
     const before = (await prisma.booking.findUnique({ where: { id: bookingId } })).event_end_at as Date;
 
@@ -194,21 +194,35 @@ run('Add-ons and fees (e2e)', () => {
     const sent = await http().post(`/api/bookings/${bookingId}/extras`).auth(T.vendor, { type: 'bearer' })
       .send({ kind: 'ADD_ON', name: 'Two more hours', unit_price: 150, price_unit: 'PER_HOUR', quantity: 2, extends_minutes: 120 });
     expect(sent.status).toBe(201);
-    expect(sent.body.data).toMatchObject({ extends_minutes: 120, extends_label: 'Adds 2 hours' });
+    expect(sent.body.data).toMatchObject({ extends_minutes: 120, extends_label: 'Adds 2 hours once paid' });
 
     const declinedOne = await http().post(`/api/bookings/${bookingId}/extras`).auth(T.vendor, { type: 'bearer' }).send({ kind: 'ADD_ON', name: 'Late night set', unit_price: 300, extends_minutes: 60 });
     expect(declinedOne.status).toBe(201);
     expect((await http().post(`/api/booking-extras/${declinedOne.body.data.id}/decline`).auth(T.cust, { type: 'bearer' }).send({ reason: 'Too late for us' })).status).toBe(201);
     expect(((await prisma.booking.findUnique({ where: { id: bookingId } })).event_end_at as Date).getTime()).toBe(before.getTime());
 
-    // the card charge fails here (no Stripe customer), but the customer agreed to the time
+    // the card charge fails here (no Stripe customer): approved, but not paid, so no time yet
     const approved = await http().post(`/api/booking-extras/${sent.body.data.id}/approve`).auth(T.cust, { type: 'bearer' }).send({});
     expect(approved.status).toBe(201);
-    const after = (await prisma.booking.findUnique({ where: { id: bookingId } })).event_end_at as Date;
-    expect(after.getTime() - before.getTime()).toBe(120 * 60_000);
+    expect(approved.body.data.paid).toBe(false);
+    expect(((await prisma.booking.findUnique({ where: { id: bookingId } })).event_end_at as Date).getTime()).toBe(before.getTime());
     const again = await http().post(`/api/booking-extras/${sent.body.data.id}/approve`).auth(T.cust, { type: 'bearer' }).send({});
     expect(again.status).toBe(400);
-    expect(((await prisma.booking.findUnique({ where: { id: bookingId } })).event_end_at as Date).getTime()).toBe(after.getTime());
+    expect(((await prisma.booking.findUnique({ where: { id: bookingId } })).event_end_at as Date).getTime()).toBe(before.getTime());
+
+    // the payment lands (Stripe's webhook), and lands again (the charge call and the webhook both
+    // report it): the end moves once
+    const installmentId = (await prisma.bookingExtra.findUnique({ where: { id: sent.body.data.id } })).installment_id as string;
+    expect(installmentId).toBeTruthy();
+    const { PaymentsService } = await import('../src/modules/payments/payments.service');
+    const payments = app.get(PaymentsService);
+    const succeeded = { id: `pi_e2e_${id}`, status: 'succeeded', metadata: { installment_id: installmentId } };
+    await Promise.all([payments.reconcilePaymentIntent(succeeded), payments.reconcilePaymentIntent(succeeded)]);
+    await payments.reconcilePaymentIntent(succeeded);
+    expect((await prisma.bookingInstallment.findUnique({ where: { id: installmentId } })).status).toBe('PAID');
+    const after = (await prisma.booking.findUnique({ where: { id: bookingId } })).event_end_at as Date;
+    expect(after.getTime() - before.getTime()).toBe(120 * 60_000);
+    expect(await prisma.paymentTransaction.count({ where: { type: 'booking_installment', reference_number: succeeded.id } })).toBe(1);
 
     const listed = await http().get(`/api/bookings/${bookingId}/extras`).auth(T.vendor, { type: 'bearer' });
     expect(new Date(listed.body.meta.event_end_at).getTime()).toBe(after.getTime());

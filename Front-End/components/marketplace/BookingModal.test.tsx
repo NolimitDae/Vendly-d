@@ -390,6 +390,43 @@ describe('BookingModal', () => {
       expect(options(/end time/i)).toEqual(['15:00', '15:30', '16:00']);
     });
 
+    describe('in another time zone than the customer’s', () => {
+      // this test's "device" is in UTC; the vendor saved their hours in Chicago (UTC−5 in June)
+      const prevTz = process.env.TZ;
+      beforeAll(() => {
+        process.env.TZ = 'UTC';
+      });
+      afterAll(() => {
+        process.env.TZ = prevTz;
+      });
+      const chicago = { ...listing, working_hours: { ...hours, timezone: 'America/Chicago' } };
+
+      it('names the vendor’s zone and offers the customer’s times that fit it', async () => {
+        (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
+        const user = userEvent.setup();
+        render(<BookingModal listing={chicago} onClose={onClose} />);
+        expect(screen.getByText('Works Mon–Fri 9am–5pm · Sat 10am–2pm (Chicago time)')).toBeInTheDocument();
+        // Saturday 10am–2pm in Chicago is 3pm–7pm here
+        await user.type(screen.getByLabelText(/event date/i), '2030-06-01');
+        await user.click(screen.getByText('DJ Service'));
+        expect(screen.getByText('The vendor works 10am–2pm (Chicago time) on Saturdays.')).toBeInTheDocument();
+        expect(options(/start time/i)).toEqual(['15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30']);
+        await user.selectOptions(screen.getByLabelText(/start time/i), '18:00');
+        expect(options(/end time/i)).toEqual(['18:30', '19:00']);
+        await user.selectOptions(screen.getByLabelText(/end time/i), '19:00');
+        await user.click(screen.getByRole('button', { name: /review contract/i }));
+        await waitFor(() => expect(ContractsService.bookingPreview).toHaveBeenCalled());
+        const sent = (ContractsService.bookingPreview as jest.Mock).mock.calls[0][0];
+        expect(sent.event_start_at).toBe('2030-06-01T18:00:00.000Z');
+        expect(sent.event_end_at).toBe('2030-06-01T19:00:00.000Z');
+      });
+
+      it('leaves the zone out when it is the customer’s own', () => {
+        render(<BookingModal listing={{ ...listing, working_hours: { ...hours, timezone: 'UTC' } }} onClose={onClose} />);
+        expect(screen.getByText('Works Mon–Fri 9am–5pm · Sat 10am–2pm')).toBeInTheDocument();
+      });
+    });
+
     it('keeps the plain date and time fields when no hours are set', () => {
       render(<BookingModal listing={listing} onClose={onClose} />);
       expect(screen.getByLabelText(/event date/i)).toHaveAttribute('type', 'date');

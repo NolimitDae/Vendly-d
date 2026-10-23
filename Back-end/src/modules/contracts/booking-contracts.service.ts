@@ -1,5 +1,6 @@
 import { eventDays } from 'src/modules/calendar-sync/busy-days';
-import { outsideWorkingHours, readWorkingHours } from 'src/modules/vendor/working-hours';
+import { hoursZone, outsideWorkingHours, readWorkingHours } from 'src/modules/vendor/working-hours';
+import { assertNotCancelled, CANCELLED_NO_BOOKINGS } from 'src/modules/events/event-rules';
 import {
   BadRequestException,
   ConflictException,
@@ -198,13 +199,15 @@ export class BookingContractsService {
     });
     if (!customer) throw new NotFoundException('User not found');
 
-    let event: { id: string; name: string; venue: string | null; guest_count: number | null; client_email: string | null } | null = null;
+    let event: { id: string; name: string; venue: string | null; guest_count: number | null; client_email: string | null; status: string | null } | null = null;
     if (dto.event_id) {
       event = await this.prisma.event.findFirst({
         where: { id: dto.event_id, event_planner_id: userId },
-        select: { id: true, name: true, venue: true, guest_count: true, client_email: true },
+        select: { id: true, name: true, venue: true, guest_count: true, client_email: true, status: true },
       });
       if (!event) throw new ForbiddenException('Event not found');
+      // no new vendor bookings for a cancelled event
+      assertNotCancelled(event, CANCELLED_NO_BOOKINGS);
     }
 
     let vc = await this.vendorContracts.resolveForListing(listing.vendor_id, listing.id);
@@ -267,12 +270,18 @@ export class BookingContractsService {
         error: 'DATE_UNAVAILABLE',
       });
     }
-    // weekly hours, when the vendor set them: a closed day, or a start/end outside that day's hours
+    // weekly hours, when the vendor set them: a closed day, or a start/end outside that day's hours,
+    // in the vendor's time zone (or, for hours saved before it was kept, a real one from the customer)
+    const hours = readWorkingHours(profile?.working_hours);
+    if (!hours) return;
+    const where = hoursZone(hours, dto.timezone);
+    if ('error' in where) throw new BadRequestException({ message: where.error, error: 'UNKNOWN_TIMEZONE' });
     const outside = outsideWorkingHours(
-      readWorkingHours(profile?.working_hours),
+      hours,
       new Date(start),
       dto.event_end_at ? new Date(dto.event_end_at) : null,
-      dto.timezone,
+      where.zone,
+      where.differs ? where.zone : null,
     );
     if (outside) throw new ConflictException({ message: outside, error: 'OUTSIDE_WORKING_HOURS' });
   }

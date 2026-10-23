@@ -85,7 +85,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       sock.on("receiveNotification", (data: any) => {
         const notification: AppNotification = data?.notification ?? data;
-        // Filter — backend broadcasts to all; only accept if destined for us
+        // the server sends only our own notifications; this is a second check
         if (notification.user_id && notification.user_id !== userId) return;
         setNotifications((prev) => [notification, ...prev]);
         setUnread((n) => n + 1);

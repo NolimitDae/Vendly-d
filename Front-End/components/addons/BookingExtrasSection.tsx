@@ -186,7 +186,7 @@ export default function BookingExtrasSection({
         </p>
       )}
 
-      {meta?.event_end_at && extras.some((e) => e.kind === "ADD_ON" && !!e.extends_minutes && e.status === "APPROVED") && (
+      {meta?.event_end_at && extras.some((e) => e.kind === "ADD_ON" && !!e.extends_minutes && e.payment?.status === "PAID") && (
         <p className="text-sm rounded-lg bg-primary/5 text-gray-800 dark:text-gray-200 px-3 py-2 flex items-center gap-2">
           <Clock className="w-4 h-4 text-primary" aria-hidden />
           With the added time, the booking now ends {dayjs(meta.event_end_at).format("ddd, MMM D [at] h:mm A")}.
@@ -231,7 +231,7 @@ export default function BookingExtrasSection({
                     {e.kind === "ADD_ON" && !!e.extends_minutes && (
                       <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
                         <Clock className="w-3.5 h-3.5" aria-hidden />
-                        {e.extends_label ?? `Adds ${durationText(e.extends_minutes)}`}
+                        {e.extends_label ?? `Adds ${durationText(e.extends_minutes)}${e.payment?.status === "PAID" ? "" : " once paid"}`}
                       </p>
                     )}
                   </div>
@@ -534,7 +534,7 @@ function RequestForm({
                 );
               })}
             </div>
-            {extendsMinutes ? <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">When the customer approves, the booking ends {durationText(extendsMinutes)} later.</p> : null}
+            {extendsMinutes ? <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Once the customer approves and pays, the booking ends {durationText(extendsMinutes)} later.</p> : null}
           </div>
         )}
         <div className="sm:col-span-2">

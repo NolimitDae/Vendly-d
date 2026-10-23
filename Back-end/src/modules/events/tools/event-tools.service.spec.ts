@@ -174,6 +174,13 @@ describe('EventToolsService', () => {
       expect(prisma.bookingContract.findMany).toHaveBeenCalledTimes(1); // only when the client changed
     });
 
+    it("can't change the client of a cancelled event", async () => {
+      prisma.event.findUnique.mockResolvedValue(event({ client_email: null, status: 'CANCELLED' }));
+      await expect(service.setClient('e1', 'planner', { email: 'ada@example.com' })).rejects.toThrow("This event was cancelled, so it can't be changed.");
+      expect(prisma.event.update).not.toHaveBeenCalled();
+      expect(mail.sendBookingNotification).not.toHaveBeenCalled();
+    });
+
     const waiting = [{ id: 'c1', booking: { vendor_id: 'v1', listing: { title: 'DJ' } } }];
 
     it('a new client email takes over contracts waiting for the co-signature, and the invite says so', async () => {

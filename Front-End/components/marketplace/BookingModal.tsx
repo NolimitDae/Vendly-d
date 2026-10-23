@@ -17,7 +17,7 @@ import { PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/paym
 import { toast } from "react-toastify";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { packagePriceText, perUnit, quantityRangeText } from "@/lib/addons";
-import { dayKeyOf, endTimesOn, formatTime, hoursMessage, isOpenDay, startTimesOn, summariseHours, type WorkingHours } from "@/lib/working-hours";
+import { dayKeyOf, endTimesOn, formatTime, hoursMessage, isOpenDay, otherZone, startTimesOn, summariseHours, withZone, type WorkingHours } from "@/lib/working-hours";
 
 interface Props {
   listing: {
@@ -105,7 +105,9 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const range = quote ? null : quantityRangeText(listing.price_unit, minQ, maxQ);
   // the vendor's weekly hours (null = any day, any time)
   const hours = listing.working_hours ?? null;
-  const hoursText = summariseHours(hours);
+  const summary = summariseHours(hours);
+  // "(Chicago time)" when the vendor's hours are in another zone than the customer's
+  const hoursText = summary && withZone(summary, hours);
   // hourly packages: the booking has to fit the fewest hours inside the day, and not run past the most
   const minMinutes = unit === "hour" && minQ ? minQ * 60 : 30;
   const startOptions = startTimesOn(hours, date, 30, minMinutes);
@@ -388,7 +390,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                   />
                 )}
               </div>
-              {hours && date && hours[dayKeyOf(date)] && (
+              {hours && date && (otherZone(hours) ? isOpenDay(hours, date) : hours[dayKeyOf(date)]) && (
                 <p className="col-span-2 text-xs text-gray-500 dark:text-gray-400 -mt-1">{hoursMessage(hours, dayKeyOf(date))}</p>
               )}
               {unit === "hour" && (

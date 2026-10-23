@@ -1,7 +1,7 @@
 "use client";
 
 import { CookieHelper } from "@/helper/cookie.helper";
-import { clearSession } from "@/lib/session";
+import { signOut } from "@/lib/session";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import React, { useState } from "react";
@@ -30,7 +30,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
   const handleLogout = () => {
     // Was destroying "accessToken", which never existed, so admin logout left the session active.
-    clearSession();
+    signOut();
     router.push("/login");
   };
   return (

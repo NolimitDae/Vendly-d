@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import { PDFDocument } from 'pdf-lib';
 import { ContractCategory } from 'prisma/generated/client';
@@ -430,6 +430,32 @@ describe('booking outside the vendor’s working hours', () => {
   it('allows anything when no hours are set (or they are unreadable)', async () => {
     await expect(setup(null).check({ event_start_at: new Date('2026-10-25T03:00:00Z') })).resolves.toBeUndefined();
     await expect(setup({ mon: 'bad' }).check({ event_start_at: new Date('2026-10-25T03:00:00Z') })).resolves.toBeUndefined();
+  });
+
+  it('checks hours in the vendor’s own time zone when it is saved with them, naming it when it isn’t the customer’s', async () => {
+    const chicago = { ...hours, timezone: 'America/Chicago' };
+    // Sat Oct 24 2026 16:00 UTC: 11am in Chicago (open), 12pm in New York
+    await expect(setup(chicago).check({ event_start_at: new Date('2026-10-24T16:00:00Z'), timezone: 'America/New_York' })).resolves.toBeUndefined();
+    // 14:30 UTC: 9:30am in Chicago, before the 10am opening, though 10:30am for a New York customer
+    const early = await refusal(setup(chicago).check({ event_start_at: new Date('2026-10-24T14:30:00Z'), timezone: 'America/New_York' }));
+    expect(early.message).toBe('The vendor works 10am–2pm (Chicago time) on Saturdays.');
+    // a customer can't move the check by sending another zone, or none
+    const tokyo = await refusal(setup(chicago).check({ event_start_at: new Date('2026-10-24T14:30:00Z'), timezone: 'Asia/Tokyo' }));
+    expect(tokyo.error).toBe('OUTSIDE_WORKING_HOURS');
+    await expect(setup(chicago).check({ event_start_at: new Date('2026-10-24T16:00:00Z'), timezone: 'Not/AZone' })).resolves.toBeUndefined();
+    // same zone as the customer: no zone in the words
+    const same = await refusal(setup(chicago).check({ event_start_at: new Date('2026-10-24T14:30:00Z'), timezone: 'America/Chicago' }));
+    expect(same.message).toBe('The vendor works 10am–2pm on Saturdays.');
+  });
+
+  it('refuses a request without a real time zone when the hours have none, rather than guessing UTC', async () => {
+    for (const timezone of ['Not/AZone', undefined, '+05:00']) {
+      const err = await setup().check({ event_start_at: new Date('2026-10-24T16:00:00Z'), timezone }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({ message: 'Your time zone wasn’t recognised. Please refresh and try again.' });
+    }
+    // no hours set: nothing to check, so no zone needed
+    await expect(setup(null).check({ event_start_at: new Date('2026-10-24T16:00:00Z') })).resolves.toBeUndefined();
   });
 
   it('still reports a blocked date first', async () => {

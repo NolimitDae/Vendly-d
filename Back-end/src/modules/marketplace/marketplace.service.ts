@@ -11,6 +11,29 @@ import { mergeDayRanges, todayUtc } from 'src/modules/calendar-sync/busy-days';
 import { readWorkingHours, summariseWorkingHours } from 'src/modules/vendor/working-hours';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
+/** How far "near me" looks by default (miles). */
+export const DEFAULT_RADIUS_MILES = 25;
+
+/** Listing filter: packages bookable on a day (yyyy-MM-dd): not blocked by the vendor, and the vendor's own calendar isn't busy. */
+export function availableOnDayWhere(date: string) {
+  const day = new Date(date + 'T00:00:00.000Z');
+  return {
+    blockedDates: { none: { start_date: { lte: day }, end_date: { gte: day } } },
+    vendor: { calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } },
+  };
+}
+
+/** Listing filter: a cheap box around a point, wide enough for vendors based further away who travel to the customer. */
+export function nearBoxWhere(near: { lat: number; lng: number }, radius: number) {
+  const box = boundingBox(near, Math.max(radius, MAX_SERVICE_RADIUS));
+  return { lat: { gte: box.minLat, lte: box.maxLat }, lng: { gte: box.minLng, lte: box.maxLng } };
+}
+
+/** Near me: the listing is within the customer's distance, or the vendor travels that far to them. */
+export function withinReach(distanceMiles: number | null | undefined, radius: number, serviceRadiusMiles?: number | null) {
+  return distanceMiles != null && (distanceMiles <= radius || (!!serviceRadiusMiles && distanceMiles <= serviceRadiusMiles));
+}
+
 @Injectable()
 export class MarketplaceService {
   constructor(private prisma: PrismaService) {}
@@ -42,22 +65,14 @@ export class MarketplaceService {
       if (query.max_price !== undefined) where.price.lte = query.max_price;
     }
 
-    // packages the vendor has blocked on that day are left out
-    if (query.date) {
-      const day = new Date(query.date + 'T00:00:00.000Z');
-      where.blockedDates = { none: { start_date: { lte: day }, end_date: { gte: day } } };
-      // and so are vendors whose own calendar is busy that day
-      where.vendor = { calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } };
-    }
+    // packages the vendor has blocked on that day are left out, and so are vendors whose own calendar is busy
+    if (query.date) Object.assign(where, availableOnDayWhere(query.date));
 
     // near me: a cheap box in the database, then the exact distance below
     const near = query.near_lat !== undefined && query.near_lng !== undefined ? { lat: Number(query.near_lat), lng: Number(query.near_lng) } : null;
-    const radius = Number(query.radius_miles ?? 25);
+    const radius = Number(query.radius_miles ?? DEFAULT_RADIUS_MILES);
     if (near) {
-      // wide enough for vendors based further away who travel to the customer
-      const box = boundingBox(near, Math.max(radius, MAX_SERVICE_RADIUS));
-      where.lat = { gte: box.minLat, lte: box.maxLat };
-      where.lng = { gte: box.minLng, lte: box.maxLng };
+      Object.assign(where, nearBoxWhere(near, radius));
     }
 
     const sortByRating = query.sort === 'rating';
@@ -102,7 +117,7 @@ export class MarketplaceService {
 
     let matched = total;
     // near me: listings within the customer's distance, or vendors who travel that far to them
-    if (near) formattedListings = formattedListings.filter((l) => l.distance_miles != null && (l.distance_miles <= radius || (!!l.service_radius_miles && l.distance_miles <= l.service_radius_miles)));
+    if (near) formattedListings = formattedListings.filter((l) => withinReach(l.distance_miles, radius, l.service_radius_miles));
     if (query.min_rating !== undefined) formattedListings = formattedListings.filter((l) => (l.avg_rating ?? 0) >= query.min_rating!);
     if (inMemory) matched = formattedListings.length;
     if (sortByRating) formattedListings.sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));

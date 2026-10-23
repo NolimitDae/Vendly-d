@@ -189,6 +189,18 @@ export default function CustomerHome() {
         </View>
       </BrandGradient>
 
+      {/* Plan your event: suggested services, budget split and who is free */}
+      <PressableScale style={s.rentals} onPress={() => nav.navigate('PlanEvent')} accessibilityRole="button" accessibilityLabel="Plan your event" accessibilityHint="Get a checklist of services, a budget split and vendors who are free">
+        <View style={s.rentalsIcon}>
+          <Ionicons name="clipboard-outline" size={26} color={DARK.accent} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.rentalsTitle}>Plan your event</Text>
+          <Text style={s.rentalsBody}>What to book, a budget split and who’s free on your date</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={DARK.muted} />
+      </PressableScale>
+
       {/* Categories */}
       {categories.length > 0 && (
         <View style={s.section}>

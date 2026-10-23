@@ -7,7 +7,7 @@ import {
   WEB_CLIENT_VALUE,
   apiBase,
   clearLegacySession,
-  clearSession,
+  clearLocalSession,
   saveSession,
 } from "./session";
 
@@ -45,12 +45,31 @@ async function refreshSession(): Promise<boolean> {
   return false;
 }
 
-// One refresh at a time: concurrent 401s wait for the same refresh instead of each starting their own.
+// One refresh at a time in this tab: concurrent 401s wait for the same refresh instead of each starting their own.
 let refreshing: Promise<boolean> | null = null;
-const refreshOnce = () =>
+const refreshInTab = () =>
   (refreshing ??= refreshSession().finally(() => {
     refreshing = null;
   }));
+
+/** The browser's cross-tab lock, where there is one (every current browser; not jsdom or old Safari). */
+const tabLocks = (): LockManager | null =>
+  typeof navigator !== "undefined" && typeof navigator.locks?.request === "function" ? navigator.locks : null;
+
+/**
+ * One refresh at a time across this browser's tabs: the refresh token rotates, so two tabs
+ * refreshing at once would otherwise race. `stillExpired`, when given, runs once the lock is held
+ * and says whether a refresh is still needed (another tab may have just done it). Without the lock
+ * API, falls back to one refresh at a time in this tab. True when the session is good now.
+ */
+async function refreshOnce(stillExpired?: () => Promise<boolean>): Promise<boolean> {
+  const locks = tabLocks();
+  if (!locks) return refreshInTab();
+  return locks.request("vendly-refresh", async () => {
+    if (stillExpired && !(await stillExpired())) return true;
+    return refreshSession();
+  });
+}
 
 // Sessions from before the HttpOnly cookies move over on the first API call of a page load.
 let migration: Promise<boolean> | null = null;
@@ -98,6 +117,14 @@ axios.interceptors.request.use(async (config: RetriableConfig) => {
   return config;
 });
 
+/** The request again, with whatever login is current now. */
+function replay(original: RetriableConfig, extra: Partial<RetriableConfig> = {}) {
+  const now = legacyAuthorization();
+  if (now) original.headers.set("Authorization", now);
+  else original.headers.delete("Authorization");
+  return axios({ ...original, ...extra });
+}
+
 axios.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -106,15 +133,33 @@ axios.interceptors.response.use(
       // Access tokens expire; refresh once and replay the request before giving up.
       if (original && !original._retried && !original._skipAuthRefresh) {
         original._retried = true;
-        if (await refreshOnce()) {
-          const now = legacyAuthorization();
-          if (now) original.headers.set("Authorization", now);
-          else original.headers.delete("Authorization");
-          return axios(original);
+        // with the cross-tab lock held, the request is first tried again as is: if another tab
+        // refreshed meanwhile it now works, and this tab doesn't rotate the refresh token again
+        let early: { response?: unknown; error?: unknown } | null = null;
+        const stillExpired = async () => {
+          try {
+            early = { response: await replay(original, { _skipAuthRefresh: true }) };
+            return false;
+          } catch (e) {
+            if ((e as AxiosError)?.response?.status === 401) return true;
+            early = { error: e };
+            return false;
+          }
+        };
+        if (await refreshOnce(stillExpired)) {
+          const done = early as { response?: unknown; error?: unknown } | null;
+          if (done) {
+            if ("error" in done) return Promise.reject(done.error);
+            return done.response;
+          }
+          return replay(original);
         }
       }
       if (!original?._skipAuthRefresh) {
-        void clearSession();
+        // The session is gone (or this request isn't allowed). Forget it here and send the user to
+        // log in, but don't sign out on the server: that would end every tab's session (and the
+        // refresh token another tab may have just been given). Only "Log out" does that.
+        clearLocalSession();
         const path = window.location.pathname;
         const publicPaths = ["/login", "/register", "/otp", "/forget-password", "/change-password"];
         if (!publicPaths.some((p) => path.startsWith(p))) {
