@@ -40,6 +40,10 @@ jest.mock('@/service/vendor/vendor-listing.service', () => ({
   },
 }));
 
+jest.mock('@/service/geo/geo.service', () => ({
+  GeoService: { suggest: jest.fn().mockResolvedValue({ data: { data: [] } }), reverse: jest.fn() },
+}));
+
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }));
@@ -128,16 +132,19 @@ describe('NewListingPage', () => {
       expect(screen.getByPlaceholderText(/professional wedding photography/i)).toBeInTheDocument();
       expect(screen.getByPlaceholderText(/describe your service/i)).toBeInTheDocument();
       expect(screen.getByPlaceholderText(/0\.00/)).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /select category/i })).toBeInTheDocument();
+      expect(screen.getByRole('combobox', { name: 'Category' })).toBeInTheDocument();
+      expect(screen.getByRole('combobox', { name: 'Package location' })).toBeInTheDocument();
     });
 
-    it('loads categories into the category select', async () => {
+    it('loads categories into the category search', async () => {
       setupActivePlan();
+      const user = userEvent.setup();
       render(<NewListingPage />);
 
-      await waitFor(() => {
-        expect(screen.getByRole('option', { name: 'Photography' })).toBeInTheDocument();
-      });
+      await waitFor(() => screen.getByText('Create New Listing'));
+      await waitFor(() => expect(MarketplaceService.getCategories).toHaveBeenCalled());
+      await user.click(screen.getByRole('combobox', { name: 'Category' }));
+      expect(await screen.findByRole('option', { name: /Photography/ })).toBeInTheDocument();
     });
   });
 
@@ -199,6 +206,32 @@ describe('NewListingPage', () => {
       });
       expect(toast.success).toHaveBeenCalledWith('Listing created!');
       expect(mockPush).toHaveBeenCalledWith('/vendor/listings');
+    });
+
+    it('sends the chosen category, location and travel radius', async () => {
+      setupActivePlan();
+      (VendorListingService.create as jest.Mock).mockResolvedValue({ data: { success: true } });
+      const user = userEvent.setup();
+      render(<NewListingPage />);
+
+      await waitFor(() => screen.getByText('Create New Listing'));
+      await waitFor(() => expect(MarketplaceService.getCategories).toHaveBeenCalled());
+      await user.type(screen.getByPlaceholderText(/professional wedding photography/i), 'Title');
+      await user.type(screen.getByPlaceholderText(/describe your service/i), 'Description');
+      await user.type(screen.getByPlaceholderText(/0\.00/), '50');
+      await user.click(screen.getByRole('combobox', { name: 'Category' }));
+      await user.click(await screen.findByRole('option', { name: /Photography/ }));
+      await user.type(screen.getByRole('combobox', { name: 'Package location' }), 'Austin, TX');
+      await user.click(screen.getByRole('button', { name: '25 mi' }));
+      await user.click(screen.getByRole('button', { name: /save as draft/i }));
+
+      await waitFor(() => expect(VendorListingService.create).toHaveBeenCalled());
+      const fd = (VendorListingService.create as jest.Mock).mock.calls[0][0] as FormData;
+      expect(fd.get('category_id')).toBe('cat-1');
+      expect(fd.get('sub_category_id')).toBeNull();
+      expect(fd.get('location')).toBe('Austin, TX');
+      expect(fd.get('lat')).toBeNull(); // typed, not picked: the server geocodes it
+      expect(fd.get('service_radius_miles')).toBe('25');
     });
 
     it('shows error toast when API returns success=false', async () => {
