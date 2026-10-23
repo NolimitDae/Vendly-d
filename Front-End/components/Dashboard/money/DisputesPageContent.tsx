@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
-import { Loader2 } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { MoneyService, type Dispute } from "@/service/admin/money.service";
+import { ContractsService, apiError } from "@/service/contracts/contracts.service";
+import AdminContractCard from "@/components/contracts/AdminContractCard";
 
 const money = (n: number | string) => "$" + Number(n).toFixed(2);
 
@@ -90,6 +92,7 @@ export default function DisputesPageContent() {
               {d.completed_at ? ` · completed ${dayjs(d.completed_at).format("MMM D")}` : ""} · {d.has_proof ? "vendor uploaded proof photos" : "no proof photos"}
             </p>
             {d.dispute_resolution && <p className="text-xs text-green-600">Resolved: {d.dispute_resolution}</p>}
+            <DisputeContract bookingId={d.id} />
 
             {tab === "open" &&
               (open === d.id ? (
@@ -120,6 +123,47 @@ export default function DisputesPageContent() {
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+/** The booking's signed contract, loaded on demand (admin views are recorded in its audit log). */
+function DisputeContract({ bookingId }: { bookingId: string }) {
+  const [contracts, setContracts] = useState<any[] | null>(null);
+  const [shown, setShown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const toggle = async () => {
+    if (shown) return setShown(false);
+    setShown(true);
+    if (contracts) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await ContractsService.adminBooking(bookingId);
+      setContracts(res.data?.data ?? []);
+    } catch (e) {
+      setError(apiError(e, "No contract for this booking."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <button type="button" onClick={toggle} aria-expanded={shown} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+        <FileText className="w-4 h-4" aria-hidden />
+        {shown ? "Hide contract" : "View contract"}
+      </button>
+      {shown &&
+        (loading ? (
+          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+        ) : error ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">{error}</p>
+        ) : (
+          contracts?.map((c) => <AdminContractCard key={c.id} contract={c} onError={(m) => toast.error(m)} />)
+        ))}
     </div>
   );
 }

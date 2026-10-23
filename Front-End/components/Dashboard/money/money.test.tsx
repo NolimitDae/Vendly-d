@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import FeeSettings from './FeeSettings';
 import DisputesPageContent from './DisputesPageContent';
+import { ContractsService } from '@/service/contracts/contracts.service';
 
 jest.mock('@/service/admin/money.service', () => ({
   MoneyService: {
@@ -15,6 +16,11 @@ jest.mock('@/service/admin/money.service', () => ({
     disputes: jest.fn(),
     resolveDispute: jest.fn(),
   },
+}));
+jest.mock('@/service/contracts/contracts.service', () => ({
+  ContractsService: { adminBooking: jest.fn(), downloadLink: jest.fn() },
+  apiError: (e: any, fallback = 'Something went wrong') => e?.response?.data?.message ?? fallback,
+  openContractFile: jest.fn(),
 }));
 jest.mock('react-toastify', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 
@@ -81,6 +87,36 @@ describe('DisputesPageContent', () => {
     await user.type(screen.getByLabelText(/decision note/i), 'Vendor confirmed no-show');
     await user.click(screen.getByRole('button', { name: /^resolve$/i }));
     await waitFor(() => expect(MoneyService.resolveDispute).toHaveBeenCalledWith('b1', { action: 'refund', amount: undefined, note: 'Vendor confirmed no-show' }));
+  });
+
+  it('shows the signed contract for the disputed booking', async () => {
+    (ContractsService.adminBooking as jest.Mock).mockResolvedValue({
+      data: {
+        data: [{
+          id: 'k1', version: 1, title: 'Bridal Glam agreement', status: 'EXECUTED', verification_code: 'ABC123', content_sha256: 'f'.repeat(64),
+          executed_pdf_key: 'contracts/k1.pdf', rendered_body: 'The vendor arrives by 9am.',
+          signatures: [{ id: 's1', role: 'CUSTOMER', legal_name: 'Amara Obi', signed_at: '2026-10-01T10:00:00Z' }],
+          auditEvents: [{ id: 'e1', created_at: '2026-10-01T10:00:00Z', action: 'SIGNED', actor: { name: 'Amara' } }],
+        }],
+      },
+    });
+    const user = userEvent.setup();
+    render(<DisputesPageContent />);
+    await user.click(await screen.findByRole('button', { name: 'View contract' }));
+    expect(ContractsService.adminBooking).toHaveBeenCalledWith('b1');
+    expect(await screen.findByText(/Bridal Glam agreement/)).toBeInTheDocument();
+    expect(screen.getByText('Amara Obi')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Signed PDF' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Hide contract' }));
+    expect(screen.queryByText(/Bridal Glam agreement/)).not.toBeInTheDocument();
+  });
+
+  it('says so when the booking has no contract', async () => {
+    (ContractsService.adminBooking as jest.Mock).mockRejectedValue({ response: { data: { message: 'No contracts for this booking.' } } });
+    const user = userEvent.setup();
+    render(<DisputesPageContent />);
+    await user.click(await screen.findByRole('button', { name: 'View contract' }));
+    expect(await screen.findByText('No contracts for this booking.')).toBeInTheDocument();
   });
 
   it('blocks a partial refund outside the held amount', async () => {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import ContractBody from "@/components/contracts/ContractBody";
-import ContractStatusBadge from "@/components/contracts/ContractStatusBadge";
+import AdminContractCard from "@/components/contracts/AdminContractCard";
 import { ContractsService, apiError, openContractFile } from "@/service/contracts/contracts.service";
 
 type Tab = "templates" | "vendor" | "booking";
@@ -246,68 +246,7 @@ function BookingLookupTab() {
       </form>
       <p className="text-xs text-gray-500 dark:text-gray-400">Admin views are recorded in each contract&apos;s audit log.</p>
       {contracts?.map((c) => (
-        <div key={c.id} className="bg-white rounded-xl border p-5 space-y-3 dark:bg-gray-800">
-          <div className="flex items-center justify-between">
-            <p className="font-semibold">
-              Version {c.version} · {c.title}
-            </p>
-            <ContractStatusBadge status={c.status} />
-          </div>
-          <div className="text-xs text-gray-500 space-y-0.5 break-all dark:text-gray-400">
-            <p>Verification code: {c.verification_code}</p>
-            <p>Content hash: {c.content_sha256}</p>
-            {c.executed_pdf_sha256 && <p>Executed PDF hash: {c.executed_pdf_sha256}</p>}
-          </div>
-          <div className="flex gap-3 text-sm">
-            {c.executed_pdf_key && (
-              <button
-                onClick={() => openContractFile(() => ContractsService.downloadLink(c.id, "executed")).catch((e) => toast.error(apiError(e)))}
-                className="text-primary underline"
-              >
-                Signed PDF
-              </button>
-            )}
-            <button
-              onClick={() => openContractFile(() => ContractsService.downloadLink(c.id, "draft")).catch((e) => toast.error(apiError(e)))}
-              className="text-primary underline"
-            >
-              Contract text
-            </button>
-          </div>
-          <div>
-            <p className="text-sm font-medium mb-1">Signatures</p>
-            <table className="w-full text-xs">
-              <tbody>
-                {c.signatures.map((s: any) => (
-                  <tr key={s.id} className="border-t align-top">
-                    <td className="py-1 pr-2 font-medium">{s.role}</td>
-                    <td className="py-1 pr-2">{s.legal_name}</td>
-                    <td className="py-1 pr-2">{new Date(s.signed_at).toLocaleString()}</td>
-                    <td className="py-1 pr-2">{s.ip_address}</td>
-                    <td className="py-1 pr-2">{[s.device_platform, s.app_version].filter(Boolean).join(" ")}</td>
-                    <td className="py-1">{s.has_signature_image ? "drawn" : "typed"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <details>
-            <summary className="text-sm font-medium cursor-pointer">Audit log ({c.auditEvents.length})</summary>
-            <table className="w-full text-xs mt-2">
-              <tbody>
-                {c.auditEvents.map((e: any) => (
-                  <tr key={e.id} className="border-t align-top">
-                    <td className="py-1 pr-2 whitespace-nowrap">{new Date(e.created_at).toLocaleString()}</td>
-                    <td className="py-1 pr-2 font-medium">{e.action}</td>
-                    <td className="py-1 pr-2">{e.actor?.name ?? e.actor_role ?? "system"}</td>
-                    <td className="py-1 pr-2">{e.ip_address}</td>
-                    <td className="py-1 break-all">{e.details ? JSON.stringify(e.details) : ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </details>
-        </div>
+        <AdminContractCard key={c.id} contract={c} onError={(m) => toast.error(m)} />
       ))}
     </div>
   );
