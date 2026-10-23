@@ -58,7 +58,7 @@ export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackP
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" bounces={false}>
         <View style={[s.welcome, { paddingTop: insets.top + 36 }]}>
           <Text style={ui.h1}>Hi, Welcome Back!</Text>
           <Text style={s.sub}>Sign in to continue to Vendly</Text>

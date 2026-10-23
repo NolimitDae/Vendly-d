@@ -90,7 +90,7 @@ export default function Payouts() {
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       >
         <ScreenHeader title="Payments & Payouts" onBack={() => nav.goBack()} />
         {loading ? (

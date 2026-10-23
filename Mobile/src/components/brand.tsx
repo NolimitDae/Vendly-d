@@ -1,6 +1,7 @@
 import React, { useId, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   StyleSheet,
   Text,
@@ -55,6 +56,30 @@ export function BrandGradient({ style, children }: { style?: StyleProp<ViewStyle
   );
 }
 
+/**
+ * A pressable that sinks slightly while held, like iOS controls and cards. Use for tappable cards and
+ * tiles; it only animates transform, so it stays smooth on the native driver.
+ */
+export function PressableScale({
+  children,
+  style,
+  onPress,
+  disabled,
+  scaleTo = 0.97,
+  ...rest
+}: Omit<React.ComponentProps<typeof Pressable>, 'style' | 'children'> & { children: React.ReactNode; style?: StyleProp<ViewStyle>; scaleTo?: number }) {
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const to = (v: number) => Animated.spring(scale, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
+  return (
+    // the pressable itself scales, so layout styles (widths, margins) keep working as on a plain Pressable
+    <AnimatedPressable {...rest} onPress={onPress} disabled={disabled} onPressIn={() => to(scaleTo)} onPressOut={() => to(1)} style={[style, { transform: [{ scale }] }]}>
+      {children}
+    </AnimatedPressable>
+  );
+}
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 export function GradientButton({
   title,
   onPress,
@@ -73,7 +98,7 @@ export function GradientButton({
 }) {
   const off = disabled || loading;
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.tap();
         onPress();
@@ -81,12 +106,12 @@ export function GradientButton({
       disabled={off}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!off }}
-      style={({ pressed }) => [{ opacity: disabled ? 0.4 : pressed ? 0.85 : 1 }, style]}
+      style={[{ opacity: disabled ? 0.4 : 1 }, style]}
     >
       <BrandGradient style={[ui.button, pill && { borderRadius: 100, height: 54 }]}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={ui.buttonText}>{title}</Text>}
       </BrandGradient>
-    </Pressable>
+    </PressableScale>
   );
 }
 

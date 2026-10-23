@@ -1,3 +1,4 @@
+import { haptic } from '../utils/haptics';
 import React from 'react';
 import { View, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -133,6 +134,8 @@ export default function CustomerTabs() {
   };
   return (
     <Tab.Navigator
+      // the small tick iOS tab bars give
+      screenListeners={{ tabPress: () => void haptic.select() }}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: '#fff',

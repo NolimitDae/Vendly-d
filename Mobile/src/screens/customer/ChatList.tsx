@@ -55,7 +55,7 @@ export default function ChatList() {
         data={items}
         keyExtractor={(c) => c.id}
         contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 32 }}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
         ListHeaderComponent={
           <View style={{ gap: 24, marginBottom: 12 }}>
             <Text style={s.title}>Message</Text>

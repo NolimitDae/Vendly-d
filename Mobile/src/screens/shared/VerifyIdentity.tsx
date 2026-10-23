@@ -107,7 +107,7 @@ export default function VerifyIdentity() {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 32, gap: 18 }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 32, gap: 18 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
           <Text style={s.lead}>We check once that you are who you say you are, before you can switch between customer, vendor and planner.</Text>
           {status === 'REJECTED' && (
             <Text style={s.error}>We couldn’t verify your last upload{reason ? `: ${reason}` : '.'} Please try again.</Text>

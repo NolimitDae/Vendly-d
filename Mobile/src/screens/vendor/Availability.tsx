@@ -90,7 +90,7 @@ export default function Availability() {
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <ScreenHeader title="Availability" onBack={() => nav.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 20 }}>
           <Text style={s.lead} numberOfLines={2}>{title}</Text>
@@ -174,7 +174,7 @@ const s = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: DARK.card },
   noteText: { flex: 1, color: '#fff', fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  monthBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: DARK.border },
+  monthBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: DARK.border },
   monthTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
   weekRow: { flexDirection: 'row' },
   weekday: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 14, fontFamily: FONTS.medium },

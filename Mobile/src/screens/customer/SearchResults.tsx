@@ -61,7 +61,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
         data={listings}
         keyExtractor={(l) => l.id}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 16 }}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
         ListHeaderComponent={
           <View style={{ gap: 20 }}>
             <ScreenHeader title={categoryName ?? (query ? 'Results' : 'All Services')} onBack={() => navigation.goBack()} />

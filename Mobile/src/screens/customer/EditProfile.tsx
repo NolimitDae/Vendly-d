@@ -68,7 +68,7 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 24 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 24 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
 
         <Pressable onPress={() => pick([1, 1], setPhoto)} style={s.avatar} accessibilityRole="button" accessibilityLabel="Change profile photo">

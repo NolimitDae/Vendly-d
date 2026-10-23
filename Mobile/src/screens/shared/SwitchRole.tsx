@@ -66,7 +66,7 @@ export default function SwitchRole() {
       {!info ? (
         <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 32, gap: 14 }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 32, gap: 14 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
           <Text style={s.lead}>Use one login as a customer, vendor and planner.</Text>
 
           {!id?.verified && (

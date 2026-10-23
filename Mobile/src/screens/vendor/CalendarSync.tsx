@@ -87,7 +87,7 @@ export default function CalendarSync() {
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <ScreenHeader title="Calendar sync" onBack={() => nav.goBack()} />
         {loading ? (
           <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />

@@ -70,7 +70,7 @@ export default function SignUp({ navigation, route }: NativeStackScreenProps<Aut
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 20 }}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       >
         <View style={s.topBar}>
           <BackButton onPress={() => navigation.goBack()} />

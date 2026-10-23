@@ -100,7 +100,7 @@ export default function CategoryPicker({
           <FlatList
             data={rows}
             keyExtractor={(r) => r.key}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
             contentContainerStyle={{ paddingVertical: 12 }}
             ListEmptyComponent={
               <Text style={s.empty}>{categories.length ? 'Nothing matches. Try another word, or pick the closest category.' : 'No categories yet.'}</Text>

@@ -66,7 +66,7 @@ export default function SendQuoteSheet({ visible, conversationId, onClose, onSen
           ) : packages.length === 0 ? (
             <Text style={s.muted}>Publish a package first. A quote sets a custom price on one of your live packages.</Text>
           ) : (
-            <ScrollView contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled">
+            <ScrollView contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
               <Text style={ui.label}>Package</Text>
               <View style={s.chips}>
                 {packages.map((p) => <Chip key={p.id} label={p.title} active={listingId === p.id} onPress={() => { setListingId(p.id); if (!amount) setAmount(String(p.price)); }} />)}

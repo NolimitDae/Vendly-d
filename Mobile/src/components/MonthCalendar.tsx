@@ -81,7 +81,7 @@ export default function MonthCalendar({
 
 const s = StyleSheet.create({
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  monthBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: DARK.border },
+  monthBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: DARK.border },
   monthTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
   weekday: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 10 },

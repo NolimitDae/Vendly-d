@@ -236,7 +236,7 @@ export default function VendorContracts() {
 
   if (mode.kind === 'default') {
     return (
-      <ScrollView style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      <ScrollView style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <Text style={s.h1}>{mode.replaceId ? 'Edit contract (new version)' : 'Vendly default contract'}</Text>
         <Text style={s.label}>Category</Text>
         <View style={s.chips}>
@@ -276,7 +276,7 @@ export default function VendorContracts() {
 
   if (mode.kind === 'upload') {
     return (
-      <ScrollView style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      <ScrollView style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <Text style={s.h1}>{mode.replaceId ? 'Replace uploaded contract' : 'Upload your own contract'}</Text>
         <Text style={s.muted}>
           PDF only, up to 10 MB, not password-protected. Vendly adds a booking addendum and a signature certificate to each booking.

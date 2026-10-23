@@ -166,7 +166,7 @@ export default function VendorBookingDetail() {
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       >
         <ScreenHeader title={st === 'PENDING' ? 'Request Booking' : 'Booking'} onBack={() => nav.goBack()} />
 

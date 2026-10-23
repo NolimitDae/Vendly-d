@@ -39,7 +39,7 @@ export default function FindVendors({ navigation, route }: NativeStackScreenProp
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 20, gap: 20 }}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       >
         <ScreenHeader title="Find Vendors" onBack={() => navigation.goBack()} />
 

@@ -43,7 +43,7 @@ export default function ChangePassword({ navigation }: { navigation: NativeStack
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 24 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 24 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <ScreenHeader title="Change Password" onBack={() => navigation.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 20 }}>
           <Text style={s.lead}>The new password must be different from the current password</Text>

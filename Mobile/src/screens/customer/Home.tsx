@@ -16,7 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DARK, FONTS } from '../../constants/colors';
-import { BrandGradient } from '../../components/brand';
+import { BrandGradient, PressableScale } from '../../components/brand';
+import { haptic } from '../../utils/haptics';
 import { ListingCardSkeleton } from '../../components/Skeleton';
 import { useFeature } from '../../hooks/useFeature';
 import { useAuth } from '../../context/AuthContext';
@@ -126,7 +127,7 @@ export default function CustomerHome() {
     <ScrollView
       style={s.root}
       contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 28 }}
-      keyboardShouldPersistTaps="handled"
+      keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />
       }
@@ -196,9 +197,12 @@ export default function CustomerHome() {
           <View style={s.grid}>
             {tiles.map((c) => {
               return (
-                <Pressable
+                <PressableScale
                   key={c.id}
-                  onPress={() => nav.navigate('SearchResults', { categoryId: c.id, categoryName: c.name })}
+                  onPress={() => {
+                    haptic.select();
+                    nav.navigate('SearchResults', { categoryId: c.id, categoryName: c.name });
+                  }}
                   accessibilityRole="button"
                   style={s.tileWrap}
                 >
@@ -206,7 +210,7 @@ export default function CustomerHome() {
                     <Ionicons name={iconFor(c.name)} size={30} color={DARK.accent} />
                     <Text style={s.tileText} numberOfLines={3}>{c.name}</Text>
                   </View>
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>
@@ -220,7 +224,7 @@ export default function CustomerHome() {
       )}
 
       {/* Rentals (Admin can switch the feature off) */}
-      {rentalsOn && <Pressable style={s.rentals} onPress={() => nav.navigate('Rentals')} accessibilityRole="button" accessibilityLabel="Browse rentals">
+      {rentalsOn && <PressableScale style={s.rentals} onPress={() => nav.navigate('Rentals')} accessibilityRole="button" accessibilityLabel="Browse rentals">
         <View style={s.rentalsIcon}>
           <Ionicons name="cube-outline" size={26} color={DARK.accent} />
         </View>
@@ -229,7 +233,7 @@ export default function CustomerHome() {
           <Text style={s.rentalsBody}>Chairs, arches, lighting and AV by the day, with live stock</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={DARK.muted} />
-      </Pressable>}
+      </PressableScale>}
 
       {/* Near you: asks for location, then lists the closest services */}
       {nearMe.status === 'on' ? (
@@ -338,7 +342,7 @@ export default function CustomerHome() {
 function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) {
   const vendor = item.vendor?.vendorProfile?.business_name || item.vendor?.name;
   return (
-    <Pressable style={s.card} onPress={onPress} accessibilityRole="button" accessibilityLabel={item.title}>
+    <PressableScale style={s.card} onPress={onPress} accessibilityRole="button" accessibilityLabel={item.title}>
       <View style={s.cardImage}>
         {item.images?.[0] ? (
           <Image source={{ uri: item.images[0] }} style={StyleSheet.absoluteFill} resizeMode="cover" />
@@ -376,7 +380,7 @@ function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) 
           </Text>
         </View>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 

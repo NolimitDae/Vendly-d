@@ -1,3 +1,4 @@
+import { haptic } from '../../utils/haptics';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -87,7 +88,10 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
                 <Pressable
                   key={d.toISOString()}
                   disabled={off || booked}
-                  onPress={() => setSelected(d)}
+                  onPress={() => {
+                    haptic.select();
+                    setSelected(d);
+                  }}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on, disabled: off || booked }}
                   accessibilityLabel={format(d, 'EEEE d MMMM') + (booked ? ', fully booked' : '')}
@@ -144,7 +148,7 @@ const s = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, padding: 12, borderRadius: 12, backgroundColor: DARK.card },
   noteText: { flex: 1, color: '#fff', fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  monthBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: DARK.border },
+  monthBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: DARK.border },
   monthTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
   weekRow: { flexDirection: 'row' },
   weekday: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 14, fontFamily: FONTS.medium },

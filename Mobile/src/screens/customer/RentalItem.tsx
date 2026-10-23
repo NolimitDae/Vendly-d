@@ -204,7 +204,7 @@ const s = StyleSheet.create({
   factLabel: { color: DARK.muted, fontSize: 11, fontFamily: FONTS.medium },
   qtyCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: DARK.field, borderRadius: 24, padding: 4 },
-  stepBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center' },
+  stepBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center' },
   stepValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold, minWidth: 22, textAlign: 'center' },
   estimate: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 },
   estimateValue: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },

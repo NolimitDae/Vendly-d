@@ -143,7 +143,7 @@ export default function RequestBookingSheet({ visible, listing, eventId, onClose
             <Text style={s.headerTitle} numberOfLines={1}>Request Booking</Text>
             <View style={{ width: 26 }} />
           </View>
-          <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
             <Text style={s.listing}>{listing.title}</Text>
 
             <Text style={s.label}>Event date</Text>
