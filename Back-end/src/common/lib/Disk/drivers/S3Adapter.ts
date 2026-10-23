@@ -1,33 +1,39 @@
-import * as AWS from 'aws-sdk';
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import type { Readable } from 'stream';
 import { IStorage } from './iStorage';
 import { DiskOption } from '../Option';
 import { contentTypeFor } from '../storage-settings';
+
+/** A missing object, however the S3-compatible service words it. */
+export function isNotFound(error: unknown) {
+  const e = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  return e?.name === 'NotFound' || e?.name === 'NoSuchKey' || e?.Code === 'NoSuchKey' || e?.$metadata?.httpStatusCode === 404;
+}
 
 /**
  * S3Adapter for s3 bucket storage
  */
 export class S3Adapter implements IStorage {
   private _config: DiskOption;
-  private s3: AWS.S3;
+  private s3: S3Client;
 
   constructor(config: DiskOption) {
     this._config = config;
-    const awsConfig: AWS.S3.ClientConfiguration = {
-      endpoint: this._config.connection.awsEndpoint,
-      region: this._config.connection.awsDefaultRegion,
-      signatureVersion: 'v4',
+    this.s3 = new S3Client({
+      endpoint: this._config.connection.awsEndpoint || undefined,
+      // R2 uses "auto"; the SDK needs some region either way
+      region: this._config.connection.awsDefaultRegion || 'us-east-1',
       credentials: {
-        accessKeyId: this._config.connection.awsAccessKeyId,
-        secretAccessKey: this._config.connection.awsSecretAccessKey,
+        accessKeyId: this._config.connection.awsAccessKeyId ?? '',
+        secretAccessKey: this._config.connection.awsSecretAccessKey ?? '',
       },
-    };
-    if (this._config.connection.minio) {
-      // s3ForcePathStyle: true, // Required for MinIO
-      awsConfig['s3ForcePathStyle'] = true;
-    }
-    this.s3 = new AWS.S3({
-      ...awsConfig,
+      // required for MinIO
+      forcePathStyle: !!this._config.connection.minio,
     });
+  }
+
+  private get bucket() {
+    return this._config.connection.awsBucket;
   }
 
   /**
@@ -58,13 +64,10 @@ export class S3Adapter implements IStorage {
    */
   async isExists(key: string): Promise<boolean> {
     try {
-      const params = { Bucket: this._config.connection.awsBucket, Key: key };
-      await this.s3.headObject(params).promise();
+      await this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
       return true;
     } catch (error) {
-      if ((error as AWS.AWSError).code === 'NotFound') {
-        return false;
-      }
+      if (isNotFound(error)) return false;
       throw error;
     }
   }
@@ -73,11 +76,10 @@ export class S3Adapter implements IStorage {
    * get data
    * @param key
    */
-  async get(key: string) {
+  async get(key: string): Promise<Readable> {
     try {
-      const params = { Bucket: this._config.connection.awsBucket, Key: key };
-      const data = this.s3.getObject(params).createReadStream();
-      return data;
+      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      return res.Body as Readable;
     } catch (error) {
       throw new Error(`Failed to get object ${key}: ${error}`);
     }
@@ -91,21 +93,18 @@ export class S3Adapter implements IStorage {
   async put(
     key: string,
     value: Buffer | Uint8Array | string,
-  ): Promise<AWS.S3.ManagedUpload.SendData> {
-    try {
-      const params = {
-        Bucket: this._config.connection.awsBucket,
+  ): Promise<{ Bucket: string; Key: string; Location: string }> {
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
         Key: key,
         Body: value,
         ContentType: contentTypeFor(key),
         // file names are random and never reused, so they can be cached forever
         CacheControl: 'public, max-age=31536000, immutable',
-      };
-      const upload = await this.s3.upload(params).promise();
-      return upload;
-    } catch (error) {
-      throw error;
-    }
+      }),
+    );
+    return { Bucket: this.bucket, Key: key, Location: this.url(key) };
   }
 
   /**
@@ -114,13 +113,10 @@ export class S3Adapter implements IStorage {
    */
   async delete(key: string): Promise<boolean> {
     try {
-      const params = { Bucket: this._config.connection.awsBucket, Key: key };
-      await this.s3.deleteObject(params).promise();
+      await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
       return true;
     } catch (error) {
-      if ((error as AWS.AWSError).code === 'NotFound') {
-        return false;
-      }
+      if (isNotFound(error)) return false;
       throw error;
     }
   }

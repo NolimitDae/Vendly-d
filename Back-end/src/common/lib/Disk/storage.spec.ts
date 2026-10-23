@@ -1,8 +1,20 @@
-const putObject = jest.fn(() => ({ promise: () => Promise.resolve({}) }));
-const getObject = jest.fn(() => ({ promise: () => Promise.resolve({ Body: Buffer.from('%PDF-1.7') }) }));
-const upload = jest.fn(() => ({ promise: () => Promise.resolve({ Location: 'x' }) }));
-const S3 = jest.fn(() => ({ putObject, getObject, upload }));
-jest.mock('aws-sdk', () => ({ S3 }));
+// AWS SDK v3: every call is client.send(new XCommand(input)); record what was sent
+const sent: { name: string; input: any }[] = [];
+const send = jest.fn(async (cmd: { name: string; input: any }) => {
+  sent.push(cmd);
+  if (cmd.name === 'GetObject') return { Body: { transformToByteArray: async () => new Uint8Array(Buffer.from('%PDF-1.7')) } };
+  return {};
+});
+const command = (name: string) => jest.fn().mockImplementation((input: any) => ({ name, input }));
+const S3Client = jest.fn(() => ({ send }));
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client,
+  PutObjectCommand: command('PutObject'),
+  GetObjectCommand: command('GetObject'),
+  DeleteObjectCommand: command('DeleteObject'),
+  HeadObjectCommand: command('HeadObject'),
+}));
+const inputsOf = (name: string) => sent.filter((c) => c.name === name).map((c) => c.input);
 
 import { contentTypeFor, storageSettings } from './storage-settings';
 import { S3Adapter } from './drivers/S3Adapter';
@@ -23,6 +35,7 @@ describe('storage (R2)', () => {
   const saved = { ...process.env };
   beforeEach(() => {
     jest.clearAllMocks();
+    sent.length = 0;
     process.env = { ...saved };
     __resetPrivateStorage();
   });
@@ -40,22 +53,31 @@ describe('storage (R2)', () => {
     const s3 = new S3Adapter({ driver: 's3', connection: { awsBucket: 'vendly-public', awsEndpoint: R2.S3_ENDPOINT, awsPublicUrl: 'https://media.vendly.app/', minio: true } });
     expect(s3.url('listings/abc_photo.jpg')).toBe('https://media.vendly.app/listings/abc_photo.jpg');
     await s3.put('avatar/x.png', Buffer.from('png'));
-    expect(upload).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'vendly-public', Key: 'avatar/x.png', ContentType: 'image/png', CacheControl: expect.stringContaining('immutable') }));
+    expect(inputsOf('PutObject')).toEqual([expect.objectContaining({ Bucket: 'vendly-public', Key: 'avatar/x.png', ContentType: 'image/png', CacheControl: expect.stringContaining('immutable') })]);
+    expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({ forcePathStyle: true, endpoint: R2.S3_ENDPOINT }));
   });
 
   it('keeps contracts and event files in the private bucket', async () => {
     Object.assign(process.env, R2);
     await PrivateStorage.put('contracts/2026/a.pdf', Buffer.from('%PDF'));
-    expect(putObject).toHaveBeenCalledWith(expect.objectContaining({ Bucket: 'vendly-private', Key: 'contracts/2026/a.pdf', ContentType: 'application/pdf' }));
+    expect(inputsOf('PutObject')).toEqual([expect.objectContaining({ Bucket: 'vendly-private', Key: 'contracts/2026/a.pdf', ContentType: 'application/pdf' })]);
     const back = await PrivateStorage.get('contracts/2026/a.pdf');
     expect(back.toString()).toBe('%PDF-1.7');
-    expect(getObject).toHaveBeenCalledWith({ Bucket: 'vendly-private', Key: 'contracts/2026/a.pdf' });
+    expect(inputsOf('GetObject')).toEqual([{ Bucket: 'vendly-private', Key: 'contracts/2026/a.pdf' }]);
   });
 
   it('still refuses keys that try to escape the folder', async () => {
     Object.assign(process.env, R2);
     await expect(PrivateStorage.put('../../etc/passwd', Buffer.from('x'))).rejects.toThrow(/Invalid storage key/);
-    expect(putObject).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('treats a missing object as "not there" rather than an error', async () => {
+    const s3 = new S3Adapter({ driver: 's3', connection: { awsBucket: 'b', awsDefaultRegion: 'auto' } });
+    send.mockRejectedValueOnce(Object.assign(new Error('not found'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } }));
+    expect(await s3.isExists('nope.jpg')).toBe(false);
+    send.mockRejectedValueOnce(Object.assign(new Error('denied'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }));
+    await expect(s3.isExists('secret.jpg')).rejects.toThrow('denied');
   });
 
   it('knows common content types', () => {

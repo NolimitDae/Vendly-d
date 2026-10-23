@@ -124,6 +124,6 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware, EmailCaseMiddleware).forRoutes('*');
+    consumer.apply(LoggerMiddleware, EmailCaseMiddleware).forRoutes('{*splat}');
   }
 }

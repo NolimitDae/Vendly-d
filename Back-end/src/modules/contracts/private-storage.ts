@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as AWS from 'aws-sdk';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { contentTypeFor, storageSettings } from 'src/common/lib/Disk/storage-settings';
 
 const ROOT = path.resolve(process.env.PRIVATE_STORAGE_DIR || './public/private');
@@ -13,7 +13,7 @@ function resolveKey(key: string) {
 }
 
 /** A private S3 / R2 bucket when STORAGE_DRIVER=s3 and S3_PRIVATE_BUCKET are set; else null (local disk). */
-let client: { s3: AWS.S3; bucket: string } | null | undefined;
+let client: { s3: S3Client; bucket: string } | null | undefined;
 function privateBucket() {
   if (client !== undefined) return client;
   const s = storageSettings();
@@ -21,11 +21,10 @@ function privateBucket() {
     s.driver === 's3' && s.privateBucket
       ? {
           bucket: s.privateBucket,
-          s3: new AWS.S3({
-            endpoint: s.endpoint,
-            region: s.region,
-            signatureVersion: 'v4',
-            s3ForcePathStyle: true,
+          s3: new S3Client({
+            endpoint: s.endpoint || undefined,
+            region: s.region || 'us-east-1',
+            forcePathStyle: true,
             credentials: { accessKeyId: s.accessKeyId ?? '', secretAccessKey: s.secretAccessKey ?? '' },
           }),
         }
@@ -51,7 +50,7 @@ export const PrivateStorage = {
     const remote = privateBucket();
     if (remote) {
       resolveKey(key); // same key rules as on disk (no "../")
-      await remote.s3.putObject({ Bucket: remote.bucket, Key: key, Body: Buffer.from(data), ContentType: contentTypeFor(key) }).promise();
+      await remote.s3.send(new PutObjectCommand({ Bucket: remote.bucket, Key: key, Body: Buffer.from(data), ContentType: contentTypeFor(key) }));
       return;
     }
     const full = resolveKey(key);
@@ -63,8 +62,8 @@ export const PrivateStorage = {
     const remote = privateBucket();
     if (remote) {
       resolveKey(key);
-      const obj = await remote.s3.getObject({ Bucket: remote.bucket, Key: key }).promise();
-      return Buffer.from(obj.Body as Uint8Array);
+      const obj = await remote.s3.send(new GetObjectCommand({ Bucket: remote.bucket, Key: key }));
+      return Buffer.from(await obj.Body!.transformToByteArray());
     }
     return fs.readFile(resolveKey(key));
   },
@@ -74,7 +73,7 @@ export const PrivateStorage = {
     const remote = privateBucket();
     if (remote) {
       resolveKey(key);
-      await remote.s3.deleteObject({ Bucket: remote.bucket, Key: key }).promise();
+      await remote.s3.send(new DeleteObjectCommand({ Bucket: remote.bucket, Key: key }));
       return;
     }
     await fs.rm(resolveKey(key), { force: true });
