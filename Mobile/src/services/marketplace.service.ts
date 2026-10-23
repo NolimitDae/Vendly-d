@@ -14,6 +14,8 @@ export interface Listing {
   add_ons?: AddOn[];
   /** fees the vendor may request after the service (only with the customer's approval) */
   fees?: AddOn[];
+  /** from the vendor's contract for this package */
+  cancellation_policy?: { key: string; label: string; text: string } | null;
   images: string[];
   location?: string | null;
   /** set when searching near a point */

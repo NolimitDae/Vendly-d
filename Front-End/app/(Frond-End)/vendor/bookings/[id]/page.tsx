@@ -23,6 +23,7 @@ import { toast } from "react-toastify";
 import BookingContractSection from "@/components/contracts/BookingContractSection";
 import RentalReturnPanel, { type RentalBookingFields } from "@/components/rentals/RentalReturnPanel";
 import BookingExtrasSection from "@/components/addons/BookingExtrasSection";
+import VendorDisputeCard, { type DisputeFields } from "@/components/disputes/VendorDisputeCard";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { closesIn } from "@/lib/requests";
@@ -53,7 +54,7 @@ interface Deliverable {
   created_at: string;
 }
 
-interface Booking {
+interface Booking extends DisputeFields {
   id: string;
   status: string;
   amount?: number;
@@ -69,6 +70,8 @@ interface Booking {
   rental_reservations?: RentalBookingFields["rental_reservations"];
   rental_return?: RentalBookingFields["rental_return"];
   event_bookings?: { event: { id: string; name: string; date?: string | null } }[];
+  /** on a request: the vendor's confirmed bookings on the same day */
+  same_day_bookings?: { id: string; title: string; status: string; start_at: string | null; end_at: string | null }[];
 }
 
 export default function VendorBookingDetailPage() {
@@ -223,6 +226,22 @@ export default function VendorBookingDetailPage() {
               </p>
             </div>
           )}
+          {booking.status === "PENDING" && !!booking.same_day_bookings?.length && (
+            <div role="note" className="col-span-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-amber-800 dark:text-amber-300 space-y-1">
+              <p className="font-medium">You already have {booking.same_day_bookings.length === 1 ? "a booking" : `${booking.same_day_bookings.length} bookings`} that day</p>
+              <ul className="space-y-0.5">
+                {booking.same_day_bookings.map((b) => (
+                  <li key={b.id}>
+                    <Link href={`/vendor/bookings/${b.id}`} className="underline">
+                      {b.title}
+                    </Link>
+                    {b.start_at ? ` · ${dayjs(b.start_at).format("h:mm A")}${b.end_at ? `–${dayjs(b.end_at).format("h:mm A")}` : ""}` : ""}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs">Make sure you can do both before accepting.</p>
+            </div>
+          )}
           {booking.message && (
             <div className="col-span-2">
               <p className="text-gray-400 text-xs">Customer note</p>
@@ -241,6 +260,8 @@ export default function VendorBookingDetailPage() {
           </span>
         </Link>
       )}
+
+      <VendorDisputeCard bookingId={booking.id} booking={booking} onChanged={fetchAll} />
 
       <RentalReturnPanel booking={booking} role="VENDOR" onChanged={fetchAll} />
 

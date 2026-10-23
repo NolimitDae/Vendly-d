@@ -15,6 +15,7 @@ import { BookingService, type Booking } from '../../services/booking.service';
 import { PaymentsService } from '../../services/payments.service';
 import RentalReturnCard from '../../components/RentalReturnCard';
 import VendorExtras from '../../components/extras/VendorExtras';
+import VendorDisputeCard from '../../components/VendorDisputeCard';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
 import { closesIn } from '../../utils/requests';
@@ -202,6 +203,24 @@ export default function VendorBookingDetail() {
             )}
           </Card>
 
+          {st === 'PENDING' && !!booking.same_day_bookings?.length && (
+            <Card style={{ gap: 6, borderWidth: 1, borderColor: 'rgba(252,211,77,0.45)' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="calendar-outline" size={20} color="#fcd34d" />
+                <Text style={[s.h2, { flex: 1 }]}>
+                  You already have {booking.same_day_bookings.length === 1 ? 'a booking' : `${booking.same_day_bookings.length} bookings`} that day
+                </Text>
+              </View>
+              {booking.same_day_bookings.map((b) => (
+                <Text key={b.id} style={s.muted}>
+                  {b.title}
+                  {b.start_at ? ` · ${format(parseISO(b.start_at), 'h:mm a')}${b.end_at ? `–${format(parseISO(b.end_at), 'h:mm a')}` : ''}` : ''}
+                </Text>
+              ))}
+              <Text style={s.muted}>Make sure you can do both before accepting.</Text>
+            </Card>
+          )}
+
           <Card style={{ gap: 14, borderWidth: 1, borderColor: DARK.field }}>
             <Text style={s.h2}>Your Service</Text>
             {!booking.is_rental && <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />}
@@ -230,6 +249,8 @@ export default function VendorBookingDetail() {
             <Row label="You receive" value={money(booking.amount)} bold />
             {Number(booking.security_deposit ?? 0) > 0 && <Row label="Security deposit (held)" value={money(booking.security_deposit)} />}
           </Card>
+
+          <VendorDisputeCard booking={booking} onChanged={load} />
 
           <RentalReturnCard booking={booking} role="VENDOR" onDone={load} />
 

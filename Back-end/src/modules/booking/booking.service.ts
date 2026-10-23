@@ -23,6 +23,7 @@ import { PaymentsService } from 'src/modules/payments/payments.service';
 import { track } from 'src/common/analytics';
 import { requestExpiresAt } from './booking-requests';
 import { withBookingLock } from 'src/common/helper/job-lock';
+import { eventDays } from 'src/modules/calendar-sync/busy-days';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -489,7 +490,44 @@ export class BookingService {
     if (booking.customer_id !== userId && booking.vendor_id !== userId)
       throw new ForbiddenException('Access denied');
 
-    return { success: true, data: this.formatBooking(booking) };
+    const data = this.formatBooking(booking);
+    // a vendor deciding on a request sees what else they've already agreed to that day
+    if (booking.vendor_id === userId && booking.status === BookingStatus.PENDING) {
+      data.same_day_bookings = await this.sameDayBookings(booking).catch(() => []);
+    }
+    return { success: true, data };
+  }
+
+  /** The vendor's other confirmed or in-progress bookings on the same day(s), in the customer's time zone. */
+  private async sameDayBookings(booking: { id: string; vendor_id: string; event_start_at: Date | null; event_end_at: Date | null; scheduled_at: Date | null }) {
+    const start = booking.event_start_at ?? booking.scheduled_at;
+    if (!start) return [];
+    const contract = await this.prisma.bookingContract.findFirst({ where: { booking_id: booking.id }, orderBy: { version: 'desc' }, select: { merge_data: true } });
+    const tz = (contract?.merge_data as Record<string, unknown> | null)?.timezone as string | undefined;
+    const { first, last } = eventDays(start, booking.event_end_at, tz);
+    const DAY = 24 * 3600 * 1000;
+    // a little wider than the days themselves, then exact days in the customer's time zone
+    const window = { gte: new Date(first.getTime() - 2 * DAY), lte: new Date(last.getTime() + 2 * DAY) };
+    const others = await this.prisma.booking.findMany({
+      where: {
+        vendor_id: booking.vendor_id,
+        id: { not: booking.id },
+        deleted_at: null,
+        status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] },
+        OR: [{ event_start_at: window }, { event_start_at: null, scheduled_at: window }],
+      },
+      select: { id: true, status: true, event_start_at: true, event_end_at: true, scheduled_at: true, listing: { select: { title: true } } },
+      orderBy: { event_start_at: 'asc' },
+      take: 20,
+    });
+    return others
+      .filter((o) => {
+        const oStart = o.event_start_at ?? o.scheduled_at;
+        if (!oStart) return false;
+        const d = eventDays(oStart, o.event_end_at, tz);
+        return d.first <= last && d.last >= first;
+      })
+      .map((o) => ({ id: o.id, status: o.status, title: o.listing?.title ?? 'Rental', start_at: o.event_start_at ?? o.scheduled_at, end_at: o.event_end_at }));
   }
 
   async createCheckoutSession(bookingId: string, customerId: string) {
@@ -669,9 +707,12 @@ export class BookingService {
   }
 
   // Admin: get all bookings
-  async getAllBookings(query: { page?: number; limit?: number; status?: BookingStatus }) {
+  async getAllBookings(query: { page?: number; limit?: number; status?: BookingStatus; from?: Date }) {
     return this.getPaginatedBookings(
-      query.status ? { status: query.status } : {},
+      {
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.from ? { created_at: { gte: query.from } } : {}),
+      },
       query,
     );
   }

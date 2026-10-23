@@ -11,8 +11,10 @@ import {
   Package,
   Link2,
   Upload,
+  Clock,
 } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
+import { vendorAnswersWithin } from "@/lib/requests";
 import { toast } from "react-toastify";
 import PaymentTimeline from "@/components/payments/PaymentTimeline";
 import BookingContractSection from "@/components/contracts/BookingContractSection";
@@ -48,6 +50,8 @@ interface Deliverable {
 }
 
 interface Booking {
+  /** an open request closes on its own at this time */
+  request_expires_at?: string | null;
   id: string;
   status: string;
   amount?: number;
@@ -143,6 +147,12 @@ export default function CustomerBookingDetailPage() {
             {booking.status}
           </span>
         </div>
+        {booking.status === "PENDING" && vendorAnswersWithin(booking.request_expires_at) && (
+          <p className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+            <Clock className="w-4 h-4 flex-shrink-0" aria-hidden />
+            {vendorAnswersWithin(booking.request_expires_at)}. If they don’t, the request closes and nothing is charged.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3 text-sm">
           {booking.scheduled_at && (
             <div>

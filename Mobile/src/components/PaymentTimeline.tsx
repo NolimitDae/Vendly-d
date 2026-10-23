@@ -104,6 +104,12 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
         <Text style={s.muted}>Paid {money(t.paid)} of {money(t.total)}</Text>
         {t.outstanding > 0 && <Text style={s.muted}>{money(t.outstanding)} to go</Text>}
       </View>
+      {Number(t.given_back ?? 0) > 0 && (
+        <View style={s.note}>
+          <Ionicons name="gift-outline" size={16} color="#6ee7c7" />
+          <Text style={s.noteText}>Your vendor gave you {money(Number(t.given_back))} back on this booking.</Text>
+        </View>
+      )}
 
       {t.dispute && !t.dispute.resolved_at ? (
         <View style={s.note}>

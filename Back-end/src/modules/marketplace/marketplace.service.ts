@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { MAX_SERVICE_RADIUS, boundingBox, milesBetween, withoutPosition } from 'src/modules/geo/geo';
-import { ListingStatus } from 'prisma/generated/client';
+import { ListingStatus, VendorContractStatus } from 'prisma/generated/client';
 import { formatAddOn } from 'src/modules/add-ons/add-ons.service';
+import { CANCELLATION_PRESETS } from 'src/modules/contracts/contract-templates';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
@@ -150,15 +151,31 @@ export class MarketplaceService {
 
     if (!listing) throw new NotFoundException('Listing not found');
 
-    const avgRatings = await this.getAverageRatings([listing.id]);
+    const [avgRatings, cancellationPolicy] = await Promise.all([
+      this.getAverageRatings([listing.id]),
+      this.cancellationPolicyFor(listing.vendor_id, listing.id).catch(() => null),
+    ]);
 
     return {
       success: true,
       data: {
         ...this.formatFullListing(listing),
         avg_rating: avgRatings[listing.id] ?? null,
+        // the policy in the contract a booking of this package would use, so customers see it before booking
+        cancellation_policy: cancellationPolicy,
       },
     };
+  }
+
+  /** Cancellation policy from the vendor's active contract for this package (a package-specific one wins). */
+  private async cancellationPolicyFor(vendorId: string, listingId: string) {
+    const active = { vendor_id: vendorId, status: VendorContractStatus.ACTIVE };
+    const vc =
+      (await this.prisma.vendorContract.findFirst({ where: { ...active, applies_to_all: false, listings: { some: { listing_id: listingId } } }, orderBy: { version: 'desc' }, select: { field_values: true } })) ??
+      (await this.prisma.vendorContract.findFirst({ where: { ...active, applies_to_all: true }, orderBy: { version: 'desc' }, select: { field_values: true } }));
+    const key = (vc?.field_values as Record<string, unknown> | null)?.cancellation_policy as string | undefined;
+    const preset = key ? CANCELLATION_PRESETS[key] : undefined;
+    return preset && key ? { key, label: preset.label, text: preset.text } : null;
   }
 
   /** Looks a vendor up by id or by shop handle (vendlymarketplace.com/v/<handle>). */

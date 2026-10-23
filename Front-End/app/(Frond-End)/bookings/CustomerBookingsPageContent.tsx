@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { BookingService } from "@/service/booking/booking.service";
+import { vendorAnswersWithin } from "@/lib/requests";
 import { ReviewService } from "@/service/review/review.service";
 import ReviewPrompt from "@/components/reviews/ReviewPrompt";
 import Image from "next/image";
@@ -29,6 +30,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 interface Booking {
+  /** an open request closes on its own at this time */
+  request_expires_at?: string | null;
   id: string;
   status: string;
   created_at: string;
@@ -217,7 +220,9 @@ export default function CustomerBookingsPageContent() {
                         <Eye className="w-3.5 h-3.5" /> View Details
                       </Link>
                       {booking.status === "PENDING" && (
-                        <span className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400">Waiting for the vendor to accept &amp; sign</span>
+                        <span className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400">
+                          Waiting for the vendor to accept &amp; sign{vendorAnswersWithin(booking.request_expires_at) ? ` · ${vendorAnswersWithin(booking.request_expires_at)}` : ""}
+                        </span>
                       )}
                       {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && booking.paid_at && (
                         <span className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-600">

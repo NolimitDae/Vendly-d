@@ -23,6 +23,7 @@ const mockListing = {
 };
 
 const mockPrisma = {
+  vendorContract: { findFirst: jest.fn().mockResolvedValue(null) },
   vendorListing: {
     count: jest.fn(),
     findMany: jest.fn(),
@@ -184,6 +185,24 @@ describe('MarketplaceService', () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue(null);
 
       await expect(service.getListing('bad-id')).rejects.toThrow(NotFoundException);
+    });
+
+    it('shows the cancellation policy from the contract this package would use (a package-specific one wins)', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      mockPrisma.vendorContract.findFirst.mockResolvedValueOnce({ field_values: { cancellation_policy: 'strict' } });
+      const result = await service.getListing('listing-1');
+      expect(result.data.cancellation_policy).toMatchObject({ key: 'strict', label: 'Strict' });
+      expect(mockPrisma.vendorContract.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ applies_to_all: false }) }));
+    });
+
+    it('falls back to the vendor’s contract for all packages, and to nothing without one', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      mockPrisma.vendorContract.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ field_values: { cancellation_policy: 'flexible' } });
+      expect((await service.getListing('listing-1')).data.cancellation_policy).toMatchObject({ key: 'flexible' });
+      mockPrisma.vendorContract.findFirst.mockResolvedValue(null);
+      expect((await service.getListing('listing-1')).data.cancellation_policy).toBeNull();
     });
   });
 

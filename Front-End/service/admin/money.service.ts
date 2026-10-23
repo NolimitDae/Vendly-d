@@ -29,6 +29,9 @@ export interface Dispute {
   service_fee: number | string;
   dispute_opened_at: string;
   dispute_reason: string;
+  /** the vendor's side, if they've replied */
+  dispute_vendor_reply?: string | null;
+  dispute_vendor_replied_at?: string | null;
   dispute_resolved_at?: string | null;
   dispute_resolution?: string | null;
   completed_at?: string | null;

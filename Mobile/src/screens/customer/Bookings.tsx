@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
+import { vendorAnswersWithin } from '../../utils/requests';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
@@ -120,6 +121,9 @@ export default function CustomerBookings() {
                 <View style={{ flex: 1, gap: 4 }}>
                   <Text style={s.vendor} numberOfLines={1}>{item.vendor?.name ?? 'Vendor'}</Text>
                   <Text style={s.service} numberOfLines={1}>{item.listing?.title ?? 'Service'}</Text>
+                  {item.status === 'PENDING' && !!vendorAnswersWithin(item.request_expires_at) && (
+                    <Text style={s.closes} numberOfLines={1}>{vendorAnswersWithin(item.request_expires_at)}</Text>
+                  )}
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
                   <StatusPill booking={item} />
@@ -160,6 +164,7 @@ function StatusPill({ booking }: { booking: Booking }) {
 }
 
 const s = StyleSheet.create({
+  closes: { color: '#fcd34d', fontSize: 12, fontFamily: FONTS.medium },
   root: { flex: 1, backgroundColor: DARK.bg },
   title: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold, textAlign: 'center' },
   segment: { flexDirection: 'row', padding: 4, borderRadius: 100, backgroundColor: DARK.card },

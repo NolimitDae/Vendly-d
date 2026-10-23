@@ -33,6 +33,8 @@ export interface PaymentTimeline {
   total: number;
   paid: number;
   outstanding: number;
+  /** money off or refunded by the vendor */
+  given_back?: number;
   paid_at?: string | null;
   release_at?: string | null;
   released_at?: string | null;

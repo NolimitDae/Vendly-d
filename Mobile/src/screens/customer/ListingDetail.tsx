@@ -148,6 +148,14 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
             </Card>
           )}
 
+          {!!listing.cancellation_policy && (
+            <Card style={{ gap: 6 }}>
+              <Text style={s.cardTitle}>Cancellation policy: {listing.cancellation_policy.label}</Text>
+              <Text style={s.muted}>{listing.cancellation_policy.text}</Text>
+              <Text style={s.muted}>The Vendly Protection fee isn’t refunded when you cancel. If the vendor cancels, you get everything back.</Text>
+            </Card>
+          )}
+
           <Card>
             {!!listing.category && <Row label="Category" value={[listing.category.name, listing.sub_category?.name].filter(Boolean).join(' · ')} />}
             {listing.delivery_time != null && <Row label="Delivery time" value={`${listing.delivery_time} day${listing.delivery_time === 1 ? '' : 's'}`} />}

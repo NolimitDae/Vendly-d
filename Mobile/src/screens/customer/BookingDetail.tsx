@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
+import { vendorAnswersWithin } from '../../utils/requests';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
@@ -217,7 +218,7 @@ export default function BookingDetail() {
             <Row label="Vendly Protection fee" value={money(booking.service_fee)} />
             <View style={s.line} />
             <Row label="Total" value={money(total)} bold />
-            <Text style={s.paidNote}>{paid ? `Paid on ${format(parseISO(booking.paid_at!), 'dd MMM yyyy')} · held by Vendly until the service is done` : st === 'PENDING' ? 'Nothing is charged until the vendor accepts' : ''}</Text>
+            <Text style={s.paidNote}>{paid ? `Paid on ${format(parseISO(booking.paid_at!), 'dd MMM yyyy')} · held by Vendly until the service is done` : st === 'PENDING' ? `Nothing is charged until the vendor accepts${vendorAnswersWithin(booking.request_expires_at) ? `. ${vendorAnswersWithin(booking.request_expires_at)}` : ''}` : ''}</Text>
           </Card>
 
           {extras.extras.length > 0 && (

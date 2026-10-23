@@ -41,6 +41,8 @@ interface Listing {
   max_quantity?: number | null;
   add_ons?: AddOn[];
   fees?: AddOn[];
+  /** from the vendor's contract for this package */
+  cancellation_policy?: { key: string; label: string; text: string } | null;
   images: string[];
   tags: string[];
   location?: string;
@@ -389,6 +391,15 @@ export default function ListingDetailPage() {
                   </section>
                 )}
               </div>
+            )}
+            {listing.cancellation_policy && (
+              <section aria-labelledby="policy-heading" className="space-y-1">
+                <h3 id="policy-heading" className="font-semibold text-gray-900 dark:text-white">
+                  Cancellation policy: {listing.cancellation_policy.label}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{listing.cancellation_policy.text}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">The Vendly Protection fee isn’t refunded when you cancel. If the vendor cancels, you get everything back.</p>
+              </section>
             )}
 
             {/* Blocked dates */}

@@ -75,4 +75,8 @@ export const BookingService = {
 
   getDeliverables: async (id: string) =>
     Fetch.get(`/bookings/${id}/deliverables`, authHeaders()),
+
+  /** Vendor's side of an open dispute, read by Vendly. */
+  replyToDispute: async (id: string, reply: string) =>
+    Fetch.post(`/bookings/${id}/dispute/reply`, { reply }, authHeaders()),
 };

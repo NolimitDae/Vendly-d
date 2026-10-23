@@ -87,6 +87,14 @@ export default function DisputesPageContent() {
               </div>
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">“{d.dispute_reason}”</p>
+            {d.dispute_vendor_reply ? (
+              <div className="text-sm bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Vendor’s reply{d.dispute_vendor_replied_at ? ` · ${dayjs(d.dispute_vendor_replied_at).format("MMM D, h:mm A")}` : ""}</p>
+                <p className="text-gray-700 dark:text-gray-200 whitespace-pre-wrap">“{d.dispute_vendor_reply}”</p>
+              </div>
+            ) : (
+              !d.dispute_resolved_at && <p className="text-xs text-gray-500 dark:text-gray-400">The vendor hasn’t replied yet.</p>
+            )}
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Status {d.status}
               {d.completed_at ? ` · completed ${dayjs(d.completed_at).format("MMM D")}` : ""} · {d.has_proof ? "vendor uploaded proof photos" : "no proof photos"}

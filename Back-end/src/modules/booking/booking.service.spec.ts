@@ -427,6 +427,35 @@ describe('BookingService', () => {
 
       await expect(service.getBooking('booking-1', 'random-user')).rejects.toThrow(ForbiddenException);
     });
+
+    describe('same-day warning for the vendor', () => {
+      // a request for 6–11pm Chicago time on Dec 5
+      const request = { ...mockBooking, event_start_at: new Date('2026-12-06T00:00:00Z'), event_end_at: new Date('2026-12-06T05:00:00Z'), scheduled_at: null };
+      beforeEach(() => {
+        mockPrisma.booking.findFirst.mockResolvedValue(request);
+        mockPrisma.bookingContract.findFirst.mockResolvedValue({ merge_data: { timezone: 'America/Chicago' } });
+      });
+      afterEach(() => mockPrisma.booking.findMany.mockReset());
+
+      it('lists confirmed bookings on the same local day, not ones that only share the UTC date', async () => {
+        mockPrisma.booking.findMany.mockResolvedValue([
+          // Dec 5, 10am Chicago: same day
+          { id: 'b2', status: BookingStatus.CONFIRMED, event_start_at: new Date('2026-12-05T16:00:00Z'), event_end_at: new Date('2026-12-05T18:00:00Z'), scheduled_at: null, listing: { title: 'Brunch' } },
+          // Dec 6, 10am Chicago: same UTC date as the request, different local day
+          { id: 'b3', status: BookingStatus.CONFIRMED, event_start_at: new Date('2026-12-06T16:00:00Z'), event_end_at: null, scheduled_at: null, listing: { title: 'Lunch' } },
+        ]);
+        const res = await service.getBooking('booking-1', 'vendor-1');
+        expect(res.data.same_day_bookings).toEqual([expect.objectContaining({ id: 'b2', title: 'Brunch' })]);
+        expect(mockPrisma.booking.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ vendor_id: 'vendor-1', status: { in: ['CONFIRMED', 'IN_PROGRESS'] } }) }));
+      });
+
+      it('is only worked out for the vendor, and only on a request', async () => {
+        await service.getBooking('booking-1', 'customer-1');
+        mockPrisma.booking.findFirst.mockResolvedValue({ ...request, status: BookingStatus.CONFIRMED });
+        await service.getBooking('booking-1', 'vendor-1');
+        expect(mockPrisma.booking.findMany).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('push notifications', () => {

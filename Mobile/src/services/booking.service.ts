@@ -25,6 +25,15 @@ export interface Booking {
   paid_at?: string | null;
   payment_plan?: string | null;
   early_released_amount?: number | string | null;
+  /** on a request, for the vendor: their confirmed bookings on the same day */
+  same_day_bookings?: { id: string; title: string; status: BookingStatus; start_at: string | null; end_at: string | null }[];
+  /** a customer's reported problem: the payout is held until Vendly resolves it */
+  dispute_opened_at?: string | null;
+  dispute_reason?: string | null;
+  dispute_resolved_at?: string | null;
+  dispute_resolution?: string | null;
+  dispute_vendor_reply?: string | null;
+  dispute_vendor_replied_at?: string | null;
   /** Rentals: the "listing" is synthesised from the rented items */
   is_rental?: boolean;
   security_deposit?: number | string | null;
@@ -121,4 +130,7 @@ export const BookingService = {
     id: string,
     data: { title: string; message?: string; links?: string[] },
   ) => api.post(`/bookings/${id}/deliverables`, data),
+
+  /** Vendor's side of an open dispute, read by Vendly. */
+  replyToDispute: (id: string, reply: string) => api.post(`/bookings/${id}/dispute/reply`, { reply }),
 };
