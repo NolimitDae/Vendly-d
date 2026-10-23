@@ -26,6 +26,7 @@ export interface Quote {
 
 export interface ChatMessage {
   id: string;
+  conversation_id?: string;
   text?: string | null;
   kind?: "text" | "quote" | "system";
   createdAt: string;
@@ -69,8 +70,9 @@ export const ChatService = {
   sendMessage: async (conversationId: string, text: string) =>
     Fetch.post("/chat/message/send-message", { conversationId, text }, authHeaders()),
 
+  /** Marks the other side's messages read; they get a `conversationRead` socket event ("Seen"). */
   markAsRead: async (conversationId: string) =>
-    Fetch.get(`/chat/message/read-message/${conversationId}`, authHeaders()),
+    Fetch.post(`/chat/message/read-message/${conversationId}`, {}, authHeaders()),
 
   getUsers: async () => Fetch.get("/chat/conversation/all-user", authHeaders()),
 

@@ -22,7 +22,7 @@ const makeSocket = (overrides: Partial<any> = {}): any => ({
   ...overrides,
 });
 
-const prisma = { participant: { findFirst: jest.fn() } };
+const prisma = { participant: { findFirst: jest.fn(), findMany: jest.fn() } };
 
 describe('MessageGateway', () => {
   let gateway: MessageGateway;
@@ -176,23 +176,48 @@ describe('MessageGateway', () => {
     });
   });
 
-  describe('handleTyping', () => {
-    it('should emit userTyping to recipient when they are online', () => {
-      gateway.clients.set('user-2', 'socket-user2');
-      const client = makeSocket();
+  describe('typing indicator', () => {
+    const members = [
+      { userId: 'user-1', user: { name: 'Alice' } },
+      { userId: 'user-2', user: { name: 'Bob' } },
+    ];
 
-      gateway.handleTyping(client, { to: 'user-2', data: { isTyping: true } });
+    it("relays typing to the other participants only, with the typer's name", async () => {
+      prisma.participant.findMany.mockResolvedValue(members);
+      const client = makeSocket({ data: { userId: 'user-1' } });
 
-      expect((gateway as any).server.to).toHaveBeenCalledWith('socket-user2');
-      expect((gateway as any).server.emit).toHaveBeenCalledWith(
-        'userTyping',
-        expect.objectContaining({ from: client.id }),
-      );
+      await gateway.handleTyping(client, { conversation_id: 'conv-1' });
+
+      expect(prisma.participant.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: 'conv-1' } }));
+      expect((gateway as any).server.to).toHaveBeenCalledWith(['user_user-2']);
+      expect((gateway as any).server.emit).toHaveBeenCalledWith('userTyping', { conversation_id: 'conv-1', user_id: 'user-1', name: 'Alice' });
     });
 
-    it('should not emit when recipient is offline', () => {
-      gateway.handleTyping(makeSocket(), { to: 'offline-user', data: {} });
+    it('relays stopTyping the same way', async () => {
+      prisma.participant.findMany.mockResolvedValue(members);
+      const client = makeSocket({ data: { userId: 'user-2' } });
 
+      await gateway.handleStopTyping(client, { conversation_id: 'conv-1' });
+
+      expect((gateway as any).server.to).toHaveBeenCalledWith(['user_user-1']);
+      expect((gateway as any).server.emit).toHaveBeenCalledWith('userStoppedTyping', { conversation_id: 'conv-1', user_id: 'user-2' });
+    });
+
+    it('drops typing from someone who is not in the conversation', async () => {
+      prisma.participant.findMany.mockResolvedValue(members);
+      const client = makeSocket({ data: { userId: 'intruder' } });
+
+      await gateway.handleTyping(client, { conversation_id: 'conv-1' });
+      await gateway.handleStopTyping(client, { conversation_id: 'conv-1' });
+
+      expect((gateway as any).server.emit).not.toHaveBeenCalled();
+    });
+
+    it('ignores unauthenticated sockets and payloads without a conversation', async () => {
+      await gateway.handleTyping(makeSocket({ data: {} }), { conversation_id: 'conv-1' });
+      await gateway.handleTyping(makeSocket({ data: { userId: 'user-1' } }), { to: 'user-2', data: {} } as any);
+
+      expect(prisma.participant.findMany).not.toHaveBeenCalled();
       expect((gateway as any).server.emit).not.toHaveBeenCalled();
     });
   });

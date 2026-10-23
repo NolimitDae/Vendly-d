@@ -33,6 +33,8 @@ export function formatQuote(q: any) {
 export function formatMessage(msg: any) {
   return {
     id: msg.id,
+    // lets a client that sits in several conversation rooms tell which chat a live message is for
+    conversation_id: msg.conversationId,
     text: msg.text,
     kind: msg.kind ?? 'text',
     createdAt: msg.createdAt,

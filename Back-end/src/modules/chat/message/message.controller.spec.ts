@@ -163,5 +163,13 @@ describe('MessageController', () => {
         controller.readMessages('conv-1', mockReq('outsider')),
       ).rejects.toThrow(UnauthorizedException);
     });
+
+    it('POST read-message marks the chat read as the token user', async () => {
+      mockMessageService.readMessages.mockResolvedValue({ success: true });
+
+      await controller.markRead('conv-1', mockReq('user-2'));
+
+      expect(mockMessageService.readMessages).toHaveBeenCalledWith('user-2', 'conv-1');
+    });
   });
 });

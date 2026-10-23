@@ -345,13 +345,13 @@ export class MessageService {
     const lastReadAt = participant.lastReadAt || new Date(0);
     const readAt = new Date();
 
-    await this.prisma.$transaction(async (tx) => {
+    const members = await this.prisma.$transaction(async (tx) => {
       await tx.message.updateMany({
         where: {
           conversationId,
           senderId: { not: userId },
           status: { not: "READ" },
-          createdAt: { gt: lastReadAt },
+          createdAt: { gt: lastReadAt, lte: readAt },
         },
         data: { status: "READ" },
       });
@@ -360,13 +360,19 @@ export class MessageService {
         where: { id: participant.id },
         data: { lastReadAt: readAt },
       });
+
+      return tx.participant.findMany({ where: { conversationId }, select: { userId: true } });
     });
-    // read receipts: everyone in the chat learns how far this user has read
-    this.messageGateway.server?.to(conversationId).emit("conversationRead", { conversation_id: conversationId, user_id: userId, read_at: readAt });
+    // read receipts: everyone in the chat learns how far this user has read. User rooms too, so
+    // senders whose socket reconnected (and lost the conversation room) and the reader's other
+    // tabs/devices (unread badges) still hear it; socket.io sends once per socket across rooms.
+    const rooms = [conversationId, ...(members ?? []).map((m) => `user_${m.userId}`)];
+    this.messageGateway.server?.to(rooms).emit("conversationRead", { conversation_id: conversationId, user_id: userId, read_at: readAt });
 
     return {
       message: "Messages marked as read successfully",
       success: true,
+      data: { conversation_id: conversationId, read_at: readAt },
     };
   }
 

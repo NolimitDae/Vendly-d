@@ -15,13 +15,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 import appConfig from '../../../config/app.config';
 
-enum MessageStatus {
-  SENT = 'SENT',
-  DELIVERED = 'DELIVERED',
-  READ = 'READ',
-  PENDING = 'PENDING',
-}
-
 @WebSocketGateway({
   cors: { origin: '*' },
   maxHttpBufferSize: 1e8,
@@ -127,31 +120,42 @@ export class MessageGateway
     }
   }
 
-  @SubscribeMessage('updateMessageStatus')
-  async updateMessageStatus(
-    client: Socket,
-    @MessageBody() body: { message_id: string; status: MessageStatus },
-  ) {
-    this.server.emit('messageStatusUpdated', {
-      message_id: body.message_id,
-      status: body.status,
-    });
-  }
-
+  /**
+   * Typing indicator. Clients send { conversation_id } at most every couple of seconds while typing
+   * and `stopTyping` when they go idle or send; the other participants get it on their user rooms
+   * (which survive reconnects, unlike conversation rooms). Non-participants are ignored.
+   */
   @SubscribeMessage('typing')
-  handleTyping(client: Socket, @MessageBody() body: { to: string; data: any }) {
-    const recipientSocketId = this.clients.get(body.to);
-    if (recipientSocketId) {
-      this.server.to(recipientSocketId).emit('userTyping', { from: client.id, data: body.data });
-    }
+  async handleTyping(client: Socket, @MessageBody() body: { conversation_id: string }) {
+    const sender = await this.typingRelay(client, body?.conversation_id);
+    if (!sender) return;
+    this.server
+      .to(sender.others)
+      .emit('userTyping', { conversation_id: body.conversation_id, user_id: sender.userId, name: sender.name });
   }
 
   @SubscribeMessage('stopTyping')
-  handleStopTyping(client: Socket, @MessageBody() body: { to: string; data: any }) {
-    const recipientSocketId = this.clients.get(body.to);
-    if (recipientSocketId) {
-      this.server.to(recipientSocketId).emit('userStoppedTyping', { from: client.id, data: body.data });
-    }
+  async handleStopTyping(client: Socket, @MessageBody() body: { conversation_id: string }) {
+    const sender = await this.typingRelay(client, body?.conversation_id);
+    if (!sender) return;
+    this.server
+      .to(sender.others)
+      .emit('userStoppedTyping', { conversation_id: body.conversation_id, user_id: sender.userId });
+  }
+
+  /** The typer's name and the other participants' user rooms, or null if they aren't in the chat. */
+  private async typingRelay(client: Socket, conversationId?: string) {
+    const userId = client.data?.userId;
+    if (!userId || !conversationId || typeof conversationId !== 'string' || !this.prisma) return null;
+    const members = await this.prisma.participant.findMany({
+      where: { conversationId },
+      select: { userId: true, user: { select: { name: true } } },
+    });
+    const me = members.find((m) => m.userId === userId);
+    if (!me) return null;
+    const others = members.filter((m) => m.userId !== userId).map((m) => `user_${m.userId}`);
+    if (!others.length) return null;
+    return { userId, name: me.user?.name ?? 'Someone', others };
   }
 
   @SubscribeMessage('join')
