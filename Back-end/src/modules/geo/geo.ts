@@ -112,12 +112,26 @@ export async function suggestPlaces(q: string, near?: { lat: number; lng: number
 }
 
 /** The place at a position (for "use my current location"). */
+/**
+ * The town or city at a position, for "use my current location". Only the area is named and the
+ * position is rounded to about a kilometre, so a vendor working from home doesn't publish their street.
+ */
 export async function reversePlace(lat: number, lng: number, fetchImpl: typeof fetch = fetch): Promise<Place | null> {
   const res = await fetchImpl(`${PHOTON()}/reverse?lat=${lat}&lon=${lng}&limit=1&lang=en`, { headers: headers() });
   if (!res.ok) throw new Error(`Place lookup answered ${res.status}`);
-  const [hit] = toPlaces(await res.json());
-  // keep the exact position the phone reported
-  return hit ? { ...hit, lat: Math.round(lat * 1e5) / 1e5, lng: Math.round(lng * 1e5) / 1e5 } : null;
+  const body = await res.json();
+  const p = body?.features?.[0]?.properties ?? {};
+  // a place that is itself a town or city has its own name; anything smaller is named by its city
+  const town = p.osm_key === 'place' || ['city', 'town', 'village', 'hamlet', 'locality', 'district'].includes(p.type) ? p.name : undefined;
+  const label = placeLabel({ countrycode: p.countrycode, city: p.city ?? town ?? p.county, state: p.state, country: p.country });
+  if (!label) return null;
+  return { label, lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 };
+}
+
+/** A listing without its map position: positions only drive "near me" on the server and are never sent out publicly. */
+export function withoutPosition<T extends Record<string, any>>(listing: T): Omit<T, 'lat' | 'lng' | 'geocoded_at'> {
+  const { lat: _lat, lng: _lng, geocoded_at: _at, ...rest } = listing;
+  return rest;
 }
 
 export const __clearPlaceCache = () => placeCache.clear();

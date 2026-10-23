@@ -1,4 +1,4 @@
-import { __clearGeocodeCache, __clearPlaceCache, boundingBox, geocode, milesBetween, placeLabel, reversePlace, suggestPlaces } from './geo';
+import { __clearGeocodeCache, __clearPlaceCache, boundingBox, geocode, milesBetween, placeLabel, reversePlace, suggestPlaces, withoutPosition } from './geo';
 import { GeocodeService } from './geocode.service';
 
 const houston = { lat: 29.7604, lng: -95.3698 };
@@ -81,9 +81,20 @@ describe('place suggestions', () => {
     expect(await suggestPlaces('b', null, fetchMock as any)).toEqual([]);
   });
 
-  it('names the place at a position but keeps the exact position', async () => {
-    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ features: [feature({ name: 'New York', state: 'New York', countrycode: 'US' }, -74.0, 40.71)] }) });
-    expect(await reversePlace(40.71283, -74.00597, fetchMock as any)).toEqual({ label: 'New York, NY', lat: 40.71283, lng: -74.00597 });
+  it('names the city at a position, rounded to about a kilometre', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ features: [feature({ name: 'New York', type: 'city', osm_key: 'place', state: 'New York', countrycode: 'US' }, -74.0, 40.71)] }) });
+    expect(await reversePlace(40.71283, -74.00597, fetchMock as any)).toEqual({ label: 'New York, NY', lat: 40.71, lng: -74.01 });
+  });
+
+  it("never names the street or house at someone's position", async () => {
+    const house = feature({ housenumber: '12', street: 'Main St', city: 'Austin', state: 'Texas', countrycode: 'US', type: 'house', osm_key: 'building' }, -97.74, 30.27);
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ features: [house] }) });
+    const place = await reversePlace(30.26715, -97.74306, fetchMock as any);
+    expect(place).toEqual({ label: 'Austin, TX', lat: 30.27, lng: -97.74 });
+  });
+
+  it('hides a listing position', () => {
+    expect(withoutPosition({ id: 'l1', location: 'Austin, TX', lat: 30.2, lng: -97.7, geocoded_at: new Date() })).toEqual({ id: 'l1', location: 'Austin, TX' });
   });
 });
 

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { MAX_SERVICE_RADIUS, boundingBox, milesBetween } from 'src/modules/geo/geo';
+import { MAX_SERVICE_RADIUS, boundingBox, milesBetween, withoutPosition } from 'src/modules/geo/geo';
 import { ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
@@ -288,7 +288,8 @@ export class MarketplaceService {
 
   private formatListingCard(listing: any) {
     return {
-      ...listing,
+      // positions only drive near me here; never sent out (a vendor may have pinned their home)
+      ...(withoutPosition(listing) as any),
       // what the customer will be asked to pay and when (vendor's choice, else the category default)
       effective_payment_plan: listing.payment_plan ?? listing.category?.default_payment_plan ?? 'FULL_ON_ACCEPT',
       images: (listing.images ?? []).map((img: string) =>

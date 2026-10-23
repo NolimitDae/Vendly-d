@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { withoutPosition } from '../geo/geo';
 
 @Injectable()
 export class SavedListingsService {
@@ -42,7 +43,7 @@ export class SavedListingsService {
       },
       orderBy: { created_at: 'desc' },
     });
-    return { success: true, data: saved };
+    return { success: true, data: saved.map((s) => ({ ...s, listing: s.listing && withoutPosition(s.listing) })) };
   }
 
   async getSavedIds(userId: string) {

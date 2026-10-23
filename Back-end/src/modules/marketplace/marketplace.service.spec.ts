@@ -123,6 +123,9 @@ describe('MarketplaceService', () => {
       const res = await service.searchListings({ near_lat: 29.76, near_lng: -95.37, radius_miles: 30, page: 1, limit: 12 });
       expect(res.data.map((l: any) => l.id)).toEqual(['near', 'far']);
       expect(res.data[0].distance_miles).toBeLessThan(3);
+      // the distance is shared, never the vendor's position
+      expect(res.data[0]).not.toHaveProperty('lat');
+      expect(res.data[0]).not.toHaveProperty('lng');
       expect(res.meta.total).toBe(2);
       expect(mockPrisma.vendorListing.count).toHaveBeenCalledWith({ where: expect.objectContaining({ lat: expect.any(Object), lng: expect.any(Object) }) });
     });
