@@ -10,6 +10,8 @@ export interface Listing {
   location?: string | null;
   /** set when searching near a point */
   distance_miles?: number | null;
+  /** how far the vendor travels from `location` */
+  service_radius_miles?: number | null;
   delivery_time?: number | null;
   tags?: string[];
   avg_rating?: number | null;

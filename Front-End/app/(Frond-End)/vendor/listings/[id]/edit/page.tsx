@@ -8,12 +8,9 @@ import { toast } from "react-toastify";
 import { Upload, X, Loader2, ArrowLeft, CalendarX, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-
-interface Category {
-  id: string;
-  name: string;
-  sub_categories?: { id: string; name: string }[];
-}
+import CategoryCombobox from "@/components/listing/CategoryCombobox";
+import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
+import type { PickerCategory } from "@/lib/categories";
 
 interface BlockedDate {
   id: string;
@@ -27,7 +24,7 @@ export default function EditListingPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<PickerCategory[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -51,13 +48,14 @@ export default function EditListingPage() {
     price: "",
     price_unit: "fixed",
     payment_plan: "FULL_ON_ACCEPT",
-    location: "",
     availability: "",
     delivery_time: "",
     category_id: "",
     sub_category_id: "",
     tags: "",
   });
+  const [place, setPlace] = useState<PickedPlace>({ label: "" });
+  const [radius, setRadius] = useState<number | null>(null);
 
   const fetchBlockedDates = async () => {
     try {
@@ -82,13 +80,14 @@ export default function EditListingPage() {
           price: String(l.price ?? ""),
           price_unit: l.price_unit ?? "fixed",
           payment_plan: l.payment_plan ?? l.effective_payment_plan ?? "FULL_ON_ACCEPT",
-          location: l.location ?? "",
           availability: l.availability ?? "",
           delivery_time: l.delivery_time ? String(l.delivery_time) : "",
-          category_id: l.category?.id ?? "",
-          sub_category_id: l.sub_category?.id ?? "",
+          category_id: l.category_id ?? l.category?.id ?? "",
+          sub_category_id: l.sub_category_id ?? l.sub_category?.id ?? "",
           tags: Array.isArray(l.tags) ? l.tags.join(", ") : (l.tags ?? ""),
         });
+        setPlace({ label: l.location ?? "", lat: l.lat ?? undefined, lng: l.lng ?? undefined });
+        setRadius(l.service_radius_miles ?? null);
       } else {
         toast.error("Listing not found");
         router.push("/vendor/listings");
@@ -100,8 +99,6 @@ export default function EditListingPage() {
 
     fetchBlockedDates();
   }, [id]);
-
-  const selectedCategory = categories.find((c) => c.id === form.category_id);
 
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
@@ -134,7 +131,9 @@ export default function EditListingPage() {
     setSaving(true);
     try {
       const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, v); });
+      // empty category values clear what was there
+      Object.entries(form).forEach(([k, v]) => { if (v || k === "category_id" || k === "sub_category_id") fd.append(k, v); });
+      appendPlace(fd, place, radius, true);
 
       // Only send images if the user picked new ones (replaces all old images on backend)
       if (newImages.length > 0) {
@@ -381,54 +380,24 @@ export default function EditListingPage() {
           {/* Category */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
             <h2 className="font-semibold text-gray-900 dark:text-white">Category</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category</label>
-                <select
-                  value={form.category_id}
-                  onChange={(e) => {
-                    set("category_id", e.target.value);
-                    set("sub_category_id", "");
-                  }}
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none text-gray-900 dark:text-white"
-                >
-                  <option value="">Select category</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              {selectedCategory?.sub_categories?.length ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Subcategory</label>
-                  <select
-                    value={form.sub_category_id}
-                    onChange={(e) => set("sub_category_id", e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none text-gray-900 dark:text-white"
-                  >
-                    <option value="">Select subcategory</option>
-                    {selectedCategory.sub_categories.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-            </div>
+            <CategoryCombobox
+              categories={categories}
+              categoryId={form.category_id}
+              subCategoryId={form.sub_category_id}
+              onChange={(category_id, sub_category_id) => setForm((prev) => ({ ...prev, category_id, sub_category_id }))}
+            />
+          </div>
+
+          {/* Location */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
+            <h2 className="font-semibold text-gray-900 dark:text-white">Location</h2>
+            <LocationField value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
           </div>
 
           {/* Details */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
             <h2 className="font-semibold text-gray-900 dark:text-white">Additional Details</h2>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Location</label>
-                <input
-                  value={form.location}
-                  onChange={(e) => set("location", e.target.value)}
-                  placeholder="e.g. New York, NY"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
-                />
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Delivery Time (days)</label>
                 <input

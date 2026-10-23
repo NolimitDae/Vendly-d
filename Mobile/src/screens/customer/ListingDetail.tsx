@@ -124,6 +124,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
             {!!listing.category && <Row label="Category" value={[listing.category.name, listing.sub_category?.name].filter(Boolean).join(' · ')} />}
             {listing.delivery_time != null && <Row label="Delivery time" value={`${listing.delivery_time} day${listing.delivery_time === 1 ? '' : 's'}`} />}
             {!!listing.location && <Row label="Location" value={listing.location} />}
+            {!!listing.service_radius_miles && <Row label="Travels" value={`Up to ${listing.service_radius_miles} miles`} />}
             <Row label="Payment" value="Held by Vendly until done" />
           </Card>
 

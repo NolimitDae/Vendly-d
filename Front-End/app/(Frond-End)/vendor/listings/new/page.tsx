@@ -8,13 +8,10 @@ import { toast } from "react-toastify";
 import { Upload, X, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import CategoryCombobox from "@/components/listing/CategoryCombobox";
+import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
+import type { PickerCategory } from "@/lib/categories";
 import { SubscriptionService } from "@/service/subscription/subscription.service";
-
-interface Category {
-  id: string;
-  name: string;
-  sub_categories?: { id: string; name: string }[];
-}
 
 export default function NewListingPage() {
   const router = useRouter();
@@ -22,7 +19,7 @@ export default function NewListingPage() {
 
   const [planGateChecked, setPlanGateChecked] = useState(false);
   const [planBlocked, setPlanBlocked] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<PickerCategory[]>([]);
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -32,13 +29,14 @@ export default function NewListingPage() {
     price: "",
     price_unit: "fixed",
     payment_plan: "FULL_ON_ACCEPT",
-    location: "",
     availability: "",
     delivery_time: "",
     category_id: "",
     sub_category_id: "",
     tags: "",
   });
+  const [place, setPlace] = useState<PickedPlace>({ label: "" });
+  const [radius, setRadius] = useState<number | null>(null);
 
   useEffect(() => {
     // vendor plans aren't required until subscriptions launch
@@ -77,8 +75,6 @@ export default function NewListingPage() {
     });
   }, []);
 
-  const selectedCategory = categories.find((c) => c.id === form.category_id);
-
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
     const newFiles = Array.from(files).slice(0, 10 - images.length);
@@ -106,6 +102,7 @@ export default function NewListingPage() {
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, v); });
+      appendPlace(fd, place, radius, false);
       images.forEach((img) => fd.append("images", img));
 
       const res = await VendorListingService.create(fd);
@@ -283,51 +280,24 @@ export default function NewListingPage() {
           {/* Category */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
             <h2 className="font-semibold text-gray-900 dark:text-white">Category</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category</label>
-                <select
-                  value={form.category_id}
-                  onChange={(e) => { set("category_id", e.target.value); set("sub_category_id", ""); }}
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none text-gray-900 dark:text-white"
-                >
-                  <option value="">Select category</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              {selectedCategory?.sub_categories?.length ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Subcategory</label>
-                  <select
-                    value={form.sub_category_id}
-                    onChange={(e) => set("sub_category_id", e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none text-gray-900 dark:text-white"
-                  >
-                    <option value="">Select subcategory</option>
-                    {selectedCategory.sub_categories.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-            </div>
+            <CategoryCombobox
+              categories={categories}
+              categoryId={form.category_id}
+              subCategoryId={form.sub_category_id}
+              onChange={(category_id, sub_category_id) => setForm((prev) => ({ ...prev, category_id, sub_category_id }))}
+            />
+          </div>
+
+          {/* Location */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
+            <h2 className="font-semibold text-gray-900 dark:text-white">Location</h2>
+            <LocationField value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
           </div>
 
           {/* Details */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
             <h2 className="font-semibold text-gray-900 dark:text-white">Additional Details</h2>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Location</label>
-                <input
-                  value={form.location}
-                  onChange={(e) => set("location", e.target.value)}
-                  placeholder="e.g. New York, NY"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
-                />
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Delivery Time (days)</label>
                 <input

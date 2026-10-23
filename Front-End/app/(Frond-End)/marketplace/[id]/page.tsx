@@ -37,6 +37,7 @@ interface Listing {
   images: string[];
   tags: string[];
   location?: string;
+  service_radius_miles?: number | null;
   availability?: string;
   delivery_time?: number;
   avg_rating?: number;
@@ -305,6 +306,7 @@ export default function ListingDetailPage() {
                   <div className="flex items-center gap-1">
                     <MapPin className="w-4 h-4" />
                     {listing.location}
+                    {listing.service_radius_miles ? ` · travels up to ${listing.service_radius_miles} mi` : ""}
                   </div>
                 )}
                 {listing.delivery_time && (
