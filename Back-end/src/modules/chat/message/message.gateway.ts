@@ -106,19 +106,9 @@ export class MessageGateway
     client.emit('joinedRoom', { room_id: roomId });
   }
 
-  @SubscribeMessage('sendMessage')
-  async listenForMessages(
-    client: Socket,
-    @MessageBody() body: { to: string; data: any },
-  ) {
-    const recipientSocketId = this.clients.get(body.to);
-    if (recipientSocketId) {
-      this.server.to(recipientSocketId).emit('message', {
-        from: body.data.sender.id,
-        data: body.data,
-      });
-    }
-  }
+  // There is deliberately no client "sendMessage" event: messages are sent through the API, which
+  // checks the sender is in the conversation, and the server pushes them out. A socket relay let any
+  // connected user deliver a message with a made-up sender to anyone.
 
   /**
    * Typing indicator. Clients send { conversation_id } at most every couple of seconds while typing

@@ -151,29 +151,8 @@ describe('MessageGateway', () => {
     });
   });
 
-  describe('listenForMessages', () => {
-    it('should forward message to recipient socket when they are online', async () => {
-      gateway.clients.set('user-2', 'socket-user2');
-
-      await gateway.listenForMessages(makeSocket(), {
-        to: 'user-2',
-        data: { sender: { id: 'user-1' }, text: 'Hi' },
-      });
-
-      expect((gateway as any).server.to).toHaveBeenCalledWith('socket-user2');
-      expect((gateway as any).server.emit).toHaveBeenCalledWith('message', expect.objectContaining({
-        from: 'user-1',
-      }));
-    });
-
-    it('should not emit when recipient is not connected', async () => {
-      await gateway.listenForMessages(makeSocket(), {
-        to: 'offline-user',
-        data: { sender: { id: 'user-1' }, text: 'Hi' },
-      });
-
-      expect((gateway as any).server.emit).not.toHaveBeenCalled();
-    });
+  it('has no client-to-client message relay (messages go through the API)', () => {
+    expect((gateway as any).listenForMessages).toBeUndefined();
   });
 
   describe('typing indicator', () => {
