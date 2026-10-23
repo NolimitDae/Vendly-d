@@ -14,6 +14,7 @@ function setup(contract: any, users: Record<string, string>) {
     bookingContract: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     contractSignature: { create: jest.fn() },
     contractAuditEvent: { create: jest.fn() },
+    booking: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
   };
   const prisma: any = {
     bookingContract: {
@@ -61,6 +62,8 @@ describe('client co-signature', () => {
       expect.objectContaining({ data: expect.objectContaining({ role: 'CLIENT', user_id: 'cara', legal_name: 'Cara Client', document_sha256: SHA }) }),
     );
     expect(tx.contractAuditEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'SIGNED', actor_role: 'CLIENT' }) }));
+    // the vendor's 72-hour window to answer starts now
+    expect(tx.booking.updateMany).toHaveBeenCalledWith({ where: { id: expect.any(String), status: 'PENDING' }, data: { request_opened_at: expect.any(Date) } });
   });
 
   it('refuses anyone but the invited client, including the planner and vendor', async () => {

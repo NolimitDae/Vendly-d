@@ -155,6 +155,12 @@ describe('MessageGateway', () => {
     expect((gateway as any).listenForMessages).toBeUndefined();
   });
 
+  it('has no unauthenticated call signalling or recording upload', () => {
+    for (const handler of ['handleJoin', 'handleCall', 'handleAnswer', 'handleICECandidate', 'handleEndCall', 'handleRecordingChunk', 'handleRecordingEnd']) {
+      expect((gateway as any)[handler]).toBeUndefined();
+    }
+  });
+
   describe('typing indicator', () => {
     const members = [
       { userId: 'user-1', user: { name: 'Alice' } },

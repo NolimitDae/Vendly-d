@@ -11,8 +11,6 @@ import { Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
-import * as path from 'path';
-import * as fs from 'fs';
 import appConfig from '../../../config/app.config';
 
 @WebSocketGateway({
@@ -26,17 +24,10 @@ export class MessageGateway
   server: Server;
 
   private readonly logger = new Logger(MessageGateway.name);
-  private chunks = new Map<string, Buffer>();
-  private uploadsDir = path.join(__dirname, '../../../../public/storage/recordings');
 
   public clients = new Map<string, string>();
-  private activeUsers = new Map<string, string>();
 
-  constructor(@Optional() private readonly prisma?: PrismaService) {
-    if (!fs.existsSync(this.uploadsDir)) {
-      fs.mkdirSync(this.uploadsDir, { recursive: true });
-    }
-  }
+  constructor(@Optional() private readonly prisma?: PrismaService) {}
 
   onModuleInit() {}
 
@@ -81,10 +72,6 @@ export class MessageGateway
 
     if (userId) {
       this.clients.delete(userId);
-      const username = [...this.activeUsers.entries()].find(
-        ([, id]) => id === client.id,
-      )?.[0];
-      if (username) this.activeUsers.delete(username);
 
       this.server.emit('userStatusChange', { user_id: userId, status: 'offline' });
       this.logger.log(`User ${userId} disconnected`);
@@ -148,62 +135,9 @@ export class MessageGateway
     return { userId, name: me.user?.name ?? 'Someone', others };
   }
 
-  @SubscribeMessage('join')
-  handleJoin(client: Socket, { username }: { username: string }) {
-    this.activeUsers.set(username, client.id);
-  }
-
-  @SubscribeMessage('call')
-  handleCall(client: Socket, { caller, receiver, offer }: { caller: string; receiver: string; offer: any }) {
-    const receiverSocketId = this.activeUsers.get(receiver);
-    if (receiverSocketId) {
-      this.server.to(receiverSocketId).emit('incomingCall', { caller, offer });
-    }
-  }
-
-  @SubscribeMessage('answer')
-  handleAnswer(client: Socket, { caller, answer }: { caller: string; receiver: string; answer: any }) {
-    const callerSocketId = this.activeUsers.get(caller);
-    if (callerSocketId) {
-      this.server.to(callerSocketId).emit('callAccepted', { answer });
-    }
-  }
-
-  @SubscribeMessage('iceCandidate')
-  handleICECandidate(client: Socket, { receiver, candidate }: { receiver: string; candidate: any }) {
-    const receiverSocketId = this.activeUsers.get(receiver);
-    if (receiverSocketId) {
-      this.server.to(receiverSocketId).emit('iceCandidate', { candidate });
-    }
-  }
-
-  @SubscribeMessage('endCall')
-  handleEndCall(client: Socket, { receiver }: { receiver: string }) {
-    const receiverSocketId = this.activeUsers.get(receiver);
-    if (receiverSocketId) {
-      this.server.to(receiverSocketId).emit('callEnded');
-    }
-  }
-
-  @SubscribeMessage('recordingChunk')
-  handleRecordingChunk(
-    client: Socket,
-    @MessageBody() payload: { recordingId: string; sequence: number; chunk: Buffer | any },
-  ) {
-    const { recordingId, chunk } = payload;
-    const existing = this.chunks.get(recordingId) ?? Buffer.alloc(0);
-    this.chunks.set(recordingId, Buffer.concat([existing, Buffer.from(new Uint8Array(chunk))]));
-  }
-
-  @SubscribeMessage('recordingEnded')
-  handleRecordingEnd(client: Socket, @MessageBody() payload: { recordingId: string }) {
-    const filePath = path.join(this.uploadsDir, `${payload.recordingId}.webm`);
-    const buffer = this.chunks.get(payload.recordingId);
-    if (buffer) {
-      fs.writeFileSync(filePath, buffer);
-      this.chunks.delete(payload.recordingId);
-    }
-  }
+  // Voice/video call signalling and call recording were removed: no app or website used them, and
+  // they trusted whatever username, caller and recording id a client sent (anyone could take over
+  // another user's calls, and a crafted recording id wrote files outside the recordings folder).
 
   // Emit booking notification to a specific user via their room
   emitBookingEvent(userId: string, event: string, data: any) {

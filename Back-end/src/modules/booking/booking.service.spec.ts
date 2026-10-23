@@ -154,6 +154,24 @@ describe('BookingService', () => {
     });
   });
 
+  describe('reject', () => {
+    it('declines an open request and voids its contract', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      await service.reject('booking-1', 'vendor-1', { reason: 'Fully booked' });
+      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.PENDING }, data: { status: BookingStatus.REJECTED, reject_reason: 'Fully booked' } });
+      expect(mockContracts.voidPendingForBooking).toHaveBeenCalledWith('booking-1', 'Vendor declined the booking', 'vendor-1');
+    });
+
+    it('does nothing if the request closed in the meantime', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.reject('booking-1', 'vendor-1', { reason: 'x' })).rejects.toThrow('no longer open');
+      expect(mockContracts.voidPendingForBooking).not.toHaveBeenCalled();
+      expect(mockPush.sendToUser).not.toHaveBeenCalled();
+    });
+  });
+
   describe('confirm', () => {
     it('should confirm a pending booking', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
@@ -179,6 +197,12 @@ describe('BookingService', () => {
       });
       await expect(service.confirm('booking-1', 'vendor-1')).rejects.toThrow('wasn’t answered in time');
       expect(mockPayments.scheduleForBooking).not.toHaveBeenCalled();
+    });
+
+    it('refuses a request that is past its time even before the hourly job closes it', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, created_at: new Date(Date.now() - 80 * 3_600_000), event_start_at: null });
+      await expect(service.confirm('booking-1', 'vendor-1')).rejects.toThrow('wasn’t answered in time');
+      expect(mockContracts.countersignForBooking).not.toHaveBeenCalled();
     });
 
     it('explains why an expired request can no longer be accepted', async () => {

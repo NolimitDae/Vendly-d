@@ -4,24 +4,32 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 let socket: Socket | null = null;
+// the socket being opened right now: callers that arrive while the token is read share it
+let opening: Promise<Socket> | null = null;
 
 async function getSocket(): Promise<Socket> {
   // `active` covers a socket that is still connecting or reconnecting; opening another one then
   // would split listeners and joined rooms across two connections.
   if (socket?.connected || socket?.active) return socket;
+  if (opening) return opening;
 
-  const token = await AsyncStorage.getItem('token');
-
-  socket = io(BASE_URL, {
-    transports: ['websocket'],
-    auth: { token },
-    extraHeaders: { Authorization: `Bearer ${token}` },
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 2000,
-  });
-
-  return socket;
+  opening = (async () => {
+    const token = await AsyncStorage.getItem('token');
+    socket = io(BASE_URL, {
+      transports: ['websocket'],
+      auth: { token },
+      extraHeaders: { Authorization: `Bearer ${token}` },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+    });
+    return socket;
+  })();
+  try {
+    return await opening;
+  } finally {
+    opening = null;
+  }
 }
 
 export const SocketService = {
@@ -70,5 +78,7 @@ export const SocketService = {
   disconnect() {
     socket?.disconnect();
     socket = null;
+    // a socket still being opened (e.g. during sign-out) is closed as soon as it exists
+    opening?.then((s) => s.disconnect()).catch(() => {});
   },
 };

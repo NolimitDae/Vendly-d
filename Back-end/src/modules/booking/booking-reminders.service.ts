@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { BookingStatus } from 'prisma/generated/client';
+import { BookingContractStatus, BookingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
@@ -13,6 +13,9 @@ export const EXPIRED_REASON = 'The vendor didn’t respond in time, so the reque
 const people = { select: { id: true, name: true, email: true } };
 const titled = { listing: { select: { title: true } }, customer: people, vendor: people };
 const titleOf = (b: { listing?: { title: string } | null }) => b.listing?.title ?? 'your booking';
+/** Open requests the vendor can answer: not ones still waiting for a planner's client to co-sign. */
+const answerable = { status: BookingStatus.PENDING, deleted_at: null, contracts: { none: { status: BookingContractStatus.AWAITING_CLIENT } } };
+const BATCH = 200;
 
 /**
  * Hourly housekeeping for bookings: reminds vendors about requests they haven't answered, closes
@@ -38,28 +41,25 @@ export class BookingRemindersService {
 
   /** Requests a day away from closing, nudged once. */
   async remindVendors(now = new Date()) {
+    // could close within the reminder window, and haven't closed yet
+    const window = { gte: hoursFromNow(-REQUEST_EXPIRY_HOURS, now), lte: hoursFromNow(EXPIRY_REMINDER_HOURS - REQUEST_EXPIRY_HOURS, now) };
     const open = await this.prisma.booking.findMany({
-      where: {
-        status: BookingStatus.PENDING,
-        deleted_at: null,
-        expiry_reminded_at: null,
-        // anything that could expire within the reminder window
-        created_at: { lte: hoursFromNow(EXPIRY_REMINDER_HOURS - REQUEST_EXPIRY_HOURS, now) },
-      },
+      where: { ...answerable, expiry_reminded_at: null, OR: [{ request_opened_at: window }, { request_opened_at: null, created_at: window }] },
       include: titled,
-      take: 200,
+      orderBy: { created_at: 'asc' },
+      take: BATCH,
     });
-    // requests whose event starts soon expire earlier than 72 h; include those too
+    // requests whose event starts soon close earlier than 72 h; include those too
     const soon = await this.prisma.booking.findMany({
       where: {
-        status: BookingStatus.PENDING,
-        deleted_at: null,
+        ...answerable,
         expiry_reminded_at: null,
-        event_start_at: { lte: hoursFromNow(EXPIRY_REMINDER_HOURS, now) },
+        event_start_at: { gt: hoursFromNow(-24, now), lte: hoursFromNow(EXPIRY_REMINDER_HOURS, now) },
         id: { notIn: open.map((b) => b.id) },
       },
       include: titled,
-      take: 200,
+      orderBy: { event_start_at: 'asc' },
+      take: BATCH,
     });
     let sent = 0;
     for (const b of [...open, ...soon]) {
@@ -92,14 +92,28 @@ export class BookingRemindersService {
 
   /** Requests nobody answered in time are declined, their unsigned contracts voided and both sides told. */
   async expireRequests(now = new Date()) {
+    let expired = 0;
+    // a backlog is worked through in batches so nothing stays open past its time
+    for (let round = 0; round < 20; round++) {
+      const closed = await this.expireBatch(now);
+      expired += closed.expired;
+      // stop at the end of the queue, or when a full batch held nothing due (those wait for a later hour)
+      if (closed.seen < BATCH || !closed.expired) break;
+    }
+    return expired;
+  }
+
+  private async expireBatch(now: Date) {
+    const due = hoursFromNow(-REQUEST_EXPIRY_HOURS, now);
     const candidates = await this.prisma.booking.findMany({
       where: {
-        status: BookingStatus.PENDING,
-        deleted_at: null,
-        OR: [{ created_at: { lte: hoursFromNow(-REQUEST_EXPIRY_HOURS, now) } }, { event_start_at: { lte: now } }],
+        ...answerable,
+        // checked precisely below; this just narrows to requests that could be due
+        OR: [{ request_opened_at: { lte: due } }, { request_opened_at: null, created_at: { lte: due } }, { event_start_at: { lte: now } }],
       },
       include: titled,
-      take: 200,
+      orderBy: { created_at: 'asc' },
+      take: BATCH,
     });
     let expired = 0;
     for (const b of candidates) {
@@ -139,7 +153,7 @@ export class BookingRemindersService {
           .catch(() => null);
       }
     }
-    return expired;
+    return { expired, seen: candidates.length };
   }
 
   /** One "how was it?" a couple of days after a booking is done, if there's no review yet. */

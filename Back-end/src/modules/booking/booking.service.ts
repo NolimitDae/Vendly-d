@@ -89,6 +89,8 @@ export class BookingService {
       throw new BadRequestException(
         booking.expired_at ? 'This request closed because it wasn’t answered in time.' : `Cannot confirm a booking in ${booking.status} status`,
       );
+    // past its time but not yet closed by the hourly job: still too late
+    if (requestExpiresAt(booking) <= new Date()) throw new BadRequestException('This request closed because it wasn’t answered in time.');
 
     // only while the request is still open: it may have expired since it was loaded
     const stillOpen = () => new BadRequestException('This request closed because it wasn’t answered in time.');
@@ -136,11 +138,13 @@ export class BookingService {
     if (booking.status !== BookingStatus.PENDING)
       throw new BadRequestException(`Cannot reject a booking in ${booking.status} status`);
 
-    const updated = await this.prisma.booking.update({
-      where: { id: bookingId },
+    // only while still open: it may have expired or been cancelled since it was loaded
+    const claimed = await this.prisma.booking.updateMany({
+      where: { id: bookingId, status: BookingStatus.PENDING },
       data: { status: BookingStatus.REJECTED, reject_reason: dto.reason },
-      include: this.bookingIncludes(),
     });
+    if (!claimed.count) throw new BadRequestException('This request is no longer open.');
+    const updated = await this.getBookingOrFail(bookingId);
     await this.contracts.voidPendingForBooking(bookingId, 'Vendor declined the booking', vendorId);
 
     const clientUrl = appConfig().app.client_app_url;

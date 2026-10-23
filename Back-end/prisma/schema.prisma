@@ -907,7 +907,9 @@ model Booking {
   venue_address  String?  @db.VarChar(500)
   guest_count    Int?
 
-  // requests the vendor doesn't answer in time are declined automatically (see booking-requests.ts)
+  // requests the vendor doesn't answer in time are declined automatically (see booking-requests.ts);
+  // the clock starts when the vendor can answer: at the request, or once a planner's client co-signs
+  request_opened_at  DateTime?
   expiry_reminded_at DateTime?
   expired_at         DateTime?
   // "how was it?" follow-up once a booking is done

@@ -31,7 +31,41 @@ describe('requestExpiresAt', () => {
   });
 });
 
+describe('requestExpiresAt edge cases', () => {
+  it('a date-only start (rental pickup day) counts to the end of that day', () => {
+    const pickup = new Date('2026-10-24T00:00:00Z');
+    expect(requestExpiresAt({ created_at: new Date('2026-10-24T10:00:00Z'), event_start_at: pickup })).toEqual(new Date('2026-10-25T00:00:00Z'));
+  });
+
+  it('stays open at least two hours however close the event is', () => {
+    const created = new Date('2026-10-24T10:00:00Z');
+    expect(requestExpiresAt({ created_at: created, event_start_at: new Date('2026-10-24T10:30:00Z') })).toEqual(new Date('2026-10-24T12:00:00Z'));
+  });
+
+  it("starts the clock when a planner's client co-signs", () => {
+    const opened = new Date('2026-10-26T09:00:00Z');
+    expect(requestExpiresAt({ created_at: new Date('2026-10-22T09:00:00Z'), request_opened_at: opened })).toEqual(new Date('2026-10-29T09:00:00Z'));
+  });
+});
+
 describe('BookingRemindersService', () => {
+  it("never reminds or closes requests still waiting for a planner's client", async () => {
+    const { service, prisma } = setup();
+    await service.remindVendors(now);
+    await service.expireRequests(now);
+    for (const [args] of prisma.booking.findMany.mock.calls) {
+      expect(args.where).toMatchObject({ status: BookingStatus.PENDING, contracts: { none: { status: 'AWAITING_CLIENT' } } });
+    }
+  });
+
+  it('works through a backlog bigger than one batch', async () => {
+    const { service, prisma } = setup();
+    const due = Array.from({ length: 200 }, (_, i) => booking({ id: `b${i}`, created_at: ago(100) }));
+    prisma.booking.findMany.mockResolvedValueOnce(due).mockResolvedValueOnce([booking({ id: 'last', created_at: ago(100) })]);
+    expect(await service.expireRequests(now)).toBe(201);
+    expect(prisma.booking.findMany).toHaveBeenCalledTimes(2);
+  });
+
   it('closes requests nobody answered, voids the contract and tells both sides', async () => {
     const { service, prisma, push, mail, contracts } = setup();
     prisma.booking.findMany.mockResolvedValueOnce([booking({ created_at: ago(73) })]);

@@ -504,6 +504,8 @@ export class BookingContractsService {
       await tx.contractSignature.create({
         data: this.signatureRow(contract.id, user.userId, ContractSignerRole.CLIENT, sig, contract.content_sha256, imageKey, me!.email, meta),
       });
+      // the vendor can answer from now on, so the request's 72-hour clock starts here
+      await tx.booking.updateMany({ where: { id: contract.booking_id, status: BookingStatus.PENDING }, data: { request_opened_at: new Date() } });
       await this.audit(tx, { booking_contract_id: contract.id, actor_id: user.userId, actor_role: ContractSignerRole.CLIENT, action: ContractAuditAction.SIGNED, meta });
     });
 

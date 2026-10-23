@@ -1,4 +1,5 @@
-ALTER TABLE "bookings" ADD COLUMN "expiry_reminded_at" TIMESTAMP(3),
+ALTER TABLE "bookings" ADD COLUMN "request_opened_at" TIMESTAMP(3),
+ADD COLUMN "expiry_reminded_at" TIMESTAMP(3),
 ADD COLUMN "expired_at" TIMESTAMP(3),
 ADD COLUMN "review_reminded_at" TIMESTAMP(3),
 ADD COLUMN "review_prompt_dismissed_at" TIMESTAMP(3);
