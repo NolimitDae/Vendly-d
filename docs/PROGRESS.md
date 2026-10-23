@@ -1,6 +1,6 @@
 # Vendly — Issues & Risks Log
 
-_Updated: 2026-10-08. All Build Plan Phase 0 items resolved._
+_Updated: 2026-10-23. All Build Plan Phase 0 items resolved._
 
 ## Fixed This Session
 
@@ -31,6 +31,9 @@ _Updated: 2026-10-08. All Build Plan Phase 0 items resolved._
 | F8 | Branded booking emails | `booking-notification.ejs` — status badge, service details, CTA button |
 | F9 | Push notifications | `PushService` sends via Expo on booking create/confirm/reject/start/complete/cancel and new deliverables; mobile taps open the booking detail |
 | F10 | Web + mobile UI | Booking detail pages (proof upload, deliverables), unavailable dates on listing pages, block/unblock dates on vendor listing edit |
+| F11 | Package categories, location and travel radius | 13 starter categories / 63 sub-categories (seed migration); searchable picker on web + app; address suggestions and "use my location" (`GET /geo/suggest`, `GET /geo/reverse`, city-level only); `service_radius_miles` on packages, and near me also finds vendors who travel that far. Listing positions are never sent out publicly |
+| F12 | Get-set-up checklist per role | `GET /onboarding`, `POST /onboarding/seen`; `User.onboarding_seen`. Customer: email, ID, card, photo, city. Vendor: email, licence, ID, first package, payouts, contract, shop branding. Planner: email, profile, licence, ID, card, first event. Lives at the top of notifications (web + app) with a welcome popup and an all-set popup; gone once finished |
+| F13 | Role switch without restarting the app | Navigation resets to the new role's tabs; the account refreshes when the app returns to the foreground |
 
 ## Contracts (docs/CONTRACTS.md)
 

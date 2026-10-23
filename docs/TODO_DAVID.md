@@ -144,6 +144,9 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 - [x] **"Near me" on the website search too:** built, with a location prompt on the website and the app home screen.
 - [ ] **Answer the questions in GitHub issue #5** (ID check method, photo retention, client co-signing, login cookie).
 - [ ] **Make a new iPhone build** once this batch is pushed: the location prompt text changed, which needs a native build.
+- [ ] **After the next push, update the app** (no new native build needed for this batch): package categories and
+      location, the get-set-up checklist and the role-switch fix are JavaScript-only, so an over-the-air update to the
+      preview channel delivers them. I need an Expo token saved as the `EXPO_TOKEN` secret in this environment to send it.
 
 ## Good to know
 
@@ -152,3 +155,7 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 - Bookings paid through the old Stripe Checkout (before the new payment engine) keep the old payout path.
 - "Near me" uses OpenStreetMap's free geocoder (one lookup a second). Fine for now; swap for Google/Mapbox if listings grow into the thousands.
 - Every push notification is now also kept in the inbox (app + website notifications page).
+- Address suggestions for packages come from Photon (OpenStreetMap, free). "Use my current location" only fills in the
+  town or city, so vendors working from home don't publish their street. Set `PLACES_URL` on the backend to use your own Photon server.
+- The get-set-up checklist ticks itself off from the account (it doesn't matter whether a step was done in the app or on the
+  website). Customers add their photo and city in the app; the website has no page for those yet.
