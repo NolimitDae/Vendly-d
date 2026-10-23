@@ -35,6 +35,7 @@ const mockListing = {
 };
 
 const mockPrisma = {
+  serviceSubCategory: { findUnique: jest.fn() },
   vendorListing: {
     create: jest.fn(),
     findMany: jest.fn(),
@@ -113,6 +114,21 @@ describe('VendorListingService', () => {
 
       await service.update('listing-1', 'vendor-1', { location: 'Dallas, TX', lat: 32.78, lng: -96.8 });
       expect(mockPrisma.vendorListing.update.mock.calls[2][0].data).toMatchObject({ location: 'Dallas, TX', lat: 32.78, lng: -96.8, geocoded_at: expect.any(Date) });
+    });
+  });
+
+  describe('category and sub-category', () => {
+    it('refuses a sub-category from another category', async () => {
+      mockPrisma.serviceSubCategory.findUnique.mockResolvedValue({ category_id: 'cat-music' });
+      await expect(service.create('vendor-1', { title: 'DJ', description: 'x', price: 100, category_id: 'cat-food', sub_category_id: 'sub-dj' })).rejects.toThrow('doesn’t belong');
+      expect(mockPrisma.vendorListing.create).not.toHaveBeenCalled();
+    });
+
+    it('drops the old sub-category when only the category changes', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, category_id: 'cat-music', sub_category_id: 'sub-dj' });
+      mockPrisma.vendorListing.update.mockResolvedValue(mockListing);
+      await service.update('listing-1', 'vendor-1', { category_id: 'cat-food' });
+      expect(mockPrisma.vendorListing.update.mock.calls[0][0].data).toMatchObject({ category_id: 'cat-food', sub_category_id: null });
     });
   });
 

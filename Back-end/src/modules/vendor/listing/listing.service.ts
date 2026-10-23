@@ -21,6 +21,15 @@ export class VendorListingService {
     @Optional() private geocoder?: GeocodeService,
   ) {}
 
+  /** A sub-category must belong to the package's category. */
+  private async assertSubCategory(categoryId?: string | null, subCategoryId?: string | null) {
+    if (!subCategoryId) return;
+    const sub = await this.prisma.serviceSubCategory.findUnique({ where: { id: subCategoryId }, select: { category_id: true } });
+    if (!sub || (categoryId && sub.category_id !== categoryId)) {
+      throw new BadRequestException('That sub-category doesn’t belong to the chosen category.');
+    }
+  }
+
   async create(
     vendorId: string,
     dto: CreateVendorListingDto,
@@ -38,6 +47,7 @@ export class VendorListingService {
       }
     }
 
+    await this.assertSubCategory(dto.category_id, dto.sub_category_id);
     const listing = await this.prisma.vendorListing.create({
       data: {
         vendor_id: vendorId,
@@ -147,6 +157,11 @@ export class VendorListingService {
       throw new ForbiddenException('Access denied');
 
     const updateData: any = { ...dto };
+    // a new category without a new sub-category drops the old one, which belonged to the old category
+    if (dto.category_id !== undefined && dto.sub_category_id === undefined && dto.category_id !== listing.category_id) {
+      updateData.sub_category_id = null;
+    }
+    await this.assertSubCategory(dto.category_id ?? listing.category_id, dto.sub_category_id);
     const moved = dto.location !== undefined && (dto.location || null) !== (listing.location || null);
     const pinned = dto.lat !== undefined && dto.lng !== undefined && !!(dto.location ?? listing.location);
     if (pinned) {
