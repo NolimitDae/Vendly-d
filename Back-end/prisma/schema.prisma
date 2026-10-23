@@ -191,6 +191,8 @@ model User {
   // email verification
   email_verified_at DateTime?
   terms_accepted_at DateTime? // when they ticked Terms of Service + Privacy Policy at sign-up
+  // onboarding popups already shown, per role: { "VENDOR": { "intro": "<iso>", "complete": "<iso>" } }
+  onboarding_seen   Json      @default("{}")
   // subscription 
 
   //----------------------------------------

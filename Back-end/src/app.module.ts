@@ -12,6 +12,7 @@ import { PlatformModule } from './modules/platform/platform.module';
 import { RentalsModule } from './modules/rentals/rentals.module';
 import { EventToolsModule } from './modules/events/tools/event-tools.module';
 import { GeoModule } from './modules/geo/geo.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
 
 // internal imports
 import appConfig from './config/app.config';
@@ -106,6 +107,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     RentalsModule,
     EventToolsModule,
     GeoModule,
+    OnboardingModule,
   ],
   controllers: [AppController],
   providers: [

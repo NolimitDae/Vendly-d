@@ -124,6 +124,11 @@ export class StripePayment {
     return connectedAccount;
   }
 
+  /** A connected account, to see whether the vendor finished Stripe's payout setup. */
+  static retrieveAccount(account_id: string): Promise<stripe.Account> {
+    return getStripe().accounts.retrieve(account_id);
+  }
+
   // Stripe Connect onboarding.
   static async createOnboardingAccountLink(account_id: string) {
     const accountLink = await getStripe().accountLinks.create({
