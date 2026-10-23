@@ -44,14 +44,21 @@ interface Category {
   name: string;
 }
 
-// Icons for the category names the admin has set up; anything else gets a generic one.
+// Icons for the category names the admin has set up (most specific first); anything else gets a generic one.
 const CATEGORY_ICONS: [RegExp, IconName][] = [
-  [/beauty|hair|makeup|nail|personal/i, 'sparkles-outline'],
-  [/creative|media|photo|video|music|dj/i, 'camera-outline'],
-  [/event|planning|wedding|party/i, 'calendar-outline'],
-  [/rental|equipment|decor/i, 'key-outline'],
-  [/food|bev|cater|drink|bak/i, 'restaurant-outline'],
-  [/venue|space|hall/i, 'business-outline'],
+  [/music|entertain|dj|band|perform/i, 'musical-notes-outline'],
+  [/photo|video|film|camera|media/i, 'camera-outline'],
+  [/cater|food|bev|drink|bak|cake|dessert|chef/i, 'restaurant-outline'],
+  [/venue|space|hall|location/i, 'business-outline'],
+  [/decor|floral|flower|design/i, 'flower-outline'],
+  [/beauty|glam|hair|makeup|nail|personal/i, 'sparkles-outline'],
+  [/officiant|ceremony|minister|vow/i, 'heart-outline'],
+  [/kid|family|child|party/i, 'happy-outline'],
+  [/station|gift|invite|print|favou?r/i, 'gift-outline'],
+  [/transport|car|limo|bus|shuttle|valet/i, 'car-sport-outline'],
+  [/staff|service|security|bartend|clean/i, 'people-outline'],
+  [/rental|equipment|tent|furniture/i, 'cube-outline'],
+  [/event|planning|planner|wedding|coordinat/i, 'calendar-outline'],
 ];
 const iconFor = (name: string): IconName => CATEGORY_ICONS.find(([re]) => re.test(name))?.[1] ?? 'pricetags-outline';
 

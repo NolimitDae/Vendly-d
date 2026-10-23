@@ -73,7 +73,10 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
           </View>
 
           <View style={s.grid}>
-            {days.map((d) => {
+            {/* rows of seven equal cells: percentage widths round past 100% on some iPhones and push Saturday off */}
+            {Array.from({ length: 6 }, (_, row) => (
+              <View key={row} style={s.gridRow}>
+            {days.slice(row * 7, row * 7 + 7).map((d) => {
               const inMonth = isSameMonth(d, month);
               const past = isBefore(d, today);
               const booked = inMonth && !past && isBlocked(d);
@@ -94,6 +97,8 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
                 </Pressable>
               );
             })}
+              </View>
+            ))}
           </View>
 
           <View style={s.legend}>
@@ -143,8 +148,9 @@ const s = StyleSheet.create({
   monthTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
   weekRow: { flexDirection: 'row' },
   weekday: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 10 },
-  cell: { width: `${100 / 7}%`, alignItems: 'center' },
+  grid: { gap: 10 },
+  gridRow: { flexDirection: 'row' },
+  cell: { flex: 1, alignItems: 'center' },
   circle: { width: 39, height: 39, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.card },
   circleOpen: { backgroundColor: '#2A1536' },
   day: { color: DARK.accent, fontSize: 12, fontFamily: FONTS.medium },

@@ -9,6 +9,7 @@ import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../com
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import type { VendorDashboardStackParams } from '../../navigation/types';
+import { SEVENTH } from '../../utils/grid';
 
 // source 'calendar' = busy time imported from the vendor's own calendar (managed in Calendar sync)
 interface Block { id: string; start_date: string; end_date: string; reason?: string | null; source?: 'manual' | 'calendar' }
@@ -178,7 +179,7 @@ const s = StyleSheet.create({
   weekRow: { flexDirection: 'row' },
   weekday: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 10 },
-  cell: { width: `${100 / 7}%`, alignItems: 'center' },
+  cell: { width: SEVENTH, alignItems: 'center' },
   circle: { width: 39, height: 39, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.card },
   day: { color: DARK.accent, fontSize: 12, fontFamily: FONTS.medium },
   h2: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },

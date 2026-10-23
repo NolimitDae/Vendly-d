@@ -10,6 +10,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { RentalsService, type RentalItem, type RentalReservation } from '../../services/rentals.service';
 import { apiError } from '../../services/contracts.service';
 import type { VendorDashboardStackParams } from '../../navigation/types';
+import { SEVENTH, SEVENTH_PCT } from '../../utils/grid';
 
 type Detail = RentalItem & { reservations: RentalReservation[] };
 
@@ -181,8 +182,8 @@ const s = StyleSheet.create({
   action: { flex: 1, height: 48, borderRadius: 24, borderWidth: 1, borderColor: DARK.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   actionText: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
   heat: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 5 },
-  weekday: { width: `${100 / 7}%`, textAlign: 'center', color: DARK.muted, fontSize: 11, fontFamily: FONTS.medium, marginBottom: 2 },
-  cell: { width: `${100 / 7 - 1.5}%`, marginHorizontal: '0.75%', aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  weekday: { width: SEVENTH, textAlign: 'center', color: DARK.muted, fontSize: 11, fontFamily: FONTS.medium, marginBottom: 2 },
+  cell: { width: `${SEVENTH_PCT - 1.5}%`, marginHorizontal: '0.75%', aspectRatio: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   cellSel: { borderWidth: 2, borderColor: '#fff' },
   cellText: { color: '#fff', fontSize: 11, fontFamily: FONTS.medium },
   legend: { flexDirection: 'row', gap: 14, flexWrap: 'wrap' },

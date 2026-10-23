@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { addDays, addMonths, format, getDay, isAfter, isBefore, isSameDay, isSameMonth, startOfDay, startOfMonth } from 'date-fns';
 import { BrandGradient } from './brand';
 import { DARK, FONTS } from '../constants/colors';
+import { SEVENTH } from '../utils/grid';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -84,7 +85,7 @@ const s = StyleSheet.create({
   monthTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
   weekday: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 10 },
-  cell: { width: `${100 / 7}%`, alignItems: 'center' },
+  cell: { width: SEVENTH, alignItems: 'center' },
   circle: { width: 39, height: 39, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.card },
   band: { position: 'absolute', top: 0, left: 0, right: 0, height: 39, backgroundColor: '#5A2361' },
   day: { color: DARK.accent, fontSize: 12, fontFamily: FONTS.medium },
