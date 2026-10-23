@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Bell, Check, Trash2 } from "lucide-react";
@@ -8,6 +8,8 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { useNotifications } from "@/hooks/useNotifications";
 import { cn } from "@/lib/utils";
+import { useOnboarding } from "@/providers/OnboardingProvider";
+import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist";
 
 dayjs.extend(relativeTime);
 
@@ -28,6 +30,13 @@ export default function NotificationsPage() {
   const { notifications, unread, loading, markAsRead, markAllAsRead, removeNotification } =
     useNotifications();
   const [filter, setFilter] = useState<Filter>("All");
+  const onboarding = useOnboarding();
+  const checklist = onboarding.data?.visible ? onboarding.data : null;
+  const refreshOnboarding = onboarding.refresh;
+  // coming back here after finishing a step should show its tick straight away
+  useEffect(() => {
+    void refreshOnboarding(true);
+  }, [refreshOnboarding]);
 
   const filtered =
     filter === "All"
@@ -68,6 +77,8 @@ export default function NotificationsPage() {
             </button>
           )}
         </div>
+
+        {checklist && <OnboardingChecklist data={checklist} />}
 
         {/* Filters */}
         <div className="flex gap-2 flex-wrap mb-5">

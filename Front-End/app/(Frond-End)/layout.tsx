@@ -4,6 +4,8 @@ import Navbar from "@/components/Navbar";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { ThemeScript } from "@/providers/ThemeScript";
 import { NotificationProvider } from "@/providers/NotificationProvider";
+import { OnboardingProvider } from "@/providers/OnboardingProvider";
+import OnboardingPopup from "@/components/onboarding/OnboardingPopup";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "../globals.css";
 
@@ -22,12 +24,15 @@ export default function FrontEndLayout({
       <body className={jakarta.className}>
         <ThemeProvider>
           <NotificationProvider>
-            <Navbar />
-            {children}
-            <CustomToastContainer />
-            <div className="bg-[#FAFAFA] dark:bg-gray-950">
-              <Footer />
-            </div>
+            <OnboardingProvider>
+              <Navbar />
+              {children}
+              <OnboardingPopup />
+              <CustomToastContainer />
+              <div className="bg-[#FAFAFA] dark:bg-gray-950">
+                <Footer />
+              </div>
+            </OnboardingProvider>
           </NotificationProvider>
         </ThemeProvider>
       </body>
