@@ -232,6 +232,10 @@ model User {
   // Vendor listings
   vendorListings VendorListing[] @relation("VendorListingOwner")
   vendorAddOns   VendorAddOn[]   @relation("VendorAddOnOwner")
+  blocksMade     UserBlock[]     @relation("BlocksMade")
+  blocksReceived UserBlock[]     @relation("BlocksReceived")
+  reportsMade    UserReport[]    @relation("ReportsMade")
+  reportsAgainst UserReport[]    @relation("ReportsAgainst")
   rentalItems    RentalItem[]    @relation("RentalItemOwner")
   quotesSent     Quote[]         @relation("QuoteVendor")
   timelineItems  EventTimelineItem[] @relation("TimelineVendor")
@@ -895,6 +899,9 @@ model Booking {
   dispute_reason     String?   @db.Text
   dispute_resolved_at DateTime?
   dispute_resolution String?   @db.Text
+  // the vendor's side of a customer's dispute, shown to Vendly
+  dispute_vendor_reply      String?   @db.Text
+  dispute_vendor_replied_at DateTime?
   // deposit paid out to the vendor before the job (recovered from later payouts if refunded)
   early_released_amount Decimal @default(0) @db.Decimal(10, 2)
   // Vendly commission taken from the vendor share at release
@@ -974,6 +981,50 @@ model BookingInstallment {
   @@index([booking_id])
   @@index([status, next_attempt_at])
   @@map("booking_installments")
+}
+
+// ─── Chat safety ─────────────────────────────────────────────────────────────
+
+/// One person blocking another: neither can message the other. Bookings carry on.
+model UserBlock {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  blocker_id String
+  blocker    User   @relation("BlocksMade", fields: [blocker_id], references: [id], onDelete: Cascade)
+  blocked_id String
+  blocked    User   @relation("BlocksReceived", fields: [blocked_id], references: [id], onDelete: Cascade)
+
+  @@unique([blocker_id, blocked_id])
+  @@index([blocked_id])
+  @@map("user_blocks")
+}
+
+/// Someone reported a person (optionally a conversation or one message) to Vendly.
+model UserReport {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  reporter_id String
+  reporter    User   @relation("ReportsMade", fields: [reporter_id], references: [id], onDelete: Cascade)
+  reported_id String
+  reported    User   @relation("ReportsAgainst", fields: [reported_id], references: [id], onDelete: Cascade)
+
+  conversation_id String?
+  message_id      String?
+  // spam | harassment | scam | inappropriate | other
+  reason          String  @db.VarChar(30)
+  details         String? @db.Text
+  // OPEN | ACTIONED | DISMISSED
+  status          String  @default("OPEN") @db.VarChar(20)
+  resolved_at     DateTime?
+  resolved_by     String?
+  resolution_note String?   @db.Text
+
+  @@index([status, created_at])
+  @@index([reported_id])
+  @@map("user_reports")
 }
 
 // ─── Add-ons and fees ─────────────────────────────────────────────────────────
