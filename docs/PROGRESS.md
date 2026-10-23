@@ -39,6 +39,7 @@ _Updated: 2026-10-23. All Build Plan Phase 0 items resolved._
 | F16 | Chat read receipts + typing | "Seen" under your latest message, "<name> is typing…", live on web and app; participant checks on the server |
 | F17 | Admin: dispute contract, categories | Disputes show the booking's contract, signatures and audit log; admins rename/add/delete categories and sub-categories |
 | F18 | Website profile | Settings → Profile: photo, name, city |
+| F19 | Calendar sync | Vendors get a private calendar link (Google/Apple subscribe to their Vendly bookings) and can import their own calendar's busy times, re-synced hourly; busy and blocked days are greyed out for customers and refused by the server |
 
 ## Contracts (docs/CONTRACTS.md)
 

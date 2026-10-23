@@ -159,6 +159,8 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 - Booking requests close on their own after **72 hours** without an answer (sooner if the event starts first). Vendors get a
   reminder a day before. Tell me if you want a different window.
 - Customers get one "How was it?" push and email two days after a booking is completed, plus a rating card in the app.
+- **Calendar sync** for vendors: website → My listings → Calendar sync, or app → More → Calendar sync. A busy event blocks
+  the whole day. The calendar link uses the backend's `APP_URL`, so keep that set to `https://api.vendlymarketplace.com`.
 - Address suggestions for packages come from Photon (OpenStreetMap, free). "Use my current location" only fills in the
   town or city, so vendors working from home don't publish their street. Set `PLACES_URL` on the backend to use your own Photon server.
 - The get-set-up checklist ticks itself off from the account (it doesn't matter whether a step was done in the app or on the
