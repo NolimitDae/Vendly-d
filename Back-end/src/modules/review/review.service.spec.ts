@@ -6,10 +6,12 @@ import {
 } from '@nestjs/common';
 import { ReviewService } from './review.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+
+jest.mock('src/common/lib/Disk/TanvirStorage', () => ({ TanvirStorage: { url: (p: string) => `https://cdn.test/${p}` } }));
 import { BookingStatus } from 'prisma/generated/client';
 
 const mockPrisma = {
-  booking: { findFirst: jest.fn() },
+  booking: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
   review: {
     findUnique: jest.fn(),
     create: jest.fn(),
@@ -144,6 +146,40 @@ describe('ReviewService', () => {
       await expect(
         service.replyToReview('review-1', 'vendor-1', { reply: 'again' }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('review prompts', () => {
+    it('lists recent finished bookings without a review, not in dispute and not dismissed', async () => {
+      mockPrisma.booking.findMany.mockResolvedValue([
+        { id: 'b1', completed_at: new Date(), listing: { id: 'l1', title: 'DJ set', images: ['a.jpg'] }, vendor: { id: 'v1', name: 'Sam', avatar: null, vendorProfile: { business_name: 'Sam Sounds' } } },
+      ]);
+      const res = await service.pendingReviews('c1');
+      expect(mockPrisma.booking.findMany.mock.calls[0][0].where).toMatchObject({
+        customer_id: 'c1',
+        status: 'COMPLETED',
+        review: null,
+        review_prompt_dismissed_at: null,
+        dispute_opened_at: null,
+        completed_at: { gte: expect.any(Date) },
+      });
+      expect(res.data[0]).toMatchObject({ booking_id: 'b1', listing: { title: 'DJ set', image: expect.stringContaining('a.jpg') }, vendor: { name: 'Sam Sounds', avatar_url: null } });
+    });
+
+    it('"not now" only works on your own booking', async () => {
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      await service.dismissPrompt('c1', 'b1');
+      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', customer_id: 'c1', review_prompt_dismissed_at: null }, data: { review_prompt_dismissed_at: expect.any(Date) } });
+
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.booking.findFirst.mockResolvedValue(null);
+      await expect(service.dismissPrompt('someone-else', 'b1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('dismissing twice is fine', async () => {
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.booking.findFirst.mockResolvedValue({ id: 'b1' });
+      await expect(service.dismissPrompt('c1', 'b1')).resolves.toEqual({ success: true });
     });
   });
 });

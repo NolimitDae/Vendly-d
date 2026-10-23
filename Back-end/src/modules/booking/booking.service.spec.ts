@@ -163,18 +163,33 @@ describe('BookingService', () => {
       });
 
       mockContracts.countersignForBooking.mockResolvedValue(null);
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.confirm('booking-1', 'vendor-1');
       expect(result.success).toBe(true);
-      expect(mockPrisma.booking.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: BookingStatus.CONFIRMED } }),
-      );
+      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED } });
+    });
+
+    it("won't confirm a request that expired after it was loaded", async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      const tx = { booking: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) } };
+      mockContracts.countersignForBooking.mockImplementation(async (_b, _v, _s, _m, onExecuted) => {
+        await onExecuted(tx);
+        return { id: 'contract-1' };
+      });
+      await expect(service.confirm('booking-1', 'vendor-1')).rejects.toThrow('wasn’t answered in time');
+      expect(mockPayments.scheduleForBooking).not.toHaveBeenCalled();
+    });
+
+    it('explains why an expired request can no longer be accepted', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.REJECTED, expired_at: new Date() });
+      await expect(service.confirm('booking-1', 'vendor-1')).rejects.toThrow('wasn’t answered in time');
     });
 
     it('countersigns the contract and confirms inside the same transaction (Accept & Sign)', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
       const signature = { legal_name: 'Vendor', consent: true, content_sha256: 'a'.repeat(64) } as any;
-      const tx = { booking: { update: jest.fn() } };
+      const tx = { booking: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) } };
       mockContracts.countersignForBooking.mockImplementation(async (_b, _v, _s, _m, onExecuted) => {
         await onExecuted(tx);
         return { id: 'contract-1' };
@@ -183,8 +198,8 @@ describe('BookingService', () => {
       await service.confirm('booking-1', 'vendor-1', { signature });
 
       expect(mockContracts.countersignForBooking).toHaveBeenCalledWith('booking-1', 'vendor-1', signature, {}, expect.any(Function));
-      expect(tx.booking.update).toHaveBeenCalledWith({ where: { id: 'booking-1' }, data: { status: BookingStatus.CONFIRMED } });
-      expect(mockPrisma.booking.update).not.toHaveBeenCalled();
+      expect(tx.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED } });
+      expect(mockPrisma.booking.updateMany).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when wrong vendor tries to confirm', async () => {
@@ -330,6 +345,7 @@ describe('BookingService', () => {
     it('pushes the customer when a booking is confirmed', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
       mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED });
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
 
       await service.confirm('booking-1', 'vendor-1');
 

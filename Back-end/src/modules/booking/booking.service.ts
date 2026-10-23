@@ -21,6 +21,7 @@ import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 import { settleCancellation, Settlement } from './cancellation';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { track } from 'src/common/analytics';
+import { requestExpiresAt } from './booking-requests';
 
 /** What the booking is for: the package title, or the rented items. */
 function titleOf(booking: any): string | undefined {
@@ -85,14 +86,20 @@ export class BookingService {
     if (booking.vendor_id !== vendorId)
       throw new ForbiddenException('Access denied');
     if (booking.status !== BookingStatus.PENDING)
-      throw new BadRequestException(`Cannot confirm a booking in ${booking.status} status`);
+      throw new BadRequestException(
+        booking.expired_at ? 'This request closed because it wasn’t answered in time.' : `Cannot confirm a booking in ${booking.status} status`,
+      );
 
+    // only while the request is still open: it may have expired since it was loaded
+    const stillOpen = () => new BadRequestException('This request closed because it wasn’t answered in time.');
     // Accept & Sign: the vendor's countersignature executes the contract and confirms the booking together
-    const executed = await this.contracts.countersignForBooking(bookingId, vendorId, dto.signature, meta, (tx) =>
-      tx.booking.update({ where: { id: bookingId }, data: { status: BookingStatus.CONFIRMED } }),
-    );
+    const executed = await this.contracts.countersignForBooking(bookingId, vendorId, dto.signature, meta, async (tx) => {
+      const res = await tx.booking.updateMany({ where: { id: bookingId, status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED } });
+      if (!res.count) throw stillOpen();
+    });
     if (!executed) {
-      await this.prisma.booking.update({ where: { id: bookingId }, data: { status: BookingStatus.CONFIRMED } });
+      const res = await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED } });
+      if (!res.count) throw stillOpen();
     }
     // Phase B: snapshot the payment plan and charge the customer's saved card for what is due now
     await this.payments.scheduleForBooking(bookingId).catch((err) => console.error(`Payment schedule for ${bookingId} failed:`, err));
@@ -702,6 +709,8 @@ export class BookingService {
 
     return {
       ...booking,
+      // an open request is declined automatically at this time if the vendor hasn't answered
+      request_expires_at: booking.status === BookingStatus.PENDING && booking.created_at ? requestExpiresAt(booking) : null,
       customer: booking.customer
         ? { ...booking.customer, avatar_url: avatarUrl(booking.customer.avatar) }
         : null,

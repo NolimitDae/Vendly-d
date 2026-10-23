@@ -9,6 +9,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { CreateReviewDto, ReplyReviewDto } from './dto/create-review.dto';
+import { REVIEW_WINDOW_DAYS } from '../booking/booking-requests';
 
 @Injectable()
 export class ReviewService {
@@ -43,6 +44,55 @@ export class ReviewService {
     });
 
     return { success: true, data: this.formatReview(review) };
+  }
+
+  async pendingReviews(customerId: string) {
+    const since = new Date(Date.now() - REVIEW_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        customer_id: customerId,
+        status: BookingStatus.COMPLETED,
+        deleted_at: null,
+        review: null,
+        review_prompt_dismissed_at: null,
+        // a booking in dispute isn't the moment to ask
+        dispute_opened_at: null,
+        completed_at: { gte: since },
+      },
+      orderBy: { completed_at: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        completed_at: true,
+        listing: { select: { id: true, title: true, images: true } },
+        vendor: { select: { id: true, name: true, avatar: true, vendorProfile: { select: { business_name: true } } } },
+      },
+    });
+    return {
+      success: true,
+      data: bookings.map((b) => ({
+        booking_id: b.id,
+        completed_at: b.completed_at,
+        listing: b.listing ? { id: b.listing.id, title: b.listing.title, image: b.listing.images?.[0] ? TanvirStorage.url(`listings/${b.listing.images[0]}`) : null } : null,
+        vendor: {
+          id: b.vendor.id,
+          name: b.vendor.vendorProfile?.business_name || b.vendor.name,
+          avatar_url: b.vendor.avatar ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${b.vendor.avatar}`) : null,
+        },
+      })),
+    };
+  }
+
+  async dismissPrompt(customerId: string, bookingId: string) {
+    const res = await this.prisma.booking.updateMany({
+      where: { id: bookingId, customer_id: customerId, review_prompt_dismissed_at: null },
+      data: { review_prompt_dismissed_at: new Date() },
+    });
+    if (!res.count) {
+      const exists = await this.prisma.booking.findFirst({ where: { id: bookingId, customer_id: customerId }, select: { id: true } });
+      if (!exists) throw new NotFoundException('Booking not found');
+    }
+    return { success: true };
   }
 
   async replyToReview(reviewId: string, vendorId: string, dto: ReplyReviewDto) {

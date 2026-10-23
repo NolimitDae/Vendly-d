@@ -8,11 +8,12 @@ import { ChatExtrasModule } from 'src/modules/chat/extras/chat-extras.module';
 import { EventToolsModule } from 'src/modules/events/tools/event-tools.module';
 import { BookingController } from './booking.controller';
 import { BookingService } from './booking.service';
+import { BookingRemindersService } from './booking-reminders.service';
 
 @Module({
   imports: [PrismaModule, MailModule, PushModule, ContractsModule, PaymentsModule, ChatExtrasModule, EventToolsModule],
   controllers: [BookingController],
-  providers: [BookingService],
+  providers: [BookingService, BookingRemindersService],
   exports: [BookingService],
 })
 export class BookingModule {}

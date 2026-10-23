@@ -26,6 +26,22 @@ export class ReviewController {
     return this.service.createReview(user.id, dto);
   }
 
+  /** Finished bookings the signed-in customer hasn't rated yet, newest first, for the "how was it?" prompt. */
+  @Get('pending')
+  @ApiBearerAuth('customer-token')
+  @UseGuards(JwtAuthGuard)
+  pending(@GetUser() user: any) {
+    return this.service.pendingReviews(user.id);
+  }
+
+  /** "Not now": stops asking about this booking (it can still be rated from the booking). */
+  @Post('pending/:bookingId/dismiss')
+  @ApiBearerAuth('customer-token')
+  @UseGuards(JwtAuthGuard)
+  dismiss(@GetUser() user: any, @Param('bookingId') bookingId: string) {
+    return this.service.dismissPrompt(user.id, bookingId);
+  }
+
   @Patch(':id/reply')
   @ApiBearerAuth('vendor-token')
   @UseGuards(JwtAuthGuard)

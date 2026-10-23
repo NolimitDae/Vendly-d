@@ -903,12 +903,21 @@ model Booking {
   venue_address  String?  @db.VarChar(500)
   guest_count    Int?
 
+  // requests the vendor doesn't answer in time are declined automatically (see booking-requests.ts)
+  expiry_reminded_at DateTime?
+  expired_at         DateTime?
+  // "how was it?" follow-up once a booking is done
+  review_reminded_at         DateTime?
+  review_prompt_dismissed_at DateTime?
+
   review        Review?
   contracts     BookingContract[]
   event_bookings EventBooking[]
   proofs        BookingProof[]
   deliverables  BookingDeliverable[]
 
+  @@index([status, created_at])
+  @@index([status, completed_at])
   @@map("bookings")
 }
 
