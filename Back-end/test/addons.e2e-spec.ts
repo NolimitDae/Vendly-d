@@ -131,7 +131,7 @@ run('Add-ons and fees (e2e)', () => {
     expect(p.price).toBe(6160);
     expect(p.package).toMatchObject({ quantity: 120, amount: 5400 });
     expect(p.add_ons.map((a: any) => a.amount)).toEqual([720, 40]);
-    expect(pv.body.data.body).toContain('Schedule A');
+    expect(pv.body.data.body).toContain('Schedule A: Price at booking');
     expect(pv.body.data.body).toContain('$45.00 per person × 120 guests = $5,400.00');
     expect(pv.body.data.body).toContain('Late return: $50.00 per hour');
     expect(pv.body.data.body).toContain('Vendor price: $6,160.00');

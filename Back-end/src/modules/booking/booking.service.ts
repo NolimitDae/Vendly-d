@@ -22,6 +22,7 @@ import { settleAgainstPaid, settleCancellation, Settlement } from './cancellatio
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { track } from 'src/common/analytics';
 import { requestExpiresAt } from './booking-requests';
+import { withBookingLock } from 'src/common/helper/job-lock';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -324,8 +325,9 @@ export class BookingService {
     // requested add-ons and fees die with the booking
     await this.prisma.bookingExtra.updateMany({ where: { booking_id: bookingId, status: { in: [BookingExtraStatus.PENDING, BookingExtraStatus.IN_REVIEW] } }, data: { status: BookingExtraStatus.CANCELLED } });
 
+    // under the booking's money lock, so a refund or payout already under way finishes first
     const settlement = booking.paid_at
-      ? await this.settlePaidCancellation(booking, isCustomer ? 'CUSTOMER' : 'VENDOR', cancelledAt)
+      ? await withBookingLock(this.prisma, bookingId, () => this.settlePaidCancellation(booking, isCustomer ? 'CUSTOMER' : 'VENDOR', cancelledAt))
       : null;
     // nothing paid yet: still release any card hold (pay-after-service, rental deposit) straight away
     if (!booking.paid_at) await this.payments.voidOpenCharges(bookingId).catch((err) => console.error(`Voiding charges for cancelled booking ${bookingId} failed:`, err));

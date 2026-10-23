@@ -14,6 +14,8 @@ import { track } from 'src/common/analytics';
 
 const HOUR = 3600 * 1000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Stripe's smallest card charge in USD. */
+const MIN_CHARGE = 0.5;
 const DAY = 24 * HOUR;
 const SECURITY_DEPOSIT = 'security_deposit';
 /** Rental deposit holds are placed this many days before pickup. */
@@ -195,12 +197,15 @@ export class PaymentsService {
         bookingId: b.id,
         installmentId: inst.id,
         captureManually: inst.capture_manually,
-        idempotencyKey: `inst-${inst.id}-${attempt}`,
+        // a customer retry resets the attempts, so the key also carries when the row last changed
+        idempotencyKey: `inst-${inst.id}-${attempt}-${inst.updated_at ? new Date(inst.updated_at).getTime() : 0}`,
         description: `${b.listing?.title ?? 'Vendly booking'} — ${inst.label}`,
       });
       if (pi.status === 'succeeded' || pi.status === 'requires_capture') {
         track(pi.status === 'requires_capture' ? 'payment_authorized' : 'payment_succeeded', b.customer_id, { booking_id: b.id, amount: Number(inst.amount), label: inst.label });
-        return this.markPaid(inst.id, pi.id, pi.status === 'requires_capture');
+        const marked = await this.markPaid(inst.id, pi.id, pi.status === 'requires_capture');
+        await this.undoIfBookingEnded(inst.id);
+        return marked;
       }
       if (NEEDS_CUSTOMER.has(pi.status)) {
         return this.recordFailure(inst.id, attempt, `Your bank needs you to confirm this payment (${pi.status})`, b, inst, pi.id, true);
@@ -210,6 +215,36 @@ export class PaymentsService {
       const message = err?.raw?.message ?? err?.message ?? 'Payment failed';
       const piId = err?.raw?.payment_intent?.id ?? err?.payment_intent?.id;
       return this.recordFailure(inst.id, attempt, message, b, inst, piId, err?.code === 'authentication_required');
+    }
+  }
+
+  /** True when a booking was cancelled, rejected, or fully refunded by Vendly: nothing more may be kept on it. */
+  private bookingEnded(b: { status: BookingStatus; dispute_resolution?: string | null }) {
+    return b.status === BookingStatus.CANCELLED || b.status === BookingStatus.REJECTED || !!b.dispute_resolution?.startsWith('refund');
+  }
+
+  /**
+   * A charge that was already on its way when the booking ended (cancelled, or fully refunded after a
+   * dispute) lands later: hand it straight back (or release the hold).
+   */
+  private async undoIfBookingEnded(installmentId: string) {
+    const i = await this.prisma.bookingInstallment.findUnique({ where: { id: installmentId }, include: { booking: { select: { status: true, dispute_resolution: true } } } });
+    if (!i?.booking || !i.payment_intent_id || !this.bookingEnded(i.booking)) return;
+    try {
+      if (i.status === InstallmentStatus.PROCESSING) {
+        await StripePayment.cancelPaymentIntent(i.payment_intent_id);
+        await this.prisma.bookingInstallment.update({ where: { id: i.id }, data: { status: InstallmentStatus.CANCELLED } });
+      } else if (i.status === InstallmentStatus.PAID) {
+        const left = round2(Number(i.amount) - Number(i.refunded_amount));
+        if (left <= 0) return;
+        const refund = await StripePayment.refundPaymentIntent(i.payment_intent_id, `ended-${i.id}`, left);
+        // the charge call and the webhook can both get here; only one records it
+        const done = await this.prisma.bookingInstallment.updateMany({ where: { id: i.id, status: InstallmentStatus.PAID, refunded_amount: i.refunded_amount }, data: { refunded_amount: { increment: left }, status: InstallmentStatus.REFUNDED } });
+        if (done.count === 1) await this.prisma.paymentTransaction.create({ data: { type: 'booking_refund', provider: 'stripe', reference_number: refund.id, status: 'refunded', amount: left, currency: i.currency } });
+      }
+    } catch (e) {
+      this.logger.error(`undo charge ${i.id} on an ended booking`, e);
+      Sentry.captureException(e, { tags: { job: 'ended-booking-charge' }, extra: { installment_id: i.id } });
     }
   }
 
@@ -314,6 +349,7 @@ export class PaymentsService {
   /** Vendor marked the job complete: capture pay-after holds, start the release clock. */
   async onBookingCompleted(bookingId: string, completedAt = new Date()) {
     // the rental security deposit is settled by the return, not by completion
+    // a failure here must not stop the release clock below, or the vendor would never be paid automatically
     await withBookingLock(this.prisma, bookingId, async () => {
       const holds = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, capture_manually: true, kind: { not: SECURITY_DEPOSIT }, status: InstallmentStatus.PROCESSING, payment_intent_id: { not: null } } });
       for (const h of holds) {
@@ -326,6 +362,9 @@ export class PaymentsService {
           this.logger.error(`capture ${h.id}`, e);
         }
       }
+    }).catch((e) => {
+      this.logger.error(`captures for ${bookingId}`, e);
+      Sentry.captureException(e, { tags: { job: 'completion-capture' }, extra: { booking_id: bookingId } });
     });
     const lastProof = await this.prisma.bookingProof.findFirst({ where: { booking_id: bookingId }, orderBy: { created_at: 'desc' }, select: { created_at: true } });
     const auto = new Date(completedAt.getTime() + AUTO_RELEASE_DAYS * DAY);
@@ -416,13 +455,17 @@ export class PaymentsService {
     const share = round2(gross - commission - Number(b.early_released_amount ?? 0));
 
     const now = new Date();
-    const claimed = await this.prisma.booking.updateMany({
-      where: { id: bookingId, released_at: null },
-      data: { released_at: now, payout_credited_at: now, commission_amount: commission, released_gross: gross },
+    // both or neither: an installment left unmarked would be paid out again by the late-payout sweep
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const c = await tx.booking.updateMany({
+        where: { id: bookingId, released_at: null },
+        data: { released_at: now, payout_credited_at: now, commission_amount: commission, released_gross: gross },
+      });
+      // extras paid from now on are paid out on their own (payOutLateInstallments)
+      if (c.count === 1 && paid.length) await tx.bookingInstallment.updateMany({ where: { id: { in: paid.map((i) => i.id) }, paid_out_at: null }, data: { paid_out_at: now } });
+      return c;
     });
     if (claimed.count !== 1) return null;
-    // extras paid from now on are paid out on their own (payOutLateInstallments)
-    if (paid.length) await this.prisma.bookingInstallment.updateMany({ where: { id: { in: paid.map((i) => i.id) }, paid_out_at: null }, data: { paid_out_at: now } });
     track('payout_released', b.vendor_id, { booking_id: bookingId, share, commission });
     const currency = b.currency ?? 'usd';
     if (commission > 0) {
@@ -472,6 +515,10 @@ export class PaymentsService {
    * (partial capture), and anything above the hold is charged to the saved card as an extra.
    */
   async settleSecurityDeposit(bookingId: string, fees: number) {
+    return withBookingLock(this.prisma, bookingId, () => this.settleSecurityDepositLocked(bookingId, fees));
+  }
+
+  private async settleSecurityDepositLocked(bookingId: string, fees: number) {
     fees = round2(Math.max(0, fees));
     const hold = await this.prisma.bookingInstallment.findFirst({ where: { booking_id: bookingId, kind: SECURITY_DEPOSIT } });
     let captured = 0;
@@ -516,6 +563,10 @@ export class PaymentsService {
    * final payout; if the booking is later refunded, it is recovered from future payouts.
    */
   async releaseDepositEarly(bookingId: string, vendorId: string) {
+    return withBookingLock(this.prisma, bookingId, () => this.releaseDepositEarlyLocked(bookingId, vendorId));
+  }
+
+  private async releaseDepositEarlyLocked(bookingId: string, vendorId: string) {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       select: { vendor_id: true, status: true, currency: true, early_released_amount: true, dispute_opened_at: true, dispute_resolved_at: true, vendor: { select: { stripe_connect_id: true } }, installments: { orderBy: { sequence: 'asc' } }, contracts: { where: { status: 'EXECUTED' }, select: { id: true }, take: 1 } },
@@ -582,11 +633,24 @@ export class PaymentsService {
       let lowered = 0;
       for (const i of unpaid) {
         if (remaining <= 0) break;
-        const take = round2(Math.min(remaining, Math.max(0, Number(i.amount) - Number(i.fee_amount))));
+        let take = round2(Math.min(remaining, Math.max(0, Number(i.amount) - Number(i.fee_amount))));
+        let left = round2(Number(i.amount) - take);
+        // Stripe can't charge under $0.50: leave at least that, or nothing at all
+        if (left > 0 && left < MIN_CHARGE) {
+          take = round2(Number(i.amount) - MIN_CHARGE);
+          left = MIN_CHARGE;
+        }
         if (take <= 0) continue;
         // only while it is still unpaid; a charge that started meanwhile is refunded below instead
-        const done = await this.prisma.bookingInstallment.updateMany({ where: { id: i.id, status: i.status, amount: i.amount }, data: { amount: round2(Number(i.amount) - take) } });
+        const done = await this.prisma.bookingInstallment.updateMany({
+          where: { id: i.id, status: i.status, amount: i.amount },
+          data: left > 0 ? { amount: left } : { amount: 0, status: InstallmentStatus.CANCELLED },
+        });
         if (done.count !== 1) continue;
+        // nothing left to collect: let go of the card hold too
+        if (left <= 0 && i.status === InstallmentStatus.PROCESSING && i.payment_intent_id) {
+          await StripePayment.cancelPaymentIntent(i.payment_intent_id).catch((e) => this.logger.error(`void hold ${i.id}`, e));
+        }
         remaining = round2(remaining - take);
         lowered = round2(lowered + take);
       }
@@ -594,8 +658,8 @@ export class PaymentsService {
       let refunded = 0;
       let recovered = 0;
       if (remaining > 0) {
-        const n = await this.prisma.paymentTransaction.count({ where: { type: 'vendor_give_back', reference_number: bookingId } });
-        const parts = await this.refundParts(bookingId, remaining, `giveback-${bookingId}-${n + 1}`, { keepFees: true });
+        // keyed on each installment's refund state: a retry after a half-finished attempt never repeats a recorded refund
+        const parts = await this.refundParts(bookingId, remaining, 'giveback', { keepFees: true, stateKey: true });
         refunded = round2(parts.reduce((s, p) => s + p.amount, 0));
         // money the vendor was already paid comes back from their balance, less Vendly's commission on it
         const rate = Number(b.released_gross ?? 0) > 0 ? Number(b.commission_amount ?? 0) / Number(b.released_gross) : currentFees().commission / 100;
@@ -660,9 +724,9 @@ export class PaymentsService {
     return withBookingLock(this.prisma, bookingId, async () => {
       const b = await this.prisma.booking.findUnique({
         where: { id: bookingId },
-        select: { id: true, status: true, released_at: true, vendor_id: true, currency: true, commission_amount: true, released_gross: true, dispute_opened_at: true, dispute_resolved_at: true, vendor: { select: { stripe_connect_id: true, balance: true } } },
+        select: { id: true, status: true, released_at: true, vendor_id: true, currency: true, commission_amount: true, released_gross: true, dispute_opened_at: true, dispute_resolved_at: true, dispute_resolution: true, vendor: { select: { stripe_connect_id: true, balance: true } } },
       });
-      if (!b || b.status !== BookingStatus.COMPLETED || !b.released_at) return null;
+      if (!b || b.status !== BookingStatus.COMPLETED || !b.released_at || this.bookingEnded(b)) return null;
       if (b.dispute_opened_at && !b.dispute_resolved_at) return null;
       const insts = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, status: InstallmentStatus.PAID, paid_out_at: null } });
       if (!insts.length) return null;
@@ -733,6 +797,16 @@ export class PaymentsService {
    * the vendor. partial_refund: `amount` back to the customer, the rest released. release: vendor paid in full.
    */
   async resolveDispute(bookingId: string, adminId: string, input: { action: 'refund' | 'partial_refund' | 'release'; amount?: number; note: string }) {
+    const res = await withBookingLock(this.prisma, bookingId, () => this.settleDisputeLocked(bookingId, adminId, input));
+    // outside the lock: releaseBooking takes it itself
+    if (res.releaseNow) {
+      await this.prisma.booking.update({ where: { id: bookingId }, data: { release_at: new Date() } });
+      await this.releaseBooking(bookingId);
+    }
+    return { success: true, data: { refunded: res.refunded, action: input.action } };
+  }
+
+  private async settleDisputeLocked(bookingId: string, adminId: string, input: { action: 'refund' | 'partial_refund' | 'release'; amount?: number; note: string }) {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       select: { id: true, status: true, dispute_opened_at: true, dispute_resolved_at: true, released_at: true, vendor_id: true, currency: true, early_released_amount: true, listing: { select: { title: true } }, customer: { select: { email: true, name: true } }, vendor: { select: { email: true, name: true } }, installments: true },
@@ -762,9 +836,6 @@ export class PaymentsService {
       const early = Number(b.early_released_amount ?? 0);
       await this.prisma.booking.update({ where: { id: bookingId }, data: { released_at: new Date(), payout_credited_at: new Date() } });
       if (early > 0) await this.recordRecovery(b.vendor_id, bookingId, -early, b.currency ?? 'usd');
-    } else if (b.status === BookingStatus.COMPLETED) {
-      await this.prisma.booking.update({ where: { id: bookingId }, data: { release_at: new Date() } });
-      await this.releaseBooking(bookingId);
     }
 
     const title = b.listing?.title ?? 'your booking';
@@ -776,7 +847,7 @@ export class PaymentsService {
       if (who?.email) await this.mail.sendBookingNotification({ to: who.email, recipientName: who.name ?? '', subject: `Dispute resolved — ${title}`, message, status: 'DISPUTE_RESOLVED', listingTitle: title }).catch(() => null);
     }
     track('dispute_resolved', adminId, { booking_id: bookingId, action: input.action, refunded });
-    return { success: true, data: { refunded, action: input.action } };
+    return { refunded, releaseNow: input.action !== 'refund' && b.status === BookingStatus.COMPLETED };
   }
 
   // ─── Revenue report (admin) ──────────────────────────────────────────────
@@ -825,7 +896,7 @@ export class PaymentsService {
   }
 
   /** The refund behind refundBooking, reporting which installments it came from. */
-  private async refundParts(bookingId: string, amount: number, reasonKey: string, opts: { keepFees?: boolean; voidOpen?: boolean }): Promise<RefundPart[]> {
+  private async refundParts(bookingId: string, amount: number, reasonKey: string, opts: { keepFees?: boolean; voidOpen?: boolean; stateKey?: boolean }): Promise<RefundPart[]> {
     const insts = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId }, orderBy: { sequence: 'desc' } });
     let remaining = Math.round(amount * 100) / 100;
     const parts: RefundPart[] = [];
@@ -845,7 +916,8 @@ export class PaymentsService {
       const refundable = opts.keepFees ? vendorPortion(i) : left;
       const take = round2(Math.min(refundable, remaining));
       if (take <= 0) continue;
-      const refund = await StripePayment.refundPaymentIntent(i.payment_intent_id, `${reasonKey}-${i.id}`, take);
+      const key = opts.stateKey ? `${reasonKey}-${i.id}-${Math.round(Number(i.refunded_amount) * 100)}` : `${reasonKey}-${i.id}`;
+      const refund = await StripePayment.refundPaymentIntent(i.payment_intent_id, key, take);
       await this.prisma.bookingInstallment.update({
         where: { id: i.id },
         data: { refunded_amount: { increment: take }, status: take >= left ? InstallmentStatus.REFUNDED : InstallmentStatus.PAID },
@@ -878,8 +950,10 @@ export class PaymentsService {
     if (!installmentId) return;
     const inst = await this.prisma.bookingInstallment.findUnique({ where: { id: installmentId } });
     if (!inst || inst.status === InstallmentStatus.PAID || inst.status === InstallmentStatus.REFUNDED) return;
-    if (pi.status === 'succeeded') await this.markPaid(inst.id, pi.id, false);
-    else if (pi.status === 'requires_capture' && inst.status !== InstallmentStatus.PROCESSING) await this.markPaid(inst.id, pi.id, true);
+    if (pi.status === 'succeeded') {
+      await this.markPaid(inst.id, pi.id, false);
+      await this.undoIfBookingEnded(inst.id);
+    } else if (pi.status === 'requires_capture' && inst.status !== InstallmentStatus.PROCESSING) await this.markPaid(inst.id, pi.id, true);
     else if (pi.status === 'canceled' && inst.status === InstallmentStatus.PROCESSING) {
       await this.prisma.bookingInstallment.update({ where: { id: inst.id }, data: { status: InstallmentStatus.FAILED, last_error: pi.last_payment_error?.message ?? 'Payment was cancelled' } });
     }

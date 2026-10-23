@@ -209,7 +209,8 @@ export interface PricingScheduleInput {
 export function buildPricingSchedule(p: PricingScheduleInput): string {
   if (!p.packageLabel && !p.addOns.length && !p.fees.length) return '';
   const m = (n: number) => fmtMoney(n, p.currency);
-  const lines = ['## Schedule A: Price details, add-ons and fees'];
+  // the price as worked out at booking; a later amendment changes the price in its own terms
+  const lines = ['## Schedule A: Price at booking, add-ons and fees'];
   lines.push(`- Package: ${p.packageLabel ? `${p.packageLabel} = ${m(p.packageAmount)}` : m(p.packageAmount)}`);
   for (const a of p.addOns) lines.push(`- Add-on: ${a.label} = ${m(a.amount)}${a.description ? ` (${a.description})` : ''}`);
   if (p.discount > 0) lines.push(`- Promo${p.promoCode ? ` ${p.promoCode}` : ''}: -${m(p.discount)}`);

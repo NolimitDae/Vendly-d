@@ -923,6 +923,9 @@ model Booking {
 
   // vendor price + the commission taken when it was paid out (refunds after payout are recovered net of commission)
   released_gross Decimal?  @db.Decimal(10, 2)
+  // short lock while money moves on this booking (see withBookingLock); expires on its own after a crash
+  money_lock_until DateTime?
+  money_lock_token String?   @db.VarChar(64)
 
   review        Review?
   extras        BookingExtra[]

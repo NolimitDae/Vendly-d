@@ -74,7 +74,7 @@ export class BookingExtrasService {
       where: { id: bookingId },
       select: {
         id: true, status: true, vendor_id: true, customer_id: true, completed_at: true, guest_count: true, currency: true, payment_method_id: true,
-        dispute_opened_at: true, dispute_resolved_at: true,
+        dispute_opened_at: true, dispute_resolved_at: true, dispute_resolution: true,
         listing: { select: { title: true, category_id: true } },
         customer: { select: { id: true, name: true, email: true } },
         vendor: { select: { id: true, name: true, email: true, vendorProfile: { select: { business_name: true } } } },
@@ -117,8 +117,10 @@ export class BookingExtrasService {
   }
 
   /** Which kinds the vendor can request on this booking right now. */
-  private requestWindow(b: { status: BookingStatus; completed_at: Date | null; dispute_opened_at: Date | null; dispute_resolved_at: Date | null }) {
+  private requestWindow(b: { status: BookingStatus; completed_at: Date | null; dispute_opened_at: Date | null; dispute_resolved_at: Date | null; dispute_resolution?: string | null }) {
     if (b.dispute_opened_at && !b.dispute_resolved_at) return { add_on: false, fee: false };
+    // Vendly refunded the booking in full after a dispute: nothing more is charged on it
+    if (b.dispute_resolution?.startsWith('refund')) return { add_on: false, fee: false };
     const recentlyDone = b.status === BookingStatus.COMPLETED && !!b.completed_at && Date.now() - b.completed_at.getTime() <= EXTRA_WINDOW_DAYS * DAY;
     return {
       add_on: b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.IN_PROGRESS || recentlyDone,
@@ -134,6 +136,7 @@ export class BookingExtrasService {
     if (b.vendor_id !== vendorId) throw new ForbiddenException('Access denied');
     const window = this.requestWindow(b);
     if (b.dispute_opened_at && !b.dispute_resolved_at) throw new BadRequestException('This booking has an open dispute. Vendly will settle it first.');
+    if (b.dispute_resolution?.startsWith('refund')) throw new BadRequestException('Vendly refunded this booking in full, so nothing more can be charged on it.');
     if (dto.kind === AddOnKind.FEE && !window.fee) {
       throw new BadRequestException(
         b.status === BookingStatus.CONFIRMED

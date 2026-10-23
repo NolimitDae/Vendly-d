@@ -11,7 +11,9 @@ CREATE TYPE "BookingExtraStatus" AS ENUM ('INCLUDED', 'PENDING', 'APPROVED', 'DE
 ALTER TABLE "booking_installments" ADD COLUMN     "paid_out_at" TIMESTAMP(3);
 
 -- AlterTable
-ALTER TABLE "bookings" ADD COLUMN     "released_gross" DECIMAL(10,2);
+ALTER TABLE "bookings" ADD COLUMN     "money_lock_token" VARCHAR(64),
+ADD COLUMN     "money_lock_until" TIMESTAMP(3),
+ADD COLUMN     "released_gross" DECIMAL(10,2);
 
 -- AlterTable
 ALTER TABLE "vendor_listings" ADD COLUMN     "max_quantity" INTEGER,

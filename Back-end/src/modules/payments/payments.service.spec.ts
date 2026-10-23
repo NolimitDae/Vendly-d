@@ -95,7 +95,7 @@ describe('PaymentsService', () => {
 
       await service.chargeInstallment('i1');
 
-      expect(StripePayment.chargeSavedCard).toHaveBeenCalledWith(expect.objectContaining({ amount: 247.5, customerId: 'cus_1', paymentMethodId: 'pm_1', captureManually: false, idempotencyKey: 'inst-i1-1' }));
+      expect(StripePayment.chargeSavedCard).toHaveBeenCalledWith(expect.objectContaining({ amount: 247.5, customerId: 'cus_1', paymentMethodId: 'pm_1', captureManually: false, idempotencyKey: 'inst-i1-1-0' }));
       expect(prisma.bookingInstallment.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: InstallmentStatus.PAID, payment_intent_id: 'pi_1' }) }));
       expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', paid_at: null }, data: { paid_at: expect.any(Date) } });
       expect(prisma.paymentTransaction.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'booking_installment', status: 'succeeded', amount: 247.5 }) }));
@@ -122,7 +122,7 @@ describe('PaymentsService', () => {
 
       await service.chargeInstallment('i1');
 
-      expect(StripePayment.chargeSavedCard).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: 'inst-i1-3' }));
+      expect(StripePayment.chargeSavedCard).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: 'inst-i1-3-0' }));
       expect(prisma.bookingInstallment.update.mock.calls[0][0].data).toMatchObject({ status: InstallmentStatus.FAILED, attempts: 3, next_attempt_at: null });
     });
 
@@ -242,7 +242,7 @@ describe('PaymentsService', () => {
       prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, dispute_opened_at: null, installments: [] });
       prisma.rentalReservation.count.mockResolvedValueOnce(2);
       expect(await service.releaseBooking('b1')).toBeNull();
-      expect(prisma.booking.updateMany).not.toHaveBeenCalled();
+      expect(prisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ released_at: expect.any(Date) }) }));
     });
   });
 
@@ -342,7 +342,7 @@ describe('PaymentsService', () => {
     it('holds the money while a dispute is open', async () => {
       prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, vendor_id: 'v1', dispute_opened_at: new Date(), dispute_resolved_at: null, vendor: { stripe_connect_id: 'acct_1' }, installments: [] });
       expect(await service.releaseBooking('b1')).toBeNull();
-      expect(prisma.booking.updateMany).not.toHaveBeenCalled();
+      expect(prisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ released_at: expect.any(Date) }) }));
     });
 
     it('sets the release clock to 48h after proof when that is sooner than the 3-day auto-approve', async () => {
@@ -410,10 +410,11 @@ describe('PaymentsService', () => {
       expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['i1'] }, paid_out_at: null }, data: { paid_out_at: expect.any(Date) } });
     });
 
-    it('takes the money lock so payouts, refunds and captures never overlap', async () => {
+    it('takes the money lock so payouts, refunds and captures never overlap, and lets it go', async () => {
       prisma.booking.findUnique.mockResolvedValue(null);
       await service.releaseBooking('b1');
-      expect(prisma.$queryRaw).toHaveBeenCalled();
+      expect(prisma.booking.updateMany).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: expect.objectContaining({ id: 'b1' }), data: expect.objectContaining({ money_lock_token: expect.any(String) }) }));
+      expect(prisma.booking.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: { money_lock_until: null, money_lock_token: null } }));
     });
   });
 
@@ -488,7 +489,7 @@ describe('PaymentsService', () => {
       prisma.bookingInstallment.findMany.mockResolvedValue([installment({ id: 'i1', status: InstallmentStatus.PAID, amount: 1050, fee_amount: 50, payment_intent_id: 'pi_1' })]);
       const res = await service.giveBack('b1', 'v1', { amount: 200, reason: 'Fewer guests came' });
       expect(res.data).toMatchObject({ refunded: 200, lowered: 0, recovered_from_balance: 0 });
-      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_1', 'giveback-b1-1-i1', 200);
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_1', 'giveback-i1-0', 200);
     });
 
     it('after the payout, takes it back from the vendor balance less the commission Vendly took', async () => {
@@ -499,6 +500,27 @@ describe('PaymentsService', () => {
       expect(res.data.recovered_from_balance).toBe(180);
       expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { balance: { increment: -180 } } });
       expect(prisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'vendly_commission', amount: -20 }) });
+    });
+
+    it('cancels a balance given back in full, and never leaves less than Stripe can charge', async () => {
+      prisma.booking.findUnique.mockResolvedValueOnce(booking()).mockResolvedValueOnce(null);
+      await service.giveBack('b1', 'v1', { amount: 750, reason: 'On the house' });
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i2', status: InstallmentStatus.SCHEDULED, amount: 750 }, data: { amount: 0, status: InstallmentStatus.CANCELLED } });
+
+      prisma.bookingInstallment.updateMany.mockClear();
+      prisma.booking.findUnique.mockResolvedValueOnce(booking()).mockResolvedValueOnce(null);
+      prisma.bookingInstallment.findMany.mockResolvedValue([installment({ id: 'i1', status: InstallmentStatus.PAID, amount: 300, fee_amount: 50, payment_intent_id: 'pi_1' })]);
+      const res = await service.giveBack('b1', 'v1', { amount: 749.8, reason: 'Nearly all' });
+      // $0.20 would be left: it stops at $0.50 and refunds the other $0.30 instead
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i2', status: InstallmentStatus.SCHEDULED, amount: 750 }, data: { amount: 0.5 } });
+      expect(res.data).toMatchObject({ lowered: 749.5, refunded: 0.3 });
+    });
+
+    it('lets go of a pay-after-service hold given back in full', async () => {
+      const hold = installment({ id: 'h', sequence: 1, status: InstallmentStatus.PROCESSING, capture_manually: true, amount: 500, fee_amount: 0, payment_intent_id: 'pi_h' });
+      prisma.booking.findUnique.mockResolvedValueOnce(booking({ installments: [hold] })).mockResolvedValueOnce(null);
+      await service.giveBack('b1', 'v1', { amount: 500, reason: 'Cancelled the extras' });
+      expect(StripePayment.cancelPaymentIntent).toHaveBeenCalledWith('pi_h');
     });
 
     it('never gives back more than the vendor part', async () => {
@@ -514,6 +536,26 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('a charge that lands after the booking ended', () => {
+    it('is refunded straight away on a cancelled booking', async () => {
+      prisma.bookingInstallment.findUnique
+        .mockResolvedValueOnce(installment({ status: InstallmentStatus.PROCESSING }))
+        .mockResolvedValueOnce(installment({ status: InstallmentStatus.PAID, payment_intent_id: 'pi_late', amount: 100, booking: { status: BookingStatus.CANCELLED, dispute_resolution: null } }));
+      (StripePayment.refundPaymentIntent as jest.Mock).mockResolvedValue({ id: 're_late' });
+      await service.reconcilePaymentIntent({ id: 'pi_late', status: 'succeeded', metadata: { installment_id: 'i1' } });
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_late', 'ended-i1', 100);
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'i1', status: InstallmentStatus.PAID }), data: expect.objectContaining({ status: InstallmentStatus.REFUNDED }) }));
+    });
+
+    it('is kept on a booking that is still going', async () => {
+      prisma.bookingInstallment.findUnique
+        .mockResolvedValueOnce(installment({ status: InstallmentStatus.PROCESSING }))
+        .mockResolvedValueOnce(installment({ status: InstallmentStatus.PAID, payment_intent_id: 'pi_ok', booking: { status: BookingStatus.CONFIRMED, dispute_resolution: null } }));
+      await service.reconcilePaymentIntent({ id: 'pi_ok', status: 'succeeded', metadata: { installment_id: 'i1' } });
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+    });
+  });
+
   describe('extras paid after the payout', () => {
     it('pays the vendor their share at the booking commission rate', async () => {
       prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: new Date(), vendor_id: 'v1', currency: 'usd', commission_amount: 50, released_gross: 500, dispute_opened_at: null, dispute_resolved_at: null, vendor: { stripe_connect_id: 'acct_1', balance: 0 } });
@@ -522,6 +564,11 @@ describe('PaymentsService', () => {
       expect(await service.payOutLateFor('b1')).toBe('tr_x');
       expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['x1'] }, paid_out_at: null }, data: { paid_out_at: expect.any(Date) } });
       expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 90, idempotencyKey: 'extras-x1' }));
+    });
+
+    it('never pays out on a booking Vendly refunded in full', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: new Date(), dispute_resolution: 'refund ($100.00 refunded) by admin a: no show', vendor: {} });
+      expect(await service.payOutLateFor('b1')).toBeNull();
     });
 
     it('waits until the booking itself is paid out', async () => {
