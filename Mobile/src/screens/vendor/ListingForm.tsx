@@ -6,13 +6,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import CategoryPicker, { type PickerCategory } from '../../components/CategoryPicker';
+import LocationPicker, { type PickedPlace } from '../../components/LocationPicker';
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
 import { PLAN_LABELS, type PaymentPlan } from '../../services/payments.service';
 import type { VendorDashboardStackParams } from '../../navigation/types';
 
-interface Category { id: string; name: string }
 interface PickedImage { uri: string; type: string; name: string }
 
 const PLANS: { value: PaymentPlan; label: string }[] = [
@@ -37,7 +38,7 @@ export default function ListingForm() {
   const isEdit = !!listingId;
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<PickerCategory[]>([]);
   const [images, setImages] = useState<PickedImage[]>([]);
   const [existing, setExisting] = useState<string[]>([]);
   const [title, setTitle] = useState('');
@@ -45,7 +46,9 @@ export default function ListingForm() {
   const [price, setPrice] = useState('');
   const [priceUnit, setPriceUnit] = useState('fixed');
   const [categoryId, setCategoryId] = useState('');
-  const [location, setLocation] = useState('');
+  const [subCategoryId, setSubCategoryId] = useState('');
+  const [place, setPlace] = useState<PickedPlace>({ label: '' });
+  const [radius, setRadius] = useState<number | null>(null);
   const [plan, setPlan] = useState<PaymentPlan>('FULL_ON_ACCEPT');
 
   useEffect(() => {
@@ -62,7 +65,9 @@ export default function ListingForm() {
             setPrice(String(l.price ?? ''));
             setPriceUnit(l.price_unit ?? 'fixed');
             setCategoryId(l.category_id ?? l.category?.id ?? '');
-            setLocation(l.location ?? '');
+            setSubCategoryId(l.sub_category_id ?? l.sub_category?.id ?? '');
+            setPlace({ label: l.location ?? '', lat: l.lat ?? undefined, lng: l.lng ?? undefined });
+            setRadius(l.service_radius_miles ?? null);
             setPlan(l.payment_plan ?? l.effective_payment_plan ?? 'FULL_ON_ACCEPT');
             setExisting(l.images ?? []);
           }
@@ -95,8 +100,16 @@ export default function ListingForm() {
       fd.append('description', description.trim());
       fd.append('price', String(amount));
       fd.append('price_unit', priceUnit);
-      if (categoryId) fd.append('category_id', categoryId);
-      if (location.trim()) fd.append('location', location.trim());
+      // when editing, empty values clear what was there
+      if (categoryId || isEdit) fd.append('category_id', categoryId);
+      if (subCategoryId || isEdit) fd.append('sub_category_id', subCategoryId);
+      const location = place.label.trim();
+      if (location || isEdit) fd.append('location', location);
+      if (location && place.lat != null && place.lng != null) {
+        fd.append('lat', String(place.lat));
+        fd.append('lng', String(place.lng));
+      }
+      if (radius != null) fd.append('service_radius_miles', String(radius));
       fd.append('payment_plan', plan);
       images.forEach((img) => fd.append('images', img as unknown as Blob));
       const config = { headers: { 'Content-Type': 'multipart/form-data' } };
@@ -165,9 +178,15 @@ export default function ListingForm() {
 
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Category</Text>
-            <View style={s.chips}>
-              {categories.map((c) => <Chip key={c.id} label={c.name} active={categoryId === c.id} onPress={() => setCategoryId(categoryId === c.id ? '' : c.id)} />)}
-            </View>
+            <CategoryPicker
+              categories={categories}
+              categoryId={categoryId}
+              subCategoryId={subCategoryId}
+              onChange={(c, sub) => {
+                setCategoryId(c);
+                setSubCategoryId(sub);
+              }}
+            />
           </View>
 
           <View style={{ gap: 8 }}>
@@ -178,10 +197,7 @@ export default function ListingForm() {
 
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Location</Text>
-            <View style={ui.field}>
-              <Ionicons name="location-outline" size={20} color={DARK.muted} />
-              <TextInput style={ui.input} placeholder="City, State" placeholderTextColor={DARK.muted} value={location} onChangeText={setLocation} />
-            </View>
+            <LocationPicker value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
           </View>
 
           <GradientButton title={isEdit ? 'Save Changes' : 'Create Package'} onPress={save} loading={saving} style={{ marginTop: 12 }} />

@@ -157,11 +157,17 @@ export class VendorListingService {
       throw new ForbiddenException('Access denied');
 
     const updateData: any = { ...dto };
+    // forms send an empty value to clear a category or sub-category
+    if (dto.category_id === '') updateData.category_id = null;
+    if (dto.sub_category_id === '') updateData.sub_category_id = null;
     // a new category without a new sub-category drops the old one, which belonged to the old category
-    if (dto.category_id !== undefined && dto.sub_category_id === undefined && dto.category_id !== listing.category_id) {
+    if (dto.category_id !== undefined && dto.sub_category_id === undefined && (dto.category_id || null) !== listing.category_id) {
       updateData.sub_category_id = null;
     }
-    await this.assertSubCategory(dto.category_id ?? listing.category_id, dto.sub_category_id);
+    if (dto.category_id === '' && updateData.sub_category_id) {
+      throw new BadRequestException('Choose a category for that sub-category.');
+    }
+    await this.assertSubCategory(updateData.category_id !== undefined ? updateData.category_id : listing.category_id, updateData.sub_category_id);
     const moved = dto.location !== undefined && (dto.location || null) !== (listing.location || null);
     const pinned = dto.lat !== undefined && dto.lng !== undefined && !!(dto.location ?? listing.location);
     if (pinned) {

@@ -130,6 +130,20 @@ describe('VendorListingService', () => {
       await service.update('listing-1', 'vendor-1', { category_id: 'cat-food' });
       expect(mockPrisma.vendorListing.update.mock.calls[0][0].data).toMatchObject({ category_id: 'cat-food', sub_category_id: null });
     });
+
+    it('an empty sub-category clears it ("Any type")', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, category_id: 'cat-music', sub_category_id: 'sub-dj' });
+      mockPrisma.vendorListing.update.mockResolvedValue(mockListing);
+      await service.update('listing-1', 'vendor-1', { category_id: 'cat-music', sub_category_id: '' });
+      expect(mockPrisma.vendorListing.update.mock.calls[0][0].data).toMatchObject({ category_id: 'cat-music', sub_category_id: null });
+    });
+
+    it('an empty category clears both', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, category_id: 'cat-music', sub_category_id: 'sub-dj' });
+      mockPrisma.vendorListing.update.mockResolvedValue(mockListing);
+      await service.update('listing-1', 'vendor-1', { category_id: '' });
+      expect(mockPrisma.vendorListing.update.mock.calls[0][0].data).toMatchObject({ category_id: null, sub_category_id: null });
+    });
   });
 
   describe('findMyListings', () => {
