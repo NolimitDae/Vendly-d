@@ -114,13 +114,8 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
       (the website `/privacy` page).
 - [ ] Privacy questionnaires: the app uses **location** (only to stamp proof photos and "near me"), **camera/photos**,
       **payment info** (handled by Stripe), **email/name**, and crash reports (Sentry, if enabled).
+- [ ] A review login for Apple and Google: one test customer and one test vendor account (they sign in to check the app).
 - [ ] Then: `eas build --profile production --platform all` and `eas submit --platform all`.
-
-### Submitting to the App Store (when you're ready)
-1. Apple Developer account ($99/yr) → App Store Connect → **My Apps → +** → new iOS app with bundle id `com.vendly.mobile`. Note the app's **Apple ID** number.
-2. Tell me that number and I'll add it to `eas.json` (`submit.production.ios.ascAppId`), make a production build and
-   submit it with `eas submit`. Apple asks for screenshots, a privacy policy URL (`https://vendlymarketplace.com/privacy`)
-   and a review account: create a test customer and a test vendor login for Apple's reviewers.
 
 ## 6. Legal and wording (needs a lawyer's eye)
 
