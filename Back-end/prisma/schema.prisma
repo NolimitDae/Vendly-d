@@ -761,6 +761,8 @@ model VendorListing {
   lng           Float?
   // when geocoding last ran for this location; null = still to do
   geocoded_at   DateTime?
+  // how far the vendor travels from `location` (miles); null = customers come to them / not set
+  service_radius_miles Int?
   availability  String?   @db.Text
   delivery_time Int?
 

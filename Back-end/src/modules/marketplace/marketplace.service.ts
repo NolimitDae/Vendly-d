@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { boundingBox, milesBetween } from 'src/modules/geo/geo';
+import { MAX_SERVICE_RADIUS, boundingBox, milesBetween } from 'src/modules/geo/geo';
 import { ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
@@ -48,7 +48,8 @@ export class MarketplaceService {
     const near = query.near_lat !== undefined && query.near_lng !== undefined ? { lat: Number(query.near_lat), lng: Number(query.near_lng) } : null;
     const radius = Number(query.radius_miles ?? 25);
     if (near) {
-      const box = boundingBox(near, radius);
+      // wide enough for vendors based further away who travel to the customer
+      const box = boundingBox(near, Math.max(radius, MAX_SERVICE_RADIUS));
       where.lat = { gte: box.minLat, lte: box.maxLat };
       where.lng = { gte: box.minLng, lte: box.maxLng };
     }
@@ -94,7 +95,8 @@ export class MarketplaceService {
     }));
 
     let matched = total;
-    if (near) formattedListings = formattedListings.filter((l) => l.distance_miles != null && l.distance_miles <= radius);
+    // near me: listings within the customer's distance, or vendors who travel that far to them
+    if (near) formattedListings = formattedListings.filter((l) => l.distance_miles != null && (l.distance_miles <= radius || (!!l.service_radius_miles && l.distance_miles <= l.service_radius_miles)));
     if (query.min_rating !== undefined) formattedListings = formattedListings.filter((l) => (l.avg_rating ?? 0) >= query.min_rating!);
     if (inMemory) matched = formattedListings.length;
     if (sortByRating) formattedListings.sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));

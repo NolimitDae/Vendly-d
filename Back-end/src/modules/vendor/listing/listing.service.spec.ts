@@ -92,6 +92,30 @@ describe('VendorListingService', () => {
     });
   });
 
+  describe('location and service radius', () => {
+    it('stores a picked place with its position and travel radius, without geocoding', async () => {
+      mockPrisma.vendorListing.create.mockResolvedValue({ ...mockListing, location: 'Austin, TX', lat: 30.27, lng: -97.74 });
+      await service.create('vendor-1', { title: 'DJ', description: 'x', price: 100, location: 'Austin, TX', lat: 30.27, lng: -97.74, service_radius_miles: 50 });
+      expect(mockPrisma.vendorListing.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ location: 'Austin, TX', lat: 30.27, lng: -97.74, geocoded_at: expect.any(Date), service_radius_miles: 50 }) }),
+      );
+    });
+
+    it('ignores coordinates sent without a location, and clears old ones when the location is retyped', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, location: null });
+      mockPrisma.vendorListing.update.mockResolvedValue(mockListing);
+      await service.update('listing-1', 'vendor-1', { lat: 1, lng: 2 } as any);
+      expect(mockPrisma.vendorListing.update.mock.calls[0][0].data).not.toHaveProperty('lat');
+
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, location: 'Austin, TX' });
+      await service.update('listing-1', 'vendor-1', { location: 'Dallas, TX' });
+      expect(mockPrisma.vendorListing.update.mock.calls[1][0].data).toMatchObject({ location: 'Dallas, TX', lat: null, lng: null, geocoded_at: null });
+
+      await service.update('listing-1', 'vendor-1', { location: 'Dallas, TX', lat: 32.78, lng: -96.8 });
+      expect(mockPrisma.vendorListing.update.mock.calls[2][0].data).toMatchObject({ location: 'Dallas, TX', lat: 32.78, lng: -96.8, geocoded_at: expect.any(Date) });
+    });
+  });
+
   describe('findMyListings', () => {
     it('should return paginated listings for vendor', async () => {
       mockPrisma.vendorListing.count.mockResolvedValue(2);

@@ -127,6 +127,17 @@ describe('MarketplaceService', () => {
       expect(mockPrisma.vendorListing.count).toHaveBeenCalledWith({ where: expect.objectContaining({ lat: expect.any(Object), lng: expect.any(Object) }) });
     });
 
+    it('also finds vendors based further away who travel to the customer', async () => {
+      const travels = { ...mockListing, id: 'travels', lat: 29.79, lng: -95.82, service_radius_miles: 40 }; // ~27 mi away
+      const stays = { ...mockListing, id: 'stays', lat: 29.79, lng: -95.82, service_radius_miles: 10 };
+      mockPrisma.vendorListing.count.mockResolvedValue(2);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([travels, stays]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      const res = await service.searchListings({ near_lat: 29.76, near_lng: -95.37, radius_miles: 10, page: 1, limit: 12 });
+      expect(res.data.map((l: any) => l.id)).toEqual(['travels']);
+      expect(res.data[0].service_radius_miles).toBe(40);
+    });
+
     it('filters by minimum rating and counts only the matches', async () => {
       const a = { ...mockListing, id: 'a' };
       const b = { ...mockListing, id: 'b' };

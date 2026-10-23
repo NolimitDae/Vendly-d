@@ -47,6 +47,9 @@ export class VendorListingService {
         price_unit: dto.price_unit ?? 'fixed',
         status: dto.status ?? ListingStatus.DRAFT,
         location: dto.location,
+        // picked from address suggestions: the position is known, no geocoding needed
+        ...(dto.lat !== undefined && dto.lng !== undefined && dto.location && { lat: dto.lat, lng: dto.lng, geocoded_at: new Date() }),
+        service_radius_miles: dto.service_radius_miles,
         availability: dto.availability,
         delivery_time: dto.delivery_time,
         category_id: dto.category_id,
@@ -61,7 +64,7 @@ export class VendorListingService {
     });
 
     // map position for "near me" search, filled in the background
-    if (listing.location) void this.geocoder?.listing(listing.id);
+    if (listing.location && listing.lat == null) void this.geocoder?.listing(listing.id);
 
     return { success: true, data: this.formatListing(listing) };
   }
@@ -145,7 +148,16 @@ export class VendorListingService {
 
     const updateData: any = { ...dto };
     const moved = dto.location !== undefined && (dto.location || null) !== (listing.location || null);
-    if (moved) {
+    const pinned = dto.lat !== undefined && dto.lng !== undefined && !!(dto.location ?? listing.location);
+    if (pinned) {
+      // picked from address suggestions: the position is known
+      updateData.geocoded_at = new Date();
+    } else {
+      // coordinates are only taken together with a location
+      delete updateData.lat;
+      delete updateData.lng;
+    }
+    if (moved && !pinned) {
       // the old coordinates no longer apply; re-geocoded below (or by the hourly backfill)
       updateData.lat = null;
       updateData.lng = null;
@@ -175,7 +187,7 @@ export class VendorListingService {
       },
     });
 
-    if (moved && updated.location) void this.geocoder?.listing(id);
+    if (moved && !pinned && updated.location) void this.geocoder?.listing(id);
 
     return { success: true, data: this.formatListing(updated) };
   }

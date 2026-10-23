@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -44,6 +45,30 @@ export class CreateVendorListingDto {
   @IsOptional()
   @IsString()
   location?: string;
+
+  @ApiPropertyOptional({ description: 'Map position of `location`, when picked from address suggestions (skips geocoding)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  lat?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  lng?: number;
+
+  @ApiPropertyOptional({ description: 'Miles the vendor travels from `location` (0 = customers come to them)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(250)
+  service_radius_miles?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
