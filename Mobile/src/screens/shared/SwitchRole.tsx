@@ -42,6 +42,8 @@ export default function SwitchRole() {
       const auth = res.data?.authorization;
       if (!res.data?.success) throw new Error(res.data?.message);
       haptic.success();
+      const label = ROLE_LABEL[role].toLowerCase();
+      Alert.alert(res.data.added ? 'Role added' : 'Switched', `You're now using Vendly as ${label === 'event planner' ? 'an event planner' : `a ${label}`}.`);
       // Updating the signed-in user to the new role swaps the whole app to that role's tabs.
       if (auth?.access_token) {
         const me = await api.get('/auth/me', { headers: { Authorization: `Bearer ${auth.access_token}` } });

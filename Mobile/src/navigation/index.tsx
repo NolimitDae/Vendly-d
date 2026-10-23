@@ -25,7 +25,9 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef}>
+    // Keyed on the role: switching roles starts the new role's tabs fresh, instead of carrying the
+    // old screen history (e.g. the Switch role screen) into them.
+    <NavigationContainer ref={navigationRef} key={user ? `role-${user.type}` : 'signed-out'}>
       {!user ? (
         <AuthScreens />
       ) : user.type === 'CUSTOMER' || user.type === 'CLIENT' ? (

@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useReducer } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../services/api';
 
@@ -151,6 +152,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Silently fail — stale data is better than crashing.
     }
   }, []);
+
+  // Coming back to the app re-reads the account, so a role switched on the website (or an ID
+  // approved meanwhile) shows up without closing the app. At most once every 30 seconds.
+  const lastRefresh = useRef(0);
+  const signedIn = !!state.token;
+  useEffect(() => {
+    if (!signedIn) return;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' || Date.now() - lastRefresh.current < 30_000) return;
+      lastRefresh.current = Date.now();
+      refreshUser();
+    });
+    return () => sub.remove();
+  }, [signedIn, refreshUser]);
 
   return (
     <AuthContext.Provider value={{ ...state, login, logout, refreshUser }}>
