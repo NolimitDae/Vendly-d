@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import { PDFDocument } from 'pdf-lib';
 import { ContractCategory } from 'prisma/generated/client';
@@ -328,5 +329,44 @@ describe('contract access control', () => {
     await service.getOne('c1', { userId: 'customer' }, meta);
     const actions = prisma.contractAuditEvent.create.mock.calls.map((c: any) => c[0].data.action);
     expect(actions).toEqual(['ADMIN_VIEWED', 'VIEWED']);
+  });
+});
+
+describe('booking a date the vendor is not free', () => {
+  const setup = (blocked: any = null, busy: any = null) => {
+    const prisma: any = {
+      listingAvailability: { findFirst: jest.fn().mockResolvedValue(blocked) },
+      calendarBusyBlock: { findFirst: jest.fn().mockResolvedValue(busy) },
+    };
+    const service = new BookingContractsService(prisma, {} as any, {} as any, {} as any, {} as any);
+    return { prisma, check: (dto: any) => (service as any).assertDateOpen('l1', 'v1', dto) };
+  };
+  const day = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+  it('checks the customer’s local day, not the UTC one', async () => {
+    const { prisma, check } = setup();
+    // 8pm on Oct 25 in Chicago is already Oct 26 in UTC
+    await check({ event_start_at: new Date('2026-10-26T01:00:00Z'), timezone: 'America/Chicago' });
+    const where = prisma.listingAvailability.findFirst.mock.calls[0][0].where;
+    expect(where).toEqual({ listing_id: 'l1', start_date: { lte: day('2026-10-25') }, end_date: { gte: day('2026-10-25') } });
+    expect(prisma.calendarBusyBlock.findFirst.mock.calls[0][0].where).toMatchObject({ user_id: 'v1' });
+  });
+
+  it('covers every day an overnight event touches', async () => {
+    const { prisma, check } = setup();
+    await check({ event_start_at: new Date('2026-10-25T22:00:00Z'), event_end_at: new Date('2026-10-26T03:00:00Z'), timezone: 'UTC' });
+    expect(prisma.listingAvailability.findFirst.mock.calls[0][0].where).toMatchObject({ start_date: { lte: day('2026-10-26') }, end_date: { gte: day('2026-10-25') } });
+  });
+
+  it('refuses a blocked day or a day busy in the vendor’s calendar', async () => {
+    await expect(setup({ id: 'b' }).check({ event_start_at: new Date('2026-10-25T15:00:00Z') })).rejects.toThrow(ConflictException);
+    await expect(setup(null, { id: 'x' }).check({ scheduled_at: new Date('2026-10-25T15:00:00Z') })).rejects.toThrow(ConflictException);
+  });
+
+  it('lets an open day through, and a request with no date', async () => {
+    await expect(setup().check({ event_start_at: new Date('2026-10-25T15:00:00Z'), timezone: 'Not/AZone' })).resolves.toBeUndefined();
+    const { prisma, check } = setup();
+    await expect(check({})).resolves.toBeUndefined();
+    expect(prisma.listingAvailability.findFirst).not.toHaveBeenCalled();
   });
 });

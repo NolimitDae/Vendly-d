@@ -1,3 +1,4 @@
+import { eventDays } from 'src/modules/calendar-sync/busy-days';
 import {
   BadRequestException,
   ConflictException,
@@ -234,8 +235,31 @@ export class BookingContractsService {
     return q;
   }
 
+  /**
+   * Refuses a date the vendor has blocked for this package, or that their own calendar shows as busy.
+   * The apps already grey these days out; this stops a request slipping through anyway (an old app,
+   * a calendar that synced since the page loaded). Days are the customer's local days.
+   */
+  private async assertDateOpen(listingId: string, vendorId: string, dto: BookingContractFieldsDto) {
+    const start = dto.event_start_at ?? dto.scheduled_at;
+    if (!start) return;
+    const { first, last } = eventDays(new Date(start), dto.event_end_at ? new Date(dto.event_end_at) : null, dto.timezone);
+    const overlaps = { start_date: { lte: last }, end_date: { gte: first } };
+    const [blocked, busy] = await Promise.all([
+      this.prisma.listingAvailability.findFirst({ where: { listing_id: listingId, ...overlaps }, select: { id: true } }),
+      this.prisma.calendarBusyBlock.findFirst({ where: { user_id: vendorId, ...overlaps }, select: { id: true } }),
+    ]);
+    if (blocked || busy) {
+      throw new ConflictException({
+        message: 'The vendor isn’t available on that date. Please pick another day.',
+        error: 'DATE_UNAVAILABLE',
+      });
+    }
+  }
+
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {
     const ctx = await this.loadBookingContext(userId, dto);
+    await this.assertDateOpen(ctx.listing.id, ctx.listing.vendor_id, dto);
     const quote = await this.quoteFor(userId, dto);
     const priced = await this.priceAfterPromo(quote ? quote.amount : ctx.listing.price, dto.promo_code);
     const data = buildMergeData({
