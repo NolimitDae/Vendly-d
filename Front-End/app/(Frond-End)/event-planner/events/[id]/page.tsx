@@ -15,7 +15,6 @@ import {
   Plus,
   Loader2,
   Trash2,
-  AlertTriangle,
   Edit2,
 } from "lucide-react";
 import dayjs from "dayjs";
@@ -29,6 +28,8 @@ import { BookingsBudget, ClientShareCard, TeamsCard } from "@/components/events/
 import { EventToolsService, type TimelineItem } from "@/service/events/eventTools.service";
 import { ChatService } from "@/service/chat/chat.service";
 import { MessagesSquare } from "lucide-react";
+import EventStatusActions, { EventCompletedBanner, canEditEvent } from "@/components/events/EventStatusActions";
+import EditEventDialog from "@/components/events/EditEventDialog";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ interface Event {
   budget_items: BudgetItem[];
   tasks: EventTask[];
   created_at: string;
+  updated_at?: string;
   client_email?: string | null;
   client_sees_budget?: boolean;
 }
@@ -122,7 +124,7 @@ export default function EventDetailPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [toolsKey, setToolsKey] = useState(0);
-  const [cancelling, setCancelling] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   // Task form
   const [taskTitle, setTaskTitle] = useState("");
@@ -153,23 +155,9 @@ export default function EventDetailPage() {
   }, [id, toolsKey]);
   const refreshTools = () => setToolsKey((k) => k + 1);
 
-  const handleCancel = async () => {
-    if (!confirm("Cancel this event? This action cannot be undone.")) return;
-    setCancelling(true);
-    try {
-      const res = await EventsService.cancel(id);
-      if (res.data?.success) {
-        toast.success("Event cancelled");
-        router.push("/event-planner/events");
-      } else {
-        toast.error(res.data?.message || "Failed to cancel event");
-      }
-    } catch {
-      toast.error("Failed to cancel event");
-    } finally {
-      setCancelling(false);
-    }
-  };
+  // PATCH returns the bare event row: keep the loaded bookings, tasks and budget lines
+  const mergeEvent = (updated: Record<string, unknown>) =>
+    setEvent((prev) => (prev ? ({ ...prev, ...updated } as Event) : prev));
 
   const handleToggleTask = async (task: EventTask) => {
     setTogglingTask(task.id);
@@ -330,34 +318,40 @@ export default function EventDetailPage() {
                 )}
               </div>
             </div>
-            <button
-              onClick={async () => {
-                try {
-                  const res = await ChatService.openEventChat(event.id);
-                  router.push(`/chat/${res.data?.data?.conversation_id}`);
-                } catch {
-                  toast.error("Could not open the event chat");
-                }
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/40 text-primary text-sm font-medium hover:bg-primary/5 transition"
-            >
-              <MessagesSquare className="w-4 h-4" /> Event chat
-            </button>
-
-            {event.status !== "CANCELLED" && event.status !== "COMPLETED" && (
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={handleCancel}
-                disabled={cancelling}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-red-200 text-red-600 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition disabled:opacity-60"
+                onClick={async () => {
+                  try {
+                    const res = await ChatService.openEventChat(event.id);
+                    router.push(`/chat/${res.data?.data?.conversation_id}`);
+                  } catch {
+                    toast.error("Could not open the event chat");
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/40 text-primary text-sm font-medium hover:bg-primary/5 transition"
               >
-                {cancelling ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4" />
-                )}
-                Cancel Event
+                <MessagesSquare className="w-4 h-4" /> Event chat
               </button>
-            )}
+
+              {canEditEvent(event.status) && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit details
+                </button>
+              )}
+
+              <EventStatusActions
+                eventId={event.id}
+                eventName={event.name}
+                status={event.status}
+                onUpdated={mergeEvent}
+                onCancelled={() => router.push("/event-planner/events")}
+              />
+            </div>
           </div>
 
           {/* Meta row */}
@@ -406,6 +400,14 @@ export default function EventDetailPage() {
             </div>
           )}
         </div>
+
+        {event.status === "COMPLETED" && (
+          <EventCompletedBanner
+            completedAt={event.updated_at}
+            hasBookings={event.bookings.length > 0}
+            onViewVendors={() => setTab("vendors")}
+          />
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-1.5 shadow-sm overflow-x-auto" role="tablist">
@@ -823,6 +825,8 @@ export default function EventDetailPage() {
           </div>
         )}
       </div>
+
+      {editing && <EditEventDialog event={event} onClose={() => setEditing(false)} onSaved={mergeEvent} />}
     </section>
   );
 }

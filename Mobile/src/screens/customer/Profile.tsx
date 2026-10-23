@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,6 @@ export default function CustomerProfile() {
   const [confirm, setConfirm] = useState(false);
   const firstName = (user?.name ?? '').split(' ')[0];
   const location = (user as any)?.address as string | undefined;
-  const soon = (what: string) => () => Alert.alert('Coming soon', `${what} is on the way.`);
 
   const sections: { title: string; items: Item[] }[] = [
     {
@@ -28,7 +27,7 @@ export default function CustomerProfile() {
         { icon: 'person-outline', label: 'Profile', onPress: () => nav.navigate('EditProfile') },
         { icon: 'wallet-outline', label: 'Payments & Payouts', onPress: () => nav.navigate('PaymentMethods') },
         { icon: 'sparkles-outline', label: 'Events shared with me', onPress: () => nav.navigate('SharedEvents') },
-        { icon: 'help-circle-outline', label: 'FAQs', onPress: soon('Help centre') },
+        { icon: 'help-circle-outline', label: 'FAQs', onPress: () => nav.navigate('Faq') },
       ],
     },
     {

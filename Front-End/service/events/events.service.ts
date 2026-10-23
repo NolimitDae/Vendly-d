@@ -39,14 +39,15 @@ export const EventsService = {
 
   update: async (
     id: string,
+    // null clears an optional field
     data: Partial<{
       name: string;
-      type: string;
-      date: string;
-      venue: string;
-      guest_count: number;
-      total_budget: number;
-      notes: string;
+      type: string | null;
+      date: string | null;
+      venue: string | null;
+      guest_count: number | null;
+      total_budget: number | null;
+      notes: string | null;
       status: string;
     }>,
   ) => Fetch.patch(`/events/${id}`, data, jsonHeaders()),

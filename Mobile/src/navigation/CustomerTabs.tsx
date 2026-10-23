@@ -29,6 +29,7 @@ import PaymentMethods from '../screens/customer/PaymentMethods';
 import SharedEvents from '../screens/shared/SharedEvents';
 import Inbox from '../screens/shared/Inbox';
 import EventShared from '../screens/shared/EventShared';
+import FaqScreen from '../screens/shared/Faq';
 import CustomerBookings from '../screens/customer/Bookings';
 import BookingDetail from '../screens/customer/BookingDetail';
 import PaymentScreen from '../screens/customer/PaymentScreen';
@@ -107,6 +108,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="PaymentMethods" component={PaymentMethods} />
       <ProfileStack.Screen name="SharedEvents" component={SharedEvents} />
       <ProfileStack.Screen name="EventShared" component={EventShared} />
+      <ProfileStack.Screen name="Faq" component={FaqScreen} />
     </ProfileStack.Navigator>
   );
 }

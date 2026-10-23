@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -10,6 +10,7 @@ import MonthCalendar from '../../components/MonthCalendar';
 import { DARK, FONTS } from '../../constants/colors';
 import { EventsService, type EventType } from '../../services/events.service';
 import { apiMessage } from '../auth/SignIn';
+import type { EventPlannerStackParams } from '../../navigation/types';
 
 const EVENT_TYPES: { label: string; value: EventType }[] = [
   { label: 'Wedding', value: 'WEDDING' },
@@ -21,21 +22,43 @@ const EVENT_TYPES: { label: string; value: EventType }[] = [
   { label: 'Other', value: 'OTHER' },
 ];
 
+/** Creates an event, or edits one when opened with `{ event }` from the event screen. */
 export default function CreateEvent() {
   const nav = useNavigation<NativeStackNavigationProp<any>>();
+  const editing = useRoute<RouteProp<EventPlannerStackParams, 'CreateEvent'>>().params?.event;
   const insets = useSafeAreaInsets();
-  const [name, setName] = useState('');
-  const [type, setType] = useState<EventType>('WEDDING');
-  const [date, setDate] = useState<Date | null>(null);
-  const [venue, setVenue] = useState('');
-  const [guests, setGuests] = useState('');
-  const [budget, setBudget] = useState('');
-  const [notes, setNotes] = useState('');
+  const [name, setName] = useState(editing?.name ?? '');
+  const [type, setType] = useState<EventType | undefined>(editing ? editing.type ?? undefined : 'WEDDING');
+  const [date, setDate] = useState<Date | null>(editing?.date ? new Date(editing.date) : null);
+  const [venue, setVenue] = useState(editing?.venue ?? '');
+  const [guests, setGuests] = useState(editing?.guest_count != null ? String(editing.guest_count) : '');
+  const [budget, setBudget] = useState(editing?.total_budget != null ? String(Number(editing.total_budget)) : '');
+  const [notes, setNotes] = useState(editing?.notes ?? '');
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     if (!name.trim()) return Alert.alert('Event name', 'Give the event a name your client will recognise.');
     setSaving(true);
+    if (editing) {
+      try {
+        // an emptied field is sent as null so the server clears it
+        await EventsService.update(editing.id, {
+          name: name.trim(),
+          type: type ?? null,
+          date: date ? date.toISOString() : null,
+          venue: venue.trim() || null,
+          guest_count: guests ? Number(guests) : null,
+          total_budget: budget ? Number(budget) : null,
+          notes: notes.trim() || null,
+        });
+        nav.goBack();
+      } catch (err) {
+        Alert.alert('Could not save changes', apiMessage(err, 'Try again in a moment.'));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     try {
       const res = await EventsService.create({
         name: name.trim(),
@@ -59,7 +82,7 @@ export default function CreateEvent() {
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-        <ScreenHeader title="New Event" onBack={() => nav.goBack()} />
+        <ScreenHeader title={editing ? 'Edit Event' : 'New Event'} onBack={() => nav.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 20 }}>
           <Text style={s.sectionTitle}>Event Details</Text>
           <Field label="Event Name" placeholder="e.g. Sarah & John's Wedding" value={name} onChangeText={setName} />
@@ -96,7 +119,7 @@ export default function CreateEvent() {
               <TextInput style={[ui.input, { minHeight: 90, textAlignVertical: 'top' }]} placeholder="Theme, must-haves, anything the vendors should know" placeholderTextColor={DARK.muted} value={notes} onChangeText={setNotes} multiline />
             </View>
           </View>
-          <GradientButton title="Create Event" onPress={save} loading={saving} style={{ marginTop: 12 }} />
+          <GradientButton title={editing ? 'Save changes' : 'Create Event'} onPress={save} loading={saving} style={{ marginTop: 12 }} />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

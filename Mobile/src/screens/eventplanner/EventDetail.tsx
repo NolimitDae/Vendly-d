@@ -21,6 +21,7 @@ import EventContractsCard from '../../components/contracts/EventContractsCard';
 import RunOfShow from '../../components/events/RunOfShow';
 import EventFiles from '../../components/events/EventFiles';
 import { BookingsBudget, ClientShareCard, TeamsCard } from '../../components/events/PlannerExtras';
+import EventStatusActions, { EventCompletedBanner } from '../../components/events/EventStatusActions';
 import { EventToolsService, type TimelineItem } from '../../services/eventTools.service';
 import { ChatService } from '../../services/chat.service';
 import { apiError } from '../../services/contracts.service';
@@ -153,6 +154,19 @@ export default function EventDetail() {
       >
         {tab === 'overview' && (
           <View style={{ gap: 16 }}>
+            {event.status === 'COMPLETED' && (
+              <EventCompletedBanner
+                completedAt={event.updated_at}
+                bookings={event.bookings}
+                onOpenBooking={(bookingId) => navigation.navigate('BookingsTab' as any, { screen: 'BookingDetail', initial: false, params: { bookingId } } as any)}
+              />
+            )}
+            <EventStatusActions
+              eventId={event.id}
+              status={event.status}
+              onEdit={() => navigation.navigate('CreateEvent', { event: { id: event.id, name: event.name, type: event.type, date: event.date, venue: event.venue, guest_count: event.guest_count, total_budget: event.total_budget, notes: event.notes } })}
+              onChanged={load}
+            />
             <OverviewTab event={event} completedTasks={completedTasks} totalTasks={totalTasks} />
             <ClientShareCard eventId={event.id} email={event.client_email} seesBudget={event.client_sees_budget} onChanged={load} />
           </View>

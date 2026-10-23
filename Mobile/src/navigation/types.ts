@@ -2,10 +2,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 // ─── Event Planner ───────────────────────────────────────────────────────────
 
+/** The fields the create/edit event form works with. */
+export type EditableEvent = Pick<import('../services/events.service').Event, 'id' | 'name' | 'type' | 'date' | 'venue' | 'guest_count' | 'total_budget' | 'notes'>;
+
 export type EventPlannerStackParams = {
   EPHome: undefined;
   MyEvents: undefined;
-  CreateEvent: undefined;
+  /** With `event`, the same form edits that event's details. */
+  CreateEvent: { event?: EditableEvent } | undefined;
   EventDetail: { eventId: string; eventName: string };
   PlannerProfile: undefined;
 };
@@ -90,6 +94,7 @@ export type CustomerProfileStackParams = {
   PaymentMethods: undefined;
   SharedEvents: undefined;
   EventShared: { eventId: string; section?: 'schedule' | 'vendors' | 'files' | 'contracts' };
+  Faq: undefined;
 };
 
 export type CustomerMessagesStackParams = {

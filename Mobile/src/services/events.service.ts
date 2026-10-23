@@ -21,6 +21,7 @@ export interface Event {
   status: EventStatus;
   notes?: string;
   created_at: string;
+  updated_at?: string;
   _count?: { bookings: number; tasks: number; budget_items: number };
 }
 
@@ -91,15 +92,16 @@ export const EventsService = {
   findOne: (id: string) =>
     api.get<{ success: boolean; data: EventDetail }>(`/events/${id}`),
 
+  /** null clears an optional field */
   update: (id: string, data: Partial<{
     name: string;
-    type: EventType;
-    date: string;
-    venue: string;
-    guest_count: number;
-    total_budget: number;
+    type: EventType | null;
+    date: string | null;
+    venue: string | null;
+    guest_count: number | null;
+    total_budget: number | null;
     status: EventStatus;
-    notes: string;
+    notes: string | null;
   }>) => api.patch<{ success: boolean; data: Event }>(`/events/${id}`, data),
 
   cancel: (id: string) =>
