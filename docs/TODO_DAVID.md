@@ -116,6 +116,12 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
       **payment info** (handled by Stripe), **email/name**, and crash reports (Sentry, if enabled).
 - [ ] Then: `eas build --profile production --platform all` and `eas submit --platform all`.
 
+### Submitting to the App Store (when you're ready)
+1. Apple Developer account ($99/yr) → App Store Connect → **My Apps → +** → new iOS app with bundle id `com.vendly.mobile`. Note the app's **Apple ID** number.
+2. Tell me that number and I'll add it to `eas.json` (`submit.production.ios.ascAppId`), make a production build and
+   submit it with `eas submit`. Apple asks for screenshots, a privacy policy URL (`https://vendlymarketplace.com/privacy`)
+   and a review account: create a test customer and a test vendor login for Apple's reviewers.
+
 ## 6. Legal and wording (needs a lawyer's eye)
 
 - [ ] Contract templates and the Terms page still say **"Vendly service fee"**; it should read **"Vendly Protection fee"**.
@@ -155,6 +161,9 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 - Bookings paid through the old Stripe Checkout (before the new payment engine) keep the old payout path.
 - "Near me" uses OpenStreetMap's free geocoder (one lookup a second). Fine for now; swap for Google/Mapbox if listings grow into the thousands.
 - Every push notification is now also kept in the inbox (app + website notifications page).
+- Booking requests close on their own after **72 hours** without an answer (sooner if the event starts first). Vendors get a
+  reminder a day before. Tell me if you want a different window.
+- Customers get one "How was it?" push and email two days after a booking is completed, plus a rating card in the app.
 - Address suggestions for packages come from Photon (OpenStreetMap, free). "Use my current location" only fills in the
   town or city, so vendors working from home don't publish their street. Set `PLACES_URL` on the backend to use your own Photon server.
 - The get-set-up checklist ticks itself off from the account (it doesn't matter whether a step was done in the app or on the

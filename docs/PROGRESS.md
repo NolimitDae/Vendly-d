@@ -34,6 +34,11 @@ _Updated: 2026-10-23. All Build Plan Phase 0 items resolved._
 | F11 | Package categories, location and travel radius | 13 starter categories / 63 sub-categories (seed migration); searchable picker on web + app; address suggestions and "use my location" (`GET /geo/suggest`, `GET /geo/reverse`, city-level only); `service_radius_miles` on packages, and near me also finds vendors who travel that far. Listing positions are never sent out publicly |
 | F12 | Get-set-up checklist per role | `GET /onboarding`, `POST /onboarding/seen`; `User.onboarding_seen`. Customer: email, ID, card, photo, city. Vendor: email, licence, ID, first package, payouts, contract, shop branding. Planner: email, profile, licence, ID, card, first event. Lives at the top of notifications (web + app) with a welcome popup and an all-set popup; gone once finished |
 | F13 | Role switch without restarting the app | Navigation resets to the new role's tabs; the account refreshes when the app returns to the foreground |
+| F14 | Rating prompts | Two days after a booking completes the customer gets one push + email; a "How was it?" card on the app home screens, the website bookings page and the planner dashboard. `GET /reviews/pending`, `POST /reviews/pending/:id/dismiss` |
+| F15 | Booking requests expire | Vendors are reminded a day before; requests not answered within 72 h (or by the event start) are declined automatically, contracts voided, both sides told; accepting is refused once closed. Vendors see "Closes in X hours" |
+| F16 | Chat read receipts + typing | "Seen" under your latest message, "<name> is typing…", live on web and app; participant checks on the server |
+| F17 | Admin: dispute contract, categories | Disputes show the booking's contract, signatures and audit log; admins rename/add/delete categories and sub-categories |
+| F18 | Website profile | Settings → Profile: photo, name, city |
 
 ## Contracts (docs/CONTRACTS.md)
 
@@ -42,9 +47,9 @@ Built: data model with DB-enforced write-once signatures/audit log, Vendly defau
 | ID | Gap | Why |
 |----|-----|-----|
 | C1 | Deposit charged on Accept & Sign | Done: Accept & Sign schedules the payment plan and charges what's due on the saved card |
-| C2 | Request expiry voiding contracts | Bookings have no expiry concept yet; decline and cancel do void |
+| C2 | Request expiry voiding contracts | Done: unanswered requests close after 72 hours and their contracts are voided |
 | C3 | Custom quotes in chat generating contracts | Done: booking with a quote puts the quoted price in the contract and claims the quote |
-| C4 | Dispute queue showing the contract | Disputes exist, but the queue doesn't show the contract yet; admin can view any booking's contract and audit log |
+| C4 | Dispute queue showing the contract | Done: each dispute has "View contract" (signatures, text, audit log, signed PDF) |
 | C5 | Client co-signature | Built behind the `client_cosign` flag (off by default): the planner's client signs before the vendor (status AWAITING_CLIENT) |
 | C6 | Privacy policy wording | Add "Signed contracts are kept for 7 years" to the privacy policy (admin dashboard > Privacy) |
 | C7 | Lawyer review | Remove [LAWYER REVIEW] by publishing new template versions once approved |
