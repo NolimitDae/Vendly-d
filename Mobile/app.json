@@ -15,7 +15,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.vendly.mobile",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CADisableMinimumFrameDurationOnPhone": true
       },
       "usesAppleSignIn": true
     },

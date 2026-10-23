@@ -1,7 +1,9 @@
 import React, { useId, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
+  Easing,
   Pressable,
   StyleSheet,
   Text,
@@ -57,8 +59,9 @@ export function BrandGradient({ style, children }: { style?: StyleProp<ViewStyle
 }
 
 /**
- * A pressable that sinks slightly while held, like iOS controls and cards. Use for tappable cards and
- * tiles; it only animates transform, so it stays smooth on the native driver.
+ * A pressable that sinks slightly while held, like iOS controls and cards: 0.97 in 120 ms ease-out on
+ * press-in, back on release. It only animates transform on the native driver, and stays still when
+ * the iPhone's Reduce Motion setting is on.
  */
 export function PressableScale({
   children,
@@ -69,13 +72,38 @@ export function PressableScale({
   ...rest
 }: Omit<React.ComponentProps<typeof Pressable>, 'style' | 'children'> & { children: React.ReactNode; style?: StyleProp<ViewStyle>; scaleTo?: number }) {
   const scale = React.useRef(new Animated.Value(1)).current;
-  const to = (v: number) => Animated.spring(scale, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
+  const reduceMotion = useReduceMotion();
+  const to = (v: number) =>
+    !reduceMotion && Animated.timing(scale, { toValue: v, duration: 120, easing: PRESS_EASE, useNativeDriver: true }).start();
   return (
     // the pressable itself scales, so layout styles (widths, margins) keep working as on a plain Pressable
-    <AnimatedPressable {...rest} onPress={onPress} disabled={disabled} onPressIn={() => to(scaleTo)} onPressOut={() => to(1)} style={[style, { transform: [{ scale }] }]}>
+    <AnimatedPressable
+      {...rest}
+      onPress={onPress}
+      disabled={disabled}
+      onPressIn={() => to(scaleTo)}
+      onPressOut={() => to(1)}
+      // a finger drifting a little while pressing shouldn't cancel the tap
+      pressRetentionOffset={{ top: 20, bottom: 20, left: 20, right: 20 }}
+      style={[style, { transform: [{ scale }] }]}
+    >
       {children}
     </AnimatedPressable>
   );
+}
+
+/** Strong ease-out: responds the instant the finger lands. */
+const PRESS_EASE = Easing.bezier(0.23, 1, 0.32, 1);
+
+/** The iPhone's Reduce Motion setting, kept current while the app runs. */
+function useReduceMotion() {
+  const [reduce, setReduce] = useState(false);
+  React.useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduce).catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce);
+    return () => sub.remove();
+  }, []);
+  return reduce;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);

@@ -17,7 +17,6 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DARK, FONTS } from '../../constants/colors';
 import { BrandGradient, PressableScale } from '../../components/brand';
-import { haptic } from '../../utils/haptics';
 import { ListingCardSkeleton } from '../../components/Skeleton';
 import { useFeature } from '../../hooks/useFeature';
 import { useAuth } from '../../context/AuthContext';
@@ -199,10 +198,7 @@ export default function CustomerHome() {
               return (
                 <PressableScale
                   key={c.id}
-                  onPress={() => {
-                    haptic.select();
-                    nav.navigate('SearchResults', { categoryId: c.id, categoryName: c.name });
-                  }}
+                  onPress={() => nav.navigate('SearchResults', { categoryId: c.id, categoryName: c.name })}
                   accessibilityRole="button"
                   style={s.tileWrap}
                 >

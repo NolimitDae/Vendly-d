@@ -457,3 +457,38 @@ input:checked~.checkmark {
   .landing-marquee-track [data-dup] { display: none; }
   .landing-marquee-track > * > * { scroll-snap-align: start; }
 }
+
+/*
+ * Feeling native on phones. Unlayered on purpose, so these win over utility classes.
+ * - no grey flash over tapped elements (every control has its own pressed state)
+ * - no font inflation when an iPhone turns to landscape
+ * - inputs at 16px on touch screens: smaller text makes iPhone Safari zoom in on focus and stay zoomed
+ * - taps fire at once (no double-tap-zoom wait) and holding a button doesn't select its label
+ */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+button,
+[role="button"],
+[role="tab"],
+a {
+  touch-action: manipulation;
+}
+
+button,
+[role="button"],
+[role="tab"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
