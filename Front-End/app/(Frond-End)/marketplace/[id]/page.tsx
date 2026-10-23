@@ -1,5 +1,6 @@
 "use client";
 
+import { isLoggedIn as hasSession } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
@@ -21,7 +22,6 @@ import {
 import BookingModal from "@/components/marketplace/BookingModal";
 import { ChatService } from "@/service/chat/chat.service";
 import ReviewList from "@/components/marketplace/ReviewList";
-import { CookieHelper } from "@/helper/cookie.helper";
 import { SavedListingsService } from "@/service/savedListings/savedListings.service";
 import { AuthService } from "@/service/auth/auth.service";
 import { EventsService } from "@/service/events/events.service";
@@ -29,6 +29,7 @@ import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import { perUnit, quantityRangeText } from "@/lib/addons";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
+import { summariseHours, type WorkingHours } from "@/lib/working-hours";
 
 interface Listing {
   id: string;
@@ -48,6 +49,9 @@ interface Listing {
   location?: string;
   service_radius_miles?: number | null;
   availability?: string;
+  /** the vendor's weekly hours (null = any day, any time) and a short line like "Mon–Fri 9am–5pm" */
+  working_hours?: WorkingHours | null;
+  working_hours_summary?: string | null;
   delivery_time?: number;
   avg_rating?: number;
   category?: { id: string; name: string };
@@ -87,7 +91,7 @@ export default function ListingDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [savingToggle, setSavingToggle] = useState(false);
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([]);
-  const isLoggedIn = !!CookieHelper.get({ key: "token" });
+  const isLoggedIn = hasSession();
 
   // Event planner state
   const [userType, setUserType] = useState<string | null>(null);
@@ -337,6 +341,16 @@ export default function ListingDetailPage() {
                       #{tag}
                     </span>
                   ))}
+                </div>
+              )}
+
+              {listing.working_hours && (
+                <div className="mt-4 p-4 bg-primary/5 rounded-xl">
+                  <div className="flex items-center gap-2 text-gray-900 dark:text-white text-sm font-medium mb-1">
+                    <Clock className="w-4 h-4 text-primary" />
+                    Working hours
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Works {listing.working_hours_summary ?? summariseHours(listing.working_hours)}</p>
                 </div>
               )}
 

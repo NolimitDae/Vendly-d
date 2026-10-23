@@ -21,8 +21,11 @@ import EventShared from '../screens/shared/EventShared';
 import VendorContracts from '../screens/vendor/Contracts';
 import VendorProfile from '../screens/vendor/Profile';
 import Payouts from '../screens/vendor/Payouts';
+import Transactions from '../screens/shared/Transactions';
 import License from '../screens/vendor/License';
 import CalendarSync from '../screens/vendor/CalendarSync';
+import WorkingHours from '../screens/vendor/WorkingHours';
+import VendorReviews from '../screens/vendor/Reviews';
 import ChatList from '../screens/customer/ChatList';
 import ChatDetail from '../screens/customer/ChatDetail';
 import EditProfile from '../screens/customer/EditProfile';
@@ -88,14 +91,17 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="VendorProfile" component={VendorProfile} />
       <ProfileStack.Screen name="VendorContracts" component={VendorContracts} />
       <ProfileStack.Screen name="Payouts" component={Payouts} />
+      <ProfileStack.Screen name="Transactions" component={Transactions} />
       <ProfileStack.Screen name="License" component={License} />
       <ProfileStack.Screen name="CalendarSync" component={CalendarSync} />
+      <ProfileStack.Screen name="WorkingHours" component={WorkingHours} />
       <ProfileStack.Screen name="EditProfile" component={EditProfile} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
       <ProfileStack.Screen name="SwitchRole" component={SwitchRole} />
       <ProfileStack.Screen name="VerifyIdentity" component={VerifyIdentity} />
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
       <ProfileStack.Screen name="Inbox" component={Inbox} />
+      <ProfileStack.Screen name="VendorReviews" component={VendorReviews} />
     </ProfileStack.Navigator>
   );
 }

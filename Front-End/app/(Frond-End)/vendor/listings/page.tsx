@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Plus, Edit2, Trash2, Eye, EyeOff, Loader2, PlusSquare, Receipt } from "lucide-react";
 import { toast } from "react-toastify";
 import CalendarSyncSection from "@/components/vendor/CalendarSyncSection";
+import WorkingHoursSection from "@/components/vendor/WorkingHoursSection";
 import { packagePriceText, perUnit } from "@/lib/addons";
 
 interface Listing {
@@ -234,6 +235,7 @@ export default function VendorListingsPage() {
           </div>
         )}
 
+        <WorkingHoursSection />
         <CalendarSyncSection />
       </div>
     </div>

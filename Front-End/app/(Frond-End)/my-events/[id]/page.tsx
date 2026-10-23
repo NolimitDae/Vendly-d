@@ -1,5 +1,6 @@
 "use client";
 
+import { whoAmI } from "@/lib/currentUser";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -7,7 +8,6 @@ import { ArrowLeft, Calendar, Loader2, MapPin, MessagesSquare, User } from "luci
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
-import { CookieHelper } from "@/helper/cookie.helper";
 import RunOfShow from "@/components/events/RunOfShow";
 import EventFiles from "@/components/events/EventFiles";
 import ClientContractsList from "@/components/contracts/ClientContractsList";
@@ -16,15 +16,6 @@ import { ChatService } from "@/service/chat/chat.service";
 import { errorMessage } from "@/service/rentals/rentals.service";
 
 type Section = "schedule" | "vendors" | "files" | "contracts";
-
-const userIdFromToken = () => {
-  try {
-    const t = CookieHelper.get({ key: "token" });
-    return t ? (JSON.parse(atob(t.split(".")[1])).sub as string) : null;
-  } catch {
-    return null;
-  }
-};
 
 /** An event as a booked vendor or the planner's client sees it. */
 export default function SharedEventPage() {
@@ -42,7 +33,8 @@ export default function SharedEventPage() {
   }, [id]);
 
   useEffect(() => {
-    setMe(userIdFromToken());
+    // the login token is in an HttpOnly cookie, so who we are comes from the API
+    whoAmI().then((u) => setMe(u.id));
     load();
   }, [load]);
 
@@ -100,7 +92,7 @@ export default function SharedEventPage() {
           ))}
         </div>
 
-        {section === "schedule" && <RunOfShow eventId={ev.id} eventDate={ev.date} role={ev.role} userId={me} items={ev.timeline} vendors={[]} onChanged={load} />}
+        {section === "schedule" && <RunOfShow eventId={ev.id} eventDate={ev.date} role={ev.role} userId={me} items={ev.timeline} vendors={[]} onChanged={load} readOnly={ev.status === "CANCELLED"} />}
         {section === "vendors" && (
           <ul className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
             {ev.vendors.length === 0 && <li className="p-6 text-sm text-gray-500 text-center">No vendors booked yet.</li>}
@@ -116,7 +108,7 @@ export default function SharedEventPage() {
             ))}
           </ul>
         )}
-        {section === "files" && <EventFiles eventId={ev.id} role={ev.role} />}
+        {section === "files" && <EventFiles eventId={ev.id} role={ev.role} readOnly={ev.status === "CANCELLED"} />}
         {section === "contracts" && ev.role === "client" && <ClientContractsList eventId={ev.id} />}
       </div>
     </div>

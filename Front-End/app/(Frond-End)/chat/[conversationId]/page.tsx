@@ -1,5 +1,6 @@
 "use client";
 
+import { whoAmI } from "@/lib/currentUser";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -7,24 +8,15 @@ import Link from "next/link";
 import { ArrowLeft, Ban, ImagePlus, Send, Loader2, Pin, PinOff, ShieldCheck, Tags, Users, X } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
-import { CookieHelper } from "@/helper/cookie.helper";
-import { ChatService, CONTACT_WARNING, MAX_PHOTO_BYTES, sharesContact, type ChatMessage, type ConversationInfo, type Quote } from "@/service/chat/chat.service";
+import { acceptPhotos, ChatService, CONTACT_WARNING, MAX_PHOTOS, sharesContact, type ChatMessage, type ConversationInfo, type Quote } from "@/service/chat/chat.service";
 import { errorMessage } from "@/service/rentals/rentals.service";
 import { useSocket } from "@/hooks/useSocket";
 import QuoteCard from "@/components/chat/QuoteCard";
 import SendQuoteModal from "@/components/chat/SendQuoteModal";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import ChatSafetyMenu from "@/components/chat/ChatSafetyMenu";
+import ChatSafetyMenu, { ReportMessageButton } from "@/components/chat/ChatSafetyMenu";
 import { CHAT_READ_EVENT, createTypingEmitter, readReceipt, useTypingUsers } from "@/components/chat/presence";
 import { cn } from "@/lib/utils";
-
-function tokenClaims(token: string): { sub?: string; type?: string } {
-  try {
-    return JSON.parse(atob(token.split(".")[1]));
-  } catch {
-    return {};
-  }
-}
 
 function Avatar({ url, name, size = 28 }: { url?: string | null; name: string; size?: number }) {
   return url ? (
@@ -49,8 +41,10 @@ export default function ConversationPage() {
   const [warning, setWarning] = useState<string | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [busyQuote, setBusyQuote] = useState<string | null>(null);
-  // one photo per message, previewed before sending
-  const [photo, setPhoto] = useState<{ file: File; url: string } | null>(null);
+  // up to 10 photos per message, previewed before sending
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
   const fileRef = useRef<HTMLInputElement>(null);
   // a message arrived while the tab was hidden; mark it read once the tab is visible again
   const unseen = useRef(false);
@@ -60,9 +54,8 @@ export default function ConversationPage() {
   const [me, setMe] = useState<{ id: string | null; type: string | null }>({ id: null, type: null });
 
   useEffect(() => {
-    const token = CookieHelper.get({ key: "token" });
-    const claims = token ? tokenClaims(token) : {};
-    setMe({ id: claims.sub ?? null, type: claims.type ?? null });
+    // the login token is in an HttpOnly cookie, so who we are comes from the API
+    whoAmI().then(setMe);
   }, []);
 
   const load = useCallback(async () => {
@@ -168,39 +161,41 @@ export default function ConversationPage() {
   const blockedByMe = !isGroup && !!info?.blocked_by_me;
   const blocked = blockedByMe || (!isGroup && !!info?.blocked_me);
 
-  const clearPhoto = useCallback(() => {
-    setPhoto(null);
+  // previews are freed when a photo is removed, the photos are sent, or the page goes away
+  const clearPhotos = useCallback(() => {
+    photosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    setPhotos([]);
     if (fileRef.current) fileRef.current.value = "";
   }, []);
-  // free the preview when it's replaced, removed or the page goes away
-  useEffect(() => () => {
-    if (photo) URL.revokeObjectURL(photo.url);
-  }, [photo]);
-  // a photo picked in one chat isn't carried into the next
-  useEffect(() => clearPhoto, [conversationId, clearPhoto]);
+  const removePhoto = (url: string) => {
+    URL.revokeObjectURL(url);
+    setPhotos((prev) => prev.filter((p) => p.url !== url));
+  };
+  // photos picked in one chat aren't carried into the next
+  useEffect(() => clearPhotos, [conversationId, clearPhotos]);
 
-  const pickPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const pickPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) return void toast.error("Only photos can be sent");
-    if (file.size > MAX_PHOTO_BYTES) return void toast.error("That photo is over 10 MB");
-    setPhoto({ file, url: URL.createObjectURL(file) });
+    if (!picked.length) return;
+    const { files, error } = acceptPhotos(photosRef.current.length, picked);
+    if (error) toast.error(error);
+    if (files.length) setPhotos((prev) => [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
   };
 
   const send = async () => {
     const content = text.trim();
-    if ((!content && !photo) || sending || blocked) return;
+    if ((!content && !photos.length) || sending || blocked) return;
     if (content && sharesContact(content) && !confirm(`${CONTACT_WARNING}\n\nSend anyway?`)) return;
     typing?.stop();
     setText("");
     setSending(true);
     try {
-      const res = await ChatService.sendMessage(conversationId, content, photo ? [photo.file] : undefined);
+      const res = await ChatService.sendMessage(conversationId, content, photos.length ? photos.map((p) => p.file) : undefined);
       if (res.data?.success) {
         setMessages((prev) => (prev.some((m) => m.id === res.data.data.id) ? prev : [...prev, res.data.data]));
         setWarning(res.data.warning?.text ?? null);
-        clearPhoto();
+        clearPhotos();
       }
     } catch (e) {
       setText(content);
@@ -348,12 +343,20 @@ export default function ConversationPage() {
                           </div>
                         ) : null
                       )}
-                      {msg.attachments_url?.map((url) => (
-                        <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                          {/* eslint-disable-next-line @next/next/no-img-element -- user photo from storage */}
-                          <img src={url} alt={`Photo from ${name}`} className="max-w-[240px] max-h-[240px] rounded-2xl object-cover bg-gray-100 dark:bg-gray-800" />
-                        </a>
-                      ))}
+                      {!!msg.attachments_url?.length && (
+                        <div className={cn("grid gap-1", msg.attachments_url.length === 1 ? "grid-cols-1" : msg.attachments_url.length === 2 || msg.attachments_url.length === 4 ? "grid-cols-2" : "grid-cols-3")}>
+                          {msg.attachments_url.map((url, n) => (
+                            <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block" aria-label={`Open photo ${n + 1} of ${msg.attachments_url!.length} from ${name}`}>
+                              {/* eslint-disable-next-line @next/next/no-img-element -- user photo from storage */}
+                              <img
+                                src={url}
+                                alt={`Photo ${n + 1} from ${name}`}
+                                className={cn("rounded-2xl object-cover bg-gray-100 dark:bg-gray-800", msg.attachments_url!.length === 1 ? "max-w-[240px] max-h-[240px]" : "w-24 h-24 sm:w-28 sm:h-28")}
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex items-center gap-1 text-[10px] text-gray-400">
                         {isPinned && <Pin className="w-3 h-3 text-primary" />}
                         <span>{dayjs(msg.createdAt).format("h:mm A")}</span>
@@ -364,6 +367,15 @@ export default function ConversationPage() {
                       <button onClick={() => pin(isPinned ? null : msg)} aria-label={isPinned ? "Unpin message" : "Pin message"} className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-gray-400 hover:text-primary transition">
                         {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                       </button>
+                    )}
+                    {!isMine && msg.sender && (
+                      <ReportMessageButton
+                        person={{ id: msg.sender.id, name }}
+                        conversationId={conversationId}
+                        messageId={msg.id}
+                        alreadyBlocked={isGroup ? undefined : blockedByMe}
+                        onReported={(alsoBlocked) => alsoBlocked && !isGroup && setInfo((i) => (i ? { ...i, blocked_by_me: true } : i))}
+                      />
                     )}
                   </div>
                 );
@@ -410,27 +422,31 @@ export default function ConversationPage() {
         </div>
       )}
 
-      {photo && !blocked && (
-        <div className="flex items-center gap-3 px-4 pt-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
-          <div className="relative">
-            {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
-            <img src={photo.url} alt="Photo to send" className="w-16 h-16 rounded-xl object-cover" />
-            <button onClick={clearPhoto} aria-label="Remove photo" className="absolute -top-2 -right-2 p-0.5 rounded-full bg-gray-900/80 text-white">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{photo.file.name}</span>
+      {photos.length > 0 && !blocked && (
+        <div className="px-4 pt-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+          <ul aria-label="Photos to send" className="flex gap-3 overflow-x-auto pt-2 pb-1">
+            {photos.map((p, n) => (
+              <li key={p.url} className="relative flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
+                <img src={p.url} alt={`Photo ${n + 1} to send`} className="w-16 h-16 rounded-xl object-cover" />
+                <button onClick={() => removePhoto(p.url)} aria-label={`Remove photo ${n + 1}`} className="absolute -top-2 -right-2 p-0.5 rounded-full bg-gray-900/80 text-white">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{photos.length} of {MAX_PHOTOS} photos</p>
         </div>
       )}
 
       {/* Input */}
-      <div className={cn("flex-shrink-0 bg-white dark:bg-gray-800 px-4 py-3", !photo && "border-t border-gray-100 dark:border-gray-700")}>
+      <div className={cn("flex-shrink-0 bg-white dark:bg-gray-800 px-4 py-3", !photos.length && "border-t border-gray-100 dark:border-gray-700")}>
         <div className="flex items-end gap-2">
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={pickPhoto} aria-label="Choose a photo" disabled={blocked} />
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={pickPhotos} aria-label="Choose photos" disabled={blocked} />
           <button
             onClick={() => fileRef.current?.click()}
-            disabled={blocked || sending}
-            aria-label="Attach a photo"
+            disabled={blocked || sending || photos.length >= MAX_PHOTOS}
+            aria-label={`Attach photos (up to ${MAX_PHOTOS})`}
             className="p-2.5 rounded-2xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
           >
             <ImagePlus className="w-5 h-5" />
@@ -461,7 +477,7 @@ export default function ConversationPage() {
               t.style.height = `${Math.min(t.scrollHeight, 128)}px`;
             }}
           />
-          <button onClick={send} disabled={(!text.trim() && !photo) || sending || blocked} aria-label="Send" className="p-2.5 gradient-bg text-white rounded-2xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+          <button onClick={send} disabled={(!text.trim() && !photos.length) || sending || blocked} aria-label="Send" className="p-2.5 gradient-bg text-white rounded-2xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
             {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>

@@ -85,7 +85,7 @@ export default function EventShared() {
           ))}
         </View>
 
-        {section === 'schedule' && <RunOfShow eventId={ev.id} eventDate={ev.date} role={ev.role} userId={user?.id} items={ev.timeline} vendors={[]} onChanged={load} />}
+        {section === 'schedule' && <RunOfShow eventId={ev.id} eventDate={ev.date} role={ev.role} userId={user?.id} items={ev.timeline} vendors={[]} onChanged={load} readOnly={ev.status === 'CANCELLED'} />}
         {section === 'vendors' &&
           (ev.vendors.length === 0 ? (
             <Text style={s.muted}>No vendors booked yet.</Text>
@@ -101,7 +101,7 @@ export default function EventShared() {
               </Card>
             ))
           ))}
-        {section === 'files' && <EventFiles eventId={ev.id} role={ev.role} />}
+        {section === 'files' && <EventFiles eventId={ev.id} role={ev.role} readOnly={ev.status === 'CANCELLED'} />}
         {section === 'contracts' && ev.role === 'client' && <ClientContractsCard eventId={ev.id} />}
       </View>
     </ScrollView>

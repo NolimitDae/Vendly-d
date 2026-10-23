@@ -232,6 +232,28 @@ describe('VendorListingService', () => {
     });
   });
 
+  describe('listing photos', () => {
+    const jpg = { originalname: '../../index.html', buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0]) } as Express.Multer.File;
+    const fake = { originalname: 'photo.jpg', buffer: Buffer.from('<html><script>alert(1)</script>') } as Express.Multer.File;
+
+    it('stores photos under random names with their real extension', async () => {
+      mockPrisma.vendorListing.create.mockResolvedValue(mockListing);
+      await service.create('vendor-1', { title: 'T', description: 'D', price: 1 }, [jpg]);
+      const images = mockPrisma.vendorListing.create.mock.calls[0][0].data.images;
+      expect(images).toEqual([expect.stringMatching(/^[0-9a-f]{24}\.jpg$/)]);
+      expect(TanvirStorage.put).toHaveBeenCalledWith(`listings/${images[0]}`, jpg.buffer);
+    });
+
+    it('refuses a file that is not really a photo, and keeps the old photos', async () => {
+      await expect(service.create('vendor-1', { title: 'T', description: 'D', price: 1 }, [fake])).rejects.toThrow(BadRequestException);
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['old.jpg'] });
+      await expect(service.update('listing-1', 'vendor-1', {}, [jpg, fake])).rejects.toThrow(BadRequestException);
+      expect(TanvirStorage.delete).not.toHaveBeenCalled();
+      expect(TanvirStorage.put).not.toHaveBeenCalled();
+      expect(mockPrisma.vendorListing.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('remove', () => {
     it('should soft-delete a listing', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);

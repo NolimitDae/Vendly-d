@@ -5,7 +5,7 @@ import {
 import { ADMIN_APPROVE_STATUS } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
-import { StringHelper } from 'src/common/helper/string.helper';
+import { PHOTOS, PHOTOS_OR_PDF, safeStoredNames } from 'src/common/helper/upload-files';
 import appConfig from 'src/config/app.config';
 import { CreateEventPlannerProfileDto } from './dto/create-profile.dto';
 
@@ -19,7 +19,9 @@ export class EventPlannerService {
     portfolioFiles?: Express.Multer.File[],
     licenseFiles?: Express.Multer.File[],
   ) {
-    const portfolioNames: string[] = [];
+    // check every file before any old one is removed: portfolio is photos, licences photos or PDFs
+    const portfolioNames = safeStoredNames(portfolioFiles, PHOTOS);
+    const licenseNames = safeStoredNames(licenseFiles, PHOTOS_OR_PDF);
     if (portfolioFiles?.length) {
       const existing = await this.prisma.eventPlannerProfile.findUnique({
         where: { user_id: userId },
@@ -28,20 +30,13 @@ export class EventPlannerService {
       for (const old of existing?.portfolio ?? []) {
         await TanvirStorage.delete(`event-planner/portfolio/${old}`).catch(() => null);
       }
-      for (const file of portfolioFiles) {
-        const name = `${StringHelper.randomString()}_${file.originalname}`;
-        await TanvirStorage.put(`event-planner/portfolio/${name}`, file.buffer);
-        portfolioNames.push(name);
+      for (const [i, file] of portfolioFiles.entries()) {
+        await TanvirStorage.put(`event-planner/portfolio/${portfolioNames[i]}`, file.buffer);
       }
     }
 
-    const licenseNames: string[] = [];
-    if (licenseFiles?.length) {
-      for (const file of licenseFiles) {
-        const name = `${StringHelper.randomString()}_${file.originalname}`;
-        await TanvirStorage.put(`event-planner/license/${name}`, file.buffer);
-        licenseNames.push(name);
-      }
+    for (const [i, file] of (licenseFiles ?? []).entries()) {
+      await TanvirStorage.put(`event-planner/license/${licenseNames[i]}`, file.buffer);
     }
 
     const data: any = {

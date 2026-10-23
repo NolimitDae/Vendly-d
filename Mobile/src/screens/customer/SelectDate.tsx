@@ -9,6 +9,7 @@ import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../compone
 import { DARK, FONTS } from '../../constants/colors';
 import { MarketplaceService } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
+import { isOpenDay, summariseHours, type WorkingHours } from '../../utils/workingHours';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const BOOKED = '#F7B1B8';
@@ -20,10 +21,15 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
   const [month, setMonth] = useState(startOfMonth(today));
   const [selected, setSelected] = useState<Date | null>(null);
   const [blocked, setBlocked] = useState<{ start: Date; end: Date; reason?: string | null }[]>([]);
+  // the vendor's weekly hours: closed weekdays are greyed out (null = any day)
+  const [hours, setHours] = useState<WorkingHours | null>(null);
 
   useEffect(() => {
     MarketplaceService.getBlockedDates(listing.id)
-      .then((r) => setBlocked((r.data?.data ?? []).map((b) => ({ start: startOfDay(parseISO(b.start_date)), end: startOfDay(parseISO(b.end_date)), reason: b.reason }))))
+      .then((r) => {
+        setBlocked((r.data?.data ?? []).map((b) => ({ start: startOfDay(parseISO(b.start_date)), end: startOfDay(parseISO(b.end_date)), reason: b.reason })));
+        setHours(r.data?.working_hours ?? null);
+      })
       .catch(() => {});
   }, [listing.id]);
 
@@ -45,9 +51,12 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
         <View style={s.note}>
           <Ionicons name="information-circle-outline" size={16} color={DARK.accent} />
           <Text style={s.noteText}>
+            {hours ? `${listing.vendorName} works ${summariseHours(hours)}. ` : ''}
             {blockedThisMonth > 0
               ? `${listing.vendorName} has ${blockedThisMonth} unavailable period${blockedThisMonth === 1 ? '' : 's'} this month`
-              : `${listing.vendorName} confirms each request, so pick the date that works for you`}
+              : hours
+                ? 'Greyed-out days are closed.'
+                : `${listing.vendorName} confirms each request, so pick the date that works for you`}
           </Text>
         </View>
 
@@ -82,7 +91,9 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
               const past = isBefore(d, today);
               const booked = inMonth && !past && isBlocked(d);
               const on = !!selected && isSameDay(d, selected);
-              const off = !inMonth || past;
+              // a weekday the vendor doesn't work
+              const closed = inMonth && !past && !booked && !isOpenDay(hours, d);
+              const off = !inMonth || past || closed;
               const label = <Text style={[s.day, off && s.dayOff, booked && { color: BOOKED }, on && { color: '#fff' }]}>{format(d, 'd')}</Text>;
               return (
                 <Pressable
@@ -94,7 +105,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
                   }}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on, disabled: off || booked }}
-                  accessibilityLabel={format(d, 'EEEE d MMMM') + (booked ? ', fully booked' : '')}
+                  accessibilityLabel={format(d, 'EEEE d MMMM') + (booked ? ', fully booked' : closed ? ', closed' : '')}
                   style={s.cell}
                 >
                   {on ? <BrandGradient style={s.circle}>{label}</BrandGradient> : <View style={[s.circle, !off && !booked && s.circleOpen]}>{label}</View>}
@@ -110,6 +121,12 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
             <Text style={s.legendText}>Available</Text>
             <View style={[s.legendDot, { backgroundColor: BOOKED, marginLeft: 28 }]} />
             <Text style={s.legendText}>Fully Booked</Text>
+            {hours && (
+              <>
+                <View style={[s.legendDot, { backgroundColor: DARK.card, marginLeft: 28 }]} />
+                <Text style={s.legendText}>Closed</Text>
+              </>
+            )}
           </View>
 
           <Card style={s.summary}>

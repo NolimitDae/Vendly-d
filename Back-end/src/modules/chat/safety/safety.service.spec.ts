@@ -87,13 +87,23 @@ describe('ChatSafetyService', () => {
     });
 
     it('takes the conversation from the reported message', async () => {
-      prisma.message.findUnique.mockResolvedValue({ id: 'm1', conversationId: 'c1', senderId: 'bad' });
+      prisma.message.findUnique.mockResolvedValue({ id: 'm1', conversationId: 'c1', senderId: 'bad', text: 'pay me on Zelle', attachments: ['x.jpg', 'y.pdf'] });
       prisma.participant.findFirst.mockResolvedValue({ id: 'p' });
       await service.report('me', { ...base, message_id: 'm1', details: '  rude  ' });
       expect(prisma.participant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: 'c1', userId: 'me' } }));
+      // a copy of the message is kept with the report
       expect(prisma.userReport.create).toHaveBeenCalledWith({
-        data: { reporter_id: 'me', reported_id: 'bad', conversation_id: 'c1', message_id: 'm1', reason: 'harassment', details: 'rude' },
+        data: {
+          reporter_id: 'me', reported_id: 'bad', conversation_id: 'c1', message_id: 'm1', reason: 'harassment', details: 'rude',
+          message_text: 'pay me on Zelle', message_attachments: ['x.jpg', 'y.pdf'],
+        },
       });
+    });
+
+    it('keeps no copy when only the conversation is reported', async () => {
+      prisma.participant.findFirst.mockResolvedValue({ id: 'p' });
+      await service.report('me', { ...base, conversation_id: 'c1' });
+      expect(prisma.userReport.create.mock.calls[0][0].data).toMatchObject({ message_id: null, message_text: null, message_attachments: [] });
     });
 
     it('refuses a message from another conversation or another sender', async () => {
@@ -158,6 +168,24 @@ describe('ChatSafetyService', () => {
       expect(row.context.map((m) => m.id)).toEqual(['m1', 'm2']); // oldest first
       expect(row.reported).toMatchObject({ id: 'bad', email: 'bad@x.com', status: 1 });
       expect(res.meta).toEqual({ page: 1, limit: 20, total: 1 });
+      expect(row.message_deleted).toBe(false);
+    });
+
+    it('shows the kept copy when the sender deleted the message', async () => {
+      prisma.userReport.count.mockResolvedValue(1);
+      prisma.userReport.findMany.mockResolvedValue([{ ...report, message_text: 'send the deposit to my cashapp', message_attachments: ['proof.jpg'] }]);
+      prisma.message.findUnique.mockResolvedValue(null);
+      prisma.message.findMany.mockResolvedValue([]);
+
+      const row = (await service.adminList({ status: 'open' })).data[0];
+
+      expect(row.message).toBeNull();
+      expect(row.message_deleted).toBe(true);
+      expect(row.message_copy).toEqual({
+        text: 'send the deposit to my cashapp',
+        attachments: ['proof.jpg'],
+        attachments_url: ['https://cdn.test/attachment/proof.jpg'],
+      });
     });
 
     it('lists resolved reports under done', async () => {

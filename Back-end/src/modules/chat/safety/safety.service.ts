@@ -1,5 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import appConfig from 'src/config/app.config';
+import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { avatarUrl, formatMessage, messageInclude } from '../extras/format';
 import { ReportUserDto, ResolveReportDto } from './safety.dto';
 
@@ -55,12 +57,18 @@ export class ChatSafetyService {
     if (!reported) throw new NotFoundException('User not found');
 
     let conversationId = dto.conversation_id || null;
+    // a copy of the reported message, so the evidence survives if the sender deletes it
+    let copy: { text: string | null; attachments: string[] } | null = null;
     if (dto.message_id) {
-      const msg = await this.prisma.message.findUnique({ where: { id: dto.message_id }, select: { id: true, conversationId: true, senderId: true } });
+      const msg = await this.prisma.message.findUnique({
+        where: { id: dto.message_id },
+        select: { id: true, conversationId: true, senderId: true, text: true, attachments: true },
+      });
       if (!msg) throw new NotFoundException('Message not found');
       if (conversationId && msg.conversationId !== conversationId) throw new BadRequestException("That message isn't in this conversation.");
       if (msg.senderId !== dto.reported_id) throw new BadRequestException("That message wasn't sent by this person.");
       conversationId = msg.conversationId;
+      copy = { text: msg.text ?? null, attachments: msg.attachments ?? [] };
     }
     if (conversationId) {
       const member = await this.prisma.participant.findFirst({ where: { conversationId, userId: me }, select: { id: true } });
@@ -73,6 +81,8 @@ export class ChatSafetyService {
         reported_id: dto.reported_id,
         conversation_id: conversationId,
         message_id: dto.message_id || null,
+        message_text: copy?.text ?? null,
+        message_attachments: copy?.attachments ?? [],
         reason: dto.reason,
         details: dto.details?.trim() || null,
       },
@@ -138,6 +148,15 @@ export class ChatSafetyService {
           message_id: r.message_id,
           // null when the sender has since deleted it
           message: msg ? formatMessage(msg) : null,
+          // the copy taken when the report was made (the files are kept even if the sender deletes the message)
+          message_copy: r.message_id
+            ? {
+                text: r.message_text ?? null,
+                attachments: r.message_attachments ?? [],
+                attachments_url: (r.message_attachments ?? []).map((f) => TanvirStorage.url(`${appConfig().storageUrl.attachment}/${f}`)),
+              }
+            : null,
+          message_deleted: !!r.message_id && !msg,
           context: context.reverse().map(formatMessage),
         };
       }),

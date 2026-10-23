@@ -32,6 +32,7 @@ import VerifyIdentity from '../screens/shared/VerifyIdentity';
 import NotificationSettings from '../screens/customer/NotificationSettings';
 import Inbox from '../screens/shared/Inbox';
 import PaymentMethods from '../screens/customer/PaymentMethods';
+import Transactions from '../screens/shared/Transactions';
 
 import type { EPTabParams } from './types';
 
@@ -93,6 +94,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
       <ProfileStack.Screen name="Inbox" component={Inbox} />
       <ProfileStack.Screen name="PaymentMethods" component={PaymentMethods} />
+      <ProfileStack.Screen name="Transactions" component={Transactions} />
     </ProfileStack.Navigator>
   );
 }

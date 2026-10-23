@@ -70,6 +70,24 @@ export interface ReportBody {
 
 /** Same limit as the API (Back-end/src/modules/chat/message/message.controller.ts). */
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+/** Photos per message (the API takes up to 10 attachments). */
+export const MAX_PHOTOS = 10;
+
+/**
+ * Which of the picked files can join the photos already chosen: photos only, 10 MB each, 10 in all.
+ * `error` says why any were left out.
+ */
+export function acceptPhotos(alreadyChosen: number, picked: File[]): { files: File[]; error: string | null } {
+  const errors = new Set<string>();
+  const files: File[] = [];
+  for (const f of picked) {
+    if (!f.type.startsWith("image/")) errors.add("Only photos can be sent");
+    else if (f.size > MAX_PHOTO_BYTES) errors.add(`${f.name || "A photo"} is over 10 MB`);
+    else if (alreadyChosen + files.length >= MAX_PHOTOS) errors.add(`You can send up to ${MAX_PHOTOS} photos at a time`);
+    else files.push(f);
+  }
+  return { files, error: errors.size ? [...errors].join(". ") : null };
+}
 
 export const ChatService = {
   getConversations: async () =>
@@ -92,7 +110,7 @@ export const ChatService = {
       authHeaders(),
     ),
 
-  /** With a photo the message goes as multipart (`attachments`); text is optional then. */
+  /** With photos (up to 10) the message goes as multipart (`attachments`); text is optional then. */
   sendMessage: async (conversationId: string, text: string, photos?: File[]) => {
     if (!photos?.length) return Fetch.post("/chat/message/send-message", { conversationId, text }, authHeaders());
     const body = new FormData();

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { X, Calendar, MessageSquare, Loader2, CheckCircle, MapPin, Users, Clock, Minus, Plus } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import {
@@ -15,6 +17,7 @@ import { PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/paym
 import { toast } from "react-toastify";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { packagePriceText, perUnit, quantityRangeText } from "@/lib/addons";
+import { dayKeyOf, endTimesOn, formatTime, hoursMessage, isOpenDay, startTimesOn, summariseHours, type WorkingHours } from "@/lib/working-hours";
 
 interface Props {
   listing: {
@@ -28,6 +31,8 @@ interface Props {
     add_ons?: AddOn[];
     fees?: AddOn[];
     vendor?: { id: string; name: string };
+    /** the vendor's weekly hours: closed days can't be picked and times stay inside the day's hours */
+    working_hours?: WorkingHours | null;
   };
   /** Planner bookings: attach to this event (pre-fills venue and guest count). */
   eventId?: string;
@@ -69,8 +74,12 @@ const money = (n: number | string) => "$" + Number(n).toFixed(2);
 
 function toIso(date: string, time?: string) {
   if (!date) return undefined;
+  // a vendor open until midnight: 24:00 is 00:00 the next day
+  if (time === "24:00") return new Date(new Date(`${date}T00:00`).getTime() + 86400e3).toISOString();
   return new Date(`${date}T${time || "00:00"}`).toISOString();
 }
+
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 export default function BookingModal({ listing, eventId, quote, onClose, onBookingCreated }: Props) {
   const [step, setStep] = useState<Step>("details");
@@ -94,6 +103,38 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const minQ = listing.min_quantity && listing.min_quantity > 0 ? listing.min_quantity : null;
   const maxQ = listing.max_quantity && listing.max_quantity > 0 ? listing.max_quantity : null;
   const range = quote ? null : quantityRangeText(listing.price_unit, minQ, maxQ);
+  // the vendor's weekly hours (null = any day, any time)
+  const hours = listing.working_hours ?? null;
+  const hoursText = summariseHours(hours);
+  // hourly packages: the booking has to fit the fewest hours inside the day, and not run past the most
+  const minMinutes = unit === "hour" && minQ ? minQ * 60 : 30;
+  const startOptions = startTimesOn(hours, date, 30, minMinutes);
+  const endOptions = endTimesOn(hours, date, startTime)?.filter((t) => {
+    if (unit !== "hour" || !startTime) return true;
+    const length = Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) - (Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5)));
+    return length >= minMinutes && (!maxQ || length <= maxQ * 60);
+  });
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  const pickDate = (value: string) => {
+    if (value && hours && !isOpenDay(hours, value)) {
+      setDateError(`${hoursMessage(hours, dayKeyOf(value))} Please pick another day.`);
+      setDate("");
+    } else {
+      setDateError(null);
+      setDate(value);
+    }
+    // times are picked again for the new day's hours
+    if (hours) {
+      setStartTime("");
+      setEndTime("");
+    }
+  };
+  const pickStart = (value: string) => {
+    setStartTime(value);
+    // an end that no longer fits after the new start is cleared
+    if (hours && endTime && value && endTime <= value) setEndTime("");
+  };
 
   const togglePick = (a: AddOn) =>
     setPicked((p) => {
@@ -154,6 +195,8 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
     e?.preventDefault();
     if (!listing.vendor) return;
     if (!date) return toast.error("Choose the event date");
+    // with working hours, the request has to say when it starts so it can fit the vendor's day
+    if (hours && !startTime) return toast.error("Choose a start time within the vendor's hours");
     const missing = missingForPrice();
     if (missing) return toast.error(missing);
     if (!card) return toast.error("Add a card first. It is only charged once the vendor accepts.");
@@ -267,15 +310,43 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                 <Calendar className="w-4 h-4 inline mr-1" />
                 Event date
               </label>
-              <input
-                id="event-date"
-                type="date"
-                required
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                min={new Date().toISOString().slice(0, 10)}
-                className={inputCls}
-              />
+              {hours ? (
+                <DatePicker
+                  id="event-date"
+                  selected={date ? new Date(`${date}T12:00:00`) : null}
+                  onChange={(d: Date | null) => pickDate(d ? ymd(d) : "")}
+                  // the vendor's closed days can't be picked
+                  filterDate={(d: Date) => isOpenDay(hours, d)}
+                  minDate={new Date()}
+                  dateFormat="yyyy-MM-dd"
+                  placeholderText="Pick a day the vendor works"
+                  required
+                  autoComplete="off"
+                  ariaDescribedBy="event-date-hours"
+                  wrapperClassName="w-full"
+                  className={inputCls}
+                />
+              ) : (
+                <input
+                  id="event-date"
+                  type="date"
+                  required
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  min={new Date().toISOString().slice(0, 10)}
+                  className={inputCls}
+                />
+              )}
+              {hoursText && (
+                <p id="event-date-hours" className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Works {hoursText}
+                </p>
+              )}
+              {dateError && (
+                <p role="alert" className="text-xs text-red-600 mt-1">
+                  {dateError}
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -283,21 +354,43 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                   <Clock className="w-4 h-4 inline mr-1" />
                   Start time
                 </label>
-                <input id="start-time" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+                {startOptions ? (
+                  <select id="start-time" value={startTime} onChange={(e) => pickStart(e.target.value)} className={inputCls}>
+                    <option value="">{startOptions.length ? "Choose" : "Pick a date first"}</option>
+                    {startOptions.map((t) => (
+                      <option key={t} value={t}>{formatTime(t)}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input id="start-time" type="time" value={startTime} disabled={!!hours && !date} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+                )}
               </div>
               <div>
                 <label htmlFor="end-time" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   End time
                 </label>
-                <input
-                  id="end-time"
-                  type="time"
-                  value={endTime}
-                  aria-required={unit === "hour"}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className={inputCls}
-                />
+                {endOptions ? (
+                  <select id="end-time" value={endTime} aria-required={unit === "hour"} disabled={!startTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls}>
+                    <option value="">{startTime ? "Choose" : "Pick a start first"}</option>
+                    {endOptions.map((t) => (
+                      <option key={t} value={t}>{formatTime(t)}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id="end-time"
+                    type="time"
+                    value={endTime}
+                    aria-required={unit === "hour"}
+                    disabled={!!hours && !date}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className={inputCls}
+                  />
+                )}
               </div>
+              {hours && date && hours[dayKeyOf(date)] && (
+                <p className="col-span-2 text-xs text-gray-500 dark:text-gray-400 -mt-1">{hoursMessage(hours, dayKeyOf(date))}</p>
+              )}
               {unit === "hour" && (
                 <p className="col-span-2 text-xs text-gray-500 dark:text-gray-400 -mt-1">
                   Priced by the hour, so add start and end times{range ? ` (${range})` : ""}.

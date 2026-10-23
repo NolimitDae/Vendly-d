@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { EventPlannerService } from './event-planner.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ADMIN_APPROVE_STATUS } from 'prisma/generated/client';
@@ -59,6 +59,28 @@ describe('EventPlannerService', () => {
   });
 
   describe('upsertProfile', () => {
+    const dto = { business_name: 'Events by Jane', bio: 'b', event_types: ['WEDDING'], years_experience: 5 } as any;
+    const jpg = { originalname: 'me.jpg', buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0]) } as Express.Multer.File;
+    const pdf = { originalname: 'licence <script>.pdf', buffer: Buffer.from('%PDF-1.4\n') } as Express.Multer.File;
+    const html = { originalname: 'licence.pdf', buffer: Buffer.from('<html></html>') } as Express.Multer.File;
+
+    it('takes photos or PDFs as licences, stored under random names', async () => {
+      mockPrisma.eventPlannerProfile.upsert.mockResolvedValue(mockProfile);
+      await service.upsertProfile('user-1', dto, [jpg], [jpg, pdf]);
+      const { create } = mockPrisma.eventPlannerProfile.upsert.mock.calls[0][0];
+      expect(create.portfolio).toEqual([expect.stringMatching(/^[0-9a-f]{24}\.jpg$/)]);
+      expect(create.license_photo).toEqual([expect.stringMatching(/^[0-9a-f]{24}\.jpg$/), expect.stringMatching(/^[0-9a-f]{24}\.pdf$/)]);
+    });
+
+    it('refuses a PDF in the portfolio or a web page as a licence, before removing anything', async () => {
+      mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue({ portfolio: ['old.jpg'] });
+      await expect(service.upsertProfile('user-1', dto, [pdf])).rejects.toThrow(BadRequestException);
+      await expect(service.upsertProfile('user-1', dto, [jpg], [html])).rejects.toThrow(BadRequestException);
+      expect(TanvirStorage.delete).not.toHaveBeenCalled();
+      expect(TanvirStorage.put).not.toHaveBeenCalled();
+      expect(mockPrisma.eventPlannerProfile.upsert).not.toHaveBeenCalled();
+    });
+
     it('should create or update a profile', async () => {
       mockPrisma.eventPlannerProfile.upsert.mockResolvedValue(mockProfile);
 

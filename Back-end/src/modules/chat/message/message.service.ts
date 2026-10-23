@@ -14,6 +14,7 @@ import { contactReasons, CONTACT_WARNING } from "../extras/contact-warning";
 import { avatarUrl, formatMessage, messageInclude } from "../extras/format";
 import { assertCanMessage, blockState } from "../safety/block";
 import { safeAttachmentNames } from "../safety/attachments";
+import { filesKeptForReports } from "../safety/evidence";
 
 // Temporary enum until Prisma generates it
 enum MessageStatus {
@@ -272,7 +273,10 @@ export class MessageService {
       });
 
       if (message.attachments && message.attachments.length > 0) {
+        // files someone reported stay, so the report can still be reviewed
+        const kept = await filesKeptForReports(tx, message.attachments);
         for (const fname of message.attachments) {
+          if (kept.has(fname)) continue;
           await TanvirStorage.delete(
             `${appConfig().storageUrl.attachment}/${fname}`,
           );

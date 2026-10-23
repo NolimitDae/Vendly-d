@@ -19,6 +19,9 @@ export function eventActionsFor(status: EventStatus): Action[] {
 /** Details can be edited until the event is completed or cancelled. */
 export const canEditEvent = (status: EventStatus) => status !== 'COMPLETED' && status !== 'CANCELLED';
 
+/** A cancelled event is read-only: no new tasks, budget lines, run-of-show items, files or invites. */
+export const isEventReadOnly = (status: EventStatus) => status === 'CANCELLED';
+
 export const CANCEL_EVENT_MESSAGE =
   "The event will be marked cancelled. After that its details can't be edited and it can't be reopened.\n\nYour vendor bookings are not cancelled with it: they stay as they are and vendors are not told. Cancel each booking you no longer need from its own booking screen.";
 
@@ -103,10 +106,7 @@ export default function EventStatusActions({
   );
 }
 
-/**
- * "Completed on <date>" plus a way into each finished booking, where the existing review prompt lives.
- * There is no completed-at column, so the date is the event's last update (the status change).
- */
+/** "Completed on <date>" (from `completed_at`) plus a way into each finished booking, where the review prompt lives. */
 export function EventCompletedBanner({
   completedAt,
   bookings,
@@ -147,7 +147,21 @@ export function EventCompletedBanner({
   );
 }
 
+/** Shown on a cancelled event: everything stays readable, nothing can be added or changed. */
+export function EventCancelledBanner({ cancelledAt }: { cancelledAt?: string | null }) {
+  return (
+    <View style={[s.card, s.cancelled]} accessibilityRole="summary">
+      <View style={s.doneHead}>
+        <Ionicons name="close-circle" size={26} color="#fca5a5" />
+        <Text style={s.doneTitle}>{cancelledAt ? `Cancelled on ${format(new Date(cancelledAt), 'MMM d, yyyy')}` : 'Cancelled'}</Text>
+      </View>
+      <Text style={s.doneBody}>You can still see the tasks, budget, run of show and files, but nothing can be added or changed.</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  cancelled: { borderWidth: 1, borderColor: '#7f1d1d' },
   card: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 12 },
   title: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   row: { flexDirection: 'row', gap: 10 },

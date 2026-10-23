@@ -217,6 +217,46 @@ describe('BookingExtrasSection (vendor)', () => {
     );
   });
 
+  it('an add-on can add time: a per hour add-on starts at its hours, and the vendor can change it', async () => {
+    mockList([]);
+    (AddOnsService.list as jest.Mock).mockResolvedValue({ data: { data: [] } });
+    (BookingExtrasService.request as jest.Mock).mockResolvedValue({ data: { success: true } });
+    const user = userEvent.setup();
+    render(<BookingExtrasSection bookingId="b1" role="VENDOR" bookingStatus="CONFIRMED" />);
+    await user.click(await screen.findByRole('button', { name: /add an add-on/i }));
+    expect(screen.getByRole('button', { name: 'No extra time' })).toHaveAttribute('aria-pressed', 'true');
+    await user.type(screen.getByLabelText('Name'), 'Two more hours');
+    await user.type(screen.getByLabelText('Price'), '150');
+    await user.selectOptions(screen.getByLabelText('Priced'), 'PER_HOUR');
+    await user.type(screen.getByLabelText(/hours/i), '2');
+    expect(screen.getByRole('button', { name: '+2h' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(/ends 2 hours later/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '+30m' }));
+    expect(screen.getByRole('button', { name: '+30m' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: '+3h' }));
+    await user.click(screen.getByRole('button', { name: /send for approval/i }));
+    await waitFor(() => expect(BookingExtrasService.request).toHaveBeenCalledWith('b1', expect.objectContaining({ kind: 'ADD_ON', price_unit: 'PER_HOUR', quantity: 2, extends_minutes: 180 })));
+  });
+
+  it('fees have no time choice', async () => {
+    mockList([]);
+    (AddOnsService.list as jest.Mock).mockResolvedValue({ data: { data: [] } });
+    const user = userEvent.setup();
+    render(<BookingExtrasSection bookingId="b1" role="VENDOR" bookingStatus="COMPLETED" />);
+    await user.click(await screen.findByRole('button', { name: /request a fee/i }));
+    expect(screen.queryByRole('button', { name: '+1h' })).not.toBeInTheDocument();
+  });
+
+  it('shows how much time an add-on adds, and the new end once approved', async () => {
+    const timed = { ...pendingAddOn, id: 'ex-7', status: 'APPROVED', extends_minutes: 120, extends_label: 'Adds 2 hours', payment: { installment_id: 'i7', status: 'PAID', paid_at: null, last_error: null, refunded_amount: 0 } };
+    (BookingExtrasService.list as jest.Mock).mockResolvedValue({
+      data: { success: true, data: [timed], meta: { waiting_on_customer: 0, waiting_total: 0, can_request: { add_on: true, fee: true }, event_end_at: '2030-06-02T01:00:00' } },
+    });
+    render(<BookingExtrasSection bookingId="b1" role="CUSTOMER" />);
+    expect(await screen.findByText('Adds 2 hours')).toBeInTheDocument();
+    expect(screen.getByText(/the booking now ends Sun, Jun 2 at 1:00 AM/)).toBeInTheDocument();
+  });
+
   it('asks Vendly to review a declined fee', async () => {
     mockList([declinedFee]);
     (BookingExtrasService.escalate as jest.Mock).mockResolvedValue({ data: { success: true } });

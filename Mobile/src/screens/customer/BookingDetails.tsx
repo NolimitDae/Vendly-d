@@ -10,6 +10,7 @@ import type { CustomerHomeStackParams } from '../../navigation/types';
 import { haptic } from '../../utils/haptics';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { countedUnit, estimate, money, plural, rangeText, type AddOn } from '../../services/addons.service';
+import { dayKeyOf, hoursMessage, minutesOf, startTimesOn, type WorkingHours } from '../../utils/workingHours';
 
 // Half-hour start times from 7am to 9pm, shown as one-tap chips like Figma's time slots.
 const TIMES = Array.from({ length: 29 }, (_, i) => ({ hours: 7 + Math.floor(i / 2), minutes: (i % 2) * 30 }));
@@ -33,14 +34,14 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const [guests, setGuests] = useState('');
   const [notes, setNotes] = useState('');
   // the package's limits and add-ons come from the listing itself (the summary passed in doesn't carry them)
-  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[] } | null>(null);
+  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; working_hours?: WorkingHours | null } | null>(null);
   const [picks, setPicks] = useState<Record<string, number>>({});
 
   useEffect(() => {
     MarketplaceService.getListing(listing.id)
       .then((r) => {
         const l = r.data?.data;
-        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [] });
+        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], working_hours: l.working_hours ?? null });
       })
       .catch(() => {});
   }, [listing.id]);
@@ -49,7 +50,16 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const unit = listing.quoteId ? null : countedUnit(pkg?.price_unit ?? listing.priceUnit);
   const min = pkg?.min_quantity && pkg.min_quantity > 0 ? pkg.min_quantity : null;
   const max = pkg?.max_quantity && pkg.max_quantity > 0 ? pkg.max_quantity : null;
-  const durations = unit === 'hour' && max ? DURATIONS.filter((d) => d.hours <= max) : DURATIONS;
+  const packageDurations = unit === 'hour' && max ? DURATIONS.filter((d) => d.hours <= max) : DURATIONS;
+  // the vendor's hours that day (undefined = no hours set, null = closed): start times and lengths stay inside them
+  const hours = pkg?.working_hours ?? null;
+  const dayHours = hours ? hours[dayKeyOf(date)] : undefined;
+  const shortest = Math.min(...packageDurations.map((d) => d.hours)) * 60;
+  const times = hours
+    ? (startTimesOn(hours, date, 30, shortest) ?? []).map((t) => ({ hours: Number(t.slice(0, 2)), minutes: Number(t.slice(3, 5)) }))
+    : TIMES;
+  const fromMinutes = start ? start.hours * 60 + start.minutes : dayHours ? minutesOf(dayHours.open) : 0;
+  const durations = dayHours ? packageDurations.filter((d) => fromMinutes + d.hours * 60 <= minutesOf(dayHours.close)) : packageDurations;
   const addOns = pkg?.add_ons ?? [];
   const picked = addOns.filter((a) => picks[a.id] != null).map((a) => ({ addOn: a, quantity: picks[a.id] }));
   const needsGuests = unit === 'person' || picked.some((p) => p.addOn.price_unit === 'PER_PERSON');
@@ -59,6 +69,10 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   useEffect(() => {
     if (durations.length && !durations.some((d) => d.label === duration.label)) setDuration(durations[durations.length - 1]);
   }, [durations, duration.label]);
+  // a start picked before the hours loaded that falls outside them is cleared
+  useEffect(() => {
+    if (start && hours && !times.some((t) => t.hours === start.hours && t.minutes === start.minutes)) setStart(null);
+  }, [hours, times, start]);
 
   const togglePick = (a: AddOn) => {
     haptic.select();
@@ -80,6 +94,9 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
 
   const proceed = () => {
     if (!startAt || !endAt) return Alert.alert('Start time', 'Choose when the service should start.');
+    if (hours && (dayHours === null || !durations.some((d) => d.label === duration.label))) {
+      return Alert.alert('Working hours', `${hoursMessage(hours, dayKeyOf(date))} Pick a time and length inside those hours.`);
+    }
     if (!venue.trim()) return Alert.alert('Service address', 'Tell the vendor where the service happens.');
     if (needsGuests && !(guestCount && guestCount >= 1)) {
       return Alert.alert('Guest count', unit === 'person' ? 'This package is priced per person. Enter how many guests are coming.' : 'Some add-ons you picked are priced per person. Enter how many guests are coming.');
@@ -115,14 +132,17 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
 
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Service Start Time</Text>
+            {hours && dayHours && <Text style={s.hint}>{hoursMessage(hours, dayKeyOf(date))}</Text>}
+            {hours && dayHours === null && <Text style={s.hint}>{hoursMessage(hours, dayKeyOf(date))} Go back and pick another day.</Text>}
             <FlatList
+              key={hours ? 'hours' : 'any'}
               horizontal
-              data={TIMES}
+              data={times}
               keyExtractor={(t) => `${t.hours}:${t.minutes}`}
               showsHorizontalScrollIndicator={false}
               style={{ marginHorizontal: -20 }}
               contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}
-              initialScrollIndex={6}
+              initialScrollIndex={hours ? undefined : 6}
               getItemLayout={(_, i) => ({ length: 96, offset: 96 * i, index: i })}
               renderItem={({ item }) => {
                 const on = !!start && start.hours === item.hours && start.minutes === item.minutes;

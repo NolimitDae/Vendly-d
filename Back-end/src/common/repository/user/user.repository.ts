@@ -7,7 +7,7 @@ import appConfig from '../../../config/app.config';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ArrayHelper } from '../../helper/array.helper';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
-import { StringHelper } from 'src/common/helper/string.helper';
+import { PHOTOS, safeStoredName } from 'src/common/helper/upload-files';
 import { normalizeEmail } from 'src/common/helper/email';
 
 @Injectable()
@@ -226,7 +226,7 @@ export class UserRepository {
       // Step 2: Upload avatar if provided
       // -------------------------
       if (image) {
-        const fileName = `${StringHelper.randomString()}_${image.originalname}`;
+        const fileName = safeStoredName(image.buffer, PHOTOS);
         await TanvirStorage.put(
           appConfig().storageUrl.avatar + '/' + fileName,
           image.buffer,

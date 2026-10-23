@@ -6,6 +6,7 @@ import { BookingService } from "@/service/booking/booking.service";
 import Image from "next/image";
 import { Calendar, Clock, Loader2, CheckCircle2, XCircle, Play, Eye } from "lucide-react";
 import { toast } from "react-toastify";
+import { categoryLabel } from "@/components/disputes/DisputeDetails";
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
@@ -25,7 +26,19 @@ interface Booking {
   message?: string;
   listing?: { id: string; title: string; images: string[] };
   customer?: { id: string; name: string; avatar_url?: string; email: string };
+  dispute_opened_at?: string | null;
+  dispute_resolved_at?: string | null;
+  dispute_category?: string | null;
+  /** Refunds tab: money refunded to the customer's card, and how much of it the vendor gave back */
+  refunded_total?: number;
+  given_back?: number;
 }
+
+/** Server-side filters next to the status tabs. */
+const EXTRA_TABS = [
+  { value: "refunds", label: "Refunds", empty: "No refunds or money given back" },
+  { value: "complaints", label: "Complaints", empty: "No complaints. Nice work!" },
+] as const;
 
 export default function VendorBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -38,9 +51,10 @@ export default function VendorBookingsPage() {
   const fetchBookings = async () => {
     setLoading(true);
     try {
+      const extra = EXTRA_TABS.find((t) => t.value === statusFilter);
       const res = await BookingService.getMyAsVendor({
         page,
-        status: statusFilter || undefined,
+        ...(extra ? { filter: extra.value } : { status: statusFilter || undefined }),
       });
       if (res.data?.success) {
         setBookings(res.data.data);
@@ -86,7 +100,7 @@ export default function VendorBookingsPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Incoming Bookings</h1>
 
         <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-          {["", "PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED"].map((s) => (
+          {[...["", "PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED"].map((s) => ({ value: s, label: s || "All" })), ...EXTRA_TABS].map(({ value: s, label }) => (
             <button
               key={s}
               onClick={() => { setStatusFilter(s); setPage(1); }}
@@ -96,7 +110,7 @@ export default function VendorBookingsPage() {
                   : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
               }`}
             >
-              {s || "All"}
+              {label}
             </button>
           ))}
         </div>
@@ -106,7 +120,7 @@ export default function VendorBookingsPage() {
         ) : bookings.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
             <Calendar className="w-12 h-12 mx-auto mb-4 opacity-40" />
-            <p>No bookings yet</p>
+            <p>{EXTRA_TABS.find((t) => t.value === statusFilter)?.empty ?? "No bookings yet"}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -160,6 +174,23 @@ export default function VendorBookingsPage() {
                         </span>
                       )}
                     </div>
+
+                    {(booking.dispute_opened_at || (booking.refunded_total ?? 0) > 0 || (booking.given_back ?? 0) > 0) && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {booking.dispute_opened_at && (
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${booking.dispute_resolved_at ? "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"}`}>
+                            {booking.dispute_resolved_at ? "Complaint resolved" : "Complaint open"}
+                            {booking.dispute_category ? ` · ${categoryLabel(booking.dispute_category)}` : ""}
+                          </span>
+                        )}
+                        {(booking.refunded_total ?? 0) > 0 && (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">${Number(booking.refunded_total).toFixed(2)} refunded</span>
+                        )}
+                        {(booking.given_back ?? 0) > 0 && (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300">${Number(booking.given_back).toFixed(2)} given back</span>
+                        )}
+                      </div>
+                    )}
 
                     {booking.message && (
                       <p className="mt-2 text-sm text-gray-500 italic dark:text-gray-400">"{booking.message}"</p>

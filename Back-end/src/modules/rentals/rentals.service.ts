@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { BookingStatus, PaymentPlan, Prisma, RentalItemStatus, RentalReservationStatus } from 'prisma/generated/client';
-import { StringHelper } from 'src/common/helper/string.helper';
+import { PHOTOS, safeStoredNames } from 'src/common/helper/upload-files';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { MailService } from 'src/mail/mail.service';
@@ -46,12 +46,8 @@ export class RentalsService {
   }
 
   private async saveImages(files?: Express.Multer.File[]) {
-    const names: string[] = [];
-    for (const f of files ?? []) {
-      const name = `${StringHelper.randomString()}_${f.originalname}`;
-      await TanvirStorage.put(`${IMAGE_DIR}/${name}`, f.buffer);
-      names.push(name);
-    }
+    const names = safeStoredNames(files, PHOTOS);
+    for (const [i, f] of (files ?? []).entries()) await TanvirStorage.put(`${IMAGE_DIR}/${names[i]}`, f.buffer);
     return names;
   }
 
@@ -106,6 +102,8 @@ export class RentalsService {
   }
 
   async updateItem(id: string, vendorId: string, dto: UpdateRentalItemDto, images?: Express.Multer.File[]) {
+    // refuse a non-image before any of the current photos are removed
+    safeStoredNames(images, PHOTOS);
     const item = await this.ownedItem(id, vendorId);
     const { keep_images, ...fields } = dto;
     let kept = item.images;
@@ -343,12 +341,8 @@ export class RentalsService {
       throw new BadRequestException('Add photos or a note explaining the damage or late fee.');
     }
 
-    const names: string[] = [];
-    for (const f of photos ?? []) {
-      const name = `${StringHelper.randomString()}_${f.originalname}`;
-      await TanvirStorage.put(`proofs/${name}`, f.buffer);
-      names.push(name);
-    }
+    const names = safeStoredNames(photos, PHOTOS);
+    for (const [i, f] of (photos ?? []).entries()) await TanvirStorage.put(`proofs/${names[i]}`, f.buffer);
     await this.prisma.$transaction([
       this.prisma.rentalReturn.create({
         data: { booking_id: bookingId, photos: names, notes: dto.notes, damage_reported: !!dto.damage_reported || damage > 0, damage_fee: damage, late_fee: late, recorded_by: vendorId },

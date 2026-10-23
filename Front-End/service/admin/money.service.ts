@@ -35,6 +35,13 @@ export interface Dispute {
   dispute_resolved_at?: string | null;
   dispute_resolution?: string | null;
   completed_at?: string | null;
+  dispute_category?: string | null;
+  dispute_outcome?: "full_refund" | "partial_refund" | "other" | null;
+  dispute_requested_amount?: number | null;
+  /** "Vendor was late · asks for a partial refund of $50.00" */
+  dispute_ask?: string;
+  /** short-lived signed links to the customer's photos */
+  dispute_photo_urls?: string[];
   listing?: { title: string } | null;
   customer: { id: string; name: string; email: string };
   vendor: { id: string; name: string; email: string };

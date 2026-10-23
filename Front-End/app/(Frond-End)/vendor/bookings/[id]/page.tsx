@@ -24,6 +24,9 @@ import BookingContractSection from "@/components/contracts/BookingContractSectio
 import RentalReturnPanel, { type RentalBookingFields } from "@/components/rentals/RentalReturnPanel";
 import BookingExtrasSection from "@/components/addons/BookingExtrasSection";
 import VendorDisputeCard, { type DisputeFields } from "@/components/disputes/VendorDisputeCard";
+import CancelBookingDialog from "@/components/bookings/CancelBookingDialog";
+import RefundCard from "@/components/bookings/RefundCard";
+import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceButton";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { closesIn } from "@/lib/requests";
@@ -58,6 +61,8 @@ interface Booking extends DisputeFields {
   id: string;
   status: string;
   amount?: number;
+  paid_at?: string | null;
+  cancelled_at?: string | null;
   scheduled_at?: string;
   message?: string;
   created_at: string;
@@ -96,6 +101,8 @@ export default function VendorBookingDetailPage() {
   const [delivFiles, setDelivFiles] = useState<File[]>([]);
   const [sendingDeliv, setSendingDeliv] = useState(false);
   const delivInputRef = useRef<HTMLInputElement>(null);
+
+  const [cancelling, setCancelling] = useState(false);
 
   const fetchAll = async () => {
     try {
@@ -249,7 +256,27 @@ export default function VendorBookingDetailPage() {
             </div>
           )}
         </div>
+        {(["CONFIRMED", "IN_PROGRESS"].includes(booking.status) || invoiceAvailable(booking)) && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
+            {["CONFIRMED", "IN_PROGRESS"].includes(booking.status) && (
+              <button
+                type="button"
+                onClick={() => setCancelling(true)}
+                className="px-4 py-2 rounded-lg border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/20"
+              >
+                Cancel booking
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {booking.status === "CANCELLED" && <RefundCard bookingId={booking.id} role="VENDOR" />}
+
+      {cancelling && (
+        <CancelBookingDialog bookingId={booking.id} role="VENDOR" onClose={() => setCancelling(false)} onCancelled={() => fetchAll()} />
+      )}
 
       {!!booking.event_bookings?.length && ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
         <Link href={`/my-events/${booking.event_bookings[0].event.id}`} className="flex items-center gap-3 p-4 rounded-xl bg-white dark:bg-gray-800 border border-primary/30 hover:shadow-md transition">

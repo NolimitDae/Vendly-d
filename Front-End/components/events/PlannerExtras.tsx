@@ -91,7 +91,16 @@ export function ClientShareCard({ eventId, email, seesBudget, onChanged }: { eve
 }
 
 /** Saved vendor teams: save booked vendors as a team, invite a whole team to this event. */
-export function TeamsCard({ eventId, bookedVendors }: { eventId: string; bookedVendors: { id: string; name: string }[] }) {
+export function TeamsCard({
+  eventId,
+  bookedVendors,
+  readOnly = false,
+}: {
+  eventId: string;
+  bookedVendors: { id: string; name: string }[];
+  /** a cancelled event: teams can be managed, but nobody can be invited to it */
+  readOnly?: boolean;
+}) {
   const [teams, setTeams] = useState<VendorTeam[] | null>(null);
   const [selected, setSelected] = useState("");
   const [note, setNote] = useState("");
@@ -153,7 +162,8 @@ export function TeamsCard({ eventId, bookedVendors }: { eventId: string; bookedV
               </span>
             ))}
           </div>
-          {team && (
+          {team && readOnly && <p className="text-xs text-gray-500 dark:text-gray-400">This event was cancelled, so you can&apos;t invite a team to it.</p>}
+          {team && !readOnly && (
             <div className="space-y-2">
               <p className="text-xs text-gray-500 dark:text-gray-400">{team.vendors.map((v) => v.name).join(", ")}</p>
               <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)" aria-label="Invite note" className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />

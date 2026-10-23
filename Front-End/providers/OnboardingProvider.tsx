@@ -1,8 +1,8 @@
 "use client";
 
+import { isLoggedIn as hasSession } from "@/lib/session";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { CookieHelper } from "@/helper/cookie.helper";
 import { OnboardingService, type Onboarding } from "@/service/onboarding/onboarding.service";
 
 /** Checking costs a couple of Stripe lookups, so don't re-check more often than this. */
@@ -26,7 +26,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const seenHere = useRef(new Set<"intro" | "complete">());
 
   const refresh = useCallback(async (force = false) => {
-    if (!CookieHelper.get({ key: "token" })) return setData(null);
+    if (!hasSession()) return setData(null);
     if (inFlight.current || (!force && Date.now() - last.current < MIN_GAP_MS)) return;
     inFlight.current = true;
     last.current = Date.now();

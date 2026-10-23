@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ChatSafetyMenu from "./ChatSafetyMenu";
+import ChatSafetyMenu, { ReportMessageButton } from "./ChatSafetyMenu";
 
 jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 jest.mock("@/service/chat/chat.service", () => ({
@@ -98,5 +98,26 @@ describe("ChatSafetyMenu", () => {
     await user.click(screen.getByRole("button", { name: /send report/i }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("ThrottlerException: Too Many Requests"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+describe("ReportMessageButton", () => {
+  it("reports one message from the keyboard, with its id", async () => {
+    const user = userEvent.setup();
+    const onReported = jest.fn();
+    render(<ReportMessageButton person={person} conversationId="g1" messageId="m9" onReported={onReported} />);
+    // keyboard: tab to the flag and press Enter
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Report message from Bad Actor" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("dialog", { name: "Report message" })).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Spam" }));
+    await user.click(screen.getByRole("checkbox", { name: /also block/i }));
+    await user.click(screen.getByRole("button", { name: /send report/i }));
+    await waitFor(() =>
+      expect(ChatService.report).toHaveBeenCalledWith({ reported_id: "u2", reason: "spam", details: undefined, conversation_id: "g1", message_id: "m9", block: undefined }),
+    );
+    expect(onReported).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

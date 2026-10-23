@@ -103,24 +103,64 @@ describe('AuthController', () => {
     expect(result.id).toBe(1);
   });
 
-  it('should login a user', async () => {
-    const res = {
-      cookie: jest.fn(),
-      json: jest.fn(),
-    };
-    await controller.login({ user: mockUserRequest.user } as any, res as any);
-    expect(res.cookie).toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalled();
+  const resMock = () => ({ cookie: jest.fn(), clearCookie: jest.fn() });
+  const webHeaders = { 'x-requested-with': 'vendly-web' };
+
+  it('logs the app in with tokens in the body and no cookies', async () => {
+    const res = resMock();
+    const result: any = await controller.login({ user: mockUserRequest.user, headers: {} } as any, res as any);
+    expect(result.authorization).toEqual({ access_token: 'access', refresh_token: 'refresh' });
+    expect(res.cookie).not.toHaveBeenCalled();
+  });
+
+  it('logs the website in with HttpOnly cookies and keeps the tokens out of the body', async () => {
+    const res = resMock();
+    const result: any = await controller.login({ user: mockUserRequest.user, headers: webHeaders } as any, res as any);
+    expect(result.authorization).toEqual({ type: 'cookie' });
+    expect(JSON.stringify(result)).not.toContain('access');
+    expect(res.cookie).toHaveBeenCalledWith('vendly_session', 'access', expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }));
+    expect(res.cookie).toHaveBeenCalledWith('vendly_refresh', 'refresh', expect.objectContaining({ httpOnly: true, path: '/api/auth' }));
+    expect(res.cookie).toHaveBeenCalledWith('vendly_logged_in', '1', expect.objectContaining({ httpOnly: false }));
   });
 
   it('should refresh token', async () => {
-    const result = await controller.refreshToken({ refresh_token: 'refresh' });
+    const result = await controller.refreshToken({ headers: {} } as any, resMock() as any, { refresh_token: 'refresh' });
+    expect(mockAuthService.refreshToken).toHaveBeenCalledWith('refresh');
     expect(result.authorization.access_token).toBe('new_access');
   });
 
-  it('should logout user', async () => {
-    const result = await controller.logout({ user: { userId: 1 } } as any);
+  it('refreshes the website from its cookie, only with the website header', async () => {
+    mockAuthService.refreshToken.mockClear();
+    const cookie = 'vendly_refresh=r-cookie; vendly_session=old';
+    await controller.refreshToken({ headers: { cookie } } as any, resMock() as any, {});
+    expect(mockAuthService.refreshToken).toHaveBeenLastCalledWith('');
+    await controller.refreshToken({ headers: { cookie, ...webHeaders } } as any, resMock() as any, {});
+    expect(mockAuthService.refreshToken).toHaveBeenLastCalledWith('r-cookie');
+  });
+
+  it('logs the app out with its Bearer token', async () => {
+    (mockAuthService as any).userFromTokens = jest.fn().mockReturnValue('u1');
+    const res = resMock();
+    const result = await controller.logout({ headers: { authorization: 'Bearer app-token' }, method: 'POST' } as any, res as any, {});
+    expect((mockAuthService as any).userFromTokens).toHaveBeenCalledWith({ access: 'app-token', refresh: null });
+    expect(mockAuthService.revokeRefreshToken).toHaveBeenCalledWith('u1');
     expect(result.success).toBe(true);
+    expect(res.clearCookie).not.toHaveBeenCalled();
+  });
+
+  it('clears the website cookies on logout, even when the session already expired', async () => {
+    (mockAuthService as any).userFromTokens = jest.fn().mockReturnValue(null);
+    const res = resMock();
+    const result = await controller.logout({ headers: { cookie: 'vendly_session=x', ...webHeaders }, method: 'POST' } as any, res as any, {});
+    expect(result.success).toBe(true);
+    const cleared = res.clearCookie.mock.calls.map((c) => c[0]);
+    expect(cleared).toEqual(expect.arrayContaining(['vendly_session', 'vendly_refresh', 'vendly_logged_in', 'token', 'refresh_token']));
+  });
+
+  it('refuses a cookie-only logout without the website header', async () => {
+    await expect(
+      controller.logout({ headers: { cookie: 'vendly_session=x' }, method: 'POST' } as any, resMock() as any, {}),
+    ).rejects.toThrow('X-Requested-With');
   });
 
   it('should update user', async () => {

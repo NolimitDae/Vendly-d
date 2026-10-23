@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class CreateReviewDto {
   @ApiProperty()
@@ -21,7 +21,8 @@ export class CreateReviewDto {
 }
 
 export class ReplyReviewDto {
-  @ApiProperty()
+  @ApiProperty({ maxLength: 2000 })
   @IsString()
+  @MaxLength(2000)
   reply: string;
 }

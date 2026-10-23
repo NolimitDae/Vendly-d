@@ -9,6 +9,7 @@ import { PrivateStorage, SignedUrl } from 'src/modules/contracts/private-storage
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { summariseBudget } from './budget-summary';
+import { assertNotCancelled } from '../event-rules';
 
 export type EventRole = 'planner' | 'vendor' | 'client';
 /** Bookings that make a vendor part of the event. */
@@ -41,7 +42,7 @@ export class EventToolsService {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       select: {
-        id: true, name: true, date: true, venue: true, event_planner_id: true, client_email: true, client_sees_budget: true, total_budget: true,
+        id: true, name: true, date: true, venue: true, status: true, event_planner_id: true, client_email: true, client_sees_budget: true, total_budget: true,
         bookings: { where: { booking: { status: { in: ACTIVE }, deleted_at: null } }, select: { booking: { select: { vendor_id: true } } } },
       },
     });
@@ -60,6 +61,13 @@ export class EventToolsService {
   private async planner(eventId: string, userId: string) {
     const a = await this.access(eventId, userId);
     if (a.role !== 'planner') throw new ForbiddenException('Only the planner can change this');
+    return a;
+  }
+
+  /** Access for a change: like `access`, but a cancelled event is read-only. */
+  private async accessToChange(eventId: string, userId: string) {
+    const a = await this.access(eventId, userId);
+    assertNotCancelled(a.event);
     return a;
   }
 
@@ -84,6 +92,8 @@ export class EventToolsService {
         name: event.name,
         date: event.date,
         venue: event.venue,
+        // CANCELLED: read-only for everyone
+        status: event.status,
         role,
         planner,
         client_sees_budget: event.client_sees_budget,
@@ -139,7 +149,8 @@ export class EventToolsService {
   }
 
   async addTimelineItem(eventId: string, userId: string, input: TimelineInput) {
-    const { vendorIds } = await this.planner(eventId, userId);
+    const { vendorIds, event } = await this.planner(eventId, userId);
+    assertNotCancelled(event);
     await this.checkTimelineVendor(eventId, vendorIds, input.vendor_id);
     const { starts, ends } = this.times(input);
     if (!starts) throw new BadRequestException('A start time is required');
@@ -152,7 +163,7 @@ export class EventToolsService {
   }
 
   async updateTimelineItem(eventId: string, itemId: string, userId: string, input: Partial<TimelineInput> & { done?: boolean }) {
-    const { role, vendorIds } = await this.access(eventId, userId);
+    const { role, vendorIds } = await this.accessToChange(eventId, userId);
     const item = await this.prisma.eventTimelineItem.findFirst({ where: { id: itemId, event_id: eventId } });
     if (!item) throw new NotFoundException('Timeline item not found');
     if (role !== 'planner') {
@@ -179,7 +190,7 @@ export class EventToolsService {
   }
 
   async deleteTimelineItem(eventId: string, itemId: string, userId: string) {
-    await this.planner(eventId, userId);
+    assertNotCancelled((await this.planner(eventId, userId)).event);
     const gone = await this.prisma.eventTimelineItem.deleteMany({ where: { id: itemId, event_id: eventId } });
     if (!gone.count) throw new NotFoundException('Timeline item not found');
     return { success: true };
@@ -202,7 +213,7 @@ export class EventToolsService {
   }
 
   async uploadFiles(eventId: string, userId: string, uploads: Express.Multer.File[]) {
-    const { role } = await this.access(eventId, userId);
+    const { role } = await this.accessToChange(eventId, userId);
     if (role === 'client') throw new ForbiddenException('Clients can view files but not upload them');
     if (!uploads?.length) throw new BadRequestException('Choose at least one file');
     const tooBig = uploads.find((f) => f.size > MAX_FILE_BYTES);
@@ -218,7 +229,7 @@ export class EventToolsService {
   }
 
   async deleteFile(eventId: string, fileId: string, userId: string) {
-    const { role } = await this.access(eventId, userId);
+    const { role } = await this.accessToChange(eventId, userId);
     const f = await this.prisma.eventFile.findFirst({ where: { id: fileId, event_id: eventId } });
     if (!f) throw new NotFoundException('File not found');
     if (role !== 'planner' && f.uploaded_by !== userId) throw new ForbiddenException('Only the planner or the person who shared it can remove it');
@@ -387,6 +398,7 @@ export class EventToolsService {
   /** Messages every vendor in a saved team about the event (one 1:1 chat each). */
   async inviteTeam(eventId: string, plannerId: string, teamId: string, note?: string) {
     const { event } = await this.planner(eventId, plannerId);
+    assertNotCancelled(event);
     const team = await this.prisma.vendorTeam.findFirst({ where: { id: teamId, planner_id: plannerId } });
     if (!team) throw new NotFoundException('Team not found');
     const planner = await this.prisma.user.findUnique({ where: { id: plannerId }, select: { name: true } });

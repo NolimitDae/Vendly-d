@@ -92,6 +92,8 @@ export type CustomerProfileStackParams = {
   VerifyIdentity: undefined;
   Notifications: undefined;
   PaymentMethods: undefined;
+  /** charges and refunds (GET /payments/transactions) */
+  Transactions: { role?: 'customer' | 'vendor' } | undefined;
   SharedEvents: undefined;
   EventShared: { eventId: string; section?: 'schedule' | 'vendors' | 'files' | 'contracts' };
   Faq: undefined;
@@ -141,9 +143,15 @@ export type VendorProfileStackParams = {
   VerifyIdentity: undefined;
   Notifications: undefined;
   Payouts: undefined;
+  /** payments received, payouts, commission and refunds */
+  Transactions: { role?: 'customer' | 'vendor' } | undefined;
   License: undefined;
   CalendarSync: undefined;
+  /** weekly hours customers can book in */
+  WorkingHours: undefined;
   Inbox: undefined;
+  /** the vendor's reviews, with replies */
+  VendorReviews: undefined;
 };
 
 export type VendorMessagesStackParams = {

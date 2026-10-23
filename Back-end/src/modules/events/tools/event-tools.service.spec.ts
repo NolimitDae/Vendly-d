@@ -55,6 +55,44 @@ describe('EventToolsService', () => {
     });
   });
 
+  describe('on a cancelled event (read-only)', () => {
+    const READ_ONLY = "This event was cancelled, so it can't be changed. You can still view everything on it.";
+    beforeEach(() => prisma.event.findUnique.mockResolvedValue(event({ status: 'CANCELLED' })));
+
+    it('refuses run-of-show changes', async () => {
+      prisma.eventTimelineItem.findFirst.mockResolvedValue({ id: 't1', vendor_id: 'v1' });
+      await expect(service.addTimelineItem('e1', 'planner', { starts_at: '2026-11-14T14:00:00Z', title: 'Load-in' })).rejects.toThrow(new BadRequestException(READ_ONLY));
+      await expect(service.updateTimelineItem('e1', 't1', 'planner', { title: 'X' })).rejects.toThrow(READ_ONLY);
+      await expect(service.updateTimelineItem('e1', 't1', 'v1', { done: true })).rejects.toThrow(READ_ONLY);
+      await expect(service.deleteTimelineItem('e1', 't1', 'planner')).rejects.toThrow(READ_ONLY);
+      expect(prisma.eventTimelineItem.create).not.toHaveBeenCalled();
+      expect(prisma.eventTimelineItem.update).not.toHaveBeenCalled();
+      expect(prisma.eventTimelineItem.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses file uploads and removals', async () => {
+      prisma.eventFile.findFirst.mockResolvedValue({ id: 'f1', uploaded_by: 'planner' });
+      const file = { originalname: 'plan.pdf', size: 10, buffer: Buffer.from('x'), mimetype: 'application/pdf' } as any;
+      await expect(service.uploadFiles('e1', 'v1', [file])).rejects.toThrow(READ_ONLY);
+      await expect(service.deleteFile('e1', 'f1', 'planner')).rejects.toThrow(READ_ONLY);
+      expect(prisma.eventFile.create).not.toHaveBeenCalled();
+      expect(prisma.eventFile.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuses team invites', async () => {
+      prisma.vendorTeam.findFirst.mockResolvedValue({ id: 'team', vendor_ids: ['v1'] });
+      await expect(service.inviteTeam('e1', 'planner', 'team')).rejects.toThrow(READ_ONLY);
+      expect(prisma.message.create).not.toHaveBeenCalled();
+    });
+
+    it('still lets everyone read the run of show, files and overview', async () => {
+      await expect(service.timeline('e1', 'v1')).resolves.toMatchObject({ success: true });
+      await expect(service.files('e1', 'planner')).resolves.toMatchObject({ success: true });
+      prisma.user.findUnique.mockResolvedValue({ id: 'planner', name: 'P' });
+      await expect(service.overview('e1', 'planner')).resolves.toMatchObject({ success: true });
+    });
+  });
+
   describe('run of show', () => {
     it('lets the planner add items assigned to booked vendors only', async () => {
       prisma.eventTimelineItem.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 't1', ...data, vendor: null }));

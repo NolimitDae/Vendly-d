@@ -47,6 +47,14 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 
   @IsOptional()
   @ApiPropertyOptional({
+    description:
+      'Vendors: weekly working hours. An object (or a JSON string in multipart) with all 7 days mon..sun, each { open: "09:00", close: "17:00" } or null when closed. null clears the hours (bookable any time).',
+    example: { mon: { open: '09:00', close: '17:00' }, tue: { open: '09:00', close: '17:00' }, wed: { open: '09:00', close: '17:00' }, thu: { open: '09:00', close: '17:00' }, fri: { open: '09:00', close: '17:00' }, sat: { open: '10:00', close: '14:00' }, sun: null },
+  })
+  working_hours?: unknown;
+
+  @IsOptional()
+  @ApiPropertyOptional({
     type: 'string',
     format: 'binary',
     description: 'New profile image (JPEG, PNG — max 5MB)',

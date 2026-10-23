@@ -12,11 +12,12 @@ jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
   },
 }));
 
-jest.mock('src/config/app.config', () =>
-  jest.fn(() => ({
+jest.mock('src/config/app.config', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({
     storageUrl: { avatar: 'avatars', attachment: 'attachments' },
   })),
-);
+}));
 
 jest.mock('src/common/helper/string.helper', () => ({
   StringHelper: {
@@ -59,6 +60,7 @@ const mockPrisma = {
     updateMany: jest.fn(),
     delete: jest.fn(),
   },
+  userReport: { findMany: jest.fn().mockResolvedValue([]) },
   $transaction: jest.fn(),
 };
 
@@ -255,6 +257,20 @@ describe('MessageService', () => {
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Message deleted successfully');
+    });
+
+    it('deletes the files but keeps the ones a report kept as evidence', async () => {
+      const { TanvirStorage } = jest.requireMock('src/common/lib/Disk/TanvirStorage');
+      TanvirStorage.delete.mockClear();
+      mockPrisma.message.findUnique.mockResolvedValue(makeMessage({ attachments: ['a.jpg', 'b.jpg'] }));
+      mockPrisma.$transaction.mockImplementation(async (fn) => fn(mockPrisma));
+      mockPrisma.userReport.findMany.mockResolvedValueOnce([{ message_attachments: ['a.jpg'] }]);
+
+      await service.deleteMessage('user-1', 'msg-1');
+
+      expect(mockPrisma.userReport.findMany.mock.calls.at(-1)[0].where).toEqual({ message_attachments: { hasSome: ['a.jpg', 'b.jpg'] } });
+      expect(TanvirStorage.delete).toHaveBeenCalledTimes(1);
+      expect(TanvirStorage.delete).toHaveBeenCalledWith('attachments/b.jpg');
     });
 
     it('should throw NotFoundException when message does not exist', async () => {

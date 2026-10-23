@@ -119,6 +119,27 @@ describe('DisputesPageContent', () => {
     expect(await screen.findByText('No contracts for this booking.')).toBeInTheDocument();
   });
 
+  it('shows the kind of problem, what the customer asks for and their photos, and starts a partial refund at the amount asked', async () => {
+    (MoneyService.disputes as jest.Mock).mockResolvedValue({
+      data: { data: [{ ...dispute, dispute_category: 'late', dispute_outcome: 'partial_refund', dispute_requested_amount: 120, dispute_photo_urls: ['https://api.test/api/dispute-files/t1', 'https://api.test/api/dispute-files/t2'] }] },
+    });
+    const user = userEvent.setup();
+    render(<DisputesPageContent />);
+    expect(await screen.findByText('Vendor was late')).toBeInTheDocument();
+    expect(screen.getByText('Partial refund of $120.00')).toBeInTheDocument();
+    const photos = screen.getAllByRole('img', { name: /photo \d of 2/i });
+    expect(photos).toHaveLength(2);
+    expect(photos[0].closest('a')).toHaveAttribute('href', 'https://api.test/api/dispute-files/t1');
+    expect(photos[0].closest('a')).toHaveAttribute('target', '_blank');
+
+    await user.click(screen.getByRole('button', { name: /decide/i }));
+    await user.click(screen.getByRole('button', { name: /partial refund/i }));
+    expect(screen.getByLabelText(/refund amount/i)).toHaveValue('120.00');
+    await user.type(screen.getByLabelText(/decision note/i), 'Arrived an hour late');
+    await user.click(screen.getByRole('button', { name: /^resolve$/i }));
+    await waitFor(() => expect(MoneyService.resolveDispute).toHaveBeenCalledWith('b1', { action: 'partial_refund', amount: 120, note: 'Arrived an hour late' }));
+  });
+
   it('blocks a partial refund outside the held amount', async () => {
     const user = userEvent.setup();
     render(<DisputesPageContent />);

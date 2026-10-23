@@ -26,6 +26,7 @@ import SwitchRole from '../screens/shared/SwitchRole';
 import VerifyIdentity from '../screens/shared/VerifyIdentity';
 import NotificationSettings from '../screens/customer/NotificationSettings';
 import PaymentMethods from '../screens/customer/PaymentMethods';
+import Transactions from '../screens/shared/Transactions';
 import SharedEvents from '../screens/shared/SharedEvents';
 import Inbox from '../screens/shared/Inbox';
 import EventShared from '../screens/shared/EventShared';
@@ -106,6 +107,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="VerifyIdentity" component={VerifyIdentity} />
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
       <ProfileStack.Screen name="PaymentMethods" component={PaymentMethods} />
+      <ProfileStack.Screen name="Transactions" component={Transactions} />
       <ProfileStack.Screen name="SharedEvents" component={SharedEvents} />
       <ProfileStack.Screen name="EventShared" component={EventShared} />
       <ProfileStack.Screen name="Faq" component={FaqScreen} />

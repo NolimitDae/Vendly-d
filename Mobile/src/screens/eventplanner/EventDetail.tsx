@@ -21,7 +21,7 @@ import EventContractsCard from '../../components/contracts/EventContractsCard';
 import RunOfShow from '../../components/events/RunOfShow';
 import EventFiles from '../../components/events/EventFiles';
 import { BookingsBudget, ClientShareCard, TeamsCard } from '../../components/events/PlannerExtras';
-import EventStatusActions, { EventCompletedBanner } from '../../components/events/EventStatusActions';
+import EventStatusActions, { EventCancelledBanner, EventCompletedBanner, isEventReadOnly } from '../../components/events/EventStatusActions';
 import { EventToolsService, type TimelineItem } from '../../services/eventTools.service';
 import { ChatService } from '../../services/chat.service';
 import { apiError } from '../../services/contracts.service';
@@ -97,6 +97,8 @@ export default function EventDetail() {
   // vendors who accepted: they can own run-of-show items and form a team
   const bookedVendors = [...new Map(event.bookings.filter((eb) => ACTIVE_BOOKING.includes(eb.booking.status)).map((eb) => [eb.booking.vendor.id, { id: eb.booking.vendor.id, name: eb.booking.vendor.name }])).values()];
   const totalTasks = event.tasks.length;
+  // a cancelled event can be read but not changed
+  const readOnly = isEventReadOnly(event.status);
 
   const openChat = async () => {
     if (!event) return;
@@ -156,11 +158,12 @@ export default function EventDetail() {
           <View style={{ gap: 16 }}>
             {event.status === 'COMPLETED' && (
               <EventCompletedBanner
-                completedAt={event.updated_at}
+                completedAt={event.completed_at ?? undefined}
                 bookings={event.bookings}
                 onOpenBooking={(bookingId) => navigation.navigate('BookingsTab' as any, { screen: 'BookingDetail', initial: false, params: { bookingId } } as any)}
               />
             )}
+            {readOnly && <EventCancelledBanner cancelledAt={event.cancelled_at} />}
             <EventStatusActions
               eventId={event.id}
               status={event.status}
@@ -172,24 +175,24 @@ export default function EventDetail() {
           </View>
         )}
         {tab === 'schedule' && (
-          <RunOfShow eventId={event.id} eventDate={event.date} role="planner" items={timeline} vendors={bookedVendors} onChanged={load} />
+          <RunOfShow eventId={event.id} eventDate={event.date} role="planner" items={timeline} vendors={bookedVendors} onChanged={load} readOnly={readOnly} />
         )}
-        {tab === 'files' && <EventFiles eventId={event.id} role="planner" />}
+        {tab === 'files' && <EventFiles eventId={event.id} role="planner" readOnly={readOnly} />}
         {tab === 'vendors' && (
           <>
-            <VendorsTab event={event} onFind={() => navigation.navigate('FindVendors', { eventId: event.id })} />
+            <VendorsTab event={event} readOnly={readOnly} onFind={() => navigation.navigate('FindVendors', { eventId: event.id })} />
             <View style={{ height: 16 }} />
-            <TeamsCard eventId={event.id} bookedVendors={bookedVendors} />
+            <TeamsCard eventId={event.id} bookedVendors={bookedVendors} readOnly={readOnly} />
             <EventContractsCard eventId={event.id} />
           </>
         )}
         {tab === 'budget' && (
           <View style={{ gap: 12 }}>
             <BookingsBudget eventId={event.id} refreshKey={budgetKey} />
-            <BudgetTab event={event} onRefresh={load} />
+            <BudgetTab event={event} onRefresh={load} readOnly={readOnly} />
           </View>
         )}
-        {tab === 'tasks' && <TasksTab event={event} onRefresh={load} />}
+        {tab === 'tasks' && <TasksTab event={event} onRefresh={load} readOnly={readOnly} />}
       </ScrollView>
     </View>
   );
@@ -262,20 +265,20 @@ function OverviewTab({ event, completedTasks, totalTasks }: { event: EventDetail
 }
 
 // ─── Vendors Tab ─────────────────────────────────────────────────────────────
-function VendorsTab({ event, onFind }: { event: EventDetailType; onFind: () => void }) {
+function VendorsTab({ event, onFind, readOnly }: { event: EventDetailType; onFind: () => void; readOnly?: boolean }) {
   if (event.bookings.length === 0) {
     return (
       <View style={s.emptyCard}>
         <Ionicons name="briefcase-outline" size={40} color={DARK.accent} />
         <Text style={s.emptyText}>No vendors booked yet</Text>
         <Text style={s.emptyHint}>Find vendors and book them for this event. Their bookings show up here.</Text>
-        <GradientButton title="Find Vendor" onPress={onFind} style={{ alignSelf: 'stretch', marginTop: 8 }} />
+        {!readOnly && <GradientButton title="Find Vendor" onPress={onFind} style={{ alignSelf: 'stretch', marginTop: 8 }} />}
       </View>
     );
   }
   return (
     <View style={{ gap: 12 }}>
-      <GradientButton title="Find another vendor" onPress={onFind} />
+      {!readOnly && <GradientButton title="Find another vendor" onPress={onFind} />}
       {event.bookings.map((eb) => {
         const b = eb.booking;
         return (
@@ -306,7 +309,7 @@ function VendorsTab({ event, onFind }: { event: EventDetailType; onFind: () => v
 }
 
 // ─── Budget Tab ───────────────────────────────────────────────────────────────
-function BudgetTab({ event, onRefresh }: { event: EventDetailType; onRefresh: () => void }) {
+function BudgetTab({ event, onRefresh, readOnly }: { event: EventDetailType; onRefresh: () => void; readOnly?: boolean }) {
   const [showAdd, setShowAdd] = useState(false);
   const [category, setCategory] = useState('');
   const [allocated, setAllocated] = useState('');
@@ -354,7 +357,7 @@ function BudgetTab({ event, onRefresh }: { event: EventDetailType; onRefresh: ()
       )}
 
       {/* Add item */}
-      {showAdd ? (
+      {readOnly ? null : showAdd ? (
         <View style={s.addCard}>
           <Text style={s.addCardTitle}>Add Budget Item</Text>
           {[
@@ -413,7 +416,7 @@ function BudgetItemRow({ item }: { item: BudgetItem }) {
 }
 
 // ─── Tasks Tab ────────────────────────────────────────────────────────────────
-function TasksTab({ event, onRefresh }: { event: EventDetailType; onRefresh: () => void }) {
+function TasksTab({ event, onRefresh, readOnly }: { event: EventDetailType; onRefresh: () => void; readOnly?: boolean }) {
   const [newTitle, setNewTitle] = useState('');
   const [adding, setAdding] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -456,19 +459,20 @@ function TasksTab({ event, onRefresh }: { event: EventDetailType; onRefresh: () 
       )}
 
       {incomplete.map((task) => (
-        <TaskRow key={task.id} task={task} toggling={togglingId === task.id} onToggle={() => handleToggle(task)} />
+        <TaskRow key={task.id} task={task} toggling={togglingId === task.id} disabled={readOnly} onToggle={() => handleToggle(task)} />
       ))}
 
       {complete.length > 0 && (
         <>
           <Text style={s.taskGroupLabel}>Completed ({complete.length})</Text>
           {complete.map((task) => (
-            <TaskRow key={task.id} task={task} toggling={togglingId === task.id} onToggle={() => handleToggle(task)} />
+            <TaskRow key={task.id} task={task} toggling={togglingId === task.id} disabled={readOnly} onToggle={() => handleToggle(task)} />
           ))}
         </>
       )}
 
       {/* Add task input */}
+      {!readOnly && (
       <View style={s.addTaskRow}>
         <TextInput
           style={s.addTaskInput}
@@ -490,14 +494,21 @@ function TasksTab({ event, onRefresh }: { event: EventDetailType; onRefresh: () 
           )}
         </TouchableOpacity>
       </View>
+      )}
     </View>
   );
 }
 
-function TaskRow({ task, toggling, onToggle }: { task: EventTask; toggling: boolean; onToggle: () => void }) {
+function TaskRow({ task, toggling, onToggle, disabled }: { task: EventTask; toggling: boolean; onToggle: () => void; disabled?: boolean }) {
   const isPastDue = task.due_date && !task.completed && new Date(task.due_date) < new Date();
   return (
-    <TouchableOpacity style={[s.taskCard, task.completed && s.taskCardDone]} onPress={onToggle}>
+    <TouchableOpacity
+      style={[s.taskCard, task.completed && s.taskCardDone]}
+      onPress={onToggle}
+      disabled={disabled}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: task.completed, disabled: !!disabled }}
+    >
       <View style={s.taskCheckbox}>
         {toggling ? (
           <ActivityIndicator size="small" color={DARK.accent} />

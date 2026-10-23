@@ -1,13 +1,16 @@
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import AddCardSheet from './AddCardSheet';
-import { Card, GradientButton, ui } from './brand';
+import { Card, GradientButton } from './brand';
 import { DARK, FONTS } from '../constants/colors';
 import { PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline } from '../services/payments.service';
 import { apiMessage } from '../screens/auth/SignIn';
+import ReportProblemForm from './ReportProblemForm';
+import DisputeDetails from './DisputeDetails';
+import { BookingService, type Booking } from '../services/booking.service';
 
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
 
@@ -30,7 +33,6 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
   const [busy, setBusy] = useState(false);
   const [addingFor, setAddingFor] = useState<string | null>(null);
   const [disputing, setDisputing] = useState(false);
-  const [reason, setReason] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -142,16 +144,19 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
         </Pressable>
       )}
       {disputing && (
-        <View style={{ gap: 10 }}>
-          <View style={[ui.field, { height: undefined, paddingVertical: 12, alignItems: 'flex-start' }]}>
-            <TextInput style={[ui.input, { minHeight: 80, textAlignVertical: 'top' }]} placeholder="What went wrong? (at least 10 characters)" placeholderTextColor={DARK.muted} value={reason} onChangeText={setReason} multiline />
-          </View>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Pressable style={s.outline} onPress={() => setDisputing(false)}><Text style={s.outlineText}>Cancel</Text></Pressable>
-            <GradientButton title="Send report" onPress={() => run(async () => { await PaymentsService.dispute(bookingId, reason.trim()); setDisputing(false); }, 'Could not send')} loading={busy} disabled={reason.trim().length < 10} style={{ flex: 1.3 }} />
-          </View>
-        </View>
+        <ReportProblemForm
+          bookingId={bookingId}
+          paid={t.paid}
+          onCancel={() => setDisputing(false)}
+          onSent={() => {
+            setDisputing(false);
+            Alert.alert('Sent to Vendly', 'The vendor isn’t paid until Vendly resolves it.');
+            load();
+            onChanged?.();
+          }}
+        />
       )}
+      {!!t.dispute && <YourReport bookingId={bookingId} />}
 
       <AddCardSheet
         visible={!!addingFor}
@@ -162,7 +167,31 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
   );
 }
 
+/** What the customer reported: kind of problem, what they asked for and their photos. */
+function YourReport({ bookingId }: { bookingId: string }) {
+  const [b, setB] = useState<Booking | null>(null);
+  useEffect(() => {
+    let live = true;
+    BookingService.getBooking(bookingId)
+      .then((res) => live && setB(res.data?.data ?? null))
+      .catch(() => null);
+    return () => {
+      live = false;
+    };
+  }, [bookingId]);
+  if (!b?.dispute_reason) return null;
+  return (
+    <View style={s.report}>
+      <Text style={s.reportTitle}>Your report</Text>
+      <Text style={s.noteText}>{b.dispute_reason}</Text>
+      <DisputeDetails d={b} mine />
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  report: { gap: 8, padding: 12, borderRadius: 12, backgroundColor: DARK.field },
+  reportTitle: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.semibold },
   h2: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
   muted: { color: DARK.muted, fontSize: 13, lineHeight: 19, fontFamily: FONTS.regular },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
@@ -175,6 +204,4 @@ const s = StyleSheet.create({
   note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   noteText: { flex: 1, color: '#fff', fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
   link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold },
-  outline: { flex: 1, height: 56, borderRadius: 28, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
-  outlineText: { color: DARK.accent, fontSize: 16, fontFamily: FONTS.medium },
 });

@@ -112,3 +112,67 @@ export function settleAgainstPaid(
   const refund = cents(vendorPaid - vendorKeeps);
   return { refundTotal: refund, refundVendorPrice: refund, refundFee: 0, vendorKeeps, percent: owed.percent };
 }
+
+/** What cancelling does with the money, as the apps show it before and after (see BookingService.cancellationTerms). */
+export interface CancellationSummary {
+  cancelled_by: 'CUSTOMER' | 'VENDOR';
+  /** back to the customer's card */
+  refund_total: number;
+  /** part of the refund that is the Vendly Protection fee (vendor cancellations) */
+  refund_fee: number;
+  /** Vendly Protection fee the customer paid and doesn't get back (customer cancellations) */
+  fee_kept: number;
+  /** what the vendor keeps of what was paid */
+  vendor_keeps: number;
+  policy: { key: string; label: string; text: string } | null;
+  /** percent of the vendor price the policy refunds */
+  percent: number;
+  /** scheduled or failed charges that will never be taken */
+  unpaid_cancelled: number;
+  /** card holds (pay after service, rental deposits) let go */
+  holds_released: number;
+  /** "Visa •••• 4242", when known (customers only) */
+  card: string | null;
+  /** refunds show on the card within this window */
+  refund_timing: string | null;
+  message: string;
+}
+
+export const REFUND_TIMING = '5–10 business days';
+
+const usd = (n: number) => `$${n.toFixed(2)}`;
+
+/**
+ * The plain sentence shown with a cancellation, worded for who reads it: "You'll get $225.00 back to
+ * your card. The $22.50 Vendly Protection fee isn't refunded." `done` words it for after the fact.
+ */
+export function cancellationMessage(
+  s: Omit<CancellationSummary, 'message' | 'refund_timing'> & { paid: boolean },
+  viewer: 'CUSTOMER' | 'VENDOR',
+  done = false,
+): string {
+  const out: string[] = [];
+  const policy = s.policy ? `${s.policy.label.toLowerCase()} ` : '';
+  const feeIncluded = s.cancelled_by === 'VENDOR' && s.refund_fee > 0 ? ', Vendly Protection fee included' : '';
+  if (viewer === 'CUSTOMER') {
+    if (s.refund_total > 0) {
+      const to = `to your card${s.card ? ` (${s.card})` : ''}`;
+      out.push(done ? `${usd(s.refund_total)} is being refunded ${to}${feeIncluded}.` : `You'll get ${usd(s.refund_total)} back ${to}${feeIncluded}.`);
+    } else if (s.paid) out.push(done ? 'Nothing was refunded.' : "You won't get a refund.");
+    else out.push(done ? "You weren't charged, so there's nothing to refund." : "You haven't been charged, so there's nothing to refund.");
+    if (s.cancelled_by === 'CUSTOMER' && s.fee_kept > 0) out.push(`The ${usd(s.fee_kept)} Vendly Protection fee isn't refunded.`);
+    if (s.vendor_keeps > 0) out.push(`The vendor keeps ${usd(s.vendor_keeps)} under their ${policy}cancellation policy.`);
+    if (s.unpaid_cancelled > 0) out.push(`The ${usd(s.unpaid_cancelled)} still to pay won't be charged.`);
+    if (s.holds_released > 0) out.push(`The ${usd(s.holds_released)} hold on your card ${done ? 'is' : 'will be'} released.`);
+    if (s.refund_total > 0) out.push(`Refunds take ${REFUND_TIMING} to show.`);
+  } else {
+    if (s.refund_total > 0) out.push(`The customer ${done ? 'is getting' : 'gets'} ${usd(s.refund_total)} back${feeIncluded}.`);
+    else if (s.paid) out.push('Nothing is refunded to the customer.');
+    else out.push(`The customer ${done ? "wasn't" : "hasn't been"} charged, so nothing is refunded.`);
+    if (s.vendor_keeps > 0) out.push(`You keep ${usd(s.vendor_keeps)}${policy ? ` under your ${policy}cancellation policy` : ''}.`);
+    else if (s.paid) out.push('You keep nothing from this booking.');
+    if (s.unpaid_cancelled > 0) out.push(`The ${usd(s.unpaid_cancelled)} still due won't be charged.`);
+    if (s.holds_released > 0) out.push(`The ${usd(s.holds_released)} card hold ${done ? 'is' : 'will be'} released.`);
+  }
+  return out.join(' ');
+}

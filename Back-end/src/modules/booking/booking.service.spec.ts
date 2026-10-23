@@ -69,6 +69,8 @@ const mockPayments = {
   onProofUploaded: jest.fn().mockResolvedValue(undefined),
   refundBooking: jest.fn().mockResolvedValue(0),
   voidOpenCharges: jest.fn().mockResolvedValue(undefined),
+  cardLabel: jest.fn().mockResolvedValue(null),
+  sendFinalInvoice: jest.fn().mockResolvedValue(true),
 };
 
 const mockContracts = {
@@ -483,7 +485,7 @@ describe('BookingService', () => {
   });
 
   describe('proofs', () => {
-    const photo = { originalname: 'a.jpg', buffer: Buffer.from('x') } as Express.Multer.File;
+    const photo = { originalname: 'a.jpg', buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0]) } as Express.Multer.File;
 
     it('lets a booking participant upload proof photos', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
@@ -492,7 +494,7 @@ describe('BookingService', () => {
       const res = await service.uploadProof('booking-1', 'vendor-1', [photo], 'done');
 
       expect(TanvirStorage.put).toHaveBeenCalledTimes(1);
-      expect(res.data.photos[0]).toMatch(/^https:\/\/cdn\.test\/proofs\//);
+      expect(res.data.photos[0]).toMatch(/^https:\/\/cdn\.test\/proofs\/[0-9a-f]{24}\.jpg$/);
       expect(mockPrisma.bookingProof.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ uploader_id: 'vendor-1', notes: 'done' }) }),
       );
@@ -506,6 +508,14 @@ describe('BookingService', () => {
     it('requires at least one photo', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
       await expect(service.uploadProof('booking-1', 'vendor-1', [])).rejects.toThrow(BadRequestException);
+    });
+
+    it('refuses a proof that is not really a photo, whatever it is called', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      const fake = { originalname: 'x.jpg', buffer: Buffer.from('<html><script>alert(1)</script>') } as Express.Multer.File;
+      await expect(service.uploadProof('booking-1', 'vendor-1', [photo, fake])).rejects.toThrow(BadRequestException);
+      expect(TanvirStorage.put).not.toHaveBeenCalled();
+      expect(mockPrisma.bookingProof.create).not.toHaveBeenCalled();
     });
 
     it('hides proofs from unrelated users', async () => {
@@ -548,6 +558,18 @@ describe('BookingService', () => {
       });
 
       expect(mockPrisma.bookingDeliverable.create.mock.calls[0][0].data.links).toEqual(['https://ok.test']);
+    });
+
+    it('stores delivered files under random names by their real type and refuses others', async () => {
+      const pdf = { originalname: '../../evil.html', buffer: Buffer.from('%PDF-1.7\n') } as Express.Multer.File;
+      const res = await service.sendDeliverable('booking-1', 'vendor-1', [pdf], { title: 'Contract' });
+      const stored = mockPrisma.bookingDeliverable.create.mock.calls[0][0].data.files;
+      expect(stored).toEqual([expect.stringMatching(/^[0-9a-f]{24}\.pdf$/)]);
+      expect(TanvirStorage.put).toHaveBeenCalledWith(`deliverables/${stored[0]}`, pdf.buffer);
+      expect(JSON.stringify(res)).not.toContain('evil');
+
+      const exe = { originalname: 'photos.zip', buffer: Buffer.from('MZ\x90\x00') } as Express.Multer.File;
+      await expect(service.sendDeliverable('booking-1', 'vendor-1', [exe], { title: 'x' })).rejects.toThrow(BadRequestException);
     });
 
     it('pushes the customer when a deliverable is sent', async () => {
@@ -678,5 +700,214 @@ describe('BookingService', () => {
     mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.COMPLETED, paid_at: null, service_fee: 5 });
     const res = await service.createCheckoutSession('booking-1', 'customer-1');
     expect(res.data.checkout_url).toBe('https://checkout.test/cs_1');
+  });
+
+  describe('cancel preview: shows exactly what cancelling does', () => {
+    const DAY = 24 * 3600 * 1000;
+    // a booking paid in full through hosted Checkout (no installments): $450 + $22.50 fee
+    const legacyPaid = (overrides: Record<string, unknown> = {}) => ({
+      ...mockBooking,
+      status: BookingStatus.CONFIRMED,
+      amount: 450,
+      service_fee: 22.5,
+      currency: 'usd',
+      paid_at: new Date(),
+      payment_transaction_id: 'cs_paid',
+      event_start_at: new Date(Date.now() + 3 * DAY),
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      (StripePayment.retrieveCheckoutSession as jest.Mock).mockResolvedValue({ payment_intent: 'pi_paid' });
+      (StripePayment.refundPaymentIntent as jest.Mock).mockResolvedValue({ id: 're_1' });
+      mockPrisma.bookingContract.findFirst.mockResolvedValue({ merge_data: { cancellation_policy: 'flexible' } });
+      mockPayments.refundBooking.mockImplementation((_id: string, amount: number) => Promise.resolve(amount));
+      mockPayments.cardLabel.mockResolvedValue(null);
+    });
+    afterEach(() => {
+      mockPrisma.bookingInstallment.findMany.mockResolvedValue([]);
+      mockPayments.cardLabel.mockResolvedValue(null);
+    });
+
+    /** Previews, then really cancels with the same data, and returns both plus what actually moved. */
+    const previewThenCancel = async (userId: string) => {
+      const preview = (await service.cancelPreview('booking-1', userId)).data;
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+      expect(mockPrisma.booking.updateMany).not.toHaveBeenCalled();
+      const result = await service.cancel('booking-1', userId, {});
+      const legacyRefund = (StripePayment.refundPaymentIntent as jest.Mock).mock.calls[0]?.[2] ?? 0;
+      const engineRefund = mockPayments.refundBooking.mock.calls[0]?.[1] ?? 0;
+      const credited = mockPrisma.user.update.mock.calls[0]?.[0]?.data?.balance?.increment ?? 0;
+      return { preview, result: result.data as any, refunded: legacyRefund || engineRefund, credited };
+    };
+
+    const expectSame = ({ preview, result, refunded, credited }: Awaited<ReturnType<typeof previewThenCancel>>) => {
+      expect(preview.refund_total).toBe(result.refund.refundTotal);
+      expect(preview.refund_fee).toBe(result.refund.refundFee);
+      expect(preview.vendor_keeps).toBe(result.refund.vendorKeeps);
+      expect(preview.percent).toBe(result.refund.percent);
+      expect(refunded).toBe(preview.refund_total);
+      expect(credited).toBe(preview.vendor_keeps);
+      const { message: _a, ...previewNumbers } = preview;
+      const { message: _b, ...doneNumbers } = result.refund_summary;
+      expect(doneNumbers).toEqual(previewNumbers);
+    };
+
+    it('vendor cancels: everything back, Vendly Protection fee included', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
+      const out = await previewThenCancel('vendor-1');
+      expectSame(out);
+      expect(out.preview).toMatchObject({ cancelled_by: 'VENDOR', refund_total: 472.5, refund_fee: 22.5, vendor_keeps: 0, fee_kept: 0 });
+      expect(out.preview.message).toBe('The customer gets $472.50 back, Vendly Protection fee included. You keep nothing from this booking.');
+    });
+
+    it('customer cancels in time for a full refund: the price back, the fee kept', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid({ event_start_at: new Date(Date.now() + 30 * DAY) }));
+      const out = await previewThenCancel('customer-1');
+      expectSame(out);
+      expect(out.preview).toMatchObject({ refund_total: 450, fee_kept: 22.5, vendor_keeps: 0, percent: 100, policy: { key: 'flexible', label: 'Flexible' } });
+      expect(out.preview.message).toBe("You'll get $450.00 back to your card. The $22.50 Vendly Protection fee isn't refunded. Refunds take 5–10 business days to show.");
+    });
+
+    it('customer cancels inside the 50% window', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
+      mockPayments.cardLabel.mockResolvedValue('Visa •••• 4242');
+      const out = await previewThenCancel('customer-1');
+      expectSame(out);
+      expect(out.preview).toMatchObject({ refund_total: 225, vendor_keeps: 225, percent: 50, card: 'Visa •••• 4242', refund_timing: '5–10 business days' });
+      expect(out.preview.message).toBe(
+        "You'll get $225.00 back to your card (Visa •••• 4242). The $22.50 Vendly Protection fee isn't refunded. The vendor keeps $225.00 under their flexible cancellation policy. Refunds take 5–10 business days to show.",
+      );
+    });
+
+    it('customer cancels too late for any refund', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
+      mockPrisma.bookingContract.findFirst.mockResolvedValue({ merge_data: { cancellation_policy: 'strict' } });
+      const out = await previewThenCancel('customer-1');
+      expectSame(out);
+      expect(out.preview).toMatchObject({ refund_total: 0, vendor_keeps: 450, percent: 0, refund_timing: null });
+      expect(out.preview.message).toMatch(/^You won't get a refund\./);
+    });
+
+    describe('deposit only paid (payment plan)', () => {
+      // $1,000 price, $50 fee; the 25% deposit ($250 + $50 fee) is paid, the $750 balance isn't
+      const deposit = { id: 'i1', status: 'PAID', amount: 300, fee_amount: 50, refunded_amount: 0, kind: 'charge', capture_manually: false, payment_intent_id: 'pi_dep' };
+      const balance = { id: 'i2', status: 'SCHEDULED', amount: 750, fee_amount: 0, refunded_amount: 0, kind: 'charge', capture_manually: false, payment_intent_id: null };
+      beforeEach(() => mockPrisma.bookingInstallment.findMany.mockResolvedValue([deposit, balance]));
+
+      it('customer cancels at 50%: the vendor keeps the deposit, the balance is never charged', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid({ amount: 1000, service_fee: 50 }));
+        const out = await previewThenCancel('customer-1');
+        expectSame(out);
+        expect(out.preview).toMatchObject({ refund_total: 0, vendor_keeps: 250, fee_kept: 50, unpaid_cancelled: 750 });
+        expect(out.preview.message).toContain("The $750.00 still to pay won't be charged.");
+      });
+
+      it('customer cancels with a full refund: the deposit comes back, the fee stays', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid({ amount: 1000, service_fee: 50, event_start_at: new Date(Date.now() + 40 * DAY) }));
+        const out = await previewThenCancel('customer-1');
+        expectSame(out);
+        expect(out.preview).toMatchObject({ refund_total: 250, vendor_keeps: 0, fee_kept: 50 });
+      });
+
+      it('vendor cancels: the whole deposit back, fee included', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid({ amount: 1000, service_fee: 50 }));
+        const out = await previewThenCancel('vendor-1');
+        expectSame(out);
+        expect(out.preview).toMatchObject({ refund_total: 300, refund_fee: 50, vendor_keeps: 0, unpaid_cancelled: 750 });
+      });
+    });
+
+    it('nothing paid yet: no refund, and a pay-after-service hold is released', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...legacyPaid(), paid_at: null, payment_transaction_id: null });
+      mockPrisma.bookingInstallment.findMany.mockResolvedValue([{ id: 'h', status: 'PROCESSING', amount: 472.5, fee_amount: 22.5, refunded_amount: 0, kind: 'charge', capture_manually: true, payment_intent_id: 'pi_hold' }]);
+      const out = await previewThenCancel('customer-1');
+      expect(out.preview).toMatchObject({ refund_total: 0, vendor_keeps: 0, holds_released: 472.5 });
+      expect(out.result.refund).toBeNull();
+      expect(out.preview.message).toBe("You haven't been charged, so there's nothing to refund. The $472.50 hold on your card will be released.");
+      expect(mockPayments.voidOpenCharges).toHaveBeenCalledWith('booking-1');
+    });
+
+    it('refuses a preview for someone else or a booking that can no longer be cancelled', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
+      await expect(service.cancelPreview('booking-1', 'stranger')).rejects.toThrow(ForbiddenException);
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid({ status: BookingStatus.COMPLETED }));
+      await expect(service.cancelPreview('booking-1', 'customer-1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('cancellation notices', () => {
+    beforeEach(() => {
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      (StripePayment.retrieveCheckoutSession as jest.Mock).mockResolvedValue({ payment_intent: 'pi_paid' });
+      (StripePayment.refundPaymentIntent as jest.Mock).mockResolvedValue({ id: 're_1' });
+      mockPrisma.bookingContract.findFirst.mockResolvedValue({ merge_data: { cancellation_policy: 'flexible' } });
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED, amount: 450, service_fee: 22.5, paid_at: new Date(), payment_transaction_id: 'cs_paid', event_start_at: new Date(Date.now() + 3 * 24 * 3600 * 1000) });
+    });
+
+    it('vendor cancels: the customer is emailed and pushed the refund amount and timing', async () => {
+      await service.cancel('booking-1', 'vendor-1', { reason: 'Double booked' });
+      expect(mockMail.sendBookingNotification).toHaveBeenCalledTimes(1);
+      expect(mockMail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({
+        to: 'customer@test.com',
+        message: expect.stringContaining('$472.50 is being refunded to your card'),
+        lines: expect.arrayContaining([{ label: 'Refund', value: '$472.50' }, { label: 'When', value: 'Within 5–10 business days' }]),
+      }));
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('customer-1', expect.objectContaining({ body: expect.stringContaining('$472.50 is being refunded') }));
+      expect(mockPayments.sendFinalInvoice).toHaveBeenCalledWith('booking-1');
+    });
+
+    it('customer cancels: both are told, each in their own words', async () => {
+      await service.cancel('booking-1', 'customer-1', {});
+      expect(mockMail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'customer@test.com', message: expect.stringContaining("The $22.50 Vendly Protection fee isn't refunded.") }));
+      expect(mockMail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'vendor@test.com', message: expect.stringContaining('You keep $225.00 under your flexible cancellation policy.') }));
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('customer-1', expect.anything());
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.anything());
+    });
+
+    it('an unpaid booking gets no invoice', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED, paid_at: null });
+      await service.cancel('booking-1', 'customer-1', {});
+      expect(mockPayments.sendFinalInvoice).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('legacy Checkout bookings credited after completion', () => {
+    const { __setFeeCache } = require('src/modules/platform/platform-settings.service');
+    afterEach(() => __setFeeCache(null));
+    const session = { id: 'cs_paid', payment_intent: 'pi_1', amount_total: 10500, currency: 'usd', metadata: { booking_id: 'booking-1' } };
+
+    it('takes the current Vendly commission, like a regular payout', async () => {
+      __setFeeCache({ percent: 5, minimum: 3, commission: 10, categories: new Map() });
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.booking.findUnique
+        .mockResolvedValueOnce({ customer_id: 'customer-1', currency: 'usd' })
+        .mockResolvedValueOnce({ status: BookingStatus.COMPLETED, paid_at: new Date(), payout_credited_at: null, amount: 100, currency: 'usd', vendor_id: 'vendor-1' });
+
+      await service.recordPayment(session);
+
+      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({
+        where: { id: 'booking-1', payout_credited_at: null },
+        data: { payout_credited_at: expect.any(Date), released_at: expect.any(Date), commission_amount: 10, released_gross: 100 },
+      });
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 90 } } });
+      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: 'vendor-1', type: 'vendly_commission', amount: 10, order_id: 'booking-1' }) });
+      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: 'vendor-1', type: 'booking_earning', amount: 90 }) });
+      expect(mockPayments.sendFinalInvoice).toHaveBeenCalledWith('booking-1');
+    });
+
+    it('never credits a booking twice (already credited before the commission rule: untouched)', async () => {
+      __setFeeCache({ percent: 5, minimum: 3, commission: 10, categories: new Map() });
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.booking.findUnique
+        .mockResolvedValueOnce({ customer_id: 'customer-1', currency: 'usd' })
+        .mockResolvedValueOnce({ status: BookingStatus.COMPLETED, paid_at: new Date(), payout_credited_at: new Date('2026-01-01'), amount: 100, currency: 'usd', vendor_id: 'vendor-1' });
+      await service.recordPayment(session);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.paymentTransaction.create).not.toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'vendly_commission' }) });
+    });
   });
 });

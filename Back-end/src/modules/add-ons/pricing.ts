@@ -179,3 +179,12 @@ export function unitPriceText(price: number | string | { toString(): string }, u
 export function extraProtectionFee(amount: number, percent: number) {
   return amount > 0 ? round2((amount * percent) / 100) : 0;
 }
+
+/** "30 minutes", "1 hour", "2 hours 30 minutes": how much time an add-on adds to a booking. */
+export function durationText(minutes: number) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const hours = h ? `${h} hour${h === 1 ? '' : 's'}` : '';
+  const mins = m ? `${m} minute${m === 1 ? '' : 's'}` : '';
+  return [hours, mins].filter(Boolean).join(' ') || '0 minutes';
+}

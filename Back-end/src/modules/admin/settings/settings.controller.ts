@@ -121,8 +121,8 @@ export class SettingsController {
   // ─── Disputes ──────────────────────────────────────────────────────────
 
   @Get('disputes')
-  disputes(@Query('status') status?: 'open' | 'resolved') {
-    return this.payments.listDisputes(status === 'resolved' ? 'resolved' : 'open');
+  disputes(@GetUser() user: any, @Query('status') status?: 'open' | 'resolved') {
+    return this.payments.listDisputes(status === 'resolved' ? 'resolved' : 'open', user?.id ?? user?.userId);
   }
 
   @Post('disputes/:bookingId/resolve')

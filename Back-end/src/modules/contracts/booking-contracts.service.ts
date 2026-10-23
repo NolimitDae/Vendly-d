@@ -1,4 +1,5 @@
 import { eventDays } from 'src/modules/calendar-sync/busy-days';
+import { outsideWorkingHours, readWorkingHours } from 'src/modules/vendor/working-hours';
 import {
   BadRequestException,
   ConflictException,
@@ -246,16 +247,19 @@ export class BookingContractsService {
   /**
    * Refuses a date the vendor has blocked for this package, or that their own calendar shows as busy.
    * The apps already grey these days out; this stops a request slipping through anyway (an old app,
-   * a calendar that synced since the page loaded). Days are the customer's local days.
+   * a calendar that synced since the page loaded). Days are the customer's local days. The vendor's
+   * weekly working hours are checked the same way (only for new requests: changes to bookings already
+   * made don't come through here).
    */
   private async assertDateOpen(listingId: string, vendorId: string, dto: BookingContractFieldsDto) {
     const start = dto.event_start_at ?? dto.scheduled_at;
     if (!start) return;
     const { first, last } = eventDays(new Date(start), dto.event_end_at ? new Date(dto.event_end_at) : null, dto.timezone);
     const overlaps = { start_date: { lte: last }, end_date: { gte: first } };
-    const [blocked, busy] = await Promise.all([
+    const [blocked, busy, profile] = await Promise.all([
       this.prisma.listingAvailability.findFirst({ where: { listing_id: listingId, ...overlaps }, select: { id: true } }),
       this.prisma.calendarBusyBlock.findFirst({ where: { user_id: vendorId, ...overlaps }, select: { id: true } }),
+      this.prisma.vendorProfile.findUnique({ where: { user_id: vendorId }, select: { working_hours: true } }),
     ]);
     if (blocked || busy) {
       throw new ConflictException({
@@ -263,6 +267,14 @@ export class BookingContractsService {
         error: 'DATE_UNAVAILABLE',
       });
     }
+    // weekly hours, when the vendor set them: a closed day, or a start/end outside that day's hours
+    const outside = outsideWorkingHours(
+      readWorkingHours(profile?.working_hours),
+      new Date(start),
+      dto.event_end_at ? new Date(dto.event_end_at) : null,
+      dto.timezone,
+    );
+    if (outside) throw new ConflictException({ message: outside, error: 'OUTSIDE_WORKING_HOURS' });
   }
 
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {

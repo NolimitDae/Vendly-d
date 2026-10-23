@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpException,
   HttpStatus,
@@ -12,6 +13,7 @@ import {
   Res,
   UploadedFile,
   UploadedFiles,
+  UnauthorizedException,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -39,6 +41,17 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import {
+  CSRF_MESSAGE,
+  REFRESH_COOKIE,
+  clearAuthCookies,
+  csrfBlocked,
+  hasAuthCookies,
+  isWebClient,
+  readCookie,
+  resolveAuthToken,
+  webSession,
+} from './auth-cookies';
 
 const ALLOWED_IMAGE_MIMETYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const ALLOWED_DOC_MIMETYPES = [...ALLOWED_IMAGE_MIMETYPES, 'application/pdf'];
@@ -206,7 +219,7 @@ export class AuthController {
   @Throttle({ short: { limit: 10, ttl: 60000 } })
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  async login(@Req() req: Request, @Res() res: Response) {
+  async login(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     try {
       const user_id = req.user.id;
       const user_email = req.user.email;
@@ -216,13 +229,9 @@ export class AuthController {
         email: user_email,
       });
 
-      // store to secure cookies
-      res.cookie('refresh_token', response.authorization.refresh_token, {
-        httpOnly: true,
-        secure: true,
-        maxAge: 1000 * 60 * 60 * 24 * 7,
-      });
-      res.json(response);
+      // the website (X-Requested-With: vendly-web) gets HttpOnly cookies instead of tokens in the
+      // body; the app gets the tokens as before
+      return webSession(req, res, response);
     } catch (error) {
       return {
         success: false,
@@ -675,11 +684,21 @@ export class AuthController {
   // No JwtAuthGuard: this must work after the access token has expired. The refresh token itself
   // is the credential (verified in AuthService.refreshToken).
   @Post('refresh-token')
-  async refreshToken(@Body() body: { refresh_token: string }) {
+  async refreshToken(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() body: { refresh_token?: string } = {},
+  ) {
     try {
-      const response = await this.authService.refreshToken(body?.refresh_token ?? '');
+      const web = isWebClient(req);
+      // the website's refresh token is in an HttpOnly cookie (read only with the website header,
+      // which a cross-site request can't add); a token in the body (the app, or a website session
+      // from before cookies) still works and, from the website, moves it onto cookies
+      const fromCookie = !body?.refresh_token && web ? readCookie(req, REFRESH_COOKIE) : null;
+      const response = await this.authService.refreshToken(body?.refresh_token || fromCookie || '');
+      if (web && !response.success && fromCookie) clearAuthCookies(req, res);
 
-      return response;
+      return webSession(req, res, response);
     } catch (error) {
       return {
         success: false,
@@ -695,14 +714,31 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'Logged out successfully.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  @UseGuards(JwtAuthGuard)
+  // No JwtAuthGuard: the website must be able to sign out (and drop its cookies) after the access
+  // token has expired. The app still signs out with its Bearer token as before.
   @Post('logout')
-  async logout(@Req() req: Request) {
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() body: { refresh_token?: string } = {},
+  ) {
+    if (csrfBlocked(req)) throw new ForbiddenException(CSRF_MESSAGE);
+    const web = isWebClient(req);
+    // signing out of the website always drops its cookies, even if the session already ended
+    if (web || hasAuthCookies(req)) clearAuthCookies(req, res);
     try {
-      const userId = req.user.userId;
+      const userId = this.authService.userFromTokens({
+        access: resolveAuthToken(req)?.token,
+        refresh: body?.refresh_token || (web ? readCookie(req, REFRESH_COOKIE) : null),
+      });
+      if (!userId) {
+        if (web) return { success: true, message: 'Logged out' };
+        throw new UnauthorizedException();
+      }
       const response = await this.authService.revokeRefreshToken(userId);
       return response;
     } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       return {
         success: false,
         message: error.message,
@@ -918,15 +954,16 @@ export class AuthController {
   @ApiOperation({
     summary: 'Enable 2FA',
     description:
-      'Enables Two-Factor Authentication for the authenticated user. Requires 2FA to have been set up first.',
+      'Enables Two-Factor Authentication for the authenticated user. Requires 2FA to have been set up first (generate-2fa-secret) and a current code from the authenticator app (`token`).',
   })
   @ApiResponse({ status: 200, description: '2FA enabled successfully.' })
   @UseGuards(JwtAuthGuard)
   @Post('enable-2fa')
-  async enable2FA(@Req() req: Request) {
+  async enable2FA(@Req() req: Request, @Body() data: { token?: string } = {}) {
     try {
       const user_id = req.user.userId;
-      return await this.authService.enable2FA(user_id);
+      // a current code is required, so 2FA is never switched on before the app is set up
+      return await this.authService.enable2FA(user_id, data?.token);
     } catch (error) {
       return {
         success: false,
@@ -970,8 +1007,20 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
   @Post('roles/switch')
-  async switchRole(@Req() req: Request, @Body() body: SwitchRoleDto) {
-    return this.authService.switchRole(req.user.userId, body.role, { business_name: body.business_name });
+  async switchRole(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() body: SwitchRoleDto) {
+    // fresh tokens: cookies for the website, in the body for the app
+    return webSession(req, res, await this.authService.switchRole(req.user.userId, body.role, { business_name: body.business_name }));
+  }
+
+  @ApiOperation({
+    summary: 'Short-lived token for the website to open its realtime (Socket.IO) connection',
+    description:
+      'The website keeps its login in an HttpOnly cookie that page scripts cannot read, so it asks for a two-minute token to hand to the socket handshake. The token only opens sockets; it is refused as an API access token.',
+  })
+  @UseGuards(JwtAuthGuard)
+  @Get('socket-token')
+  socketToken(@Req() req: Request) {
+    return this.authService.socketToken(req.user.userId);
   }
 
   @ApiOperation({ summary: 'Delete my account (users with bookings or signed contracts are anonymised)' })

@@ -1,12 +1,12 @@
 "use client";
 
+import { isLoggedIn as hasSession } from "@/lib/session";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Boxes, CheckCircle2, Loader2, MapPin, Minus, Package, Plus, ShieldCheck, Store, Tag } from "lucide-react";
 import { toast } from "react-toastify";
-import { CookieHelper } from "@/helper/cookie.helper";
 import RangeCalendar from "@/components/rentals/RangeCalendar";
 import SavedCards from "@/components/payments/SavedCards";
 import { RentalsService, dayKey, errorMessage, money, type RentalItem, type RentalQuote } from "@/service/rentals/rentals.service";
@@ -31,7 +31,7 @@ export default function RentalItemPage() {
   const [card, setCard] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const loggedIn = !!CookieHelper.get({ key: "token" });
+  const loggedIn = hasSession();
 
   useEffect(() => {
     RentalsService.item(id)

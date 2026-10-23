@@ -6,7 +6,7 @@ import Redis from 'ioredis';
 
 //internal imports
 import { DateHelper } from '../../common/helper/date.helper';
-import { StringHelper } from '../../common/helper/string.helper';
+import { PHOTOS, PHOTOS_OR_PDF, safeStoredName, safeStoredNames, sniffUpload, uploadRefusedMessage } from '../../common/helper/upload-files';
 import { TanvirStorage } from '../../common/lib/Disk/TanvirStorage';
 import { StripePayment } from '../../common/lib/Payment/stripe/StripePayment';
 import { UcodeRepository } from '../../common/repository/ucode/ucode.repository';
@@ -14,11 +14,12 @@ import { UserRepository } from '../../common/repository/user/user.repository';
 import appConfig from '../../config/app.config';
 import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UserType } from 'prisma/generated/client';
+import { Prisma, UserType } from 'prisma/generated/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { track } from 'src/common/analytics';
 import { normalizeHandle, shopImageUrl } from '../../common/helper/handle';
 import { IdentityService } from '../identity/identity.service';
+import { parseWorkingHours, readWorkingHours, type WorkingHours } from '../vendor/working-hours';
 
 /** Roles a person can hold on one login and switch between (CLIENT is the older name for CUSTOMER). */
 export const SWITCHABLE_ROLES = ['CUSTOMER', 'VENDOR', 'EVENT_PLANNER'] as const;
@@ -67,7 +68,7 @@ export class AuthService {
           last_name: true,
           bio: true,
           // vendors: business details and where their licence check stands
-          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true, handle: true, banner: true, logo: true } },
+          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true, handle: true, banner: true, logo: true, working_hours: true } },
         },
       });
 
@@ -102,6 +103,8 @@ export class AuthService {
               handle: vendorProfile.handle,
               banner_url: shopImageUrl(vendorProfile.banner),
               logo_url: shopImageUrl(vendorProfile.logo),
+              // weekly hours customers can book in; null = not set (any time)
+              working_hours: readWorkingHours(vendorProfile.working_hours),
             }),
           },
         };
@@ -265,6 +268,9 @@ export class AuthService {
     const data: any = {};
 
     if (license && license.length > 0) {
+      // check every file is a photo or PDF before touching the ones on file
+      const fileNames = safeStoredNames(license, PHOTOS_OR_PDF);
+
       // delete old license images if exist
       const existingProfile = await this.prisma.vendorProfile.findUnique({
         where: { user_id: userId },
@@ -280,14 +286,11 @@ export class AuthService {
       }
 
       // upload new license images
-      const fileNames: string[] = [];
-      for (const file of license) {
-        const fileName = `${StringHelper.randomString()}_${file.originalname}`;
+      for (const [i, file] of license.entries()) {
         await TanvirStorage.put(
-          appConfig().storageUrl.license + '/' + fileName,
+          appConfig().storageUrl.license + '/' + fileNames[i],
           file.buffer,
         );
-        fileNames.push(fileName);
       }
       // VendorProfile.license_photo is a String[] in Prisma schema
       data.license_photo = fileNames;
@@ -349,8 +352,8 @@ export class AuthService {
   // update user 
   /** Stores an image in the avatar dir (deleting the one it replaces) and returns its filename. */
   private async replaceImage(file: Express.Multer.File, old?: string | null) {
+    const fileName = safeStoredName(file.buffer, PHOTOS);
     if (old) await TanvirStorage.delete(appConfig().storageUrl.avatar + '/' + old);
-    const fileName = `${StringHelper.randomString()}_${file.originalname}`;
     await TanvirStorage.put(appConfig().storageUrl.avatar + '/' + fileName, file.buffer);
     return fileName;
   }
@@ -361,6 +364,11 @@ export class AuthService {
     image?: Express.Multer.File,
     shop: { banner?: Express.Multer.File; logo?: Express.Multer.File } = {},
   ) {
+    // refused before anything changes when a picture isn't really an image (this endpoint answers
+    // failures as { success: false, message }, which the website and app show)
+    for (const f of [image, shop.banner, shop.logo]) {
+      if (f && !sniffUpload(f.buffer, PHOTOS)) return { success: false, message: uploadRefusedMessage(PHOTOS) };
+    }
     try {
       const data: any = {};
 
@@ -390,6 +398,14 @@ export class AuthService {
           }
         }
 
+        // vendors' weekly working hours: checked before anything is saved
+        let workingHours: WorkingHours | null | undefined;
+        if (user.type === UserType.VENDOR && updateUserDto.working_hours !== undefined) {
+          const parsed = parseWorkingHours(updateUserDto.working_hours);
+          if ('error' in parsed) return { success: false, message: parsed.error };
+          workingHours = parsed.hours;
+        }
+
         if (image) {
           const oldImage = await this.prisma.user.findFirst({
             where: { id: userId },
@@ -412,6 +428,7 @@ export class AuthService {
           if (updateUserDto.address !== undefined)
             vendorProfilePatch.address = updateUserDto.address;
           if (handle !== undefined) vendorProfilePatch.handle = handle;
+          if (workingHours !== undefined) vendorProfilePatch.working_hours = workingHours ?? Prisma.DbNull;
           if (shop.banner || shop.logo) {
             const old = await this.prisma.vendorProfile.findUnique({
               where: { user_id: userId },
@@ -807,6 +824,31 @@ export class AuthService {
     }
   }
 
+  /**
+   * The user a sign-out is for: from a valid access token, else from a valid refresh token. Null
+   * when neither verifies (nothing to revoke).
+   */
+  userFromTokens({ access, refresh }: { access?: string | null; refresh?: string | null }): string | null {
+    for (const [token, want] of [[access, 'access'], [refresh, 'refresh']] as const) {
+      if (!token) continue;
+      try {
+        const claims: any = this.jwtService.verify(token);
+        const typ = claims?.typ === 'refresh' ? 'refresh' : claims?.typ ? 'other' : 'access';
+        if (claims?.sub && typ === want) return claims.sub;
+      } catch {
+        // expired or not ours: try the next one
+      }
+    }
+    return null;
+  }
+
+  /** A two-minute token that only opens the website's socket connection (see JwtStrategy). */
+  socketToken(user_id: string) {
+    const expiresIn = 120;
+    const token = this.jwtService.sign({ sub: user_id, typ: 'socket' }, { expiresIn });
+    return { success: true, data: { token, user_id, expires_in: expiresIn } };
+  }
+
   async revokeRefreshToken(user_id: string) {
     try {
       const storedToken = await this.redis.get(`refresh_token:${user_id}`);
@@ -1013,10 +1055,18 @@ export class AuthService {
     }
   }
 
-  async enable2FA(user_id: string) {
+  async enable2FA(user_id: string, token?: string) {
     try {
       const user = await this.userRepository.getUserDetails(user_id);
       if (user) {
+        // only switch on once the person proves their authenticator app holds the secret,
+        // otherwise they could lock themselves out at the next login
+        if (!token?.trim() || !(await this.userRepository.verify2FA(user_id, token.trim()))) {
+          return {
+            success: false,
+            message: 'Enter the code from your authenticator app to turn on two-step login.',
+          };
+        }
         await this.userRepository.enable2FA(user_id);
         return {
           success: true,

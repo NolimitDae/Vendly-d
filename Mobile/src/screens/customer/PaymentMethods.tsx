@@ -106,6 +106,14 @@ export default function PaymentMethods({ navigation }: { navigation: NativeStack
             ))
           )}
           <GradientButton title="Add a card" onPress={() => setAdding(true)} />
+          <Pressable style={s.txLink} onPress={() => navigation.navigate('Transactions', { role: 'customer' })} accessibilityRole="button" accessibilityLabel="Transactions">
+            <Ionicons name="receipt-outline" size={22} color={DARK.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.txTitle}>Transactions</Text>
+              <Text style={s.txSub}>Your charges and refunds</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={DARK.muted} />
+          </Pressable>
         </View>
       </ScrollView>
       <AddCardSheet visible={adding} onClose={() => setAdding(false)} onSaved={() => load()} />
@@ -125,4 +133,7 @@ const s = StyleSheet.create({
   cardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   cardSub: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular },
   link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold },
+  txLink: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, backgroundColor: DARK.card },
+  txTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  txSub: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular },
 });

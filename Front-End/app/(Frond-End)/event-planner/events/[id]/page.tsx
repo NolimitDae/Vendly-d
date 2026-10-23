@@ -28,7 +28,7 @@ import { BookingsBudget, ClientShareCard, TeamsCard } from "@/components/events/
 import { EventToolsService, type TimelineItem } from "@/service/events/eventTools.service";
 import { ChatService } from "@/service/chat/chat.service";
 import { MessagesSquare } from "lucide-react";
-import EventStatusActions, { EventCompletedBanner, canEditEvent } from "@/components/events/EventStatusActions";
+import EventStatusActions, { EventCancelledBanner, EventCompletedBanner, canEditEvent, isEventReadOnly } from "@/components/events/EventStatusActions";
 import EditEventDialog from "@/components/events/EditEventDialog";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -74,6 +74,8 @@ interface Event {
   tasks: EventTask[];
   created_at: string;
   updated_at?: string;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
   client_email?: string | null;
   client_sees_budget?: boolean;
 }
@@ -279,6 +281,8 @@ export default function EventDetailPage() {
   // vendors who accepted: they can own run-of-show items and form a team
   const bookedVendors = [...new Map(event.bookings.filter((eb) => !eb.booking.status || ACTIVE_BOOKING.includes(eb.booking.status)).map((eb) => [eb.booking.vendor.id, { id: eb.booking.vendor.id, name: eb.booking.vendor.name }])).values()];
   const totalTasks = event.tasks.length;
+  // a cancelled event can be read but not changed
+  const readOnly = isEventReadOnly(event.status);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -403,11 +407,12 @@ export default function EventDetailPage() {
 
         {event.status === "COMPLETED" && (
           <EventCompletedBanner
-            completedAt={event.updated_at}
+            completedAt={event.completed_at ?? undefined}
             hasBookings={event.bookings.length > 0}
             onViewVendors={() => setTab("vendors")}
           />
         )}
+        {readOnly && <EventCancelledBanner cancelledAt={event.cancelled_at} />}
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-1.5 shadow-sm overflow-x-auto" role="tablist">
@@ -560,29 +565,31 @@ export default function EventDetailPage() {
               </ul>
             )}
 
-            <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
-              <Link
-                href="/marketplace"
-                className="flex items-center gap-1.5 text-sm text-primary hover:opacity-80 transition font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                Add vendor from marketplace
-              </Link>
-            </div>
+            {!readOnly && (
+              <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
+                <Link
+                  href="/marketplace"
+                  className="flex items-center gap-1.5 text-sm text-primary hover:opacity-80 transition font-medium"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add vendor from marketplace
+                </Link>
+              </div>
+            )}
           </div>
         )}
         {tab === "vendors" && (
           <div className="mt-4 space-y-4">
-            <TeamsCard eventId={id} bookedVendors={bookedVendors} />
+            <TeamsCard eventId={id} bookedVendors={bookedVendors} readOnly={readOnly} />
             <EventContractsSection eventId={id} />
           </div>
         )}
 
         {tab === "schedule" && (
-          <RunOfShow eventId={id} eventDate={event.date} role="planner" items={timeline} vendors={bookedVendors} onChanged={refreshTools} />
+          <RunOfShow eventId={id} eventDate={event.date} role="planner" items={timeline} vendors={bookedVendors} onChanged={refreshTools} readOnly={readOnly} />
         )}
 
-        {tab === "files" && <EventFiles eventId={id} role="planner" />}
+        {tab === "files" && <EventFiles eventId={id} role="planner" readOnly={readOnly} />}
 
         {tab === "overview" && (
           <div className="mt-4">
@@ -688,6 +695,7 @@ export default function EventDetailPage() {
             </div>
 
             {/* Add budget item form */}
+            {!readOnly && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                 Add Budget Item
@@ -728,6 +736,7 @@ export default function EventDetailPage() {
                 </button>
               </form>
             </div>
+            )}
           </div>
         )}
 
@@ -739,7 +748,7 @@ export default function EventDetailPage() {
               {event.tasks.length === 0 ? (
                 <div className="py-12 text-center">
                   <CheckSquare className="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
-                  <p className="text-sm text-gray-400">No tasks yet — add one below</p>
+                  <p className="text-sm text-gray-400">{readOnly ? "No tasks" : "No tasks yet — add one below"}</p>
                 </div>
               ) : (
                 <ul className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -750,7 +759,7 @@ export default function EventDetailPage() {
                     >
                       <button
                         onClick={() => handleToggleTask(task)}
-                        disabled={togglingTask === task.id}
+                        disabled={readOnly || togglingTask === task.id}
                         className={cn(
                           "flex-shrink-0 transition",
                           task.completed ? "text-primary" : "text-gray-300 dark:text-gray-600",
@@ -788,6 +797,7 @@ export default function EventDetailPage() {
             </div>
 
             {/* Add task form */}
+            {!readOnly && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                 Add Task
@@ -822,6 +832,7 @@ export default function EventDetailPage() {
                 </div>
               </form>
             </div>
+            )}
           </div>
         )}
       </div>

@@ -1,20 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { clearSession } from "@/lib/session";
+import { clearSession, isLoggedIn as hasSession } from "@/lib/session";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
 import Logo from "@/components/brand/Logo";
 import { nav, VENDOR_SIGNUP_HREF } from "@/components/landing/content";
-import { FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat, PlusSquare, Receipt } from "lucide-react";
+import { FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat, PlusSquare, Receipt, Star } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { useFeature } from "@/hooks/useFeature";
-import { CookieHelper } from "@/helper/cookie.helper";
 import { AuthService } from "@/service/auth/auth.service";
 import { useNotifications } from "@/hooks/useNotifications";
 import dayjs from "dayjs";
@@ -70,8 +69,7 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    const token = CookieHelper.get({ key: "token" });
-    if (token) {
+    if (hasSession()) {
       AuthService.me()
         .then((res) => {
           if (res.data?.success) setUser(res.data.data);
@@ -98,10 +96,8 @@ export default function Navbar() {
   };
 
   const handleLogout = async () => {
-    try {
-      await AuthService.logout();
-    } catch {}
-    clearSession();
+    // revokes the refresh token and clears the HttpOnly login cookies (and any old readable ones)
+    await clearSession();
     setUser(null);
     setUserMenuOpen(false);
     router.push("/");
@@ -320,6 +316,14 @@ export default function Navbar() {
                       >
                         <TrendingUp className="w-4 h-4" />
                         Earnings
+                      </Link>
+                      <Link
+                        href="/vendor/reviews"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <Star className="w-4 h-4" />
+                        Reviews
                       </Link>
                       <Link
                         href="/vendor/contracts"
@@ -579,6 +583,14 @@ export default function Navbar() {
                     >
                       <TrendingUp className="w-4 h-4" />
                       Earnings
+                    </Link>
+                    <Link
+                      href="/vendor/reviews"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <Star className="w-4 h-4" />
+                      Reviews
                     </Link>
                     <Link
                       href="/vendor/add-ons"

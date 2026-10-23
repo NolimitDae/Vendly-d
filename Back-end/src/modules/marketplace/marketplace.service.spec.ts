@@ -181,6 +181,20 @@ describe('MarketplaceService', () => {
       expect(result.success).toBe(true);
     });
 
+    it('shows the vendor’s working hours on the listing', async () => {
+      const hours = {
+        mon: { open: '09:00', close: '17:00' }, tue: { open: '09:00', close: '17:00' }, wed: { open: '09:00', close: '17:00' },
+        thu: { open: '09:00', close: '17:00' }, fri: { open: '09:00', close: '17:00' }, sat: { open: '10:00', close: '14:00' }, sun: null,
+      };
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, vendor: { ...mockListing.vendor, vendorProfile: { business_name: 'Photo Pro', working_hours: hours } } });
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      const result = await service.getListing('listing-1');
+      expect(result.data.working_hours).toEqual(hours);
+      expect(result.data.working_hours_summary).toBe('Mon–Fri 9am–5pm · Sat 10am–2pm');
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      expect((await service.getListing('listing-1')).data.working_hours).toBeNull();
+    });
+
     it('should throw NotFoundException for non-existent listing', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue(null);
 
@@ -227,6 +241,21 @@ describe('MarketplaceService', () => {
         { id: 'blk-1', start_date: d('2099-11-10'), end_date: d('2099-11-12'), reason: 'Holiday', source: 'manual' },
         { id: 'calendar-2099-11-20', start_date: d('2099-11-20'), end_date: d('2099-11-20'), reason: null, source: 'calendar' },
       ]);
+    });
+
+    it('gives the vendor’s weekly working hours beside the blocked days', async () => {
+      const hours = {
+        mon: { open: '09:00', close: '17:00' }, tue: { open: '09:00', close: '17:00' }, wed: { open: '09:00', close: '17:00' },
+        thu: { open: '09:00', close: '17:00' }, fri: { open: '09:00', close: '17:00' }, sat: null, sun: null,
+      };
+      mockPrisma.listingAvailability.findMany.mockResolvedValue([]);
+      mockPrisma.calendarBusyBlock.findMany.mockResolvedValue([]);
+      mockPrisma.vendorListing.findUnique.mockResolvedValue({ vendor_id: 'v1', vendor: { vendorProfile: { working_hours: hours } } });
+      const result = await service.getBlockedDates('listing-1');
+      expect(result).toMatchObject({ data: [], working_hours: hours, working_hours_summary: 'Mon–Fri 9am–5pm' });
+
+      mockPrisma.vendorListing.findUnique.mockResolvedValue({ vendor_id: 'v1', vendor: { vendorProfile: { working_hours: null } } });
+      expect(await service.getBlockedDates('listing-1')).toMatchObject({ working_hours: null, working_hours_summary: null });
     });
 
     it('returns only manual blocks for an unknown listing', async () => {

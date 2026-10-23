@@ -22,6 +22,9 @@ export interface Event {
   notes?: string;
   created_at: string;
   updated_at?: string;
+  /** When it was marked completed / cancelled. */
+  completed_at?: string | null;
+  cancelled_at?: string | null;
   _count?: { bookings: number; tasks: number; budget_items: number };
 }
 

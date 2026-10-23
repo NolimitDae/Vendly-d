@@ -18,6 +18,10 @@ import type { CustomerBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from './Bookings';
 import CustomerExtras, { ExtrasBanner } from '../../components/extras/CustomerExtras';
 import { useBookingExtras } from '../../services/addons.service';
+import { confirmCancelBooking } from '../../components/booking/cancelBooking';
+import RefundCard from '../../components/booking/RefundCard';
+import InvoiceButton from '../../components/booking/InvoiceButton';
+import { invoiceAvailable } from '../../services/bookingMoney.service';
 
 interface Proof { id: string; photos: string[]; notes?: string; created_at: string }
 interface Deliverable { id: string; title: string; message?: string; files: string[]; links: string[]; created_at: string }
@@ -65,25 +69,23 @@ export default function BookingDetail() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const cancel = () =>
-    Alert.alert('Cancel this booking?', 'The vendor will be told. Any payment is refunded under the contract’s cancellation terms.', [
-      { text: 'Keep it', style: 'cancel' },
-      {
-        text: 'Cancel booking',
-        style: 'destructive',
-        onPress: async () => {
-          setBusy(true);
-          try {
-            await BookingService.cancelBooking(bookingId);
-            load();
-          } catch (err: any) {
-            Alert.alert('Could not cancel', err?.response?.data?.message ?? 'Try again in a moment.');
-          } finally {
-            setBusy(false);
-          }
+  // shows what cancelling does with the money first (refund, fee kept), then the refund result
+  const cancel = async () => {
+    setBusy(true);
+    try {
+      await confirmCancelBooking({
+        bookingId,
+        role: 'CUSTOMER',
+        title: booking?.status === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?',
+        onCancelled: () => {
+          load();
+          setPaymentsKey((k) => k + 1);
         },
-      },
-    ]);
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const payNow = async () => {
     setBusy(true);
@@ -227,6 +229,7 @@ export default function BookingDetail() {
                 bookingId={booking.id}
                 vendor={vendor}
                 extras={extras.extras}
+                meta={extras.meta}
                 reload={extras.reload}
                 onChanged={() => {
                   load();
@@ -235,6 +238,9 @@ export default function BookingDetail() {
               />
             </View>
           )}
+
+          {st === 'CANCELLED' && <RefundCard bookingId={booking.id} role="CUSTOMER" reloadKey={paymentsKey} />}
+          {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
 
           <RentalReturnCard booking={booking} role="CUSTOMER" onDone={load} />
 

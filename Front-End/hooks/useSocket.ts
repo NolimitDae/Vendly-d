@@ -2,20 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { CookieHelper } from "@/helper/cookie.helper";
 import { URL as API_URL } from "@/config/app.config";
+import { isLoggedIn } from "@/lib/session";
+import { socketAuth } from "@/lib/currentUser";
 
 export function useSocket(): Socket | null {
   const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
-    const token = CookieHelper.get({ key: "token" });
-    if (!token) return;
+    if (!isLoggedIn()) return;
 
     const sock = io(API_URL, {
-      // Browsers can't send custom headers on a WebSocket, so the token goes in the handshake `auth`
-      // payload. It's a function so every (re)connection reads the latest, possibly refreshed, token.
-      auth: (cb) => cb({ token: CookieHelper.get({ key: "token" }) }),
+      // The login token is in an HttpOnly cookie scripts can't read, and browsers can't send custom
+      // headers on a WebSocket: every (re)connection asks the API for a short-lived socket token
+      // and passes it in the handshake `auth` payload.
+      auth: socketAuth(),
       transports: ["websocket"],
       reconnectionAttempts: 5,
     });

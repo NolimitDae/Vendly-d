@@ -51,6 +51,35 @@ export interface PaymentTimeline {
   installments: Installment[];
 }
 
+export type DisputeCategory = "no_show" | "late" | "not_as_described" | "quality" | "damage" | "billing" | "other";
+export type DisputeOutcome = "full_refund" | "partial_refund" | "other";
+
+export const DISPUTE_CATEGORY_LABELS: Record<DisputeCategory, string> = {
+  no_show: "Vendor didn’t show up",
+  late: "Vendor was late",
+  not_as_described: "Not as described",
+  quality: "Poor quality",
+  damage: "Damage",
+  billing: "Billing problem",
+  other: "Something else",
+};
+
+export const DISPUTE_OUTCOME_LABELS: Record<DisputeOutcome, string> = {
+  full_refund: "Full refund",
+  partial_refund: "Partial refund",
+  other: "Something else",
+};
+
+export const DISPUTE_MAX_PHOTOS = 10;
+
+export interface DisputeReport {
+  reason: string;
+  category?: DisputeCategory;
+  outcome?: DisputeOutcome;
+  requested_amount?: number;
+  photos?: File[];
+}
+
 export interface ScheduleLine {
   label: string;
   amount: number;
@@ -73,7 +102,17 @@ export const PaymentsService = {
 
   timeline: (bookingId: string) => Fetch.get(`/bookings/${bookingId}/payments`, authHeaders()),
   approve: (bookingId: string) => Fetch.post(`/bookings/${bookingId}/approve`, {}, authHeaders()),
-  dispute: (bookingId: string, reason: string) => Fetch.post(`/bookings/${bookingId}/dispute`, { reason }, authHeaders()),
+  /** Report a problem: details and up to 10 photos go as multipart (the upload timeout applies). */
+  dispute: (bookingId: string, report: string | DisputeReport) => {
+    if (typeof report === "string") return Fetch.post(`/bookings/${bookingId}/dispute`, { reason: report }, authHeaders());
+    const form = new FormData();
+    form.append("reason", report.reason);
+    if (report.category) form.append("category", report.category);
+    if (report.outcome) form.append("outcome", report.outcome);
+    if (report.outcome === "partial_refund" && report.requested_amount != null) form.append("requested_amount", String(report.requested_amount));
+    (report.photos ?? []).forEach((p) => form.append("photos", p));
+    return Fetch.post(`/bookings/${bookingId}/dispute`, form, { headers: { Authorization: `Bearer ${CookieHelper.get({ key: "token" })}` } });
+  },
   retry: (bookingId: string, installmentId: string, paymentMethodId?: string) =>
     Fetch.post(`/bookings/${bookingId}/installments/${installmentId}/retry`, paymentMethodId ? { payment_method_id: paymentMethodId } : {}, authHeaders()),
 };

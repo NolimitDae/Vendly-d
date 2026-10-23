@@ -35,6 +35,15 @@ export const AuthService = {
       },
     }),
 
+  /** Vendors: weekly working hours (all 7 days, null = closed day), or null to clear them. */
+  updateWorkingHours: async (working_hours: Record<string, { open: string; close: string } | null> | null) =>
+    Fetch.patch("/auth/update", { working_hours }, {
+      headers: {
+        Authorization: `Bearer ${CookieHelper.get({ key: "token" })}`,
+        "Content-Type": "application/json",
+      },
+    }),
+
   addLicense: async (formData: FormData) =>
     Fetch.post("/auth/add-license", formData, {
       headers: {

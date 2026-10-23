@@ -74,9 +74,18 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 - Payouts wait until every reservation on the booking is returned.
 - Card holds lapse after about 7 days, so a deposit on a rental longer than ~6 days may expire before the return. If capture fails the fees are charged to the saved card instead (and can fail like any charge).
 
+## What people see about their money
+
+- **Cancel preview:** `GET /bookings/:id/cancel-preview` (customer or vendor) returns what cancelling now would do: `{ cancelled_by, refund_total, refund_fee, fee_kept, vendor_keeps, policy: {key,label,text}|null, percent, unpaid_cancelled, holds_released, card, refund_timing, message }`. It runs the same `BookingService.cancellationTerms` as the real cancel (which returns the same shape as `refund_summary`), so the two never differ. `message` is a plain sentence for whoever asked ("You'll get $225.00 back to your card. The $22.50 Vendly Protection fee isn't refunded.").
+- **After a cancellation** the customer always gets an email and push with the refund amount, the card and "5–10 business days", whoever cancelled; the vendor is told when the customer cancels. `GET /bookings/:id/payments` carries `refunded`, `refund_card`, `refund_timing` and `invoice_available` for the Refund card on the booking.
+- **Receipts:** every installment that becomes `PAID` (deposit, balance, pay-after capture, add-on or fee, rental deposit kept) emails the customer a receipt once (`BookingInstallment.receipt_sent_at`, claimed first; a mail failure never touches the payment). An hourly sweep sends receipts missed in the last 7 days.
+- **Final invoice:** `GET /bookings/:id/invoice` (customer, vendor or admin) returns a PDF: package (from Schedule A), add-ons at booking and later, promo, fees, Vendly Protection fee, every charge with status, refunds, money given back and the total paid; the vendor's and admin's copy add the payout and commission. `GET /bookings/:id/invoice/link` returns a five-minute signed link (`/api/invoices/:token`) the mobile app opens without a login header. The customer is emailed once (`Booking.invoice_sent_at`) when the money is final: the vendor is paid out, or a paid booking's cancellation is settled (and by the hourly sweep).
+- **Transaction history:** `GET /payments/transactions?type=all|payment|refund|payout|fee&from&to&q&page&limit&role=customer|vendor`. Customers: charges (−) and refunds (+) from installments, plus refunds of Checkout-era bookings. Vendors: their part of each customer payment (pending until released), refunds of it, payouts, balance credits, early deposits, withdrawals, commission, money given back and recoveries. `q` searches the booking title. Transactions created from now on carry the booking in `order_id`.
+- **Checkout-era bookings** paid after completion are credited to the vendor balance less the current Vendly commission (recorded as `vendly_commission`, with `commission_amount` / `released_gross` / `released_at` set), like a regular payout. Credits made before this change are untouched.
+
 ## Still to do
 
 - A customer cancelling a pay-after-service booking whose card is only held (not captured) owes nothing: the hold is released rather than captured for the vendor's policy share.
 
-- Legacy bookings paid through hosted Checkout before this engine keep the old path: no installments, vendor credited to balance on completion.
+- Legacy bookings paid through hosted Checkout before this engine keep the old path: no installments, vendor credited to balance (less commission) on completion.
 - Amendments that change the price use the platform fee rate, not the category override.

@@ -246,6 +246,45 @@ describe('VendorBookingsPage', () => {
     });
   });
 
+  describe('Refunds and Complaints tabs', () => {
+    it('asks the server for complaints and shows which are open', async () => {
+      setupSuccess([]);
+      const user = userEvent.setup();
+      render(<VendorBookingsPage />);
+      await waitFor(() => screen.getByText(/no bookings yet/i));
+
+      setupSuccess([
+        makeBooking({ id: 'b2', status: 'COMPLETED', dispute_opened_at: '2026-10-01T00:00:00Z', dispute_resolved_at: null, dispute_category: 'late' }),
+        makeBooking({ id: 'b3', status: 'COMPLETED', dispute_opened_at: '2026-09-01T00:00:00Z', dispute_resolved_at: '2026-09-05T00:00:00Z' }),
+      ]);
+      await user.click(screen.getByRole('button', { name: /^complaints$/i }));
+      await waitFor(() => expect(BookingService.getMyAsVendor).toHaveBeenLastCalledWith({ page: 1, filter: 'complaints' }));
+      expect(await screen.findByText('Complaint open · Vendor was late')).toBeInTheDocument();
+      expect(screen.getByText('Complaint resolved')).toBeInTheDocument();
+    });
+
+    it('asks the server for refunds and shows how much went back', async () => {
+      setupSuccess([]);
+      const user = userEvent.setup();
+      render(<VendorBookingsPage />);
+      await waitFor(() => screen.getByText(/no bookings yet/i));
+      setupSuccess([makeBooking({ status: 'CANCELLED', refunded_total: 120, given_back: 20 })]);
+      await user.click(screen.getByRole('button', { name: /^refunds$/i }));
+      await waitFor(() => expect(BookingService.getMyAsVendor).toHaveBeenLastCalledWith({ page: 1, filter: 'refunds' }));
+      expect(await screen.findByText('$120.00 refunded')).toBeInTheDocument();
+      expect(screen.getByText('$20.00 given back')).toBeInTheDocument();
+    });
+
+    it('says so when there are no complaints', async () => {
+      setupSuccess([]);
+      const user = userEvent.setup();
+      render(<VendorBookingsPage />);
+      await waitFor(() => screen.getByText(/no bookings yet/i));
+      await user.click(screen.getByRole('button', { name: /^complaints$/i }));
+      expect(await screen.findByText(/no complaints/i)).toBeInTheDocument();
+    });
+  });
+
   describe('pagination', () => {
     it('renders page number buttons when last_page > 1', async () => {
       (BookingService.getMyAsVendor as jest.Mock).mockResolvedValue({

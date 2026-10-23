@@ -1,4 +1,4 @@
-import { customerRefundPercent, settleCancellation } from './cancellation';
+import { cancellationMessage, customerRefundPercent, settleCancellation } from './cancellation';
 
 const event = new Date('2026-06-14T15:00:00Z');
 const before = (days: number, hours = 0) => new Date(event.getTime() - (days * 24 + hours) * 3600 * 1000);
@@ -60,5 +60,29 @@ describe('settleCancellation', () => {
     const s = settleCancellation({ cancelledBy: 'CUSTOMER', amount: 99.99, serviceFee: 5, policy: 'moderate', eventStart: event, cancelledAt: before(20) });
     expect(s.refundVendorPrice).toBe(50);
     expect(s.vendorKeeps).toBe(49.99);
+  });
+});
+
+describe('cancellationMessage', () => {
+  const base = { cancelled_by: 'CUSTOMER' as const, refund_total: 225, refund_fee: 0, fee_kept: 22.5, vendor_keeps: 225, policy: { key: 'flexible', label: 'Flexible', text: '' }, percent: 50, unpaid_cancelled: 0, holds_released: 0, card: null, paid: true };
+
+  it('tells the customer what comes back and what is kept, before and after', () => {
+    expect(cancellationMessage(base, 'CUSTOMER')).toBe(
+      "You'll get $225.00 back to your card. The $22.50 Vendly Protection fee isn't refunded. The vendor keeps $225.00 under their flexible cancellation policy. Refunds take 5–10 business days to show.",
+    );
+    expect(cancellationMessage({ ...base, card: 'Visa •••• 4242' }, 'CUSTOMER', true)).toMatch(/^\$225\.00 is being refunded to your card \(Visa •••• 4242\)\./);
+  });
+
+  it('tells the vendor what they keep', () => {
+    expect(cancellationMessage(base, 'VENDOR', true)).toBe('The customer is getting $225.00 back. You keep $225.00 under your flexible cancellation policy.');
+    expect(cancellationMessage({ ...base, cancelled_by: 'VENDOR', refund_total: 472.5, refund_fee: 22.5, fee_kept: 0, vendor_keeps: 0 }, 'VENDOR')).toBe(
+      'The customer gets $472.50 back, Vendly Protection fee included. You keep nothing from this booking.',
+    );
+  });
+
+  it('says nothing is charged when nothing was paid', () => {
+    expect(cancellationMessage({ ...base, refund_total: 0, fee_kept: 0, vendor_keeps: 0, unpaid_cancelled: 300, paid: false }, 'CUSTOMER')).toBe(
+      "You haven't been charged, so there's nothing to refund. The $300.00 still to pay won't be charged.",
+    );
   });
 });

@@ -12,11 +12,12 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { BookingStatus } from 'prisma/generated/client';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
-import { BookingService } from './booking.service';
+import { BookingService, VENDOR_BOOKING_FILTERS, VendorBookingFilter } from './booking.service';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
@@ -24,6 +25,7 @@ import { requestMeta } from 'src/modules/contracts/request-meta';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 import { DisputeBookingDto, DisputeReplyDto, RetryInstallmentDto } from './dto/payments.dto';
 import { PaymentsService } from 'src/modules/payments/payments.service';
+import { DISPUTE_MAX_PHOTOS, DISPUTE_PHOTO_MAX_BYTES } from 'src/modules/payments/dispute-files';
 
 @ApiTags('bookings')
 @ApiBearerAuth('customer-token')
@@ -58,8 +60,11 @@ export class BookingController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('status') status?: BookingStatus,
+    @Query('filter') filter?: string,
   ) {
-    return this.service.getMyBookingsAsVendor(user.id, { page, limit, status });
+    // refunds: money went back to the customer; complaints: the customer reported a problem (open first)
+    const f = (VENDOR_BOOKING_FILTERS as readonly string[]).includes(filter ?? '') ? (filter as VendorBookingFilter) : undefined;
+    return this.service.getMyBookingsAsVendor(user.id, { page, limit, status, filter: f });
   }
 
   @Get(':id')
@@ -94,6 +99,12 @@ export class BookingController {
   @ApiBearerAuth('vendor-token')
   complete(@GetUser() user: any, @Param('id') id: string) {
     return this.service.complete(id, user.id);
+  }
+
+  /** What cancelling now would do with the money (refund, fee kept, what the vendor keeps), in a plain sentence. */
+  @Get(':id/cancel-preview')
+  cancelPreview(@GetUser() user: any, @Param('id') id: string) {
+    return this.service.cancelPreview(id, user.id);
   }
 
   @Patch(':id/cancel')
@@ -164,8 +175,12 @@ export class BookingController {
 
   /** Customer raises a problem; the money stays held until it is resolved. */
   @Post(':id/dispute')
-  dispute(@GetUser() user: any, @Param('id') id: string, @Body() dto: DisputeBookingDto) {
-    return this.payments.openDispute(id, user.id, dto.reason);
+  @Throttle({ short: { limit: 2, ttl: 10_000 } })
+  // multipart with up to 10 photos; plain JSON (reason only) still works for older apps
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @UseInterceptors(FilesInterceptor('photos', DISPUTE_MAX_PHOTOS, { storage: memoryStorage(), limits: { fileSize: DISPUTE_PHOTO_MAX_BYTES, files: DISPUTE_MAX_PHOTOS } }))
+  dispute(@GetUser() user: any, @Param('id') id: string, @Body() dto: DisputeBookingDto, @UploadedFiles() photos?: Express.Multer.File[]) {
+    return this.payments.openDispute(id, user.id, dto, photos ?? []);
   }
 
   /** Vendor gives their side of an open dispute; Vendly sees it with the customer's report. */

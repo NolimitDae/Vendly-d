@@ -53,6 +53,14 @@ export class ReviewController {
     return this.service.replyToReview(id, user.id, dto);
   }
 
+  /** The signed-in vendor's own reviews with their average, count and how many still need a reply. */
+  @Get('my')
+  @ApiBearerAuth('vendor-token')
+  @UseGuards(JwtAuthGuard)
+  mine(@GetUser() user: any, @Query('page') page?: number, @Query('limit') limit?: number) {
+    return this.service.getMyReviewsAsVendor(user.id, { page, limit });
+  }
+
   @Get('listing/:listingId')
   getListingReviews(
     @Param('listingId') listingId: string,

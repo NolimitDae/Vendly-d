@@ -102,7 +102,16 @@ export function ClientShareCard({ eventId, email, seesBudget, onChanged }: { eve
 }
 
 /** Saved vendor teams: save the booked vendors as a team, and invite a whole team to this event. */
-export function TeamsCard({ eventId, bookedVendors }: { eventId: string; bookedVendors: { id: string; name: string }[] }) {
+export function TeamsCard({
+  eventId,
+  bookedVendors,
+  readOnly = false,
+}: {
+  eventId: string;
+  bookedVendors: { id: string; name: string }[];
+  /** a cancelled event: teams can be managed, but nobody can be invited to it */
+  readOnly?: boolean;
+}) {
   const [teams, setTeams] = useState<VendorTeam[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -155,7 +164,8 @@ export function TeamsCard({ eventId, bookedVendors }: { eventId: string; bookedV
       ) : (
         <>
           <View style={s.chips}>{teams.map((t) => <Chip key={t.id} label={`${t.name} (${t.vendors.length})`} active={selected === t.id} onPress={() => setSelected(selected === t.id ? null : t.id)} />)}</View>
-          {selected && (
+          {selected && readOnly && <Text style={s.muted}>This event was cancelled, so you can&apos;t invite a team to it.</Text>}
+          {selected && !readOnly && (
             <>
               <Text style={s.muted}>{teams.find((t) => t.id === selected)?.vendors.map((v) => v.name).join(', ')}</Text>
               <View style={ui.field}><TextInput style={ui.input} placeholder="Add a note (optional)" placeholderTextColor={DARK.muted} value={note} onChangeText={setNote} /></View>

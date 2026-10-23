@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import EventStatusActions, { EventCompletedBanner, canEditEvent, eventActionsFor } from "./EventStatusActions";
+import EventStatusActions, { EventCancelledBanner, EventCompletedBanner, canEditEvent, eventActionsFor, isEventReadOnly } from "./EventStatusActions";
 import EditEventDialog, { formValuesToUpdate } from "./EditEventDialog";
 
 jest.mock("@/service/events/events.service", () => ({
@@ -44,6 +44,12 @@ describe("eventActionsFor / canEditEvent", () => {
     expect(canEditEvent("IN_PROGRESS")).toBe(true);
     expect(canEditEvent("COMPLETED")).toBe(false);
     expect(canEditEvent("CANCELLED")).toBe(false);
+  });
+
+  it("treats only a cancelled event as read-only (a completed one can still get tasks and files)", () => {
+    expect(isEventReadOnly("CANCELLED")).toBe(true);
+    expect(isEventReadOnly("COMPLETED")).toBe(false);
+    expect(isEventReadOnly("PLANNING")).toBe(false);
   });
 });
 
@@ -158,6 +164,14 @@ describe("EventCompletedBanner", () => {
   it("skips the review prompt when the event had no vendors", () => {
     render(<EventCompletedBanner completedAt="2026-11-15T10:00:00Z" hasBookings={false} onViewVendors={jest.fn()} />);
     expect(screen.queryByRole("link")).toBeNull();
+  });
+});
+
+describe("EventCancelledBanner", () => {
+  it("shows when it was cancelled and that it's read-only", () => {
+    render(<EventCancelledBanner cancelledAt="2026-10-02T09:00:00Z" />);
+    expect(screen.getByText("Cancelled on Oct 2, 2026")).toBeInTheDocument();
+    expect(screen.getByText(/nothing can be added or changed/)).toBeInTheDocument();
   });
 });
 

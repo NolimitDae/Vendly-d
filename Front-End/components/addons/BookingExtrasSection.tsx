@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dayjs from "dayjs";
-import { HandCoins, Loader2, Plus, Receipt } from "lucide-react";
+import { Clock, HandCoins, Loader2, Plus, Receipt } from "lucide-react";
 import { toast } from "react-toastify";
 import {
   AddOnsService,
@@ -17,7 +17,7 @@ import {
 import { PaymentsService } from "@/service/payments/payments.service";
 import { apiError } from "@/service/contracts/contracts.service";
 import SavedCards from "@/components/payments/SavedCards";
-import { ADD_ON_UNITS, money } from "@/lib/addons";
+import { ADD_ON_UNITS, EXTEND_CHOICES, durationText, extendChip, money } from "@/lib/addons";
 
 type Role = "CUSTOMER" | "VENDOR";
 
@@ -186,6 +186,13 @@ export default function BookingExtrasSection({
         </p>
       )}
 
+      {meta?.event_end_at && extras.some((e) => e.kind === "ADD_ON" && !!e.extends_minutes && e.status === "APPROVED") && (
+        <p className="text-sm rounded-lg bg-primary/5 text-gray-800 dark:text-gray-200 px-3 py-2 flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary" aria-hidden />
+          With the added time, the booking now ends {dayjs(meta.event_end_at).format("ddd, MMM D [at] h:mm A")}.
+        </p>
+      )}
+
       {included.length > 0 && (
         <div>
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Included add-ons</p>
@@ -221,6 +228,12 @@ export default function BookingExtrasSection({
                     </p>
                     <p className="font-medium text-gray-900 dark:text-white">{e.label}</p>
                     {e.description && <p className="text-xs text-gray-500 dark:text-gray-400">{e.description}</p>}
+                    {e.kind === "ADD_ON" && !!e.extends_minutes && (
+                      <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                        <Clock className="w-3.5 h-3.5" aria-hidden />
+                        {e.extends_label ?? `Adds ${durationText(e.extends_minutes)}`}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-gray-900 dark:text-white">{money(e.total)}</p>
@@ -420,6 +433,8 @@ function RequestForm({
   const [unit, setUnit] = useState<AddOnUnit>("FIXED");
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
+  // add-ons only: time it adds to the booking; a per hour add-on starts at its hours until the vendor picks
+  const [extendPick, setExtendPick] = useState<number | null | undefined>(undefined);
   const word = kind === "FEE" ? "fee" : "add-on";
 
   useEffect(() => {
@@ -440,6 +455,9 @@ function RequestForm({
   };
 
   const q = unit === "FIXED" ? 1 : qty ? Number(qty) : unit === "PER_PERSON" ? null : 1;
+  const hourDefault = unit === "PER_HOUR" && q ? Math.round(q * 60) : null;
+  const extendsMinutes =
+    kind !== "ADD_ON" ? null : extendPick !== undefined ? extendPick : hourDefault && (EXTEND_CHOICES as readonly number[]).includes(hourDefault) ? hourDefault : null;
   const amount = q !== null && Number(price) > 0 ? Math.round(Number(price) * q * 100) / 100 : null;
 
   const send = () => {
@@ -456,6 +474,7 @@ function RequestForm({
       price_unit: unit,
       quantity: unit !== "FIXED" && qty ? Number(qty) : undefined,
       note: note.trim() || undefined,
+      extends_minutes: extendsMinutes ?? undefined,
     });
   };
 
@@ -494,6 +513,28 @@ function RequestForm({
           <div>
             <label htmlFor="extra-qty" className={labelCls}>{QTY_LABEL[unit]}</label>
             <input id="extra-qty" type="number" min={unit === "PER_HOUR" ? "0.5" : "1"} step={unit === "PER_HOUR" ? "0.5" : "1"} value={qty} onChange={(e) => setQty(e.target.value)} className={fieldCls} />
+          </div>
+        )}
+        {kind === "ADD_ON" && (
+          <div className="sm:col-span-2">
+            <p id="extra-time-label" className={labelCls}>Adds time to the booking (optional)</p>
+            <div role="group" aria-labelledby="extra-time-label" className="flex flex-wrap gap-2">
+              {[null, ...EXTEND_CHOICES].map((m) => {
+                const on = extendsMinutes === m;
+                return (
+                  <button
+                    key={m ?? "none"}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setExtendPick(m)}
+                    className={`px-3 py-1 rounded-full text-sm border ${on ? "bg-primary text-primary-foreground border-primary" : "border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"}`}
+                  >
+                    {m === null ? "No extra time" : extendChip(m)}
+                  </button>
+                );
+              })}
+            </div>
+            {extendsMinutes ? <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">When the customer approves, the booking ends {durationText(extendsMinutes)} later.</p> : null}
           </div>
         )}
         <div className="sm:col-span-2">

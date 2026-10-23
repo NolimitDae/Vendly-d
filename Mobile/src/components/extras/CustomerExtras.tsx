@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AddCardSheet from '../AddCardSheet';
 import { BrandGradient, Card, GradientButton, ui } from '../brand';
 import Sheet from '../Sheet';
-import { ExtraLine, extraStyles as x } from './shared';
+import { ExtraLine, NewEndTime, extraStyles as x } from './shared';
 import { DARK, FONTS } from '../../constants/colors';
 import { AddOnsService, money, type Extra, type ExtrasMeta } from '../../services/addons.service';
 import { PaymentsService, type SavedCard } from '../../services/payments.service';
@@ -35,7 +35,7 @@ export function ExtrasBanner({ meta, vendor, onPress }: { meta: ExtrasMeta | nul
  * The customer's add-ons and fees on a booking: what they picked when booking, and anything the
  * vendor sent since, to approve (charged right away) or decline. A failed charge can be retried.
  */
-export default function CustomerExtras({ bookingId, vendor, extras, reload, onChanged }: { bookingId: string; vendor: string; extras: Extra[]; reload: () => Promise<void>; onChanged?: () => void }) {
+export default function CustomerExtras({ bookingId, vendor, extras, meta, reload, onChanged }: { bookingId: string; vendor: string; extras: Extra[]; meta?: ExtrasMeta | null; reload: () => Promise<void>; onChanged?: () => void }) {
   const [approving, setApproving] = useState<Extra | null>(null);
   const [declining, setDeclining] = useState<Extra | null>(null);
   const [newCardFor, setNewCardFor] = useState<{ extra: Extra; retry: boolean } | null>(null);
@@ -93,6 +93,7 @@ export default function CustomerExtras({ bookingId, vendor, extras, reload, onCh
   return (
     <Card style={{ gap: 12, borderWidth: 1, borderColor: DARK.field }}>
       <Text style={x.h2}>Add-ons and fees</Text>
+      <NewEndTime extras={extras} meta={meta ?? null} />
 
       {included.length > 0 && <Text style={x.h3}>Included add-ons</Text>}
       {included.map((e) => <ExtraLine key={e.id} extra={e} role="CUSTOMER" />)}

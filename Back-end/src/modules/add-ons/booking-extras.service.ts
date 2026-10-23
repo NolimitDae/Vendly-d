@@ -10,7 +10,7 @@ import { currentFees } from 'src/modules/platform/platform-settings.service';
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RequestExtraDto } from './dto/add-ons.dto';
-import { addOnLabel, extraProtectionFee, round2 } from './pricing';
+import { addOnLabel, durationText, extraProtectionFee, round2 } from './pricing';
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -24,6 +24,8 @@ const REMIND_AFTER_HOURS = 24;
 const MAX_OPEN = 10;
 /** One request can't be more than this. */
 const MAX_AMOUNT = 25_000;
+/** An add-on can add up to this much time to a booking. */
+const MAX_EXTEND_MINUTES = 12 * 60;
 
 const KIND_WORD: Record<AddOnKind, string> = { ADD_ON: 'add-on', FEE: 'fee' };
 
@@ -44,6 +46,9 @@ export function formatExtra(e: ExtraRow | Prisma.BookingExtraGetPayload<{}>) {
     fee_amount: Number(e.fee_amount),
     total: round2(Number(e.amount) + Number(e.fee_amount)),
     note: e.note,
+    // add-ons that add time move the booking's end when approved
+    extends_minutes: e.extends_minutes ?? null,
+    extends_label: e.extends_minutes ? `Adds ${durationText(e.extends_minutes)}` : null,
     status: e.status,
     created_at: e.created_at,
     responded_at: e.responded_at,
@@ -73,7 +78,7 @@ export class BookingExtrasService {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       select: {
-        id: true, status: true, vendor_id: true, customer_id: true, completed_at: true, guest_count: true, currency: true, payment_method_id: true,
+        id: true, status: true, vendor_id: true, customer_id: true, completed_at: true, guest_count: true, currency: true, payment_method_id: true, event_start_at: true, event_end_at: true,
         dispute_opened_at: true, dispute_resolved_at: true, dispute_resolution: true,
         listing: { select: { title: true, category_id: true } },
         customer: { select: { id: true, name: true, email: true } },
@@ -109,6 +114,8 @@ export class BookingExtrasService {
       success: true,
       data,
       meta: {
+        event_start_at: b.event_start_at,
+        event_end_at: b.event_end_at,
         waiting_on_customer: waiting.length,
         waiting_total: round2(waiting.reduce((s, e) => s + e.total, 0)),
         can_request: this.requestWindow(b),
@@ -146,6 +153,12 @@ export class BookingExtrasService {
     }
     if (dto.kind === AddOnKind.ADD_ON && !window.add_on) {
       throw new BadRequestException(`Add-ons can be added once the booking is confirmed, and up to ${EXTRA_WINDOW_DAYS} days after it’s complete.`);
+    }
+    // only add-ons add time; a fee is for what already happened
+    const extendsMinutes = dto.extends_minutes ?? null;
+    if (extendsMinutes != null) {
+      if (dto.kind === AddOnKind.FEE) throw new BadRequestException('Fees can’t add time to the booking. Send an add-on instead.');
+      if (extendsMinutes % 30 !== 0 || extendsMinutes < 30 || extendsMinutes > MAX_EXTEND_MINUTES) throw new BadRequestException('Time added must be in steps of 30 minutes, up to 12 hours.');
     }
     const open = await this.prisma.bookingExtra.count({ where: { booking_id: bookingId, status: BookingExtraStatus.PENDING } });
     if (open >= MAX_OPEN) throw new BadRequestException('The customer has several requests to answer already. Wait for them to respond first.');
@@ -185,6 +198,7 @@ export class BookingExtrasService {
         amount,
         fee_amount: fee,
         note: dto.note?.trim() || null,
+        extends_minutes: extendsMinutes,
         status: BookingExtraStatus.PENDING,
       },
     });
@@ -196,7 +210,7 @@ export class BookingExtrasService {
       bookingId,
       dto.kind === AddOnKind.FEE ? 'A fee needs your approval' : 'An add-on needs your approval',
       `Approve ${KIND_WORD[dto.kind]}: ${name} — ${title}`,
-      `${this.vendorName(b)} sent ${dto.kind === AddOnKind.FEE ? 'a fee' : 'an add-on'} for ${title}: ${what}, $${total.toFixed(2)}${extra.note ? ` (${extra.note})` : ''}. Nothing is charged until you approve it.`,
+      `${this.vendorName(b)} sent ${dto.kind === AddOnKind.FEE ? 'a fee' : 'an add-on'} for ${title}: ${what}, $${total.toFixed(2)}${extra.note ? ` (${extra.note})` : ''}.${extendsMinutes ? ` It adds ${durationText(extendsMinutes)} to the booking.` : ''} Nothing is charged until you approve it.`,
       title,
       total,
     );
@@ -275,7 +289,7 @@ export class BookingExtrasService {
       e.booking_id,
       `${e.kind === AddOnKind.FEE ? 'Fee' : 'Add-on'} approved`,
       `${e.name} approved — ${title}`,
-      `${b.customer.name ?? 'The customer'} approved ${e.name} ($${Number(e.amount).toFixed(2)}) on ${title}.${result.paid ? ' It has been paid and will reach you with your payout.' : ' We’re taking the payment now.'}`,
+      `${b.customer.name ?? 'The customer'} approved ${e.name} ($${Number(e.amount).toFixed(2)}) on ${title}.${e.kind === AddOnKind.ADD_ON && e.extends_minutes ? ` The booking now runs ${durationText(e.extends_minutes)} longer.` : ''}${result.paid ? ' It has been paid and will reach you with your payout.' : ' We’re taking the payment now.'}`,
       title,
       Number(e.amount),
     );
@@ -324,6 +338,8 @@ export class BookingExtrasService {
         },
       });
       await tx.bookingExtra.update({ where: { id: extraId }, data: { installment_id: row.id } });
+      // an approved add-on that adds time moves the booking's end (once: the claim above is atomic)
+      if (e.kind === AddOnKind.ADD_ON && e.extends_minutes) await this.extendBooking(tx, e.booking_id, e.extends_minutes);
       return row;
     });
     const charged = await this.payments.chargeInstallment(inst.id, paymentMethodId ?? undefined).catch((err) => {
@@ -334,7 +350,16 @@ export class BookingExtrasService {
     // paid after the booking's payout: send the vendor their share now rather than at the next sweep
     if (paid) void this.payments.payOutLateFor(e.booking_id).catch((err) => this.logger.error(`late payout ${e.booking_id}`, err));
     const fresh = await this.prisma.bookingExtra.findUniqueOrThrow({ where: { id: extraId }, include: { installment: true } });
-    return { ...formatExtra(fresh), paid };
+    const ends = e.kind === AddOnKind.ADD_ON && e.extends_minutes ? await this.prisma.booking.findUnique({ where: { id: e.booking_id }, select: { event_end_at: true } }) : null;
+    return { ...formatExtra(fresh), paid, ...(ends ? { event_end_at: ends.event_end_at } : {}) };
+  }
+
+  /** Moves the booking's end later; a booking with only a start ends that long after it starts. */
+  private async extendBooking(tx: Prisma.TransactionClient, bookingId: string, minutes: number) {
+    const b = await tx.booking.findUnique({ where: { id: bookingId }, select: { event_start_at: true, event_end_at: true } });
+    const from = b?.event_end_at ?? b?.event_start_at;
+    if (!from) return;
+    await tx.booking.update({ where: { id: bookingId }, data: { event_end_at: new Date(from.getTime() + minutes * 60_000) } });
   }
 
   // ─── Vendly review (admin) ─────────────────────────────────────────────────

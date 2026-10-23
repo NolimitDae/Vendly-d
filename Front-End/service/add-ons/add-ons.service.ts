@@ -62,6 +62,10 @@ export interface Extra {
   fee_amount: number;
   total: number;
   note: string | null;
+  /** add-ons only: minutes it adds to the booking (moves the end time once approved) */
+  extends_minutes?: number | null;
+  /** "Adds 2 hours" */
+  extends_label?: string | null;
   status: ExtraStatus;
   created_at: string;
   responded_at: string | null;
@@ -81,6 +85,9 @@ export interface Extra {
 }
 
 export interface ExtrasMeta {
+  /** the booking's times now (an approved add-on that adds time moves the end) */
+  event_start_at?: string | null;
+  event_end_at?: string | null;
   waiting_on_customer: number;
   waiting_total: number;
   can_request: { add_on: boolean; fee: boolean };
@@ -94,6 +101,8 @@ export interface ExtraRequestInput {
   price_unit?: AddOnUnit;
   quantity?: number;
   note?: string;
+  /** add-ons only: minutes added to the booking when approved */
+  extends_minutes?: number;
 }
 
 export interface GiveBackResult {

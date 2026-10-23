@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { DARK, FONTS } from '../../constants/colors';
-import { money, type Extra } from '../../services/addons.service';
+import { durationText, money, type Extra, type ExtrasMeta } from '../../services/addons.service';
 
 type Role = 'VENDOR' | 'CUSTOMER';
 
@@ -57,6 +57,12 @@ export function ExtraLine({ extra, role, children }: { extra: Extra; role: Role;
           {role === 'CUSTOMER' && extra.fee_amount > 0 && <Text style={s.small}>incl. {money(extra.fee_amount)} fee</Text>}
         </View>
       </View>
+      {extra.kind === 'ADD_ON' && !!extra.extends_minutes && (
+        <View style={s.meta}>
+          <Ionicons name="time-outline" size={14} color={DARK.accent} />
+          <Text style={[s.status, { color: DARK.accent }]}>{extra.extends_label ?? `Adds ${durationText(extra.extends_minutes)}`}</Text>
+        </View>
+      )}
       {!!extra.note && <Text style={s.note}>“{extra.note}”</Text>}
       {extra.status === 'DECLINED' && !!extra.decline_reason && <Text style={s.small}>Reason: {extra.decline_reason}</Text>}
       {extra.status === 'IN_REVIEW' && (
@@ -67,6 +73,17 @@ export function ExtraLine({ extra, role, children }: { extra: Extra; role: Role;
       {extra.status === 'WAIVED' && <Text style={s.small}>{role === 'CUSTOMER' ? 'You won’t be charged for this.' : 'Vendly decided this fee isn’t owed.'}</Text>}
       {extra.payment?.status === 'FAILED' && !!extra.payment.last_error && <Text style={[s.small, { color: RED }]}>{extra.payment.last_error}</Text>}
       {children}
+    </View>
+  );
+}
+
+/** Once an add-on that adds time is approved: when the booking now ends. */
+export function NewEndTime({ extras, meta }: { extras: Extra[]; meta: ExtrasMeta | null }) {
+  if (!meta?.event_end_at || !extras.some((e) => e.kind === 'ADD_ON' && !!e.extends_minutes && e.status === 'APPROVED')) return null;
+  return (
+    <View style={[s.meta, { gap: 8 }]}>
+      <Ionicons name="time-outline" size={16} color={DARK.accent} />
+      <Text style={[s.note, { flex: 1 }]}>With the added time, the booking now ends {format(parseISO(meta.event_end_at), 'EEE, dd MMM \'at\' h:mm a')}.</Text>
     </View>
   );
 }

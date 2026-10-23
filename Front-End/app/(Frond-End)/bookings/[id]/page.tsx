@@ -20,6 +20,9 @@ import PaymentTimeline from "@/components/payments/PaymentTimeline";
 import BookingContractSection from "@/components/contracts/BookingContractSection";
 import RentalReturnPanel, { type RentalBookingFields } from "@/components/rentals/RentalReturnPanel";
 import BookingExtrasSection from "@/components/addons/BookingExtrasSection";
+import CancelBookingDialog from "@/components/bookings/CancelBookingDialog";
+import RefundCard from "@/components/bookings/RefundCard";
+import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceButton";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +60,7 @@ interface Booking {
   amount?: number;
   service_fee?: number | string | null;
   paid_at?: string | null;
+  cancelled_at?: string | null;
   payment_plan?: string | null;
   scheduled_at?: string;
   message?: string;
@@ -79,6 +83,12 @@ export default function CustomerBookingDetailPage() {
   const [loading, setLoading] = useState(true);
   // bumped when an add-on or fee is paid, so the payments list reloads
   const [paymentsKey, setPaymentsKey] = useState(0);
+
+  const [cancelling, setCancelling] = useState(false);
+  const reloadBooking = () =>
+    BookingService.getOne(id)
+      .then((res) => res.data?.success && setBooking(res.data.data))
+      .catch(() => null);
 
   useEffect(() => {
     if (!id) return;
@@ -182,7 +192,36 @@ export default function CustomerBookingDetailPage() {
             </div>
           )}
         </div>
+        {(["PENDING", "CONFIRMED"].includes(booking.status) || invoiceAvailable(booking)) && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
+            {["PENDING", "CONFIRMED"].includes(booking.status) && (
+              <button
+                type="button"
+                onClick={() => setCancelling(true)}
+                className="px-4 py-2 rounded-lg border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/20"
+              >
+                {booking.status === "PENDING" ? "Cancel request" : "Cancel booking"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {booking.status === "CANCELLED" && <RefundCard bookingId={booking.id} role="CUSTOMER" cancelledAt={booking.cancelled_at} />}
+
+      {cancelling && (
+        <CancelBookingDialog
+          bookingId={booking.id}
+          role="CUSTOMER"
+          defaultReason="Customer cancelled"
+          onClose={() => setCancelling(false)}
+          onCancelled={() => {
+            reloadBooking();
+            setPaymentsKey((k) => k + 1);
+          }}
+        />
+      )}
 
       <RentalReturnPanel booking={booking} role="CUSTOMER" />
 

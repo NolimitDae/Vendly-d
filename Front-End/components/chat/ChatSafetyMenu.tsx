@@ -102,6 +102,49 @@ export function ReportDialog({
 }
 
 /**
+ * A small flag next to someone else's message (1:1 and group chats) that reports that one message.
+ * Shown on hover or keyboard focus, and always on touch screens where there's no hover.
+ */
+export function ReportMessageButton({
+  person,
+  conversationId,
+  messageId,
+  alreadyBlocked,
+  onReported,
+}: {
+  person: Person;
+  conversationId: string;
+  messageId: string;
+  alreadyBlocked?: boolean;
+  onReported?: (alsoBlocked: boolean) => void;
+}) {
+  const [reporting, setReporting] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setReporting(true)}
+        aria-label={`Report message from ${person.name}`}
+        title="Report message"
+        className="opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-60 p-1 text-gray-400 hover:text-red-600 focus:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded transition"
+      >
+        <Flag className="w-3.5 h-3.5" />
+      </button>
+      {reporting && (
+        <ReportDialog
+          person={person}
+          conversationId={conversationId}
+          messageId={messageId}
+          alreadyBlocked={alreadyBlocked}
+          onClose={() => setReporting(false)}
+          onReported={(alsoBlocked) => onReported?.(alsoBlocked)}
+        />
+      )}
+    </>
+  );
+}
+
+/**
  * The ⋮ menu on a 1:1 chat: block / unblock and report. Blocking stops messages both ways;
  * bookings and contracts carry on.
  */

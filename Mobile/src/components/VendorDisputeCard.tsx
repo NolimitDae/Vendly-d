@@ -7,6 +7,7 @@ import { DARK, FONTS } from '../constants/colors';
 import { BookingService, type Booking } from '../services/booking.service';
 import { apiMessage } from '../screens/auth/SignIn';
 import { haptic } from '../utils/haptics';
+import DisputeDetails from './DisputeDetails';
 
 const MIN = 10;
 const MAX = 2000;
@@ -43,6 +44,7 @@ export default function VendorDisputeCard({ booking, onChanged }: { booking: Boo
       </View>
       <Text style={s.muted}>Reported {format(parseISO(booking.dispute_opened_at), 'MMM d, yyyy h:mm a')}</Text>
       {!!booking.dispute_reason && <Text style={s.quote}>“{booking.dispute_reason}”</Text>}
+      <DisputeDetails d={booking} />
       {open ? (
         <Text style={s.body}>Your payment for this booking is held until Vendly reviews it. Give your side below; proof photos you’ve uploaded are seen by Vendly too.</Text>
       ) : (

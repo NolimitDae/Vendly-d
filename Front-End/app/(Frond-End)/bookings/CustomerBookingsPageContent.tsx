@@ -6,6 +6,8 @@ import { BookingService } from "@/service/booking/booking.service";
 import { vendorAnswersWithin } from "@/lib/requests";
 import { ReviewService } from "@/service/review/review.service";
 import ReviewPrompt from "@/components/reviews/ReviewPrompt";
+import CancelBookingDialog from "@/components/bookings/CancelBookingDialog";
+import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceButton";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -53,6 +55,7 @@ export default function CustomerBookingsPageContent() {
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, last_page: 1 });
+  // the booking whose cancel confirmation (with its refund preview) is open
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [reviewModal, setReviewModal] = useState<{ bookingId: string } | null>(null);
@@ -102,23 +105,7 @@ export default function CustomerBookingsPageContent() {
     }
   };
 
-  const handleCancel = async (id: string) => {
-    if (!confirm("Cancel this booking?")) return;
-    setCancellingId(id);
-    try {
-      const res = await BookingService.cancel(id, "Customer cancelled");
-      if (res.data?.success) {
-        toast.success("Booking cancelled");
-        fetchBookings();
-      } else {
-        toast.error(res.data?.message || "Failed to cancel");
-      }
-    } catch {
-      toast.error("Failed to cancel booking");
-    } finally {
-      setCancellingId(null);
-    }
-  };
+  const handleCancel = (id: string) => setCancellingId(id);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
@@ -249,13 +236,15 @@ export default function CustomerBookingsPageContent() {
                           disabled={cancellingId === booking.id}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-red-600 border border-red-200 hover:bg-red-50 transition disabled:opacity-60"
                         >
-                          {cancellingId === booking.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <XCircle className="w-3.5 h-3.5" />
-                          )}
+                          <XCircle className="w-3.5 h-3.5" />
                           Cancel
                         </button>
+                      )}
+                      {invoiceAvailable(booking) && (
+                        <InvoiceButton
+                          bookingId={booking.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-60"
+                        />
                       )}
                       {booking.status === "COMPLETED" && !booking.review && (
                         <button
@@ -299,6 +288,20 @@ export default function CustomerBookingsPageContent() {
           </div>
         )}
       </div>
+
+      {cancellingId && (
+        <CancelBookingDialog
+          bookingId={cancellingId}
+          role="CUSTOMER"
+          defaultReason="Customer cancelled"
+          bookingHref={`/bookings/${cancellingId}`}
+          onClose={() => setCancellingId(null)}
+          onCancelled={() => {
+            toast.success("Booking cancelled");
+            fetchBookings();
+          }}
+        />
+      )}
 
       {reviewModal && (
         <QuickReviewModal

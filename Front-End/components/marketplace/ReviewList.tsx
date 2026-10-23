@@ -1,9 +1,9 @@
 "use client";
 
+import { isLoggedIn as hasSession } from "@/lib/session";
 import { useEffect, useState, useCallback } from "react";
 import { ReviewService } from "@/service/review/review.service";
 import { BookingService } from "@/service/booking/booking.service";
-import { CookieHelper } from "@/helper/cookie.helper";
 import { Loader2, Star } from "lucide-react";
 import ReviewCard, { Review } from "@/components/shared/ReviewCard";
 import StarRating from "@/components/shared/StarRating";
@@ -30,7 +30,7 @@ export default function ReviewList({ listingId, vendorId }: Props) {
   const [eligibleBookingId, setEligibleBookingId] = useState<string | null>(null);
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: "" });
   const [submitting, setSubmitting] = useState(false);
-  const isLoggedIn = !!CookieHelper.get({ key: "token" });
+  const isLoggedIn = hasSession();
 
   const fetchReviews = useCallback(
     async (p: number, append: boolean) => {

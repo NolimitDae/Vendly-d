@@ -4,9 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { Card, Chip, Field, GradientButton, ui } from '../brand';
 import Sheet, { CheckRow } from '../Sheet';
-import { ExtraLine, extraStyles as x } from './shared';
+import { ExtraLine, NewEndTime, extraStyles as x } from './shared';
 import { DARK } from '../../constants/colors';
-import { AddOnsService, UNIT_OPTIONS, money, useBookingExtras, type AddOn, type AddOnKind, type AddOnUnit, type Extra } from '../../services/addons.service';
+import { AddOnsService, EXTEND_CHOICES, UNIT_OPTIONS, durationText, extendChip, money, useBookingExtras, type AddOn, type AddOnKind, type AddOnUnit, type Extra } from '../../services/addons.service';
 import { apiMessage } from '../../screens/auth/SignIn';
 import { haptic } from '../../utils/haptics';
 
@@ -80,6 +80,7 @@ export default function VendorExtras({ booking, onChanged }: { booking: BookingL
       <Card style={{ gap: 12, borderWidth: 1, borderColor: DARK.field }}>
         <Text style={x.h2}>Add-ons and fees</Text>
         <Text style={x.muted}>Send {customer} an add-on they asked for, or a fee after the job. They approve each one before it’s charged.</Text>
+        <NewEndTime extras={extras} meta={meta} />
 
         {included.length > 0 && <Text style={x.h3}>Booked with the package</Text>}
         {included.map((e) => <ExtraLine key={e.id} extra={e} role="VENDOR" />)}
@@ -190,6 +191,8 @@ function RequestSheet({ kind, booking, onClose, onSent }: { kind: AddOnKind | nu
   const [unit, setUnit] = useState<AddOnUnit>('FIXED');
   const [qty, setQty] = useState('1');
   const [note, setNote] = useState('');
+  // add-ons only: time it adds to the booking; a per hour add-on starts at its hours until the vendor picks
+  const [extendPick, setExtendPick] = useState<number | null | undefined>(undefined);
   const [sending, setSending] = useState(false);
   const guests = booking.guest_count ? String(booking.guest_count) : '';
 
@@ -201,6 +204,7 @@ function RequestSheet({ kind, booking, onClose, onSent }: { kind: AddOnKind | nu
     setUnit('FIXED');
     setQty('1');
     setNote('');
+    setExtendPick(undefined);
     setLibrary([]);
     AddOnsService.list(kind, booking.listing?.id)
       .then((r) => setLibrary(r.data?.data ?? []))
@@ -225,6 +229,9 @@ function RequestSheet({ kind, booking, onClose, onSent }: { kind: AddOnKind | nu
   const quantity = unit === 'FIXED' ? 1 : Number(qty);
   const amount = Math.round(unitPrice * quantity * 100) / 100;
   const lib = library.find((a) => a.id === fromId);
+  const hourDefault = unit === 'PER_HOUR' && quantity > 0 ? Math.round(quantity * 60) : null;
+  const extendsMinutes =
+    kind !== 'ADD_ON' ? null : extendPick !== undefined ? extendPick : hourDefault && (EXTEND_CHOICES as readonly number[]).includes(hourDefault) ? hourDefault : null;
 
   const send = async () => {
     if (!kind) return;
@@ -243,6 +250,7 @@ function RequestSheet({ kind, booking, onClose, onSent }: { kind: AddOnKind | nu
         price_unit: unit,
         quantity,
         note: note.trim() || undefined,
+        extends_minutes: extendsMinutes ?? undefined,
       });
       haptic.success();
       onClose();
@@ -305,6 +313,17 @@ function RequestSheet({ kind, booking, onClose, onSent }: { kind: AddOnKind | nu
           keyboardType={unit === 'PER_HOUR' ? 'decimal-pad' : 'number-pad'}
           accessibilityLabel={QTY_LABEL[unit]}
         />
+      )}
+      {kind === 'ADD_ON' && (
+        <View style={{ gap: 8 }}>
+          <Text style={ui.label}>Adds time to the booking (optional)</Text>
+          <View style={x.chips}>
+            {[null, ...EXTEND_CHOICES].map((m) => (
+              <Chip key={m ?? 'none'} label={m === null ? 'No extra time' : extendChip(m)} active={extendsMinutes === m} onPress={() => setExtendPick(m)} />
+            ))}
+          </View>
+          {!!extendsMinutes && <Text style={x.muted}>When the customer approves, the booking ends {durationText(extendsMinutes)} later.</Text>}
+        </View>
       )}
       <View style={{ gap: 8 }}>
         <Text style={ui.label}>Reason (shown to the customer)</Text>

@@ -128,5 +128,40 @@ describe('RentalsService', () => {
       prisma.booking.findUnique.mockResolvedValue(rental({ rental_return: { id: 'x' } }));
       await expect(service.recordReturn('b1', 'v1', {})).rejects.toThrow(/already been recorded/);
     });
+
+    it('keeps return photos under random names and refuses files that are not photos', async () => {
+      const { TanvirStorage } = jest.requireMock('src/common/lib/Disk/TanvirStorage');
+      const jpg = { originalname: 'arch.jpg', buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0]) } as Express.Multer.File;
+      const pdf = { originalname: 'arch.jpg', buffer: Buffer.from('%PDF-1.4') } as Express.Multer.File;
+      prisma.booking.findUnique.mockResolvedValue(rental());
+      await expect(service.recordReturn('b1', 'v1', { notes: 'bent' }, [jpg, pdf])).rejects.toThrow(BadRequestException);
+      expect(TanvirStorage.put).not.toHaveBeenCalled();
+      expect(prisma.rentalReturn.create).not.toHaveBeenCalled();
+
+      payments.settleSecurityDeposit.mockResolvedValue({ captured_from_deposit: 0, charged_extra: 0, deposit_released: true });
+      await service.recordReturn('b1', 'v1', {}, [jpg]);
+      const photos = prisma.rentalReturn.create.mock.calls[0][0].data.photos;
+      expect(photos).toEqual([expect.stringMatching(/^[0-9a-f]{24}\.jpg$/)]);
+      expect(TanvirStorage.put).toHaveBeenCalledWith(`proofs/${photos[0]}`, jpg.buffer);
+    });
+  });
+
+  describe('item photos', () => {
+    const jpg = { originalname: 'chair.png.html', buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0]) } as Express.Multer.File;
+    const html = { originalname: 'chair.jpg', buffer: Buffer.from('<html></html>') } as Express.Multer.File;
+
+    it('stores item photos under random names with their real extension', async () => {
+      prisma.rentalItem.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'i1', ...data }));
+      await service.createItem('v1', { title: 'Chair', daily_rate: 5 } as any, [jpg]);
+      expect(prisma.rentalItem.create.mock.calls[0][0].data.images).toEqual([expect.stringMatching(/^[0-9a-f]{24}\.jpg$/)]);
+    });
+
+    it('refuses a non-photo before removing any current photo', async () => {
+      const { TanvirStorage } = jest.requireMock('src/common/lib/Disk/TanvirStorage');
+      prisma.rentalItem.findFirst.mockResolvedValue({ ...chairs, images: ['a.jpg', 'b.jpg'] });
+      await expect(service.updateItem('chairs', 'v1', { keep_images: ['a.jpg'] } as any, [html])).rejects.toThrow(BadRequestException);
+      expect(TanvirStorage.delete).not.toHaveBeenCalled();
+      expect(prisma.rentalItem.update).not.toHaveBeenCalled();
+    });
   });
 });

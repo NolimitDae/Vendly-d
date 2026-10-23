@@ -17,6 +17,7 @@ export default function RunOfShow({
   items,
   vendors,
   onChanged,
+  readOnly = false,
 }: {
   eventId: string;
   eventDate?: string | null;
@@ -25,6 +26,8 @@ export default function RunOfShow({
   items: TimelineItem[];
   vendors: { id: string; name: string }[];
   onChanged: () => void;
+  /** A cancelled event: the schedule can be read but not changed. */
+  readOnly?: boolean;
 }) {
   const dayDefault = eventDate ? dayjs(eventDate).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
   const [adding, setAdding] = useState(false);
@@ -105,7 +108,7 @@ export default function RunOfShow({
           <ol className="relative border-l-2 border-gray-100 dark:border-gray-700 ml-14 space-y-3">
             {list.map((item) => {
               const mine = role === "vendor" && item.vendor_id === userId;
-              const canTick = role === "planner" || mine;
+              const canTick = !readOnly && (role === "planner" || mine);
               return (
                 <li key={item.id} className="relative pl-5">
                   <span className="absolute -left-[4.6rem] top-3 w-14 text-right text-sm font-semibold text-gray-900 dark:text-white">
@@ -121,7 +124,7 @@ export default function RunOfShow({
                           {busy === item.id ? <Loader2 className="w-5 h-5 animate-spin" /> : item.done ? <CheckCircle2 className="w-5 h-5 text-green-600" /> : <Circle className="w-5 h-5" />}
                         </button>
                       )}
-                      {role === "planner" && (
+                      {role === "planner" && !readOnly && (
                         <button onClick={() => remove(item)} aria-label={`Remove ${item.title}`} className="text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                       )}
                     </div>
@@ -136,7 +139,7 @@ export default function RunOfShow({
         </div>
       ))}
 
-      {role === "planner" &&
+      {role === "planner" && !readOnly &&
         (adding ? (
           <form onSubmit={add} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 space-y-3">
             <div className="grid grid-cols-3 gap-3">

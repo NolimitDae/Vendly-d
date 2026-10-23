@@ -178,6 +178,14 @@ export class RequestExtraDto {
   @IsString()
   @MaxLength(1000)
   note?: string;
+
+  @ApiPropertyOptional({ description: 'Add-ons only: minutes this adds to the booking (moves its end time when approved), in steps of 30, up to 12 hours' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(30)
+  @Max(720)
+  extends_minutes?: number;
 }
 
 export class DeclineExtraDto {

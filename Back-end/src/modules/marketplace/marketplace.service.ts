@@ -8,6 +8,7 @@ import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { shopImageUrl } from 'src/common/helper/handle';
 import { mergeDayRanges, todayUtc } from 'src/modules/calendar-sync/busy-days';
+import { readWorkingHours, summariseWorkingHours } from 'src/modules/vendor/working-hours';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 @Injectable()
@@ -132,6 +133,7 @@ export class MarketplaceService {
                 business_name: true,
                 about_me: true,
                 license_status: true,
+                working_hours: true,
               },
             },
           },
@@ -156,11 +158,15 @@ export class MarketplaceService {
       this.cancellationPolicyFor(listing.vendor_id, listing.id).catch(() => null),
     ]);
 
+    const workingHours = readWorkingHours(listing.vendor?.vendorProfile?.working_hours);
     return {
       success: true,
       data: {
         ...this.formatFullListing(listing),
         avg_rating: avgRatings[listing.id] ?? null,
+        // weekly hours customers can book in (null = any day, any time), and a short line for the page
+        working_hours: workingHours,
+        working_hours_summary: summariseWorkingHours(workingHours),
         // the policy in the contract a booking of this package would use, so customers see it before booking
         cancellation_policy: cancellationPolicy,
       },
@@ -257,7 +263,10 @@ export class MarketplaceService {
     return { success: true, data: categories };
   }
 
-  /** Days a package can't be booked: the vendor's manual blocks plus busy time imported from their own calendar. */
+  /**
+   * Days a package can't be booked: the vendor's manual blocks plus busy time imported from their own
+   * calendar. `working_hours` (top level, beside `data`) are the vendor's weekly hours.
+   */
   async getBlockedDates(listingId: string) {
     const [blocks, listing] = await Promise.all([
       this.prisma.listingAvailability.findMany({
@@ -265,7 +274,10 @@ export class MarketplaceService {
         select: { id: true, start_date: true, end_date: true, reason: true },
         orderBy: { start_date: 'asc' },
       }),
-      this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { vendor_id: true } }),
+      this.prisma.vendorListing.findUnique({
+        where: { id: listingId },
+        select: { vendor_id: true, vendor: { select: { vendorProfile: { select: { working_hours: true } } } } },
+      }),
     ]);
     // imported busy time covers all the vendor's packages; only the days are shared, never what the event was
     const busy = listing
@@ -285,7 +297,9 @@ export class MarketplaceService {
     const data = [...blocks.map((b) => ({ ...b, source: 'manual' as const })), ...imported].sort(
       (a, b) => a.start_date.getTime() - b.start_date.getTime(),
     );
-    return { success: true, data };
+    // the vendor's weekly hours: closed days and the hours a booking has to fit in (null = not set)
+    const working_hours = readWorkingHours(listing?.vendor?.vendorProfile?.working_hours);
+    return { success: true, data, working_hours, working_hours_summary: summariseWorkingHours(working_hours) };
   }
 
   async getFeaturedListings() {

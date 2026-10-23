@@ -334,10 +334,11 @@ describe('contract access control', () => {
 });
 
 describe('booking a date the vendor is not free', () => {
-  const setup = (blocked: any = null, busy: any = null) => {
+  const setup = (blocked: any = null, busy: any = null, working_hours: any = null) => {
     const prisma: any = {
       listingAvailability: { findFirst: jest.fn().mockResolvedValue(blocked) },
       calendarBusyBlock: { findFirst: jest.fn().mockResolvedValue(busy) },
+      vendorProfile: { findUnique: jest.fn().mockResolvedValue(working_hours === undefined ? null : { working_hours }) },
     };
     const service = new BookingContractsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any);
     return { prisma, check: (dto: any) => (service as any).assertDateOpen('l1', 'v1', dto) };
@@ -369,6 +370,73 @@ describe('booking a date the vendor is not free', () => {
     const { prisma, check } = setup();
     await expect(check({})).resolves.toBeUndefined();
     expect(prisma.listingAvailability.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('booking outside the vendor’s working hours', () => {
+  // Mon–Fri 9am–5pm, Saturday 10am–2pm, closed Sunday
+  const hours = {
+    mon: { open: '09:00', close: '17:00' }, tue: { open: '09:00', close: '17:00' }, wed: { open: '09:00', close: '17:00' },
+    thu: { open: '09:00', close: '17:00' }, fri: { open: '09:00', close: '17:00' }, sat: { open: '10:00', close: '14:00' }, sun: null,
+  };
+  const setup = (working_hours: any = hours) => {
+    const prisma: any = {
+      listingAvailability: { findFirst: jest.fn().mockResolvedValue(null) },
+      calendarBusyBlock: { findFirst: jest.fn().mockResolvedValue(null) },
+      vendorProfile: { findUnique: jest.fn().mockResolvedValue({ working_hours }) },
+    };
+    const service = new BookingContractsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any);
+    return { prisma, check: (dto: any) => (service as any).assertDateOpen('l1', 'v1', dto) };
+  };
+  const refusal = async (p: Promise<unknown>) => {
+    try {
+      await p;
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConflictException);
+      return (e as ConflictException).getResponse() as { message: string; error: string };
+    }
+    throw new Error('expected a refusal');
+  };
+
+  it('lets a request inside the hours through (customer time zone)', async () => {
+    const { prisma, check } = setup();
+    // Sat Oct 24 2026, 11:00–13:00 in Chicago (16:00–18:00 UTC)
+    await expect(check({ event_start_at: new Date('2026-10-24T16:00:00Z'), event_end_at: new Date('2026-10-24T18:00:00Z'), timezone: 'America/Chicago' })).resolves.toBeUndefined();
+    expect(prisma.vendorProfile.findUnique).toHaveBeenCalledWith({ where: { user_id: 'v1' }, select: { working_hours: true } });
+  });
+
+  it('refuses a closed day with a clear 409', async () => {
+    const r = await refusal(setup().check({ event_start_at: new Date('2026-10-25T17:00:00Z'), timezone: 'America/Chicago' }));
+    expect(r).toEqual({ message: "The vendor doesn't work on Sundays. Please pick another day.", error: 'OUTSIDE_WORKING_HOURS' });
+  });
+
+  it('refuses a start before opening or an end after closing', async () => {
+    // Sat 9:00 in Chicago, before the 10am opening
+    const early = await refusal(setup().check({ event_start_at: new Date('2026-10-24T14:00:00Z'), timezone: 'America/Chicago' }));
+    expect(early.message).toBe('The vendor works 10am–2pm on Saturdays.');
+    // Sat 13:00–15:00 in Chicago runs past 2pm
+    const late = await refusal(setup().check({ event_start_at: new Date('2026-10-24T18:00:00Z'), event_end_at: new Date('2026-10-24T20:00:00Z'), timezone: 'America/Chicago' }));
+    expect(late.message).toBe('The vendor works 10am–2pm on Saturdays.');
+  });
+
+  it('uses the customer’s day, not the UTC one (time zone edge)', async () => {
+    // Fri Oct 23 2026, 4pm in Los Angeles = Sat 00:00 UTC (a UTC check would see Saturday before opening)
+    await expect(setup().check({ event_start_at: new Date('2026-10-23T23:00:00Z'), event_end_at: new Date('2026-10-24T00:00:00Z'), timezone: 'America/Los_Angeles' })).resolves.toBeUndefined();
+    // the same moment in UTC is Friday 11pm: outside Friday's hours
+    const utc = await refusal(setup().check({ event_start_at: new Date('2026-10-23T23:00:00Z'), timezone: 'UTC' }));
+    expect(utc.message).toBe('The vendor works 9am–5pm on Fridays.');
+  });
+
+  it('allows anything when no hours are set (or they are unreadable)', async () => {
+    await expect(setup(null).check({ event_start_at: new Date('2026-10-25T03:00:00Z') })).resolves.toBeUndefined();
+    await expect(setup({ mon: 'bad' }).check({ event_start_at: new Date('2026-10-25T03:00:00Z') })).resolves.toBeUndefined();
+  });
+
+  it('still reports a blocked date first', async () => {
+    const { prisma, check } = setup();
+    prisma.listingAvailability.findFirst.mockResolvedValue({ id: 'b' });
+    const r = await refusal(check({ event_start_at: new Date('2026-10-25T17:00:00Z'), timezone: 'America/Chicago' }));
+    expect(r.error).toBe('DATE_UNAVAILABLE');
   });
 });
 

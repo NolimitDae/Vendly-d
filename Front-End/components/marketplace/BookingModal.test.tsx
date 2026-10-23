@@ -309,4 +309,92 @@ describe('BookingModal', () => {
       expect((ContractsService.bookingPreview as jest.Mock).mock.calls[0][0].add_ons).toEqual([{ add_on_id: 'ao-1' }]);
     });
   });
+
+  describe('vendor working hours', () => {
+    const nineToFive = { open: '09:00', close: '17:00' };
+    const hours = { mon: nineToFive, tue: nineToFive, wed: nineToFive, thu: nineToFive, fri: nineToFive, sat: { open: '10:00', close: '14:00' }, sun: null };
+    const withHours = { ...listing, working_hours: hours };
+    const options = (label: RegExp) => Array.from((screen.getByLabelText(label) as HTMLSelectElement).options).map((o) => o.value).filter(Boolean);
+
+    it('shows when the vendor works', () => {
+      render(<BookingModal listing={withHours} onClose={onClose} />);
+      expect(screen.getByText('Works Mon–Fri 9am–5pm · Sat 10am–2pm')).toBeInTheDocument();
+    });
+
+    it("won't take a closed day", async () => {
+      const user = userEvent.setup();
+      render(<BookingModal listing={withHours} onClose={onClose} />);
+      // Sunday, June 2 2030
+      await user.type(screen.getByLabelText(/event date/i), '2030-06-02');
+      await user.click(screen.getByText('DJ Service'));
+      // the calendar refuses it, so the field is left empty and nothing is requested
+      expect(screen.getByLabelText(/event date/i)).toHaveValue('');
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+      expect(ContractsService.bookingPreview).not.toHaveBeenCalled();
+    });
+
+    it('greys out closed days in the calendar', async () => {
+      const user = userEvent.setup();
+      render(<BookingModal listing={withHours} onClose={onClose} />);
+      await user.type(screen.getByLabelText(/event date/i), '2030-06-01');
+      // the calendar is open on June 2030: Sundays can't be picked, Saturdays can
+      const day = (n: string) => document.querySelector(`.react-datepicker__day--0${n}:not(.react-datepicker__day--outside-month)`) as HTMLElement;
+      expect(day('02').getAttribute('aria-disabled')).toBe('true');
+      expect(day('09').getAttribute('aria-disabled')).toBe('true');
+      expect(day('08').getAttribute('aria-disabled')).toBe('false');
+      expect(day('03').getAttribute('aria-disabled')).toBe('false');
+    });
+
+    it("limits start and end times to the day's hours", async () => {
+      (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
+      const user = userEvent.setup();
+      render(<BookingModal listing={withHours} onClose={onClose} />);
+      // Saturday: 10am–2pm
+      await user.type(screen.getByLabelText(/event date/i), '2030-06-01');
+      await user.click(screen.getByText('DJ Service'));
+      expect(screen.getByText('The vendor works 10am–2pm on Saturdays.')).toBeInTheDocument();
+      expect(options(/start time/i)).toEqual(['10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30']);
+      expect(screen.getByLabelText(/end time/i)).toBeDisabled();
+
+      await user.selectOptions(screen.getByLabelText(/start time/i), '12:00');
+      expect(options(/end time/i)).toEqual(['12:30', '13:00', '13:30', '14:00']);
+      await user.selectOptions(screen.getByLabelText(/end time/i), '14:00');
+
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+      await waitFor(() => expect(ContractsService.bookingPreview).toHaveBeenCalled());
+      const sent = (ContractsService.bookingPreview as jest.Mock).mock.calls[0][0];
+      expect(sent.event_start_at).toBe(new Date('2030-06-01T12:00').toISOString());
+      expect(sent.event_end_at).toBe(new Date('2030-06-01T14:00').toISOString());
+    });
+
+    it('needs a start time when the vendor has hours', async () => {
+      const user = userEvent.setup();
+      render(<BookingModal listing={withHours} onClose={onClose} />);
+      await user.type(screen.getByLabelText(/event date/i), '2030-06-03');
+      await user.click(screen.getByText('DJ Service'));
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+      expect(toast.error).toHaveBeenCalledWith("Choose a start time within the vendor's hours");
+      expect(ContractsService.bookingPreview).not.toHaveBeenCalled();
+    });
+
+    it('fits an hourly package inside the hours (fewest and most hours)', async () => {
+      const user = userEvent.setup();
+      render(<BookingModal listing={{ ...withHours, price_unit: 'hour', min_quantity: 2, max_quantity: 3 }} onClose={onClose} />);
+      // Monday 9am–5pm, at least 2 hours: the last start is 3pm
+      await user.type(screen.getByLabelText(/event date/i), '2030-06-03');
+      await user.click(screen.getByText('DJ Service'));
+      const starts = options(/start time/i);
+      expect(starts[0]).toBe('09:00');
+      expect(starts[starts.length - 1]).toBe('15:00');
+      await user.selectOptions(screen.getByLabelText(/start time/i), '13:00');
+      expect(options(/end time/i)).toEqual(['15:00', '15:30', '16:00']);
+    });
+
+    it('keeps the plain date and time fields when no hours are set', () => {
+      render(<BookingModal listing={listing} onClose={onClose} />);
+      expect(screen.getByLabelText(/event date/i)).toHaveAttribute('type', 'date');
+      expect(screen.getByLabelText(/start time/i)).toHaveAttribute('type', 'time');
+      expect(screen.queryByText(/^Works /)).toBeNull();
+    });
+  });
 });

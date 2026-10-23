@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TanvirStorage } from './common/lib/Disk/TanvirStorage';
+import { PHOTOS, safeStoredName } from './common/helper/upload-files';
 
 @Injectable()
 export class AppService {
@@ -9,7 +10,8 @@ export class AppService {
 
   async test(image: Express.Multer.File) {
     try {
-      const fileName = image.originalname;
+      // never the uploaded name: a random one with the real (image) extension
+      const fileName = safeStoredName(image?.buffer, PHOTOS);
       const fileType = image.mimetype;
       const fileSize = image.size;
       const fileBuffer = image.buffer;

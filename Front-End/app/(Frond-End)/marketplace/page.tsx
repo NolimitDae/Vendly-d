@@ -1,10 +1,10 @@
 "use client";
 
+import { isLoggedIn as hasSession } from "@/lib/session";
 import { useEffect, useState, useCallback } from "react";
 import { useDebounce } from "@/hooks";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import { SavedListingsService } from "@/service/savedListings/savedListings.service";
-import { CookieHelper } from "@/helper/cookie.helper";
 import Link from "next/link";
 import Image from "next/image";
 import { Star, Search, SlidersHorizontal, MapPin, Heart, LocateFixed, X, Loader2 } from "lucide-react";
@@ -48,7 +48,7 @@ export default function MarketplacePage() {
   const [meta, setMeta] = useState({ total: 0, last_page: 1 });
   const [showFilters, setShowFilters] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  const isLoggedIn = !!CookieHelper.get({ key: "token" });
+  const isLoggedIn = hasSession();
   const nearMe = useNearMe();
   const [radius, setRadius] = useState(25);
   const near = nearMe.active ? nearMe.coords : null;

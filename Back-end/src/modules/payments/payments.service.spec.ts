@@ -30,8 +30,8 @@ const DAY = 24 * 3600 * 1000;
 
 const prisma = {
   user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
-  booking: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), count: jest.fn(), findMany: jest.fn() },
-  bookingInstallment: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+  booking: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), update: jest.fn(), updateMany: jest.fn(), count: jest.fn(), findMany: jest.fn() },
+  bookingInstallment: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   bookingProof: { findFirst: jest.fn() },
   paymentTransaction: { create: jest.fn(), findMany: jest.fn(), count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
   vendorListing: { findUnique: jest.fn() },
@@ -414,7 +414,8 @@ describe('PaymentsService', () => {
       prisma.booking.findUnique.mockResolvedValue(null);
       await service.releaseBooking('b1');
       expect(prisma.booking.updateMany).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: expect.objectContaining({ id: 'b1' }), data: expect.objectContaining({ money_lock_token: expect.any(String) }) }));
-      expect(prisma.booking.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: { money_lock_until: null, money_lock_token: null } }));
+      // the lock is let go (the final-invoice claim that follows runs outside it)
+      expect(prisma.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { money_lock_until: null, money_lock_token: null } }));
     });
   });
 

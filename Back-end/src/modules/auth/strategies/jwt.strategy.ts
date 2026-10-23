@@ -1,14 +1,16 @@
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import appConfig from '../../../config/app.config';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { resolveAuthToken } from '../auth-cookies';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private readonly prisma: PrismaService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Bearer header (the app, older website sessions) or the website's HttpOnly session cookie
+      jwtFromRequest: (req: any) => resolveAuthToken(req)?.token ?? null,
       // Access tokens expire (JWT_ACCESS_EXPIRY); the web and mobile clients refresh them via
       // POST /auth/refresh-token.
       ignoreExpiration: false,
@@ -19,6 +21,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     if (payload?.typ === 'refresh') {
       throw new UnauthorizedException('Refresh tokens cannot be used as access tokens');
+    }
+    // short-lived tokens handed to the website's socket connection only open sockets
+    if (payload?.typ === 'socket') {
+      throw new UnauthorizedException('Socket tokens cannot be used as access tokens');
     }
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },

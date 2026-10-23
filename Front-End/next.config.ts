@@ -34,10 +34,31 @@ const hostOf = (url?: string) => {
 };
 const extraImageHosts = [hostOf(process.env.NEXT_PUBLIC_MEDIA_URL), hostOf(process.env.NEXT_PUBLIC_API_ENDPOINT)].filter((h): h is string => !!h);
 
+/** The API the website's /api path forwards to (baked in at build time, like NEXT_PUBLIC_API_ENDPOINT). */
+const apiOrigin = (process.env.NEXT_PUBLIC_API_ENDPOINT || "http://127.0.0.1:4000").replace(/\/+$/, "");
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   output: "standalone",
   compress: true,
+
+  // The browser calls the API at the website's own /api path and Next forwards it to the API.
+  // That makes the API's login cookies (HttpOnly, SameSite=Lax) first-party cookies of the website's
+  // domain, whatever domains the website and API are on. Next's proxy passes Cookie and Set-Cookie
+  // through unchanged. Don't add a middleware/proxy file matching /api: it would buffer request
+  // bodies (uploads) through it.
+  async rewrites() {
+    return [{ source: "/api/:path*", destination: `${apiOrigin}/api/:path*` }];
+  },
+
+  experimental: {
+    // the proxy's default 30s is too short for large uploads on slow connections and PDF generation
+    proxyTimeout: 120_000,
+    // Next 16 copies every request body it forwards and cuts it off at 10 MB by default, which would
+    // break multi-photo uploads (10 listing photos, deliverables, event files: up to 10 × 20 MB).
+    // The copy is held in memory while the request runs, as the API already does with uploads.
+    proxyClientMaxBodySize: "250mb",
+  },
 
   async headers() {
     return [

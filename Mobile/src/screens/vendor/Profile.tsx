@@ -28,7 +28,9 @@ export default function VendorProfile() {
       items: [
         { icon: 'person-outline', label: 'Profile', onPress: () => nav.navigate('EditProfile') },
         { icon: 'wallet-outline', label: 'Payments & Payouts', onPress: () => nav.navigate('Payouts') },
+        { icon: 'star-outline', label: 'Reviews', onPress: () => nav.navigate('VendorReviews') },
         { icon: 'document-text-outline', label: 'Contracts', onPress: () => nav.navigate('VendorContracts') },
+        { icon: 'time-outline', label: 'Working hours', onPress: () => nav.navigate('WorkingHours') },
         { icon: 'calendar-outline', label: 'Calendar sync', onPress: () => nav.navigate('CalendarSync') },
         { icon: 'shield-checkmark-outline', label: 'Verification', note: license === 'APPROVED' ? 'Verified' : license === 'REJECTED' ? 'Rejected' : u?.license_uploaded ? 'In review' : 'Upload licence', onPress: () => nav.navigate('License') },
       ],

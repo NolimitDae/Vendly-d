@@ -10,6 +10,7 @@ import { BrandGradient } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { BookingService, type Booking, type BookingStatus } from '../../services/booking.service';
 import type { CustomerBookingsStackParams } from '../../navigation/types';
+import { confirmCancelBooking } from '../../components/booking/cancelBooking';
 
 type Tab = 'previous' | 'pending' | 'upcoming';
 const TABS: { key: Tab; label: string; statuses: BookingStatus[] }[] = [
@@ -55,22 +56,9 @@ export default function CustomerBookings() {
     .filter((b) => current.statuses.includes(b.status))
     .sort((a, b) => (a.event_start_at ?? a.scheduled_at ?? a.created_at).localeCompare(b.event_start_at ?? b.scheduled_at ?? b.created_at) * (tab === 'previous' ? -1 : 1));
 
+  // shows what cancelling does with the money first, then the refund result
   const cancel = (b: Booking) =>
-    Alert.alert('Cancel booking?', 'The vendor will be told and any payment is refunded under the contract’s cancellation terms.', [
-      { text: 'Keep it', style: 'cancel' },
-      {
-        text: 'Cancel booking',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await BookingService.cancelBooking(b.id);
-            load();
-          } catch (err: any) {
-            Alert.alert('Could not cancel', err?.response?.data?.message ?? 'Try again in a moment.');
-          }
-        },
-      },
-    ]);
+    confirmCancelBooking({ bookingId: b.id, role: 'CUSTOMER', title: b.status === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?', onCancelled: () => load() });
 
   return (
     <View style={s.root}>

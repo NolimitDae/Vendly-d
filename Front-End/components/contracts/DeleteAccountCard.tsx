@@ -20,7 +20,8 @@ export default function DeleteAccountCard() {
         headers: { Authorization: `Bearer ${CookieHelper.get({ key: "token" })}` },
         data: { confirm: "DELETE" },
       });
-      clearSession();
+      // wait for the login cookies to be cleared before leaving the page
+      await clearSession();
       toast.success("Your account was deleted.");
       window.location.href = "/";
     } catch (err) {

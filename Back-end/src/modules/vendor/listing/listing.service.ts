@@ -9,7 +9,7 @@ import { ListingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
-import { StringHelper } from 'src/common/helper/string.helper';
+import { PHOTOS, safeStoredNames } from 'src/common/helper/upload-files';
 import appConfig from 'src/config/app.config';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
@@ -46,16 +46,9 @@ export class VendorListingService {
     dto: CreateVendorListingDto,
     images?: Express.Multer.File[],
   ) {
-    const imageNames: string[] = [];
-    if (images?.length) {
-      for (const file of images) {
-        const fileName = `${StringHelper.randomString()}_${file.originalname}`;
-        await TanvirStorage.put(
-          `listings/${fileName}`,
-          file.buffer,
-        );
-        imageNames.push(fileName);
-      }
+    const imageNames = safeStoredNames(images, PHOTOS);
+    for (const [i, file] of (images ?? []).entries()) {
+      await TanvirStorage.put(`listings/${imageNames[i]}`, file.buffer);
     }
 
     const categoryId = await this.assertSubCategory(dto.category_id, dto.sub_category_id);
@@ -213,15 +206,14 @@ export class VendorListingService {
     }
 
     if (images?.length) {
+      // checked before the old images are deleted
+      const imageNames = safeStoredNames(images, PHOTOS);
       // delete old images
       for (const img of listing.images) {
         await TanvirStorage.delete(`listings/${img}`).catch(() => null);
       }
-      const imageNames: string[] = [];
-      for (const file of images) {
-        const fileName = `${StringHelper.randomString()}_${file.originalname}`;
-        await TanvirStorage.put(`listings/${fileName}`, file.buffer);
-        imageNames.push(fileName);
+      for (const [i, file] of images.entries()) {
+        await TanvirStorage.put(`listings/${imageNames[i]}`, file.buffer);
       }
       updateData.images = imageNames;
     }

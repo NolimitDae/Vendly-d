@@ -1,4 +1,6 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import { webSession } from '../auth-cookies';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
@@ -31,7 +33,8 @@ export class SocialAuthController {
   @Throttle({ short: { limit: 10, ttl: 60000 } })
   @HttpCode(200)
   @Post('social')
-  signIn(@Body() dto: SocialSignInDto) {
-    return this.social.signIn(dto);
+  async signIn(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() dto: SocialSignInDto) {
+    // the website (if it signs in this way) gets HttpOnly cookies; the apps get tokens as before
+    return webSession(req, res, await this.social.signIn(dto));
   }
 }

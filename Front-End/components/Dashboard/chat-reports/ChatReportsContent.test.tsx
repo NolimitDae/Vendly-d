@@ -51,6 +51,32 @@ describe("ChatReportsContent", () => {
     expect(within(convo).getByText(/is the 14th free/)).toBeInTheDocument();
   });
 
+  it("shows the copy kept with the report when the sender deleted the message", async () => {
+    (ChatReportsService.list as jest.Mock).mockResolvedValue({
+      data: {
+        data: [
+          {
+            ...report,
+            message: null,
+            message_deleted: true,
+            message_copy: { text: "Send the deposit to my CashApp", attachments: ["a.jpg", "b.jpg"], attachments_url: ["https://cdn/a.jpg", "https://cdn/b.jpg"] },
+          },
+        ],
+      },
+    });
+    render(<ChatReportsContent />);
+    const card = await screen.findByRole("article", { name: "Report about Victor Vendor" });
+    expect(within(card).getByText("Deleted by the sender — copy kept for review")).toBeInTheDocument();
+    expect(within(card).getByText("Send the deposit to my CashApp")).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "Attachment 2" })).toHaveAttribute("href", "https://cdn/b.jpg");
+  });
+
+  it("says the message is gone when there's no copy (older reports)", async () => {
+    (ChatReportsService.list as jest.Mock).mockResolvedValue({ data: { data: [{ ...report, message: null, message_copy: { text: null, attachments: [], attachments_url: [] } }] } });
+    render(<ChatReportsContent />);
+    expect(await screen.findByText("The sender has deleted this message.")).toBeInTheDocument();
+  });
+
   it("marks a report actioned with a note and removes it from the open list", async () => {
     const user = userEvent.setup();
     render(<ChatReportsContent />);

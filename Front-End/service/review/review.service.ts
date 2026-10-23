@@ -15,7 +15,35 @@ export interface PendingReview {
   vendor: { id: string; name: string; avatar_url: string | null };
 }
 
+export interface VendorReview {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  reply?: string | null;
+  created_at: string;
+  updated_at?: string;
+  author: { id: string; name: string | null; avatar_url: string | null } | null;
+  listing: { id: string; title: string } | null;
+}
+
+export interface VendorReviewsMeta {
+  total: number;
+  page: number;
+  limit: number;
+  last_page: number;
+  avg_rating: number | null;
+  unanswered: number;
+  distribution?: Record<number, number>;
+}
+
 export const ReviewService = {
+  /** The signed-in vendor's own reviews, with the average, count and how many need a reply. */
+  mine: async (params?: { page?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => v && query.set(k, String(v)));
+    return Fetch.get(`/reviews/my?${query.toString()}`, authHeaders());
+  },
+
   /** Finished bookings waiting for a rating, for the "how was it?" prompt. */
   pending: async () => Fetch.get("/reviews/pending", authHeaders()),
   /** "Not now": stop asking about this booking. */

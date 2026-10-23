@@ -140,8 +140,8 @@ describe('SettingsPage', () => {
       expect(screen.getByPlaceholderText('000000')).toBeInTheDocument();
     });
 
-    it('shows error when 2FA verification fails', async () => {
-      (TwoFAService.verifyToken as jest.Mock).mockResolvedValue({
+    it('shows error when the server refuses the code', async () => {
+      (TwoFAService.enable as jest.Mock).mockResolvedValue({
         data: { success: false, message: 'Invalid code' },
       });
       const user = userEvent.setup();
@@ -156,6 +156,22 @@ describe('SettingsPage', () => {
       await waitFor(() => {
         expect(toast.error).toHaveBeenCalledWith('Invalid code');
       });
+      expect(TwoFAService.enable).toHaveBeenCalledWith('123456');
+      expect(TwoFAService.verifyToken).not.toHaveBeenCalled();
+    });
+
+    it('turns 2FA on with the code it collected', async () => {
+      (TwoFAService.enable as jest.Mock).mockResolvedValue({ data: { success: true } });
+      const user = userEvent.setup();
+      render(<SettingsPage />);
+      await waitFor(() => screen.getByRole('button', { name: /enable 2fa/i }));
+      await user.click(screen.getByRole('button', { name: /enable 2fa/i }));
+      await waitFor(() => screen.getByRole('button', { name: /next/i }));
+      await user.click(screen.getByRole('button', { name: /next/i }));
+      await user.type(screen.getByPlaceholderText('000000'), '654321');
+      await user.click(screen.getByRole('button', { name: /verify/i }));
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Two-factor authentication enabled'));
+      expect(TwoFAService.enable).toHaveBeenCalledWith('654321');
     });
   });
 

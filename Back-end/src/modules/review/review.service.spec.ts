@@ -140,12 +140,37 @@ describe('ReviewService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
+    it('trims the reply and refuses an empty one', async () => {
+      mockPrisma.review.findFirst.mockResolvedValue(existingReview);
+      mockPrisma.review.update.mockResolvedValue({ ...existingReview, reply: 'Thanks!', author: null, listing: null });
+      await service.replyToReview('review-1', 'vendor-1', { reply: '  Thanks!  ' });
+      expect(mockPrisma.review.update).toHaveBeenCalledWith(expect.objectContaining({ data: { reply: 'Thanks!' } }));
+      await expect(service.replyToReview('review-1', 'vendor-1', { reply: '   ' })).rejects.toThrow('Write a reply');
+    });
+
     it('should throw BadRequestException if already replied', async () => {
       mockPrisma.review.findFirst.mockResolvedValue({ ...existingReview, reply: 'Already replied' });
 
       await expect(
         service.replyToReview('review-1', 'vendor-1', { reply: 'again' }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("a vendor's own reviews", () => {
+    it('lists them newest first with the average, the count and how many need a reply', async () => {
+      mockPrisma.review.count.mockResolvedValueOnce(3).mockResolvedValueOnce(1);
+      mockPrisma.review.findMany.mockResolvedValue([
+        { id: 'r1', rating: 5, comment: 'Great', reply: null, created_at: new Date(), author: { id: 'c1', name: 'Amara', avatar: 'a.png' }, listing: { id: 'l1', title: 'Buffet' } },
+      ]);
+      mockPrisma.review.aggregate.mockResolvedValue({ _avg: { rating: 4.67 } });
+      (mockPrisma.review as any).groupBy = jest.fn().mockResolvedValue([{ rating: 5, _count: { rating: 2 } }, { rating: 4, _count: { rating: 1 } }]);
+      const res = await service.getMyReviewsAsVendor('vendor-1', {});
+      expect(mockPrisma.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { vendor_id: 'vendor-1', deleted_at: null }, orderBy: { created_at: 'desc' } }));
+      expect(mockPrisma.review.count).toHaveBeenCalledWith({ where: { vendor_id: 'vendor-1', deleted_at: null, reply: null } });
+      expect(res.meta).toMatchObject({ total: 3, avg_rating: 4.67, unanswered: 1 });
+      expect(res.data[0].author.avatar_url).toContain('a.png');
+      expect(res.data[0].listing.title).toBe('Buffet');
     });
   });
 

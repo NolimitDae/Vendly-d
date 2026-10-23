@@ -34,6 +34,10 @@ export interface ChatReport {
   message_id: string | null;
   /** The reported message; null if none was picked or the sender deleted it. */
   message: ChatMessage | null;
+  /** The copy of the reported message kept when the report was made (its files are kept too). */
+  message_copy?: { text: string | null; attachments: string[]; attachments_url: string[] } | null;
+  /** The reported message was deleted by the sender after the report. */
+  message_deleted?: boolean;
   /** Up to 10 messages leading up to the report, oldest first. */
   context: ChatMessage[];
 }

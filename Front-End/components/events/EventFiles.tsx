@@ -14,7 +14,7 @@ const Icon = ({ mime }: { mime: string }) =>
   mime.startsWith("image/") ? <FileImage className="w-5 h-5" /> : mime === "application/pdf" ? <FileText className="w-5 h-5" /> : /sheet|excel|csv/.test(mime) ? <FileSpreadsheet className="w-5 h-5" /> : <FileIcon className="w-5 h-5" />;
 
 /** Files shared on the event. Planner and booked vendors upload; everyone on the event downloads. */
-export default function EventFiles({ eventId, role }: { eventId: string; role: EventRole }) {
+export default function EventFiles({ eventId, role, readOnly = false }: { eventId: string; role: EventRole; /** a cancelled event: download only */ readOnly?: boolean }) {
   const [files, setFiles] = useState<EventFile[] | null>(null);
   const [uploading, setUploading] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -70,7 +70,7 @@ export default function EventFiles({ eventId, role }: { eventId: string; role: E
 
   return (
     <div className="space-y-3">
-      {role !== "client" && (
+      {role !== "client" && !readOnly && (
         <>
           <input ref={input} type="file" multiple className="hidden" onChange={(e) => upload(e.target.files)} aria-label="Choose files to share" />
           <button onClick={() => input.current?.click()} disabled={uploading} className="w-full py-3 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-primary text-sm font-medium flex items-center justify-center gap-2 hover:bg-primary/5">
@@ -94,7 +94,7 @@ export default function EventFiles({ eventId, role }: { eventId: string; role: E
                 <span className="block text-sm font-medium text-gray-900 dark:text-white truncate hover:text-primary">{f.name}</span>
                 <span className="block text-xs text-gray-500 dark:text-gray-400">{fileSize(f.size)} · {f.uploader.name} · {dayjs(f.created_at).fromNow()}</span>
               </button>
-              {(f.can_delete || role === "planner") && (
+              {!readOnly && (f.can_delete || role === "planner") && (
                 <button onClick={() => remove(f)} aria-label={`Remove ${f.name}`} className="p-1.5 text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
               )}
             </li>

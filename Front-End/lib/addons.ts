@@ -56,3 +56,20 @@ export function packagePriceHint(price: string, unit?: string | null) {
   const p = "$" + (Number(price) % 1 === 0 ? Number(price).toFixed(0) : Number(price).toFixed(2));
   return u ? `${p} per ${u}` : `${p} for the booking`;
 }
+
+/** Time an add-on can add to a booking, in minutes: +30m, +1h … +6h. */
+export const EXTEND_CHOICES = [30, 60, 120, 180, 240, 300, 360] as const;
+
+/** "+30m", "+1h", "+1h 30m" for the chips. */
+export const extendChip = (min: number) => {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `+${h ? `${h}h` : ""}${h && m ? " " : ""}${m ? `${m}m` : ""}`;
+};
+
+/** "30 minutes", "2 hours", "1 hour 30 minutes". */
+export function durationText(min: number) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return [h ? `${h} hour${h === 1 ? "" : "s"}` : "", m ? `${m} minute${m === 1 ? "" : "s"}` : ""].filter(Boolean).join(" ") || "0 minutes";
+}

@@ -105,10 +105,12 @@ export class ReviewService {
       throw new ForbiddenException('Only the vendor can reply');
     if (review.reply)
       throw new BadRequestException('You already replied to this review');
+    const reply = dto.reply?.trim() ?? '';
+    if (reply.length < 2) throw new BadRequestException('Write a reply first.');
 
     const updated = await this.prisma.review.update({
       where: { id: reviewId },
-      data: { reply: dto.reply },
+      data: { reply },
       include: this.reviewIncludes(),
     });
 
@@ -187,6 +189,15 @@ export class ReviewService {
         distribution: this.ratingDistribution(dist),
       },
     };
+  }
+
+  /** A vendor's own reviews (newest first), with how many they haven't answered yet. */
+  async getMyReviewsAsVendor(vendorId: string, query: { page?: number; limit?: number }) {
+    const [res, unanswered] = await Promise.all([
+      this.getVendorReviews(vendorId, { page: query.page, limit: Math.min(Number(query.limit) || 20, 50) }),
+      this.prisma.review.count({ where: { vendor_id: vendorId, deleted_at: null, reply: null } }),
+    ]);
+    return { ...res, meta: { ...res.meta, unanswered } };
   }
 
   private ratingDistribution(

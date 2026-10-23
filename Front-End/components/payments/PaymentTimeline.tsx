@@ -5,6 +5,9 @@ import dayjs from "dayjs";
 import { AlertCircle, CheckCircle2, Clock, Loader2, Lock, RotateCcw, ShieldCheck, XCircle } from "lucide-react";
 import { toast } from "react-toastify";
 import { PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline } from "@/service/payments/payments.service";
+import { BookingService } from "@/service/booking/booking.service";
+import ReportProblemForm from "@/components/disputes/ReportProblemForm";
+import DisputeDetails, { type DisputeDetailFields } from "@/components/disputes/DisputeDetails";
 
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
 
@@ -23,7 +26,6 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [disputing, setDisputing] = useState(false);
-  const [reason, setReason] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -129,28 +131,30 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
           )}
         </div>
       )}
-      {disputing && (
-        <div className="space-y-2">
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={3}
-            placeholder="What went wrong? (at least 10 characters)"
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
-          />
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setDisputing(false)} className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">Cancel</button>
-            <button
-              type="button"
-              disabled={busy || reason.trim().length < 10}
-              onClick={() => run(async () => { await PaymentsService.dispute(bookingId, reason.trim()); setDisputing(false); }, "Could not send")}
-              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60"
-            >
-              Send report
-            </button>
-          </div>
-        </div>
-      )}
+      {disputing && <ReportProblemForm bookingId={bookingId} paid={t.paid} onCancel={() => setDisputing(false)} onSent={() => { setDisputing(false); load(); onChanged?.(); }} />}
+      {t.dispute && <YourReport bookingId={bookingId} />}
     </section>
+  );
+}
+
+/** What the customer reported: kind of problem, what they asked for and their photos. */
+function YourReport({ bookingId }: { bookingId: string }) {
+  const [b, setB] = useState<(DisputeDetailFields & { dispute_reason?: string | null }) | null>(null);
+  useEffect(() => {
+    let live = true;
+    BookingService.getOne(bookingId)
+      .then((res) => live && setB(res.data?.data ?? null))
+      .catch(() => null);
+    return () => {
+      live = false;
+    };
+  }, [bookingId]);
+  if (!b?.dispute_reason) return null;
+  return (
+    <div className="rounded-lg bg-gray-50 dark:bg-gray-900/40 p-3 space-y-2">
+      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Your report</p>
+      <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{b.dispute_reason}</p>
+      <DisputeDetails d={b} who="You" />
+    </div>
   );
 }

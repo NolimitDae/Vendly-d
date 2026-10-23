@@ -1,6 +1,7 @@
 "use client";
 
 import SavedCards from "@/components/payments/SavedCards";
+import TransactionsList from "@/components/payments/TransactionsList";
 
 export default function PaymentMethodsPage() {
   return (
@@ -12,6 +13,7 @@ export default function PaymentMethodsPage() {
       <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700">
         <SavedCards />
       </section>
+      <TransactionsList role="customer" title="Payments and refunds" />
     </div>
   );
 }

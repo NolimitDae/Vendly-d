@@ -1,33 +1,102 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
-import { AppConfig } from "../config/app.config";
 import { CookieHelper } from "../helper/cookie.helper";
-import { REFRESH_TOKEN_COOKIE, clearSession, saveSession } from "./session";
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  WEB_CLIENT_HEADER,
+  WEB_CLIENT_VALUE,
+  apiBase,
+  clearLegacySession,
+  clearSession,
+  saveSession,
+} from "./session";
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean; _skipAuthRefresh?: boolean };
 
-// One refresh at a time: concurrent 401s wait for the same refresh instead of each starting their own.
-let refreshing: Promise<string | null> | null = null;
-
-/** Trades the refresh token for a new access token (and a rotated refresh token). Null if that fails. */
-async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = CookieHelper.get({ key: REFRESH_TOKEN_COOKIE });
-  if (!refreshToken) return null;
+/**
+ * Asks the API for a fresh session. The website's refresh token is in an HttpOnly cookie the API
+ * reads itself; a session from before the cookies sends its readable refresh token once, and the
+ * API answers by setting the HttpOnly cookies (and clearing the readable ones).
+ * True when the session was renewed.
+ */
+async function refreshSession(): Promise<boolean> {
+  const legacyRefresh = CookieHelper.get({ key: REFRESH_TOKEN_COOKIE });
   try {
     const res = await axios.post(
-      `${AppConfig().app.apiUrl}/auth/refresh-token`,
-      { refresh_token: refreshToken },
+      `${apiBase()}/auth/refresh-token`,
+      legacyRefresh ? { refresh_token: legacyRefresh } : {},
       { _skipAuthRefresh: true } as RetriableConfig,
     );
-    const auth = res.data?.authorization;
-    if (res.data?.success && auth?.access_token) {
-      saveSession(auth.access_token, auth.refresh_token);
-      return auth.access_token;
+    if (res.data?.success) {
+      const auth = res.data?.authorization;
+      if (auth?.access_token) {
+        // an API without the cookies: keep the old way
+        saveSession(auth.access_token, auth.refresh_token);
+      } else {
+        clearLegacySession();
+      }
+      return true;
     }
+    // the readable refresh token is no good: stop offering it
+    if (legacyRefresh) CookieHelper.destroy({ key: REFRESH_TOKEN_COOKIE });
   } catch {
-    // fall through to sign-out
+    // network trouble: fall through
   }
-  return null;
+  return false;
 }
+
+// One refresh at a time: concurrent 401s wait for the same refresh instead of each starting their own.
+let refreshing: Promise<boolean> | null = null;
+const refreshOnce = () =>
+  (refreshing ??= refreshSession().finally(() => {
+    refreshing = null;
+  }));
+
+// Sessions from before the HttpOnly cookies move over on the first API call of a page load.
+let migration: Promise<boolean> | null = null;
+export function migrateLegacySession(): Promise<boolean> {
+  if (!migration) {
+    migration = CookieHelper.get({ key: REFRESH_TOKEN_COOKIE }) ? refreshOnce() : Promise.resolve(false);
+  }
+  return migration;
+}
+/** Test hook. */
+export function __resetSessionState() {
+  refreshing = null;
+  migration = null;
+}
+
+/** "Bearer undefined" and friends: what the service files build when the token is no longer in JS. */
+const EMPTY_BEARER = /^Bearer\s*(undefined|null)?\s*$/i;
+
+/** The current readable token as a header, if a pre-cookie session still has one. */
+const legacyAuthorization = () => {
+  const token = CookieHelper.get({ key: ACCESS_TOKEN_COOKIE });
+  return token ? `Bearer ${token}` : null;
+};
+
+/** Calls to our API through the website's /api path (the only ones that get cookies and the header). */
+const isApiCall = (url?: string) => !!url && (url === apiBase() || url.startsWith(`${apiBase()}/`));
+
+axios.interceptors.request.use(async (config: RetriableConfig) => {
+  if (typeof window === "undefined" || !isApiCall(config.url)) return config;
+  if (!config._skipAuthRefresh && CookieHelper.get({ key: REFRESH_TOKEN_COOKIE })) {
+    await migrateLegacySession();
+    // the request was built before the move: send what is current now (nothing once moved)
+    const auth = config.headers.get("Authorization");
+    if (typeof auth === "string" && auth.startsWith("Bearer")) {
+      const now = legacyAuthorization();
+      if (now) config.headers.set("Authorization", now);
+      else config.headers.delete("Authorization");
+    }
+  }
+  const auth = config.headers.get("Authorization");
+  if (typeof auth === "string" && EMPTY_BEARER.test(auth.trim())) config.headers.delete("Authorization");
+  // the login cookies travel with same-origin requests; the header marks the call as the website's
+  config.withCredentials = true;
+  config.headers.set(WEB_CLIENT_HEADER, WEB_CLIENT_VALUE);
+  return config;
+});
 
 axios.interceptors.response.use(
   (response) => response,
@@ -37,20 +106,20 @@ axios.interceptors.response.use(
       // Access tokens expire; refresh once and replay the request before giving up.
       if (original && !original._retried && !original._skipAuthRefresh) {
         original._retried = true;
-        refreshing ??= refreshAccessToken().finally(() => {
-          refreshing = null;
-        });
-        const token = await refreshing;
-        if (token) {
-          original.headers.set("Authorization", `Bearer ${token}`);
+        if (await refreshOnce()) {
+          const now = legacyAuthorization();
+          if (now) original.headers.set("Authorization", now);
+          else original.headers.delete("Authorization");
           return axios(original);
         }
       }
-      clearSession();
-      const path = window.location.pathname;
-      const publicPaths = ["/login", "/register", "/otp", "/forget-password", "/change-password"];
-      if (!publicPaths.some((p) => path.startsWith(p))) {
-        window.location.href = "/login";
+      if (!original?._skipAuthRefresh) {
+        void clearSession();
+        const path = window.location.pathname;
+        const publicPaths = ["/login", "/register", "/otp", "/forget-password", "/change-password"];
+        if (!publicPaths.some((p) => path.startsWith(p))) {
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);
@@ -60,18 +129,28 @@ axios.interceptors.response.use(
 type AdapterOption = "fetch" | "axios";
 
 export class Fetch {
-  private static _baseUrl = `${AppConfig().app.apiUrl}`;
+  private static _baseUrl = apiBase();
   private static _adapter: AdapterOption = "axios";
 
   static setAdapter(adapter: AdapterOption) {
     this._adapter = adapter;
   }
 
+  /** Options for the fetch adapter: same cookies and website header as the axios path. */
+  private static fetchInit(header: any, init: RequestInit = {}): RequestInit {
+    return {
+      ...header,
+      ...init,
+      credentials: "include",
+      headers: { ...(header?.headers ?? {}), [WEB_CLIENT_HEADER]: WEB_CLIENT_VALUE },
+    };
+  }
+
   static async get(url: string, header?: any) {
     if (this._adapter === "axios") {
       return await axios.get(`${this._baseUrl}${url}`, header);
     }
-    const res = await fetch(`${this._baseUrl}${url}`, header);
+    const res = await fetch(`${this._baseUrl}${url}`, this.fetchInit(header));
     return await res.json();
   }
 
@@ -79,7 +158,7 @@ export class Fetch {
     if (this._adapter === "axios") {
       return await axios.post(`${this._baseUrl}${url}`, data, header);
     }
-    const res = await fetch(`${this._baseUrl}${url}`, { ...header, method: "POST", body: data });
+    const res = await fetch(`${this._baseUrl}${url}`, this.fetchInit(header, { method: "POST", body: data }));
     return await res.json();
   }
 
@@ -87,7 +166,7 @@ export class Fetch {
     if (this._adapter === "axios") {
       return await axios.put(`${this._baseUrl}${url}`, data, header);
     }
-    const res = await fetch(`${this._baseUrl}${url}`, { ...header, method: "PUT", body: data });
+    const res = await fetch(`${this._baseUrl}${url}`, this.fetchInit(header, { method: "PUT", body: data }));
     return await res.json();
   }
 
@@ -95,7 +174,7 @@ export class Fetch {
     if (this._adapter === "axios") {
       return await axios.patch(`${this._baseUrl}${url}`, data, header);
     }
-    const res = await fetch(`${this._baseUrl}${url}`, { ...header, method: "PATCH", body: data });
+    const res = await fetch(`${this._baseUrl}${url}`, this.fetchInit(header, { method: "PATCH", body: data }));
     return await res.json();
   }
 
@@ -103,7 +182,7 @@ export class Fetch {
     if (this._adapter === "axios") {
       return await axios.delete(`${this._baseUrl}${url}`, header);
     }
-    const res = await fetch(`${this._baseUrl}${url}`, { ...header, method: "DELETE" });
+    const res = await fetch(`${this._baseUrl}${url}`, this.fetchInit(header, { method: "DELETE" }));
     return await res.json();
   }
 }

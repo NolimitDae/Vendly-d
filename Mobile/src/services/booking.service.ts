@@ -34,6 +34,16 @@ export interface Booking {
   dispute_resolution?: string | null;
   dispute_vendor_reply?: string | null;
   dispute_vendor_replied_at?: string | null;
+  /** no_show | late | not_as_described | quality | damage | billing | other */
+  dispute_category?: string | null;
+  /** full_refund | partial_refund | other */
+  dispute_outcome?: string | null;
+  dispute_requested_amount?: number | string | null;
+  /** short-lived signed links to the customer's photos (on the booking itself, not in lists) */
+  dispute_photo_urls?: string[];
+  /** Refunds tab: refunded to the customer's card, and how much of that the vendor gave back */
+  refunded_total?: number;
+  given_back?: number;
   /** Rentals: the "listing" is synthesised from the rented items */
   is_rental?: boolean;
   security_deposit?: number | string | null;
@@ -69,6 +79,8 @@ export interface CreateBookingData extends BookingFields {
 
 export interface BookingListParams {
   status?: BookingStatus;
+  /** vendor list only: refunds (money went back) or complaints (a problem was reported, open first) */
+  filter?: 'refunds' | 'complaints';
   page?: number;
   limit?: number;
 }

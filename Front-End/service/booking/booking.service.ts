@@ -20,7 +20,8 @@ export const BookingService = {
     return Fetch.get(`/bookings/my/customer?${query.toString()}`, authHeaders());
   },
 
-  getMyAsVendor: async (params?: { page?: number; limit?: number; status?: string }) => {
+  /** `filter`: "refunds" (money went back to the customer) or "complaints" (a problem was reported, open first). */
+  getMyAsVendor: async (params?: { page?: number; limit?: number; status?: string; filter?: "refunds" | "complaints" }) => {
     const query = new URLSearchParams();
     if (params) Object.entries(params).forEach(([k, v]) => v && query.set(k, String(v)));
     return Fetch.get(`/bookings/my/vendor?${query.toString()}`, authHeaders());

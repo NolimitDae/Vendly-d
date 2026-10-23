@@ -11,7 +11,7 @@ const iconFor = (mime: string): keyof typeof Ionicons.glyphMap =>
   mime.startsWith('image/') ? 'image-outline' : mime === 'application/pdf' ? 'document-text-outline' : /sheet|excel|csv/.test(mime) ? 'grid-outline' : 'document-outline';
 
 /** Files shared on the event: floor plans, shot lists, menus. Planner and booked vendors upload; everyone downloads. */
-export default function EventFiles({ eventId, role }: { eventId: string; role: EventRole }) {
+export default function EventFiles({ eventId, role, readOnly = false }: { eventId: string; role: EventRole; /** a cancelled event: download only */ readOnly?: boolean }) {
   const [files, setFiles] = useState<EventFile[] | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -49,7 +49,7 @@ export default function EventFiles({ eventId, role }: { eventId: string; role: E
 
   return (
     <View style={{ gap: 10 }}>
-      {role !== 'client' && (
+      {role !== 'client' && !readOnly && (
         <Pressable style={s.upload} onPress={upload} disabled={uploading} accessibilityRole="button">
           {uploading ? <ActivityIndicator color={DARK.accent} /> : <Ionicons name="cloud-upload-outline" size={20} color={DARK.accent} />}
           <Text style={s.uploadText}>{uploading ? 'Uploading…' : 'Share a file'}</Text>
@@ -69,7 +69,7 @@ export default function EventFiles({ eventId, role }: { eventId: string; role: E
               <Text style={s.name} numberOfLines={1}>{f.name}</Text>
               <Text style={s.muted}>{fileSize(f.size)} · {f.uploader.name} · {formatDistanceToNow(parseISO(f.created_at), { addSuffix: true })}</Text>
             </View>
-            {(f.can_delete || role === 'planner') && (
+            {!readOnly && (f.can_delete || role === 'planner') && (
               <Pressable onPress={() => remove(f)} hitSlop={8} accessibilityLabel={`Remove ${f.name}`}>
                 <Ionicons name="trash-outline" size={18} color={DARK.muted} />
               </Pressable>

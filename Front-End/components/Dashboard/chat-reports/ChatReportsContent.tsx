@@ -31,6 +31,23 @@ function Who({ label, p }: { label: string; p: ReportPerson | null }) {
   );
 }
 
+function ReportedMessage({ text, urls }: { text: string | null; urls: string[] }) {
+  return (
+    <>
+      {text && <p className="text-gray-900 dark:text-white whitespace-pre-wrap">{text}</p>}
+      {urls.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-1">
+          {urls.map((url, n) => (
+            <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+              {urls.length > 1 ? `Attachment ${n + 1}` : "Attachment"}
+            </a>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /** Admin queue of people reported from chat: read the conversation, then dismiss or mark actioned. */
 export default function ChatReportsContent() {
   const [tab, setTab] = useState<Tab>("open");
@@ -130,11 +147,11 @@ export default function ChatReportsContent() {
               <div className="rounded-lg border-l-4 border-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm">
                 <p className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Reported message</p>
                 {r.message ? (
+                  <ReportedMessage text={r.message.text ?? null} urls={r.message.attachments_url ?? []} />
+                ) : r.message_copy && (r.message_copy.text || r.message_copy.attachments_url.length) ? (
                   <>
-                    {r.message.text && <p className="text-gray-900 dark:text-white whitespace-pre-wrap">{r.message.text}</p>}
-                    {r.message.attachments_url?.map((url) => (
-                      <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline block">Photo</a>
-                    ))}
+                    <p className="text-xs text-gray-500 dark:text-gray-400 italic mb-1">Deleted by the sender — copy kept for review</p>
+                    <ReportedMessage text={r.message_copy.text} urls={r.message_copy.attachments_url} />
                   </>
                 ) : (
                   <p className="text-gray-500 italic">The sender has deleted this message.</p>

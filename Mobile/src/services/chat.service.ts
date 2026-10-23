@@ -52,7 +52,9 @@ export interface Message {
   conversation_id: string;
   sender_id: string;
   content: string;
+  /** The first attachment (older screens); `files` has them all. */
   file?: string;
+  files?: string[];
   created_at: string;
   sender?: Participant;
   kind: 'text' | 'quote' | 'system';
@@ -83,9 +85,14 @@ export interface PhotoFile {
 export interface SendMessageData {
   conversation_id: string;
   content: string;
-  /** Sent as multipart `attachments`; the text is optional then. */
+  /** Sent as multipart `attachments` (up to 10); the text is optional then. */
+  photos?: PhotoFile[];
+  /** One photo (older callers). */
   photo?: PhotoFile;
 }
+
+/** Photos per message (the API takes up to 10 attachments). */
+export const MAX_PHOTOS = 10;
 
 export type ReportReason = 'spam' | 'harassment' | 'scam' | 'inappropriate' | 'other';
 
@@ -159,6 +166,7 @@ export function toMessage(raw: ApiMessage, conversationId = ''): Message {
     sender_id: raw.sender?.id ?? '',
     content: raw.text ?? '',
     file: raw.attachments_url?.[0],
+    files: raw.attachments_url ?? [],
     created_at: raw.createdAt,
     kind: (raw.kind as Message['kind']) ?? 'text',
     quote: raw.quote ?? null,
@@ -219,15 +227,16 @@ export const ChatService = {
 
   sendMessage: async (data: SendMessageData) => {
     let body: FormData | { conversationId: string; text: string } = { conversationId: data.conversation_id, text: data.content };
-    if (data.photo) {
+    const photos = [...(data.photos ?? []), ...(data.photo ? [data.photo] : [])].slice(0, MAX_PHOTOS);
+    if (photos.length) {
       // FormData gets the long upload timeout from api.ts
       const form = new FormData();
       form.append('conversationId', data.conversation_id);
       if (data.content) form.append('text', data.content);
-      form.append('attachments', data.photo as unknown as Blob);
+      photos.forEach((p) => form.append('attachments', p as unknown as Blob));
       body = form;
     }
-    const res = await api.post('/chat/message/send-message', body, data.photo ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined);
+    const res = await api.post('/chat/message/send-message', body, photos.length ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined);
     return { data: { success: !!res.data?.success, data: toMessage(res.data?.data as ApiMessage, data.conversation_id), warning: res.data?.warning as { text: string } | null } };
   },
 

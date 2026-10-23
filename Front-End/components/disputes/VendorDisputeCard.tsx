@@ -5,8 +5,9 @@ import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import { BookingService } from "@/service/booking/booking.service";
+import DisputeDetails, { type DisputeDetailFields } from "./DisputeDetails";
 
-export interface DisputeFields {
+export interface DisputeFields extends DisputeDetailFields {
   dispute_opened_at?: string | null;
   dispute_reason?: string | null;
   dispute_resolved_at?: string | null;
@@ -52,6 +53,7 @@ export default function VendorDisputeCard({ bookingId, booking, onChanged }: { b
       {booking.dispute_reason && (
         <blockquote className="text-sm text-gray-800 dark:text-gray-200 border-l-4 border-amber-300 dark:border-amber-700 pl-3 whitespace-pre-wrap">{booking.dispute_reason}</blockquote>
       )}
+      <DisputeDetails d={booking} />
       {open ? (
         <p className="text-sm text-gray-700 dark:text-gray-300">Your payment for this booking is held until Vendly reviews it. Give your side below; photos you’ve uploaded as proof are seen by Vendly too.</p>
       ) : (

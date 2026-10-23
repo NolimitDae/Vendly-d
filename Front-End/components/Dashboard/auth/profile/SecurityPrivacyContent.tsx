@@ -93,18 +93,14 @@ const SecurityPrivacyContent = () => {
     if (code.length !== 6) { toast.error("Enter a 6-digit code"); return; }
     setBusy(true);
     try {
-      const res = await TwoFAService.verifyToken(code);
-      if (!res.data?.success) {
-        toast.error(res.data?.message || "Invalid code — try again");
-        return;
-      }
-      const enableRes = await TwoFAService.enable();
+      // the server checks the code before turning 2FA on
+      const enableRes = await TwoFAService.enable(code);
       if (enableRes.data?.success) {
         setEnabled(true);
         reset();
         toast.success("Two-factor authentication enabled");
       } else {
-        toast.error(enableRes.data?.message || "Failed to enable 2FA");
+        toast.error(enableRes.data?.message || "Invalid code — try again");
       }
     } catch {
       toast.error("Verification failed");

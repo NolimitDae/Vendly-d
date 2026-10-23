@@ -38,11 +38,18 @@ jest.mock('@/service/review/review.service', () => ({
   },
 }));
 
+jest.mock('@/service/payments/booking-money.service', () => ({
+  BookingMoneyService: { cancelPreview: jest.fn() },
+  downloadInvoice: jest.fn(),
+  money: (n: number) => `$${n.toFixed(2)}`,
+}));
+
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() },
 }));
 
 import { BookingService } from '@/service/booking/booking.service';
+import { BookingMoneyService } from '@/service/payments/booking-money.service';
 import { toast } from 'react-toastify';
 
 const makeBooking = (overrides: Partial<any> = {}) => ({
@@ -190,8 +197,19 @@ describe('CustomerBookingsPageContent', () => {
   });
 
   describe('cancel action', () => {
-    it('calls BookingService.cancel when user confirms cancellation', async () => {
-      (BookingService.cancel as jest.Mock).mockResolvedValue({ data: { success: true } });
+    const preview = {
+      cancelled_by: 'CUSTOMER', refund_total: 75, refund_fee: 0, fee_kept: 7.5, vendor_keeps: 75, percent: 50, unpaid_cancelled: 0, holds_released: 0,
+      policy: { key: 'flexible', label: 'Flexible', text: 'Full refund at 7+ days.' }, card: 'Visa •••• 4242', refund_timing: '5–10 business days',
+      message: "You'll get $75.00 back to your card (Visa •••• 4242). The $7.50 Vendly Protection fee isn't refunded.",
+    };
+    beforeEach(() => {
+      (BookingMoneyService.cancelPreview as jest.Mock).mockResolvedValue({ data: { success: true, data: preview } });
+    });
+
+    it('shows what cancelling does before confirming, then cancels and shows the refund', async () => {
+      (BookingService.cancel as jest.Mock).mockResolvedValue({
+        data: { success: true, data: { id: 'b1', refund_summary: { ...preview, message: '$75.00 is being refunded to your card (Visa •••• 4242).' } } },
+      });
       (BookingService.getMyAsCustomer as jest.Mock)
         .mockResolvedValueOnce({
           data: { success: true, data: [makeBooking()], meta: { total: 1, last_page: 1 } },
@@ -206,13 +224,34 @@ describe('CustomerBookingsPageContent', () => {
       await waitFor(() => screen.getByRole('button', { name: /^cancel$/i }));
       await user.click(screen.getByRole('button', { name: /^cancel$/i }));
 
+      // the preview, before anything is cancelled
+      expect(await screen.findByText(/You'll get \$75\.00 back to your card/)).toBeInTheDocument();
+      expect(screen.getByText(/Flexible cancellation policy/)).toBeInTheDocument();
+      expect(BookingMoneyService.cancelPreview).toHaveBeenCalledWith('b1');
+      expect(BookingService.cancel).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('button', { name: /^cancel booking$/i }));
+
       await waitFor(() => {
         expect(BookingService.cancel).toHaveBeenCalledWith('b1', 'Customer cancelled');
       });
       expect(toast.success).toHaveBeenCalledWith('Booking cancelled');
+      expect(await screen.findByText('$75.00 is being refunded to your card (Visa •••• 4242).')).toBeInTheDocument();
+      expect(screen.getByText(/5–10 business days/)).toBeInTheDocument();
     });
 
-    it('shows error toast when cancel API fails', async () => {
+    it('keeps the booking when the user changes their mind', async () => {
+      setupSuccess();
+      const user = userEvent.setup();
+      render(<CustomerBookingsPageContent />);
+      await waitFor(() => screen.getByRole('button', { name: /^cancel$/i }));
+      await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+      await user.click(await screen.findByRole('button', { name: /keep booking/i }));
+      expect(BookingService.cancel).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('shows an error when the cancel API fails', async () => {
       (BookingService.cancel as jest.Mock).mockRejectedValue(new Error('fail'));
       setupSuccess();
       const user = userEvent.setup();
@@ -220,10 +259,11 @@ describe('CustomerBookingsPageContent', () => {
 
       await waitFor(() => screen.getByRole('button', { name: /^cancel$/i }));
       await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+      await screen.findByText(/You'll get/);
+      await user.click(screen.getByRole('button', { name: /^cancel booking$/i }));
 
-      await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith('Failed to cancel booking');
-      });
+      expect(await screen.findByRole('alert')).toHaveTextContent('fail');
+      expect(toast.success).not.toHaveBeenCalled();
     });
   });
 

@@ -56,6 +56,10 @@ export interface Extra {
   fee_amount: number;
   total: number;
   note: string | null;
+  /** add-ons only: minutes it adds to the booking (moves the end time once approved) */
+  extends_minutes?: number | null;
+  /** "Adds 2 hours" */
+  extends_label?: string | null;
   status: ExtraStatus;
   created_at: string;
   responded_at: string | null;
@@ -75,6 +79,9 @@ export interface Extra {
 }
 
 export interface ExtrasMeta {
+  /** the booking's times now (an approved add-on that adds time moves the end) */
+  event_start_at?: string | null;
+  event_end_at?: string | null;
   waiting_on_customer: number;
   waiting_total: number;
   can_request: { add_on: boolean; fee: boolean };
@@ -111,7 +118,7 @@ export const AddOnsService = {
   extras: (bookingId: string) => api.get<{ success: boolean; data: Extra[]; meta: ExtrasMeta }>(`/bookings/${bookingId}/extras`),
   request: (
     bookingId: string,
-    data: { kind: AddOnKind; add_on_id?: string; name?: string; unit_price?: number; price_unit?: AddOnUnit; quantity?: number; note?: string },
+    data: { kind: AddOnKind; add_on_id?: string; name?: string; unit_price?: number; price_unit?: AddOnUnit; quantity?: number; note?: string; extends_minutes?: number },
   ) => api.post<{ success: boolean; data: Extra }>(`/bookings/${bookingId}/extras`, data),
   approve: (extraId: string, paymentMethodId?: string) =>
     api.post<{ success: boolean; data: Extra & { paid: boolean } }>(`/booking-extras/${extraId}/approve`, paymentMethodId ? { payment_method_id: paymentMethodId } : {}),
@@ -206,4 +213,21 @@ export function estimate(
     return sum + addOn.price * q;
   }, 0);
   return Math.round((base + extras) * 100) / 100;
+}
+
+/** Time an add-on can add to a booking, in minutes: +30m, +1h … +6h. */
+export const EXTEND_CHOICES = [30, 60, 120, 180, 240, 300, 360] as const;
+
+/** "+30m", "+1h", "+1h 30m" for the chips. */
+export const extendChip = (min: number) => {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `+${h ? `${h}h` : ''}${h && m ? ' ' : ''}${m ? `${m}m` : ''}`;
+};
+
+/** "30 minutes", "2 hours", "1 hour 30 minutes". */
+export function durationText(min: number) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return [h ? `${h} hour${h === 1 ? '' : 's'}` : '', m ? `${m} minute${m === 1 ? '' : 's'}` : ''].filter(Boolean).join(' ') || '0 minutes';
 }

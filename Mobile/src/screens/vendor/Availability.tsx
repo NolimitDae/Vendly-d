@@ -98,6 +98,11 @@ export default function Availability() {
             <Ionicons name="information-circle-outline" size={16} color={DARK.accent} />
             <Text style={s.noteText}>Tap a start day and an end day to block them. Customers can't request those dates.</Text>
           </View>
+          <Pressable style={s.note} onPress={() => (nav as any).navigate('ProfileTab', { screen: 'WorkingHours', initial: false })} accessibilityRole="button">
+            <Ionicons name="time-outline" size={16} color={DARK.accent} />
+            <Text style={s.noteText}>Only work certain days or hours? Set your weekly working hours so customers book inside them.</Text>
+            <Ionicons name="chevron-forward" size={16} color={DARK.muted} />
+          </Pressable>
           <Pressable style={s.note} onPress={() => (nav as any).navigate('ProfileTab', { screen: 'CalendarSync' })} accessibilityRole="button">
             <Ionicons name="calendar-outline" size={16} color={DARK.accent} />
             <Text style={s.noteText}>Busy in Google or Apple Calendar? Connect it in Calendar sync to block those days automatically.</Text>

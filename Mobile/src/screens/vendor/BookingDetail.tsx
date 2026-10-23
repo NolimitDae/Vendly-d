@@ -19,6 +19,10 @@ import VendorDisputeCard from '../../components/VendorDisputeCard';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
 import { closesIn } from '../../utils/requests';
+import { confirmCancelBooking } from '../../components/booking/cancelBooking';
+import RefundCard from '../../components/booking/RefundCard';
+import InvoiceButton from '../../components/booking/InvoiceButton';
+import { invoiceAvailable } from '../../services/bookingMoney.service';
 
 interface Proof { id: string; photos: string[]; notes?: string; created_at: string }
 interface Deliverable { id: string; title: string; message?: string; files: string[]; links: string[]; created_at: string }
@@ -83,6 +87,15 @@ export default function VendorBookingDetail() {
     { text: 'Not yet', style: 'cancel' },
     { text: 'Start', onPress: () => run(() => BookingService.startWork(bookingId), 'Could not start') },
   ]);
+  // shows the vendor what the customer gets back (and what they keep) before cancelling
+  const cancelBooking = async () => {
+    setBusy(true);
+    try {
+      await confirmCancelBooking({ bookingId, role: 'VENDOR', onCancelled: () => load() });
+    } finally {
+      setBusy(false);
+    }
+  };
   const complete = () => Alert.alert('Mark as completed?', 'Upload proof photos first so the customer can confirm the work.', [
     { text: 'Not yet', style: 'cancel' },
     { text: 'Complete', onPress: () => run(() => BookingService.completeBooking(bookingId), 'Could not complete') },
@@ -252,6 +265,9 @@ export default function VendorBookingDetail() {
 
           <VendorDisputeCard booking={booking} onChanged={load} />
 
+          {st === 'CANCELLED' && <RefundCard bookingId={booking.id} role="VENDOR" />}
+          {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
+
           <RentalReturnCard booking={booking} role="VENDOR" onDone={load} />
 
           <VendorExtras booking={booking} onChanged={load} />
@@ -268,6 +284,13 @@ export default function VendorBookingDetail() {
           )}
 
           <BookingContractCard bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={load} />
+
+          {(st === 'CONFIRMED' || st === 'IN_PROGRESS') && (
+            <Pressable style={s.outline} onPress={cancelBooking} disabled={busy} accessibilityRole="button" accessibilityLabel="Cancel booking">
+              <Ionicons name="close-circle-outline" size={20} color={DARK.accent} />
+              <Text style={s.outlineText}>Cancel booking</Text>
+            </Pressable>
+          )}
 
           {(st === 'CONFIRMED' || st === 'IN_PROGRESS') && booking.payment_plan && booking.payment_plan.startsWith('DEPOSIT') && !Number(booking.early_released_amount ?? 0) && (
             <Card style={{ gap: 10 }}>

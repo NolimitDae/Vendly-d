@@ -91,6 +91,10 @@ export class MailService {
     amount?: number;
     reason?: string;
     ctaUrl?: string;
+    /** button text (default "View Booking") */
+    ctaLabel?: string;
+    /** extra label / value rows, e.g. a receipt's card and date */
+    lines?: { label: string; value: string }[];
   }) {
     try {
       const from = `${process.env.APP_NAME} <${appConfig().mail.from}>`;

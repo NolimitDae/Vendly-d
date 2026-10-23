@@ -29,6 +29,7 @@ import {
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import { EarningsService } from "@/service/earnings/earnings.service";
+import TransactionsList from "@/components/payments/TransactionsList";
 import { cn } from "@/lib/utils";
 
 /* ─── Types ──────────────────────────────────────────────────── */
@@ -754,6 +755,9 @@ export default function VendorEarningsPage() {
             </>
           )}
         </div>
+
+        {/* ── Every payment, payout, commission and refund, with filters and search ── */}
+        <TransactionsList role="vendor" title="Transactions" />
 
         {/* ── Payout section ──────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">

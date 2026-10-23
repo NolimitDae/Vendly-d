@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,38 +9,56 @@ import { DARK, FONTS } from '../../constants/colors';
 import { BookingService, type Booking, type BookingStatus } from '../../services/booking.service';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
+import { disputeCategoryText } from '../../components/DisputeDetails';
 
-type Tab = 'pending' | 'upcoming' | 'completed';
-const TABS: { key: Tab; label: string; statuses: BookingStatus[] }[] = [
+type Tab = 'pending' | 'upcoming' | 'completed' | 'refunds' | 'complaints';
+const TABS: { key: Tab; label: string; statuses?: BookingStatus[]; filter?: 'refunds' | 'complaints' }[] = [
   { key: 'pending', label: 'Pending', statuses: ['PENDING'] },
   { key: 'upcoming', label: 'Upcoming', statuses: ['CONFIRMED', 'IN_PROGRESS'] },
   { key: 'completed', label: 'Completed', statuses: ['COMPLETED', 'CANCELLED', 'REJECTED'] },
+  // filtered on the server: money went back to the customer / the customer reported a problem (open first)
+  { key: 'refunds', label: 'Refunds', filter: 'refunds' },
+  { key: 'complaints', label: 'Complaints', filter: 'complaints' },
 ];
+
+const EMPTY: Record<Tab, [string, string]> = {
+  pending: ['No requests right now', 'New requests show up here the moment a customer signs.'],
+  upcoming: ['Nothing booked yet', ''],
+  completed: ['No past bookings', ''],
+  refunds: ['No refunds', 'Bookings where money went back to the customer show up here.'],
+  complaints: ['No complaints', 'If a customer reports a problem, it shows up here.'],
+};
 
 export default function VendorBookings() {
   const nav = useNavigation<NativeStackNavigationProp<VendorBookingsStackParams>>();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>('pending');
   const [all, setAll] = useState<Booking[]>([]);
+  const [filtered, setFiltered] = useState<Partial<Record<'refunds' | 'complaints', Booking[]>>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const current = TABS.find((t) => t.key === tab)!;
 
   const load = useCallback(async () => {
     try {
-      const res = await BookingService.getMyBookingsAsVendor({ limit: 100 });
+      const [res, extra] = await Promise.all([
+        BookingService.getMyBookingsAsVendor({ limit: 100 }),
+        current.filter ? BookingService.getMyBookingsAsVendor({ limit: 100, filter: current.filter }) : Promise.resolve(null),
+      ]);
       if (res.data?.success) setAll(res.data.data ?? []);
+      if (current.filter && extra?.data?.success) setFiltered((f) => ({ ...f, [current.filter!]: extra.data.data ?? [] }));
     } catch {
       // keep what we have
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [current.filter]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const current = TABS.find((t) => t.key === tab)!;
-  const items = all.filter((b) => current.statuses.includes(b.status));
+  const items = current.filter ? filtered[current.filter] ?? [] : all.filter((b) => current.statuses!.includes(b.status));
+  const waiting = !!current.filter && !filtered[current.filter];
 
   const decline = (b: Booking) =>
     Alert.alert('Decline this request?', `${b.customer?.name ?? 'The customer'} will be told you can't take this booking.`, [
@@ -71,28 +89,28 @@ export default function VendorBookings() {
         ListHeaderComponent={
           <View style={{ gap: 24 }}>
             <Text style={s.title}>Booking</Text>
-            <View style={s.segment}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.segment} accessibilityRole="tablist">
               {TABS.map((t) => {
                 const on = t.key === tab;
-                const count = all.filter((b) => t.statuses.includes(b.status)).length;
+                const count = t.statuses ? all.filter((b) => t.statuses!.includes(b.status)).length : 0;
                 const label = <Text style={[s.segmentText, on && { color: '#fff' }]}>{t.label}{count && t.key !== 'completed' ? ` (${count})` : ''}</Text>;
                 return (
-                  <Pressable key={t.key} onPress={() => setTab(t.key)} style={{ flex: 1 }} accessibilityRole="tab" accessibilityState={{ selected: on }}>
+                  <Pressable key={t.key} onPress={() => setTab(t.key)} accessibilityRole="tab" accessibilityState={{ selected: on }}>
                     {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
           </View>
         }
         ListEmptyComponent={
-          loading ? (
+          loading || waiting ? (
             <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
           ) : (
             <View style={s.empty}>
-              <Ionicons name="calendar-outline" size={44} color={DARK.muted} />
-              <Text style={s.emptyTitle}>{tab === 'pending' ? 'No requests right now' : tab === 'upcoming' ? 'Nothing booked yet' : 'No past bookings'}</Text>
-              <Text style={s.emptyText}>{tab === 'pending' ? 'New requests show up here the moment a customer signs.' : ''}</Text>
+              <Ionicons name={tab === 'complaints' ? 'chatbox-ellipses-outline' : tab === 'refunds' ? 'return-down-back-outline' : 'calendar-outline'} size={44} color={DARK.muted} />
+              <Text style={s.emptyTitle}>{EMPTY[tab][0]}</Text>
+              <Text style={s.emptyText}>{EMPTY[tab][1]}</Text>
             </View>
           )
         }
@@ -117,6 +135,18 @@ export default function VendorBookings() {
                   <Text style={s.price}>${Number(item.amount ?? 0).toFixed(2)}</Text>
                 </View>
               </View>
+              {(!!item.dispute_opened_at || Number(item.refunded_total ?? 0) > 0 || Number(item.given_back ?? 0) > 0) && (
+                <View style={s.badges}>
+                  {!!item.dispute_opened_at && (
+                    <Text style={[s.badge, item.dispute_resolved_at ? s.badgeDone : s.badgeOpen]}>
+                      {item.dispute_resolved_at ? 'Complaint resolved' : 'Complaint open'}
+                      {item.dispute_category ? ` · ${disputeCategoryText(item.dispute_category)}` : ''}
+                    </Text>
+                  )}
+                  {Number(item.refunded_total ?? 0) > 0 && <Text style={[s.badge, s.badgeDone]}>${Number(item.refunded_total).toFixed(2)} refunded</Text>}
+                  {Number(item.given_back ?? 0) > 0 && <Text style={[s.badge, s.badgeDone]}>${Number(item.given_back).toFixed(2)} given back</Text>}
+                </View>
+              )}
               <View style={s.actions}>
                 {item.status === 'PENDING' ? (
                   <>
@@ -148,8 +178,12 @@ export default function VendorBookings() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: DARK.bg },
   title: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold, textAlign: 'center' },
-  segment: { flexDirection: 'row', padding: 4, borderRadius: 100, backgroundColor: DARK.card },
-  segmentItem: { height: 44, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  segment: { flexDirection: 'row', padding: 4, borderRadius: 100, backgroundColor: DARK.card, gap: 2 },
+  segmentItem: { height: 44, paddingHorizontal: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  badge: { fontSize: 12, fontFamily: FONTS.medium, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100, overflow: 'hidden' },
+  badgeOpen: { color: '#fcd34d', backgroundColor: 'rgba(252,211,77,0.15)' },
+  badgeDone: { color: DARK.text, backgroundColor: DARK.field },
   segmentText: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.medium },
   empty: { alignItems: 'center', paddingVertical: 48, gap: 8 },
   emptyTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },

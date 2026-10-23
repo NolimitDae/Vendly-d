@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
-import { AlertTriangle, CheckCircle2, Loader2, PlayCircle } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Loader2, PlayCircle } from "lucide-react";
 import { toast } from "react-toastify";
 import { EventsService } from "@/service/events/events.service";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,9 @@ export function eventActionsFor(status: string): EventAction[] {
 
 /** The planner can edit details until the event is completed or cancelled. */
 export const canEditEvent = (status: string) => status !== "CANCELLED" && status !== "COMPLETED";
+
+/** A cancelled event is read-only: no new tasks, budget lines, run-of-show items, files or invites. */
+export const isEventReadOnly = (status: string) => status === "CANCELLED";
 
 export const CANCEL_EVENT_MESSAGE =
   "The event will be marked cancelled. After that its details can't be edited and it can't be reopened. Your vendor bookings are not cancelled with it: they stay as they are and vendors are not told. Cancel each booking you no longer need from its own booking page.";
@@ -83,8 +86,9 @@ export default function EventStatusActions({
       } else {
         toast.error(res.data?.message || "Failed to cancel event");
       }
-    } catch {
-      toast.error("Failed to cancel event");
+    } catch (err: any) {
+      // e.g. "This event is already completed, so it can't be cancelled."
+      toast.error(err?.response?.data?.message || "Failed to cancel event");
     } finally {
       setBusy(null);
       setConfirming(null);
@@ -214,10 +218,7 @@ function ConfirmDialog({
   );
 }
 
-/**
- * Shown on a completed event. There is no completed-at column, so the date is the event's last
- * update (the status change), which details edits can no longer move once it is completed.
- */
+/** Shown on a completed event, dated by when it was marked completed (`completed_at`). */
 export function EventCompletedBanner({
   completedAt,
   hasBookings,
@@ -260,6 +261,23 @@ export function EventCompletedBanner({
           </Link>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Shown on a cancelled event: everything stays readable, nothing can be added or changed. */
+export function EventCancelledBanner({ cancelledAt }: { cancelledAt?: string | null }) {
+  return (
+    <div role="status" className="rounded-2xl border border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-900/20 p-5 mb-6 flex items-start gap-4">
+      <Ban className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0" />
+      <div>
+        <p className="font-semibold text-red-800 dark:text-red-300">
+          {cancelledAt ? `Cancelled on ${dayjs(cancelledAt).format("MMM D, YYYY")}` : "Cancelled"}
+        </p>
+        <p className="text-sm text-red-700 dark:text-red-400 mt-1">
+          You can still see the tasks, budget, run of show and files, but nothing can be added or changed.
+        </p>
+      </div>
     </div>
   );
 }

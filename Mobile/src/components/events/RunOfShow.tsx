@@ -29,6 +29,7 @@ export default function RunOfShow({
   items,
   vendors,
   onChanged,
+  readOnly = false,
 }: {
   eventId: string;
   eventDate?: string | null;
@@ -37,6 +38,8 @@ export default function RunOfShow({
   items: TimelineItem[];
   vendors: { id: string; name: string }[];
   onChanged: () => void;
+  /** A cancelled event: the schedule can be read but not changed. */
+  readOnly?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [start, setStart] = useState('');
@@ -98,7 +101,7 @@ export default function RunOfShow({
 
       {items.map((item, i) => {
         const mine = role === 'vendor' && item.vendor_id === userId;
-        const canTick = role === 'planner' || mine;
+        const canTick = !readOnly && (role === 'planner' || mine);
         return (
           <View key={item.id} style={s.row}>
             <View style={s.timeCol}>
@@ -121,7 +124,7 @@ export default function RunOfShow({
               {!!item.vendor && <Text style={s.vendor}>{mine ? 'You' : item.vendor.name}</Text>}
               {!!item.location && <Text style={s.muted}>📍 {item.location}</Text>}
               {!!item.notes && <Text style={s.notes}>{item.notes}</Text>}
-              {role === 'planner' && (
+              {role === 'planner' && !readOnly && !readOnly && (
                 <Pressable onPress={() => remove(item)} hitSlop={6} style={{ alignSelf: 'flex-end' }} accessibilityLabel={`Remove ${item.title}`}>
                   <Ionicons name="trash-outline" size={16} color={DARK.muted} />
                 </Pressable>

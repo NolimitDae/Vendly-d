@@ -38,6 +38,12 @@ describe("RunOfShow", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("hides every change on a cancelled event, even for the planner", () => {
+    render(<RunOfShow eventId="e1" eventDate="2026-11-14" role="planner" items={items} vendors={[]} onChanged={jest.fn()} readOnly />);
+    expect(screen.getByText("Ceremony")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("lets the planner add an item for a booked vendor", async () => {
     const user = userEvent.setup();
     render(<RunOfShow eventId="e1" eventDate="2026-11-14" role="planner" items={[]} vendors={[{ id: "v1", name: "Nia Glam" }]} onChanged={jest.fn()} />);

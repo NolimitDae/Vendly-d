@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,9 +9,10 @@ import { BrandGradient, ScreenHeader } from '../../components/brand';
 import QuoteCard from '../../components/chat/QuoteCard';
 import SendQuoteSheet from '../../components/chat/SendQuoteSheet';
 import ReportSheet from '../../components/chat/ReportSheet';
+import PhotoGrid from '../../components/chat/PhotoGrid';
 import { createTypingEmitter, typingLabel, useTypingUsers } from '../../components/chat/presence';
 import { DARK, FONTS } from '../../constants/colors';
-import { ChatService, CONTACT_WARNING, sharesContact, toMessage, type ConversationInfo, type Message, type PhotoFile, type Quote } from '../../services/chat.service';
+import { ChatService, CONTACT_WARNING, MAX_PHOTOS, sharesContact, toMessage, type ConversationInfo, type Message, type PhotoFile, type Quote } from '../../services/chat.service';
 import { SocketService } from '../../services/socket.service';
 import { apiError } from '../../services/contracts.service';
 import { useAuth } from '../../context/AuthContext';
@@ -30,8 +31,8 @@ export default function ChatDetail() {
   const [quoting, setQuoting] = useState(false);
   const [busyQuote, setBusyQuote] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  // one photo per message, previewed before sending
-  const [photo, setPhoto] = useState<PhotoFile | null>(null);
+  // up to 10 photos per message, previewed before sending
+  const [photos, setPhotos] = useState<PhotoFile[]>([]);
   // who (and optionally which message) the report sheet is for
   const [reporting, setReporting] = useState<{ person: { id: string; name: string }; messageId?: string } | null>(null);
 
@@ -129,12 +130,12 @@ export default function ChatDetail() {
     setSending(true);
     setText('');
     try {
-      const res = await ChatService.sendMessage({ conversation_id: conversationId, content, photo: photo ?? undefined });
+      const res = await ChatService.sendMessage({ conversation_id: conversationId, content, photos });
       if (res.data?.success) {
         const sent = res.data.data;
         setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [sent, ...prev]));
         setWarning(res.data.warning?.text ?? null);
-        setPhoto(null);
+        setPhotos([]);
       }
     } catch (e: any) {
       setText(content);
@@ -146,16 +147,22 @@ export default function ChatDetail() {
     }
   };
 
-  const pickPhoto = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
-    if (res.canceled || !res.assets?.[0]) return;
-    const a = res.assets[0];
-    setPhoto({ uri: a.uri, name: a.fileName ?? `chat_${Date.now()}.jpg`, type: a.mimeType ?? 'image/jpeg' });
+  const pickPhotos = async () => {
+    const room = MAX_PHOTOS - photos.length;
+    if (room <= 0) return void Alert.alert(`Up to ${MAX_PHOTOS} photos`, `You can send up to ${MAX_PHOTOS} photos at a time.`);
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6, allowsMultipleSelection: true, selectionLimit: room });
+    if (res.canceled || !res.assets?.length) return;
+    const picked = res.assets.map((a, i) => ({ uri: a.uri, name: a.fileName ?? `chat_${Date.now()}_${i}.jpg`, type: a.mimeType ?? 'image/jpeg' }));
+    setPhotos((prev) => {
+      const next = [...prev, ...picked.filter((p) => !prev.some((q) => q.uri === p.uri))];
+      if (next.length > MAX_PHOTOS) Alert.alert(`Up to ${MAX_PHOTOS} photos`, `Only the first ${MAX_PHOTOS} were added.`);
+      return next.slice(0, MAX_PHOTOS);
+    });
   };
 
   const send = () => {
     const content = text.trim();
-    if ((!content && !photo) || sending || blocked) return;
+    if ((!content && !photos.length) || sending || blocked) return;
     if (content && sharesContact(content)) {
       Alert.alert('Keep it in Vendly', CONTACT_WARNING, [
         { text: 'Edit message', style: 'cancel' },
@@ -352,7 +359,7 @@ export default function ChatDetail() {
                       <Text style={s.bubbleText}>{item.content}</Text>
                     </View>
                   )}
-                  {item.file && <Image source={{ uri: item.file }} style={s.attachment} />}
+                  <PhotoGrid urls={item.files?.length ? item.files : item.file ? [item.file] : []} from={senderName} onLongPress={() => onLongPress(item)} />
                   <Text style={s.time}>
                     {info?.pinned?.id === item.id ? '📌 ' : ''}
                     {time}
@@ -391,16 +398,29 @@ export default function ChatDetail() {
         </View>
       ) : (
         <>
-          {photo && (
-            <View style={s.preview}>
-              <Image source={{ uri: photo.uri }} style={s.previewImg} accessibilityLabel="Photo to send" />
-              <Pressable onPress={() => setPhoto(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Remove photo" style={s.previewRemove}>
-                <Ionicons name="close" size={14} color="#fff" />
-              </Pressable>
+          {photos.length > 0 && (
+            <View style={s.previewBar}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.previewStrip} accessibilityLabel="Photos to send">
+                {photos.map((p, i) => (
+                  <View key={p.uri} style={s.preview}>
+                    <Image source={{ uri: p.uri }} style={s.previewImg} accessibilityLabel={`Photo ${i + 1} to send`} />
+                    <Pressable
+                      onPress={() => setPhotos((prev) => prev.filter((q) => q.uri !== p.uri))}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove photo ${i + 1}`}
+                      style={s.previewRemove}
+                    >
+                      <Ionicons name="close" size={14} color="#fff" />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+              <Text style={s.previewCount}>{photos.length} of {MAX_PHOTOS} photos</Text>
             </View>
           )}
           <View style={[s.inputBar, { marginBottom: insets.bottom + 12 }]}>
-            <Pressable onPress={pickPhoto} disabled={sending} hitSlop={6} accessibilityRole="button" accessibilityLabel="Attach a photo" style={s.plus}>
+            <Pressable onPress={pickPhotos} disabled={sending} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Attach photos (up to ${MAX_PHOTOS})`} style={s.plus}>
               <Ionicons name="image-outline" size={22} color={DARK.accent} />
             </Pressable>
             {isVendor && (
@@ -422,8 +442,8 @@ export default function ChatDetail() {
               onSubmitEditing={send}
               blurOnSubmit
             />
-            <Pressable onPress={send} disabled={(!text.trim() && !photo) || sending} accessibilityRole="button" accessibilityLabel="Send">
-              <BrandGradient style={[s.send, !text.trim() && !photo && { opacity: 0.5 }]}>
+            <Pressable onPress={send} disabled={(!text.trim() && !photos.length) || sending} accessibilityRole="button" accessibilityLabel="Send">
+              <BrandGradient style={[s.send, !text.trim() && !photos.length && { opacity: 0.5 }]}>
                 {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="paper-plane-outline" size={22} color="#fff" />}
               </BrandGradient>
             </Pressable>
@@ -463,7 +483,6 @@ const s = StyleSheet.create({
   bubbleMe: { borderBottomRightRadius: 4 },
   bubbleThem: { backgroundColor: DARK.card, borderTopLeftRadius: 4 },
   bubbleText: { color: '#fff', fontSize: 16, lineHeight: 24, fontFamily: FONTS.regular },
-  attachment: { width: 200, height: 150, borderRadius: 16, backgroundColor: DARK.card },
   time: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular },
   typing: { color: DARK.accent, fontSize: 12, lineHeight: 16, minHeight: 16, fontFamily: FONTS.medium, marginHorizontal: 28, marginBottom: 6 },
   warning: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginBottom: 8, padding: 12, borderRadius: 14, backgroundColor: 'rgba(245,183,0,0.12)' },
@@ -476,7 +495,10 @@ const s = StyleSheet.create({
   blocked: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 20, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 28, backgroundColor: DARK.field },
   blockedText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium, textAlign: 'center', flexShrink: 1 },
   blockedLink: { color: DARK.accent, fontFamily: FONTS.semibold },
-  preview: { alignSelf: 'flex-start', marginHorizontal: 24, marginBottom: 8 },
+  previewBar: { marginHorizontal: 20, marginBottom: 8 },
+  previewStrip: { gap: 12, paddingTop: 8, paddingRight: 8, paddingLeft: 4 },
+  previewCount: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular, marginTop: 4, marginLeft: 4 },
+  preview: {},
   previewImg: { width: 72, height: 72, borderRadius: 14, backgroundColor: DARK.card },
   previewRemove: { position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center' },
 });

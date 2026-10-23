@@ -60,4 +60,8 @@ export const AuthService = {
     }
     return api.patch<{ success: boolean; data: AuthUser }>('/auth/update', data);
   },
+
+  /** Vendors: weekly working hours (all 7 days, null = closed day), or null to clear them. */
+  updateWorkingHours: (working_hours: Record<string, { open: string; close: string } | null> | null) =>
+    api.patch<{ success: boolean; message?: string }>('/auth/update', { working_hours }),
 };

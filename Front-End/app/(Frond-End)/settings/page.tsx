@@ -63,22 +63,18 @@ export default function SettingsPage() {
     if (verifyCode.length !== 6) { toast.error("Enter a 6-digit code"); return; }
     setVerifying(true);
     try {
-      const res = await TwoFAService.verifyToken(verifyCode);
-      if (res.data?.success) {
-        setEnabling(true);
-        const enableRes = await TwoFAService.enable();
-        if (enableRes.data?.success) {
-          setEnabled(true);
-          setSetupStep("idle");
-          setVerifyCode("");
-          setQrCode("");
-          setSecret("");
-          toast.success("Two-factor authentication enabled");
-        } else {
-          toast.error(enableRes.data?.message || "Failed to enable 2FA");
-        }
+      setEnabling(true);
+      // the server checks the code before turning 2FA on
+      const enableRes = await TwoFAService.enable(verifyCode);
+      if (enableRes.data?.success) {
+        setEnabled(true);
+        setSetupStep("idle");
+        setVerifyCode("");
+        setQrCode("");
+        setSecret("");
+        toast.success("Two-factor authentication enabled");
       } else {
-        toast.error(res.data?.message || "Invalid code — try again");
+        toast.error(enableRes.data?.message || "Invalid code — try again");
       }
     } catch {
       toast.error("Verification failed");

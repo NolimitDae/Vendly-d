@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { AddOn } from './addons.service';
+import type { WorkingHours } from '../utils/workingHours';
 
 export interface Listing {
   id: string;
@@ -16,6 +17,9 @@ export interface Listing {
   fees?: AddOn[];
   /** from the vendor's contract for this package */
   cancellation_policy?: { key: string; label: string; text: string } | null;
+  /** the vendor's weekly hours (null = any day, any time) and a short line like "Mon–Fri 9am–5pm" */
+  working_hours?: WorkingHours | null;
+  working_hours_summary?: string | null;
   images: string[];
   location?: string | null;
   /** set when searching near a point */
@@ -94,9 +98,13 @@ export const MarketplaceService = {
   getVendor: (id: string) => api.get<{ success: boolean; data: VendorProfile }>(`/marketplace/vendors/${id}`),
 
   getBlockedDates: (listingId: string) =>
-    api.get<{ success: boolean; data: { id: string; start_date: string; end_date: string; reason?: string | null }[] }>(
-      `/marketplace/listings/${listingId}/availability`,
-    ),
+    api.get<{
+      success: boolean;
+      data: { id: string; start_date: string; end_date: string; reason?: string | null }[];
+      /** the vendor's weekly hours (null = any day, any time) */
+      working_hours?: WorkingHours | null;
+      working_hours_summary?: string | null;
+    }>(`/marketplace/listings/${listingId}/availability`),
 
   savedIds: () => api.get<{ success: boolean; data: string[] }>('/saved-listings/ids'),
   save: (listingId: string) => api.post(`/saved-listings/${listingId}`),

@@ -9,7 +9,8 @@ import {
   useState,
 } from "react";
 import { io, Socket } from "socket.io-client";
-import { CookieHelper } from "@/helper/cookie.helper";
+import { isLoggedIn } from "@/lib/session";
+import { fetchSocketToken, socketAuth } from "@/lib/currentUser";
 import { NotificationService } from "@/service/notification/notification.service";
 import { URL as API_URL } from "@/config/app.config";
 
@@ -40,15 +41,6 @@ export const NotificationContext = createContext<NotificationContextValue>({
   removeNotification: async () => {},
 });
 
-function getUserIdFromToken(token: string): string | null {
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
@@ -57,8 +49,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const userIdRef = useRef<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
-    const token = CookieHelper.get({ key: "token" });
-    if (!token) return;
+    if (!isLoggedIn()) return;
     setLoading(true);
     try {
       const res = await NotificationService.getNotifications();
@@ -74,30 +65,36 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    const token = CookieHelper.get({ key: "token" });
-    if (!token) return;
+    if (!isLoggedIn()) return;
+    let cancelled = false;
 
-    const userId = getUserIdFromToken(token);
-    if (!userId) return;
-    userIdRef.current = userId;
+    // The login token is in an HttpOnly cookie scripts can't read: the API hands out a short-lived
+    // socket token, along with who we are.
+    fetchSocketToken().then((first) => {
+      if (cancelled || !first) return;
+      const userId = first.user_id;
+      userIdRef.current = userId;
 
-    const sock = io(API_URL, {
-      query: { userId },
-      transports: ["websocket"],
-      reconnectionAttempts: 5,
-    });
-    socketRef.current = sock;
+      const sock = io(API_URL, {
+        query: { userId },
+        auth: socketAuth(first.token),
+        transports: ["websocket"],
+        reconnectionAttempts: 5,
+      });
+      socketRef.current = sock;
 
-    sock.on("receiveNotification", (data: any) => {
-      const notification: AppNotification = data?.notification ?? data;
-      // Filter — backend broadcasts to all; only accept if destined for us
-      if (notification.user_id && notification.user_id !== userId) return;
-      setNotifications((prev) => [notification, ...prev]);
-      setUnread((n) => n + 1);
+      sock.on("receiveNotification", (data: any) => {
+        const notification: AppNotification = data?.notification ?? data;
+        // Filter — backend broadcasts to all; only accept if destined for us
+        if (notification.user_id && notification.user_id !== userId) return;
+        setNotifications((prev) => [notification, ...prev]);
+        setUnread((n) => n + 1);
+      });
     });
 
     return () => {
-      sock.disconnect();
+      cancelled = true;
+      socketRef.current?.disconnect();
       socketRef.current = null;
     };
   }, []);

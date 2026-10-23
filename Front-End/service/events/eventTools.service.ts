@@ -38,6 +38,8 @@ export interface EventOverview {
   name: string;
   date?: string | null;
   venue?: string | null;
+  /** CANCELLED means read-only for everyone. */
+  status?: string;
   role: EventRole;
   planner: { id: string; name: string } | null;
   client_sees_budget: boolean;

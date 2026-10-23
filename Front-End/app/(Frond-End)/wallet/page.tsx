@@ -17,6 +17,7 @@ import dayjs from "dayjs";
 import { WalletService } from "@/service/wallet/wallet.service";
 import { AuthService } from "@/service/auth/auth.service";
 import { cn } from "@/lib/utils";
+import TransactionsList from "@/components/payments/TransactionsList";
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface AccountInfo {
@@ -478,6 +479,9 @@ export default function WalletPage() {
             </div>
           )}
         </div>
+
+        {/* ── Booking charges and refunds ───────────────────── */}
+        <TransactionsList role="customer" title="Booking payments and refunds" />
 
         {/* ── Transaction history ───────────────────────────── */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">

@@ -123,6 +123,15 @@ export default function Payouts() {
               </Card>
             )}
 
+            <Pressable style={s.txLink} onPress={() => nav.navigate('Transactions', { role: 'vendor' })} accessibilityRole="button" accessibilityLabel="Transactions">
+              <Ionicons name="receipt-outline" size={22} color={DARK.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.txTitle}>Transactions</Text>
+                <Text style={s.txSub}>Payments, payouts, commission and refunds</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={DARK.muted} />
+            </Pressable>
+
             <View style={{ gap: 10 }}>
               <Text style={s.h2}>Withdrawal history</Text>
               {history.length === 0 ? (
@@ -165,4 +174,7 @@ const s = StyleSheet.create({
   txnTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
   txnAmount: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   txnStatus: { fontSize: 13, fontFamily: FONTS.medium },
+  txLink: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, backgroundColor: DARK.card },
+  txTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  txSub: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular },
 });

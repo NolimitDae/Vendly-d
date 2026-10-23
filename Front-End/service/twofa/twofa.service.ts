@@ -17,7 +17,9 @@ export const TwoFAService = {
   verifyToken: async (token: string) =>
     Fetch.post("/auth/verify-2fa", { token }, authHeaders()),
 
-  enable: async () => Fetch.post("/auth/enable-2fa", {}, authHeaders()),
+  // the server only turns 2FA on with a current code from the authenticator app
+  enable: async (token: string) =>
+    Fetch.post("/auth/enable-2fa", { token }, authHeaders()),
 
   disable: async (token: string) =>
     Fetch.post("/auth/disable-2fa", { token }, authHeaders()),

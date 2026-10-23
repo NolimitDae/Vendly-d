@@ -4,11 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AddOnKind, BookingExtraStatus, BookingStatus, ListingStatus } from 'prisma/generated/client';
+import { AddOnKind, BookingExtraStatus, BookingStatus, ListingStatus, Prisma } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
-import { StringHelper } from 'src/common/helper/string.helper';
+import { DELIVERABLE_FILES, PHOTOS, safeStoredNames } from 'src/common/helper/upload-files';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
@@ -18,14 +18,40 @@ import { EventToolsService } from 'src/modules/events/tools/event-tools.service'
 import { BookingContractsService, RequestMeta } from 'src/modules/contracts/booking-contracts.service';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
-import { settleAgainstPaid, settleCancellation, Settlement } from './cancellation';
+import { CancellationSummary, cancellationMessage, REFUND_TIMING, settleAgainstPaid, settleCancellation, Settlement } from './cancellation';
+import { CANCELLATION_PRESETS } from 'src/modules/contracts/contract-templates';
+import { currentFees } from 'src/modules/platform/platform-settings.service';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { track } from 'src/common/analytics';
 import { requestExpiresAt } from './booking-requests';
 import { withBookingLock } from 'src/common/helper/job-lock';
 import { eventDays } from 'src/modules/calendar-sync/busy-days';
+import { disputePhotoUrls } from 'src/modules/payments/dispute-files';
+
+/** Extra tabs on the vendor's bookings list. */
+export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
+export type VendorBookingFilter = (typeof VENDOR_BOOKING_FILTERS)[number];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Bookings that can still be cancelled. */
+const CANCELLABLE: BookingStatus[] = [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS];
+
+/** A booking as getBookingOrFail loads it. */
+type BookingRow = Awaited<ReturnType<BookingService['getBookingOrFail']>>;
+
+/** What cancelling a booking does with its money (see BookingService.cancellationTerms). */
+interface CancellationTerms {
+  cancelledBy: 'CUSTOMER' | 'VENDOR';
+  settlement: Settlement;
+  installments: { status: string; amount: unknown; fee_amount: unknown; refunded_amount: unknown; kind: string; capture_manually: boolean; payment_intent_id: string | null }[];
+  policyKey: string | null;
+  /** anything was paid (booking.paid_at) */
+  paid: boolean;
+  feeKept: number;
+  unpaidCancelled: number;
+  holdsReleased: number;
+}
 
 /** What the booking is for: the package title, or the rented items. */
 function titleOf(booking: any): string | undefined {
@@ -276,32 +302,52 @@ export class BookingService {
     if (outcome === 'paid') await this.creditVendorEarnings(bookingId);
   }
 
-  /** Releases the vendor price (not the customer service fee) to the vendor's payout balance, once. */
+  /**
+   * Releases the vendor price (not the customer service fee) to the vendor's payout balance, once,
+   * less Vendly's commission at the current rate, like a regular payout (`releaseBooking`).
+   */
   private async creditVendorEarnings(bookingId: string) {
-    await this.prisma.$transaction(async (tx) => {
+    const credited = await this.prisma.$transaction(async (tx) => {
       const b = await tx.booking.findUnique({
         where: { id: bookingId },
         select: { status: true, paid_at: true, payout_credited_at: true, amount: true, currency: true, vendor_id: true },
       });
-      if (!b?.paid_at || b.payout_credited_at || !b.amount || b.status !== BookingStatus.COMPLETED) return;
+      if (!b?.paid_at || b.payout_credited_at || !b.amount || b.status !== BookingStatus.COMPLETED) return false;
+      const gross = round2(Number(b.amount));
+      const commission = round2((Math.max(0, gross) * currentFees().commission) / 100);
+      const share = round2(gross - commission);
+      const now = new Date();
+      // released_gross / commission_amount: refunds after the payout are recovered net of commission
       const claimed = await tx.booking.updateMany({
         where: { id: bookingId, payout_credited_at: null },
-        data: { payout_credited_at: new Date() },
+        data: { payout_credited_at: now, released_at: now, commission_amount: commission, released_gross: gross },
       });
-      if (claimed.count !== 1) return;
-      await tx.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: b.amount } } });
-      await tx.paymentTransaction.create({
-        data: {
-          user_id: b.vendor_id,
-          type: 'booking_earning',
-          provider: 'stripe',
-          reference_number: bookingId,
-          status: 'succeeded',
-          amount: b.amount,
-          currency: b.currency ?? 'usd',
-        },
-      });
+      if (claimed.count !== 1) return false;
+      const currency = b.currency ?? 'usd';
+      if (commission > 0) {
+        await tx.paymentTransaction.create({
+          data: { user_id: b.vendor_id, type: 'vendly_commission', provider: 'stripe', reference_number: bookingId, order_id: bookingId, status: 'succeeded', amount: commission, currency },
+        });
+      }
+      if (share > 0) {
+        await tx.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: share } } });
+        await tx.paymentTransaction.create({
+          data: {
+            user_id: b.vendor_id,
+            type: 'booking_earning',
+            provider: 'stripe',
+            reference_number: bookingId,
+            order_id: bookingId,
+            status: 'succeeded',
+            amount: share,
+            currency,
+          },
+        });
+      }
+      return true;
     });
+    // the money on this booking is final: the customer gets their invoice
+    if (credited) await this.payments.sendFinalInvoice(bookingId).catch((err) => console.error(`Invoice for ${bookingId} failed:`, err));
   }
 
   async cancel(bookingId: string, userId: string, dto: CancelBookingDto) {
@@ -311,14 +357,13 @@ export class BookingService {
     const isVendor = booking.vendor_id === userId;
     if (!isCustomer && !isVendor) throw new ForbiddenException('Access denied');
 
-    const cancellable: BookingStatus[] = [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS];
-    if (!cancellable.includes(booking.status))
+    if (!CANCELLABLE.includes(booking.status))
       throw new BadRequestException(`Cannot cancel a booking in ${booking.status} status`);
 
     // Claim the cancellation atomically so two simultaneous cancels can't both refund.
     const cancelledAt = new Date();
     const claimed = await this.prisma.booking.updateMany({
-      where: { id: bookingId, status: { in: cancellable } },
+      where: { id: bookingId, status: { in: CANCELLABLE } },
       data: { status: BookingStatus.CANCELLED, cancelled_at: cancelledAt, cancel_reason: dto.reason },
     });
     if (claimed.count !== 1) throw new BadRequestException('This booking has already been cancelled or completed');
@@ -326,59 +371,99 @@ export class BookingService {
     // requested add-ons and fees die with the booking
     await this.prisma.bookingExtra.updateMany({ where: { booking_id: bookingId, status: { in: [BookingExtraStatus.PENDING, BookingExtraStatus.IN_REVIEW] } }, data: { status: BookingExtraStatus.CANCELLED } });
 
+    const cancelledBy = isCustomer ? 'CUSTOMER' : 'VENDOR';
     // under the booking's money lock, so a refund or payout already under way finishes first
-    const settlement = booking.paid_at
-      ? await withBookingLock(this.prisma, bookingId, () => this.settlePaidCancellation(booking, isCustomer ? 'CUSTOMER' : 'VENDOR', cancelledAt))
-      : null;
-    // nothing paid yet: still release any card hold (pay-after-service, rental deposit) straight away
-    if (!booking.paid_at) await this.payments.voidOpenCharges(bookingId).catch((err) => console.error(`Voiding charges for cancelled booking ${bookingId} failed:`, err));
+    let terms: CancellationTerms;
+    if (booking.paid_at) {
+      terms = await withBookingLock(this.prisma, bookingId, () => this.settlePaidCancellation(booking, cancelledBy, cancelledAt));
+    } else {
+      // nothing paid yet: still release any card hold (pay-after-service, rental deposit) straight away
+      terms = await this.cancellationTerms(booking, cancelledBy, cancelledAt);
+      await this.payments.voidOpenCharges(bookingId).catch((err) => console.error(`Voiding charges for cancelled booking ${bookingId} failed:`, err));
+    }
+    const settlement = booking.paid_at ? terms.settlement : null;
     const updated = await this.getBookingOrFail(bookingId);
 
-    // notify the other party
-    const notifyUser = isCustomer ? booking.vendor : booking.customer;
     const clientUrl = appConfig().app.client_app_url;
+    const title = titleOf(booking) ?? 'Service';
+    const card = await this.payments.cardLabel(booking.payment_method_id).catch(() => null);
+    const forCustomer = this.describeCancellation(terms, 'CUSTOMER', card, true);
+    const who = isCustomer ? 'You cancelled' : `${booking.vendor?.name ?? 'The vendor'} cancelled`;
+
+    // the customer always hears what happens to their money, whoever cancelled
     await this.mailService.sendBookingNotification({
-      to: notifyUser.email,
-      recipientName: notifyUser.name,
-      subject: `Booking cancelled — ${titleOf(booking)}`,
-      message: `The booking has been cancelled by the ${isCustomer ? 'customer' : 'vendor'}.${
-        settlement && settlement.refundTotal > 0
-          ? ` A refund of $${settlement.refundTotal.toFixed(2)} is on its way to the customer.`
-          : ''
-      }`,
+      to: booking.customer.email,
+      recipientName: booking.customer.name,
+      subject: `Booking cancelled — ${title}`,
+      message: `${who} this booking. ${forCustomer.message}`,
       status: 'CANCELLED',
-      listingTitle: titleOf(booking) ?? 'Service',
-      reason: dto.reason,
-      ctaUrl: `${clientUrl}/bookings`,
+      listingTitle: title,
+      reason: isVendor ? dto.reason : undefined,
+      lines: [
+        { label: 'Refund', value: `$${forCustomer.refund_total.toFixed(2)}` },
+        ...(forCustomer.refund_total > 0 && card ? [{ label: 'Refunded to', value: card }] : []),
+        ...(forCustomer.refund_total > 0 ? [{ label: 'When', value: `Within ${REFUND_TIMING}` }] : []),
+        ...(forCustomer.fee_kept > 0 ? [{ label: 'Vendly Protection fee (not refunded)', value: `$${forCustomer.fee_kept.toFixed(2)}` }] : []),
+      ],
+      ctaUrl: `${clientUrl}/bookings/${bookingId}`,
     }).catch(() => null);
     this.pushBooking(
-      isCustomer ? booking.vendor_id : booking.customer_id,
+      booking.customer_id,
       bookingId,
       'Booking cancelled',
-      `${titleOf(booking) ?? 'A booking'} was cancelled by the ${isCustomer ? 'customer' : 'vendor'}`,
+      forCustomer.refund_total > 0
+        ? `${title}: $${forCustomer.refund_total.toFixed(2)} is being refunded to your card (${REFUND_TIMING}).`
+        : `${title} was cancelled. ${forCustomer.message}`,
     );
 
-    return { success: true, data: { ...this.formatBooking(updated), refund: settlement } };
+    // and the vendor is told when the customer cancelled
+    if (isCustomer) {
+      const forVendor = this.describeCancellation(terms, 'VENDOR', null, true);
+      await this.mailService.sendBookingNotification({
+        to: booking.vendor.email,
+        recipientName: booking.vendor.name,
+        subject: `Booking cancelled — ${title}`,
+        message: `The booking has been cancelled by the customer. ${forVendor.message}`,
+        status: 'CANCELLED',
+        listingTitle: title,
+        reason: dto.reason,
+        ctaUrl: `${clientUrl}/vendor/bookings/${bookingId}`,
+      }).catch(() => null);
+      this.pushBooking(booking.vendor_id, bookingId, 'Booking cancelled', `${title} was cancelled by the customer`);
+    }
+
+    // money on a paid booking is settled now: the customer gets the final invoice
+    if (booking.paid_at) await this.payments.sendFinalInvoice(bookingId).catch((err) => console.error(`Invoice for ${bookingId} failed:`, err));
+
+    return { success: true, data: { ...this.formatBooking(updated), refund: settlement, refund_summary: this.describeCancellation(terms, cancelledBy, isCustomer ? card : null, true) } };
+  }
+
+  /** What cancelling now would do with the money, worded for whoever asks (customer or vendor). Changes nothing. */
+  async cancelPreview(bookingId: string, userId: string) {
+    const booking = await this.getBookingOrFail(bookingId);
+    const isCustomer = booking.customer_id === userId;
+    if (!isCustomer && booking.vendor_id !== userId) throw new ForbiddenException('Access denied');
+    if (!CANCELLABLE.includes(booking.status)) throw new BadRequestException(`Cannot cancel a booking in ${booking.status} status`);
+    const by = isCustomer ? 'CUSTOMER' : 'VENDOR';
+    const terms = await this.cancellationTerms(booking, by, new Date());
+    const card = isCustomer ? await this.payments.cardLabel(booking.payment_method_id).catch(() => null) : null;
+    return { success: true, data: this.describeCancellation(terms, by, card, false) };
   }
 
   /**
-   * Refunds a paid booking that was just cancelled and credits the vendor what they keep
-   * (rules in ./cancellation.ts). A failed Stripe refund is recorded as `refund_failed` for follow-up
-   * rather than undoing the cancellation.
+   * The one calculation behind both the cancel preview and the real cancellation: the policy in the
+   * signed contract, add-ons and fees agreed after booking, and (on a payment plan) what was actually
+   * paid. Reads only; settlePaidCancellation moves the money.
    */
-  private async settlePaidCancellation(
-    booking: Awaited<ReturnType<BookingService['getBookingOrFail']>>,
-    cancelledBy: 'CUSTOMER' | 'VENDOR',
-    cancelledAt: Date,
-  ): Promise<Settlement> {
+  private async cancellationTerms(booking: BookingRow, cancelledBy: 'CUSTOMER' | 'VENDOR', cancelledAt: Date): Promise<CancellationTerms> {
     const contract = await this.prisma.bookingContract.findFirst({
       where: { booking_id: booking.id, status: 'EXECUTED' },
       orderBy: { version: 'desc' },
       select: { merge_data: true },
     });
     const policy = (contract?.merge_data as Record<string, unknown> | null)?.cancellation_policy as string | undefined;
-    const installments = await this.prisma.bookingInstallment.findMany({ where: { booking_id: booking.id } });
-    const approvedExtras = await this.prisma.bookingExtra.findMany({ where: { booking_id: booking.id, status: BookingExtraStatus.APPROVED }, select: { kind: true, amount: true } });
+    const installments = (await this.prisma.bookingInstallment.findMany({ where: { booking_id: booking.id } })) ?? [];
+    const approvedExtras = (await this.prisma.bookingExtra.findMany({ where: { booking_id: booking.id, status: BookingExtraStatus.APPROVED }, select: { kind: true, amount: true } })) ?? [];
     // add-ons agreed after booking are part of the price the policy applies to; agreed fees are the vendor's in full
     const addOnsAfter = approvedExtras.filter((e) => e.kind === AddOnKind.ADD_ON).reduce((s, e) => s + Number(e.amount), 0);
     const feesAgreed = approvedExtras.filter((e) => e.kind === AddOnKind.FEE).reduce((s, e) => s + Number(e.amount), 0);
@@ -390,10 +475,73 @@ export class BookingService {
       eventStart: booking.event_start_at ?? booking.scheduled_at,
       cancelledAt,
     });
-    const currency = booking.currency ?? 'usd';
+    const paid = !!booking.paid_at;
     // with installments, settle against what was actually paid: the vendor keeps at most what the
-    // customer paid towards their price, and everything else paid comes back
-    const settlement = installments.length ? settleAgainstPaid(owed, installments, cancelledBy, cancelledBy === 'CUSTOMER' ? round2(owed.vendorKeeps + feesAgreed) : 0) : owed;
+    // customer paid towards their price, and everything else paid comes back. Nothing paid: nothing moves.
+    const settlement: Settlement = !paid
+      ? { refundTotal: 0, refundVendorPrice: 0, refundFee: 0, vendorKeeps: 0, percent: owed.percent }
+      : installments.length
+        ? settleAgainstPaid(owed, installments, cancelledBy, cancelledBy === 'CUSTOMER' ? round2(owed.vendorKeeps + feesAgreed) : 0)
+        : owed;
+
+    const sum = (rows: typeof installments, f: (i: (typeof installments)[number]) => number) => round2(rows.reduce((s, i) => s + f(i), 0));
+    // charges never taken (rental deposit holds not placed yet aren't charges)
+    const unpaid = sum(installments.filter((i) => (i.status === 'SCHEDULED' || i.status === 'FAILED') && i.kind !== 'security_deposit'), (i) => Number(i.amount));
+    // card holds let go (voidOpenCharges)
+    const holds = sum(installments.filter((i) => i.status === 'PROCESSING' && i.capture_manually && i.payment_intent_id), (i) => Number(i.amount));
+    // the Vendly Protection fee paid and still held: kept when the customer cancels
+    const feePaid = !paid
+      ? 0
+      : installments.length
+        ? sum(installments.filter((i) => i.status === 'PAID'), (i) => Math.max(0, Math.min(Number(i.fee_amount), Number(i.amount) - Number(i.refunded_amount))))
+        : round2(Number(booking.service_fee ?? 0));
+    return {
+      cancelledBy,
+      settlement,
+      installments,
+      policyKey: policy ?? null,
+      paid,
+      feeKept: cancelledBy === 'CUSTOMER' ? feePaid : 0,
+      unpaidCancelled: unpaid,
+      holdsReleased: holds,
+    };
+  }
+
+  /** The API/app shape of cancellation terms, with the plain sentence for `viewer`. */
+  private describeCancellation(t: CancellationTerms, viewer: 'CUSTOMER' | 'VENDOR', card: string | null, done: boolean): CancellationSummary {
+    const preset = t.policyKey ? CANCELLATION_PRESETS[t.policyKey] : undefined;
+    const summary = {
+      cancelled_by: t.cancelledBy,
+      refund_total: round2(t.settlement.refundTotal),
+      refund_fee: round2(t.settlement.refundFee),
+      fee_kept: t.feeKept,
+      vendor_keeps: round2(t.settlement.vendorKeeps),
+      policy: preset && t.policyKey ? { key: t.policyKey, label: preset.label, text: preset.text } : null,
+      percent: t.settlement.percent,
+      unpaid_cancelled: t.unpaidCancelled,
+      holds_released: t.holdsReleased,
+      card,
+    };
+    return {
+      ...summary,
+      refund_timing: summary.refund_total > 0 ? REFUND_TIMING : null,
+      message: cancellationMessage({ ...summary, paid: t.paid }, viewer, done),
+    };
+  }
+
+  /**
+   * Refunds a paid booking that was just cancelled and credits the vendor what they keep
+   * (rules in ./cancellation.ts, sums in cancellationTerms). A failed Stripe refund is recorded as
+   * `refund_failed` for follow-up rather than undoing the cancellation.
+   */
+  private async settlePaidCancellation(
+    booking: BookingRow,
+    cancelledBy: 'CUSTOMER' | 'VENDOR',
+    cancelledAt: Date,
+  ): Promise<CancellationTerms> {
+    const terms = await this.cancellationTerms(booking, cancelledBy, cancelledAt);
+    const { settlement, installments } = terms;
+    const currency = booking.currency ?? 'usd';
 
     // nothing more is charged, and card holds are let go
     await this.payments.voidOpenCharges(booking.id).catch((err) => console.error(`Voiding charges for cancelled booking ${booking.id} failed:`, err));
@@ -405,7 +553,7 @@ export class BookingService {
       } catch (err) {
         console.error(`Refund for cancelled booking ${booking.id} failed:`, err);
         await this.prisma.paymentTransaction.create({
-          data: { user_id: booking.customer_id, type: 'booking_refund', provider: 'stripe', reference_number: `cancel-${booking.id}`, status: 'refund_failed', amount: settlement.refundTotal, currency },
+          data: { user_id: booking.customer_id, type: 'booking_refund', provider: 'stripe', reference_number: `cancel-${booking.id}`, order_id: booking.id, status: 'refund_failed', amount: settlement.refundTotal, currency },
         });
       }
     } else if (settlement.refundTotal > 0) {
@@ -430,6 +578,8 @@ export class BookingService {
           type: 'booking_refund',
           provider: 'stripe',
           reference_number: reference,
+          // the booking this refund belongs to (transaction history, invoice)
+          order_id: booking.id,
           status,
           amount: settlement.refundTotal,
           currency,
@@ -454,6 +604,7 @@ export class BookingService {
             type: net > 0 ? 'booking_cancellation_earning' : 'payout_recovery',
             provider: 'stripe',
             reference_number: booking.id,
+            order_id: booking.id,
             status: 'succeeded',
             amount: net,
             currency,
@@ -461,7 +612,7 @@ export class BookingService {
         });
       });
     }
-    return settlement;
+    return terms;
   }
 
   async getMyBookingsAsCustomer(
@@ -476,8 +627,50 @@ export class BookingService {
 
   async getMyBookingsAsVendor(
     vendorId: string,
-    query: { page?: number; limit?: number; status?: BookingStatus },
+    query: { page?: number; limit?: number; status?: BookingStatus; filter?: VendorBookingFilter },
   ) {
+    if (query.filter === 'refunds') {
+      // money went back to the customer: a refund on any charge, or the vendor gave some back
+      const givenBack = await this.prisma.paymentTransaction.findMany({
+        where: { user_id: vendorId, type: 'vendor_give_back', reference_number: { not: null } },
+        select: { reference_number: true },
+        distinct: ['reference_number'],
+      });
+      const ids = givenBack.map((t) => t.reference_number).filter((r): r is string => !!r);
+      const res = await this.getPaginatedBookings(
+        {
+          vendor_id: vendorId,
+          ...(query.status ? { status: query.status } : {}),
+          OR: [{ installments: { some: { refunded_amount: { gt: 0 } } } }, ...(ids.length ? [{ id: { in: ids } }] : [])],
+        },
+        query,
+        [{ updated_at: 'desc' }],
+      );
+      // how much went back on each: refunded to the card, and how much of it the vendor chose to give
+      const pageIds = res.data.map((b) => b.id as string);
+      const [refunded, gave] = pageIds.length
+        ? await Promise.all([
+            this.prisma.bookingInstallment.groupBy({ by: ['booking_id'], where: { booking_id: { in: pageIds } }, _sum: { refunded_amount: true } }),
+            this.prisma.paymentTransaction.groupBy({ by: ['reference_number'], where: { user_id: vendorId, type: 'vendor_give_back', reference_number: { in: pageIds } }, _sum: { amount: true } }),
+          ])
+        : [[], []];
+      return {
+        ...res,
+        data: res.data.map((b): Record<string, any> => ({
+          ...b,
+          refunded_total: round2(Number(refunded.find((r) => r.booking_id === b.id)?._sum.refunded_amount ?? 0)),
+          given_back: round2(Number(gave.find((g) => g.reference_number === b.id)?._sum.amount ?? 0)),
+        })),
+      };
+    }
+    if (query.filter === 'complaints') {
+      // open complaints first, then the most recent
+      return this.getPaginatedBookings(
+        { vendor_id: vendorId, ...(query.status ? { status: query.status } : {}), dispute_opened_at: { not: null } },
+        query,
+        [{ dispute_resolved_at: { sort: 'desc', nulls: 'first' } }, { dispute_opened_at: 'desc' }],
+      );
+    }
     return this.getPaginatedBookings(
       { vendor_id: vendorId, ...(query.status ? { status: query.status } : {}) },
       query,
@@ -491,6 +684,8 @@ export class BookingService {
       throw new ForbiddenException('Access denied');
 
     const data = this.formatBooking(booking);
+    // the customer and the vendor see the dispute photos through short-lived signed links
+    data.dispute_photo_urls = disputePhotoUrls(booking.dispute_photos, userId, booking.id);
     // a vendor deciding on a request sees what else they've already agreed to that day
     if (booking.vendor_id === userId && booking.status === BookingStatus.PENDING) {
       data.same_day_bookings = await this.sameDayBookings(booking).catch(() => []);
@@ -586,12 +781,8 @@ export class BookingService {
     if (!photos || photos.length === 0)
       throw new BadRequestException('At least one photo is required');
 
-    const fileNames: string[] = [];
-    for (const photo of photos) {
-      const fileName = `${StringHelper.randomString()}_${photo.originalname}`;
-      await TanvirStorage.put(`proofs/${fileName}`, photo.buffer);
-      fileNames.push(fileName);
-    }
+    const fileNames = safeStoredNames(photos, PHOTOS);
+    for (const [i, photo] of photos.entries()) await TanvirStorage.put(`proofs/${fileNames[i]}`, photo.buffer);
 
     const proof = await this.prisma.bookingProof.create({
       data: {
@@ -649,12 +840,9 @@ export class BookingService {
     const booking = await this.getBookingOrFail(bookingId);
     if (booking.vendor_id !== vendorId) throw new ForbiddenException('Access denied');
 
-    const fileNames: string[] = [];
-    for (const file of files ?? []) {
-      const fileName = `${StringHelper.randomString()}_${file.originalname}`;
-      await TanvirStorage.put(`deliverables/${fileName}`, file.buffer);
-      fileNames.push(fileName);
-    }
+    // photos, PDFs, Office documents, zips and videos, by content; never the uploaded name
+    const fileNames = safeStoredNames(files, DELIVERABLE_FILES);
+    for (const [i, file] of (files ?? []).entries()) await TanvirStorage.put(`deliverables/${fileNames[i]}`, file.buffer);
 
     let links: string[] = [];
     if (Array.isArray(body.links)) {
@@ -717,7 +905,7 @@ export class BookingService {
     );
   }
 
-  private async getPaginatedBookings(where: any, query: { page?: number; limit?: number }) {
+  private async getPaginatedBookings(where: any, query: { page?: number; limit?: number }, orderBy: Prisma.BookingOrderByWithRelationInput[] = [{ created_at: 'desc' }]) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
@@ -730,7 +918,7 @@ export class BookingService {
         where: fullWhere,
         skip,
         take: limit,
-        orderBy: { created_at: 'desc' },
+        orderBy,
         include: this.bookingIncludes(),
       }),
     ]);
@@ -801,6 +989,9 @@ export class BookingService {
         item: r.item ? { ...r.item, images: (r.item.images ?? []).map((img: string) => TanvirStorage.url(`rentals/${img}`)) } : r.item,
       })),
       is_rental: !!booking.rental_reservations?.length,
-    };
+      // private storage keys stay in the API; getBooking adds signed links
+      dispute_photos: undefined,
+      dispute_photo_count: booking.dispute_photos?.length ?? 0,
+    } as Record<string, any>;
   }
 }

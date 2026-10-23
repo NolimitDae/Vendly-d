@@ -169,6 +169,62 @@ describe('BookingExtrasService', () => {
     });
   });
 
+  describe('add-ons that add time', () => {
+    const start = new Date('2026-12-01T18:00:00Z');
+    const end = new Date('2026-12-01T22:00:00Z');
+    const withTime = (over: Record<string, unknown> = {}) => {
+      const t = setup();
+      t.prisma.booking.update = jest.fn().mockResolvedValue({});
+      t.prisma.booking.findUnique.mockResolvedValue(booking({ event_start_at: start, event_end_at: end, ...over }));
+      t.prisma.bookingExtra.findUnique.mockResolvedValue(extra({ kind: 'ADD_ON', name: 'Extra time', extends_minutes: 120 }));
+      t.prisma.bookingExtra.findUniqueOrThrow.mockResolvedValue(extra({ kind: 'ADD_ON', name: 'Extra time', extends_minutes: 120 }));
+      return t;
+    };
+
+    it('stores the time on the request and tells the customer', async () => {
+      const { service, prisma, push } = setup();
+      const res = await service.request('b1', 'v1', { kind: 'ADD_ON', name: 'Extra time', unit_price: 150, price_unit: 'PER_HOUR', quantity: 2, extends_minutes: 120 } as any);
+      expect(prisma.bookingExtra.create).toHaveBeenCalledWith({ data: expect.objectContaining({ extends_minutes: 120 }) });
+      expect(res.data).toMatchObject({ extends_minutes: 120, extends_label: 'Adds 2 hours' });
+      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ body: expect.stringContaining('adds 2 hours to the booking') }));
+    });
+
+    it('fees never add time, and time comes in steps of 30 minutes', async () => {
+      const { service, prisma } = setup();
+      await expect(service.request('b1', 'v1', { kind: 'FEE', name: 'Late return', unit_price: 50, extends_minutes: 60 } as any)).rejects.toThrow('Fees can’t add time');
+      await expect(service.request('b1', 'v1', { kind: 'ADD_ON', name: 'Extra time', unit_price: 50, extends_minutes: 45 } as any)).rejects.toThrow('steps of 30 minutes');
+      expect(prisma.bookingExtra.create).not.toHaveBeenCalled();
+    });
+
+    it('approval moves the end time later once, inside the charge', async () => {
+      const { service, prisma } = withTime();
+      const res = await service.approve('e1', 'c1');
+      expect(prisma.booking.update).toHaveBeenCalledTimes(1);
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { event_end_at: new Date('2026-12-02T00:00:00Z') } });
+      expect(res.data).toMatchObject({ paid: true, extends_minutes: 120 });
+
+      // answered already: the claim fails and nothing moves again
+      prisma.bookingExtra.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.approve('e1', 'c1')).rejects.toThrow('already been answered');
+      expect(prisma.booking.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('a booking with only a start ends that long after it starts', async () => {
+      const { service, prisma } = withTime({ event_end_at: null });
+      await service.approve('e1', 'c1');
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { event_end_at: new Date('2026-12-01T20:00:00Z') } });
+    });
+
+    it('declining or withdrawing leaves the end time alone', async () => {
+      const { service, prisma } = withTime();
+      await service.decline('e1', 'c1', 'No thanks');
+      prisma.bookingExtra.findUnique.mockResolvedValue({ ...extra({ kind: 'ADD_ON', extends_minutes: 120 }), booking: { vendor_id: 'v1', customer_id: 'c1' } });
+      await service.withdraw('e1', 'v1');
+      expect(prisma.booking.update).not.toHaveBeenCalled();
+      expect(prisma.bookingInstallment.create).not.toHaveBeenCalled();
+    });
+  });
+
   it('reminds the customer once after a day', async () => {
     const { service, prisma, push } = setup();
     prisma.bookingExtra.findMany.mockResolvedValue([{ id: 'e1', booking_id: 'b1', name: 'Late return', kind: 'FEE', amount: 150, fee_amount: 0 }]);

@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { MoneyService, type Dispute } from "@/service/admin/money.service";
 import { ContractsService, apiError } from "@/service/contracts/contracts.service";
 import AdminContractCard from "@/components/contracts/AdminContractCard";
+import DisputeDetails from "@/components/disputes/DisputeDetails";
 
 const money = (n: number | string) => "$" + Number(n).toFixed(2);
 
@@ -37,6 +38,18 @@ export default function DisputesPageContent() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  // a partial refund starts at the amount the customer asked for
+  const decide = (d: Dispute) => {
+    setOpen(d.id);
+    setAction("release");
+    setAmount(d.dispute_requested_amount != null ? Number(d.dispute_requested_amount).toFixed(2) : "");
+  };
+
+  const pick = (v: "refund" | "partial_refund" | "release", d: Dispute) => {
+    setAction(v);
+    if (v === "partial_refund" && !amount && d.dispute_requested_amount != null) setAmount(Number(d.dispute_requested_amount).toFixed(2));
+  };
 
   const resolve = async (d: Dispute) => {
     if (note.trim().length < 5) return toast.error("Add a short note explaining the decision");
@@ -87,6 +100,7 @@ export default function DisputesPageContent() {
               </div>
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">“{d.dispute_reason}”</p>
+            <DisputeDetails d={d} />
             {d.dispute_vendor_reply ? (
               <div className="text-sm bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Vendor’s reply{d.dispute_vendor_replied_at ? ` · ${dayjs(d.dispute_vendor_replied_at).format("MMM D, h:mm A")}` : ""}</p>
@@ -111,7 +125,7 @@ export default function DisputesPageContent() {
                       ["partial_refund", "Partial refund"],
                       ["refund", "Full refund"],
                     ] as const).map(([v, label]) => (
-                      <button key={v} onClick={() => setAction(v)} className={`px-3 py-1.5 rounded-full text-sm ${action === v ? "bg-primary text-primary-foreground" : "border border-gray-200 dark:border-gray-700"}`}>
+                      <button key={v} onClick={() => pick(v, d)} className={`px-3 py-1.5 rounded-full text-sm ${action === v ? "bg-primary text-primary-foreground" : "border border-gray-200 dark:border-gray-700"}`}>
                         {label}
                       </button>
                     ))}
@@ -126,7 +140,7 @@ export default function DisputesPageContent() {
                   </div>
                 </div>
               ) : (
-                <button onClick={() => { setOpen(d.id); setAction("release"); }} className="text-sm font-semibold text-primary">Decide</button>
+                <button onClick={() => decide(d)} className="text-sm font-semibold text-primary">Decide</button>
               ))}
           </div>
         ))

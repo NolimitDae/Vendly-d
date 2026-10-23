@@ -37,7 +37,7 @@ describe('SecurityPrivacyContent', () => {
     expect(screen.queryByText('MacBook Pro (You)')).not.toBeInTheDocument();
   });
 
-  it('turns 2FA on: QR code, verify the code, then enable', async () => {
+  it('turns 2FA on: QR code, then enable with the code (the server checks it)', async () => {
     status(false);
     const user = userEvent.setup();
     render(<SecurityPrivacyContent />);
@@ -50,15 +50,15 @@ describe('SecurityPrivacyContent', () => {
     await user.type(screen.getByLabelText('Authenticator code'), '123456');
     await user.click(screen.getByRole('button', { name: 'Verify & Enable' }));
 
-    await waitFor(() => expect(TwoFAService.enable).toHaveBeenCalled());
-    expect(TwoFAService.verifyToken).toHaveBeenCalledWith('123456');
+    await waitFor(() => expect(TwoFAService.enable).toHaveBeenCalledWith('123456'));
+    expect(TwoFAService.verifyToken).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('checkbox')).toBeChecked());
     expect(toast.success).toHaveBeenCalledWith('Two-factor authentication enabled');
   });
 
-  it('does not enable 2FA when the code is wrong', async () => {
+  it('does not show 2FA as on when the server refuses the code', async () => {
     status(false);
-    (TwoFAService.verifyToken as jest.Mock).mockResolvedValue({ data: { success: false, message: 'Invalid token' } });
+    (TwoFAService.enable as jest.Mock).mockResolvedValue({ data: { success: false, message: 'Enter the code from your authenticator app to turn on two-step login.' } });
     const user = userEvent.setup();
     render(<SecurityPrivacyContent />);
     await waitFor(() => expect(screen.getByRole('checkbox')).not.toBeDisabled());
@@ -66,8 +66,9 @@ describe('SecurityPrivacyContent', () => {
     await user.type(await screen.findByLabelText('Authenticator code'), '000000');
     await user.click(screen.getByRole('button', { name: 'Verify & Enable' }));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Invalid token'));
-    expect(TwoFAService.enable).not.toHaveBeenCalled();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Enter the code from your authenticator app to turn on two-step login.'));
+    expect(TwoFAService.enable).toHaveBeenCalledWith('000000');
+    expect(toast.success).not.toHaveBeenCalled();
     expect(screen.getByRole('checkbox')).not.toBeChecked();
   });
 

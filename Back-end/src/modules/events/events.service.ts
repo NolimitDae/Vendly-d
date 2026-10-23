@@ -12,6 +12,7 @@ import {
   CreateEventTaskDto,
 } from './dto/create-event.dto';
 import { UpdateBudgetItemDto, UpdateEventDto, UpdateTaskDto } from './dto/update-event.dto';
+import { assertNotCancelled, COMPLETED_CANT_CANCEL } from './event-rules';
 
 @Injectable()
 export class EventsService {
@@ -106,19 +107,20 @@ export class EventsService {
   async update(id: string, plannerId: string, dto: UpdateEventDto) {
     const event = await this.getEventOrFail(id, plannerId);
 
-    if (event.status === EventStatus.CANCELLED) {
-      throw new BadRequestException('Cancelled events cannot be modified');
-    }
+    assertNotCancelled(event);
 
-    if (dto.status) {
+    const changingStatus = dto.status !== undefined && dto.status !== event.status;
+    if (changingStatus) {
+      if (event.status === EventStatus.COMPLETED && dto.status === EventStatus.CANCELLED) {
+        throw new BadRequestException(COMPLETED_CANT_CANCEL);
+      }
       const valid: Partial<Record<EventStatus, EventStatus[]>> = {
         [EventStatus.PLANNING]: [EventStatus.CONFIRMED, EventStatus.IN_PROGRESS, EventStatus.CANCELLED],
         [EventStatus.CONFIRMED]: [EventStatus.IN_PROGRESS, EventStatus.CANCELLED],
         [EventStatus.IN_PROGRESS]: [EventStatus.COMPLETED, EventStatus.CANCELLED],
-        [EventStatus.COMPLETED]: [EventStatus.CANCELLED],
       };
       const allowed = valid[event.status] ?? [];
-      if (!allowed.includes(dto.status)) {
+      if (!allowed.includes(dto.status!)) {
         throw new BadRequestException(
           `Cannot transition from ${event.status} to ${dto.status}`,
         );
@@ -135,6 +137,9 @@ export class EventsService {
         ...(dto.guest_count !== undefined && { guest_count: dto.guest_count }),
         ...(dto.total_budget !== undefined && { total_budget: dto.total_budget }),
         ...(dto.status !== undefined && { status: dto.status }),
+        // when it happened, for the "Completed on …" banner and reports
+        ...(changingStatus && dto.status === EventStatus.COMPLETED && { completed_at: new Date() }),
+        ...(changingStatus && dto.status === EventStatus.CANCELLED && { cancelled_at: new Date() }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
       },
     });
@@ -143,11 +148,14 @@ export class EventsService {
   }
 
   async cancel(id: string, plannerId: string) {
-    await this.getEventOrFail(id, plannerId);
+    const event = await this.getEventOrFail(id, plannerId);
+    if (event.status === EventStatus.COMPLETED) throw new BadRequestException(COMPLETED_CANT_CANCEL);
+    // cancelling twice keeps the first cancellation time
+    if (event.status === EventStatus.CANCELLED) return { success: true, data: event };
 
     const updated = await this.prisma.event.update({
       where: { id },
-      data: { status: EventStatus.CANCELLED },
+      data: { status: EventStatus.CANCELLED, cancelled_at: new Date() },
     });
 
     return { success: true, data: updated };
@@ -193,7 +201,7 @@ export class EventsService {
   }
 
   async addBudgetItem(eventId: string, plannerId: string, dto: CreateBudgetItemDto) {
-    await this.getEventOrFail(eventId, plannerId);
+    assertNotCancelled(await this.getEventOrFail(eventId, plannerId));
 
     const item = await this.prisma.budgetItem.create({
       data: {
@@ -209,7 +217,7 @@ export class EventsService {
   }
 
   async addTask(eventId: string, plannerId: string, dto: CreateEventTaskDto) {
-    await this.getEventOrFail(eventId, plannerId);
+    assertNotCancelled(await this.getEventOrFail(eventId, plannerId));
 
     const task = await this.prisma.eventTask.create({
       data: {
@@ -228,7 +236,7 @@ export class EventsService {
     plannerId: string,
     dto: UpdateTaskDto,
   ) {
-    await this.getEventOrFail(eventId, plannerId);
+    assertNotCancelled(await this.getEventOrFail(eventId, plannerId));
 
     const task = await this.prisma.eventTask.findFirst({
       where: { id: taskId, event_id: eventId },
@@ -253,7 +261,7 @@ export class EventsService {
     plannerId: string,
     dto: UpdateBudgetItemDto,
   ) {
-    await this.getEventOrFail(eventId, plannerId);
+    assertNotCancelled(await this.getEventOrFail(eventId, plannerId));
 
     const item = await this.prisma.budgetItem.findFirst({
       where: { id: itemId, event_id: eventId },
@@ -274,7 +282,7 @@ export class EventsService {
   }
 
   async deleteBudgetItem(eventId: string, itemId: string, plannerId: string) {
-    await this.getEventOrFail(eventId, plannerId);
+    assertNotCancelled(await this.getEventOrFail(eventId, plannerId));
 
     const item = await this.prisma.budgetItem.findFirst({
       where: { id: itemId, event_id: eventId },
@@ -286,7 +294,7 @@ export class EventsService {
   }
 
   async deleteTask(eventId: string, taskId: string, plannerId: string) {
-    await this.getEventOrFail(eventId, plannerId);
+    assertNotCancelled(await this.getEventOrFail(eventId, plannerId));
 
     const task = await this.prisma.eventTask.findFirst({
       where: { id: taskId, event_id: eventId },
