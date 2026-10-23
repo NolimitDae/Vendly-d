@@ -27,7 +27,10 @@ const mockPrisma = {
     count: jest.fn(),
     findMany: jest.fn(),
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
   },
+  listingAvailability: { findMany: jest.fn() },
+  calendarBusyBlock: { findMany: jest.fn() },
   user: { findFirst: jest.fn() },
   review: {
     groupBy: jest.fn(),
@@ -113,6 +116,19 @@ describe('MarketplaceService', () => {
       });
     });
 
+    it('leaves out vendors whose synced calendar is busy on the chosen date', async () => {
+      mockPrisma.vendorListing.count.mockResolvedValue(0);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      await service.searchListings({ date: '2026-11-14', page: 1 });
+      const day = new Date('2026-11-14T00:00:00.000Z');
+      expect(mockPrisma.vendorListing.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ vendor: { calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } } }),
+        }),
+      );
+    });
+
     it('finds packages near a point, nearest first, with their distance', async () => {
       const near = { ...mockListing, id: 'near', lat: 29.78, lng: -95.4 };
       const far = { ...mockListing, id: 'far', lat: 29.79, lng: -95.82 };
@@ -168,6 +184,38 @@ describe('MarketplaceService', () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue(null);
 
       await expect(service.getListing('bad-id')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getBlockedDates', () => {
+    const d = (s: string) => new Date(s + 'T00:00:00.000Z');
+
+    it('adds the vendor’s imported busy days to the manual blocks, merged and without details', async () => {
+      mockPrisma.listingAvailability.findMany.mockResolvedValue([{ id: 'blk-1', start_date: d('2099-11-10'), end_date: d('2099-11-12'), reason: 'Holiday' }]);
+      mockPrisma.vendorListing.findUnique.mockResolvedValue({ vendor_id: 'v1' });
+      mockPrisma.calendarBusyBlock.findMany.mockResolvedValue([
+        { start_date: d('2099-11-01'), end_date: d('2099-11-01') },
+        { start_date: d('2099-11-01'), end_date: d('2099-11-02') },
+        { start_date: d('2099-11-03'), end_date: d('2099-11-03') },
+        { start_date: d('2099-11-20'), end_date: d('2099-11-20') },
+      ]);
+
+      const result = await service.getBlockedDates('listing-1');
+
+      expect(mockPrisma.calendarBusyBlock.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ user_id: 'v1' }) }));
+      expect(result.data).toEqual([
+        { id: 'calendar-2099-11-01', start_date: d('2099-11-01'), end_date: d('2099-11-03'), reason: null, source: 'calendar' },
+        { id: 'blk-1', start_date: d('2099-11-10'), end_date: d('2099-11-12'), reason: 'Holiday', source: 'manual' },
+        { id: 'calendar-2099-11-20', start_date: d('2099-11-20'), end_date: d('2099-11-20'), reason: null, source: 'calendar' },
+      ]);
+    });
+
+    it('returns only manual blocks for an unknown listing', async () => {
+      mockPrisma.listingAvailability.findMany.mockResolvedValue([]);
+      mockPrisma.vendorListing.findUnique.mockResolvedValue(null);
+      const result = await service.getBlockedDates('nope');
+      expect(result.data).toEqual([]);
+      expect(mockPrisma.calendarBusyBlock.findMany).not.toHaveBeenCalled();
     });
   });
 

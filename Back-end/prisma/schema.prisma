@@ -266,6 +266,10 @@ model User {
   // Event planner profile
   eventPlannerProfile EventPlannerProfile? @relation("UserToEventPlannerProfile")
 
+  // Calendar sync (vendor): private .ics feed + imported busy time
+  calendarSync       CalendarSync?       @relation("CalendarSyncUser")
+  calendarBusyBlocks CalendarBusyBlock[] @relation("CalendarBusyUser")
+
   @@map("users")
 }
 
@@ -1633,4 +1637,46 @@ model IdentityVerification {
   @@index([status, created_at])
   @@index([user_id])
   @@map("identity_verifications")
+}
+
+// ─── Calendar sync (vendor) ─────────────────────────────────────────────────
+
+/// One per vendor: the secret token of their .ics feed and the calendar they import busy time from.
+model CalendarSync {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user_id String @unique
+  user    User   @relation("CalendarSyncUser", fields: [user_id], references: [id], onDelete: Cascade)
+
+  // random 32-byte secret in the feed URL (/api/calendar/feed/<token>.ics); regenerating replaces it
+  feed_token String? @unique @db.VarChar(64)
+
+  // their Google / Apple iCal address (itself a secret, never shown back in full)
+  import_url           String?   @db.Text
+  last_synced_at       DateTime?
+  last_sync_error      String?   @db.Text
+  last_sync_attempt_at DateTime?
+
+  @@map("calendar_syncs")
+}
+
+/// Busy time imported from the vendor's own calendar. Replaced wholesale on every sync; manual blocks live in ListingAvailability.
+model CalendarBusyBlock {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  user_id String
+  user    User   @relation("CalendarBusyUser", fields: [user_id], references: [id], onDelete: Cascade)
+
+  start_at   DateTime
+  end_at     DateTime
+  // the days it covers in the event's own time zone (inclusive); this is what blocks bookings
+  start_date DateTime @db.Date
+  end_date   DateTime @db.Date
+  all_day    Boolean  @default(false)
+
+  @@index([user_id, end_date])
+  @@map("calendar_busy_blocks")
 }

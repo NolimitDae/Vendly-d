@@ -10,7 +10,8 @@ import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import type { VendorDashboardStackParams } from '../../navigation/types';
 
-interface Block { id: string; start_date: string; end_date: string; reason?: string | null }
+// source 'calendar' = busy time imported from the vendor's own calendar (managed in Calendar sync)
+interface Block { id: string; start_date: string; end_date: string; reason?: string | null; source?: 'manual' | 'calendar' }
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /** Block out dates a package can't be booked. Tap a start day, then an end day. */
@@ -96,6 +97,11 @@ export default function Availability() {
             <Ionicons name="information-circle-outline" size={16} color={DARK.accent} />
             <Text style={s.noteText}>Tap a start day and an end day to block them. Customers can't request those dates.</Text>
           </View>
+          <Pressable style={s.note} onPress={() => (nav as any).navigate('ProfileTab', { screen: 'CalendarSync' })} accessibilityRole="button">
+            <Ionicons name="calendar-outline" size={16} color={DARK.accent} />
+            <Text style={s.noteText}>Busy in Google or Apple Calendar? Connect it in Calendar sync to block those days automatically.</Text>
+            <Ionicons name="chevron-forward" size={16} color={DARK.muted} />
+          </Pressable>
 
           <View style={s.monthRow}>
             <Pressable onPress={() => setMonth(addMonths(month, -1))} disabled={isSameMonth(month, today)} style={[s.monthBtn, isSameMonth(month, today) && { opacity: 0.3 }]} accessibilityLabel="Previous month">
@@ -148,9 +154,9 @@ export default function Availability() {
                   <Ionicons name="close-circle-outline" size={20} color="#F7B1B8" />
                   <View style={{ flex: 1 }}>
                     <Text style={s.blockText}>{format(parseISO(b.start_date), 'EEE, dd MMM')} – {format(parseISO(b.end_date), 'EEE, dd MMM yyyy')}</Text>
-                    {!!b.reason && <Text style={s.muted}>{b.reason}</Text>}
+                    {b.source === 'calendar' ? <Text style={s.muted}>Busy in your calendar</Text> : !!b.reason && <Text style={s.muted}>{b.reason}</Text>}
                   </View>
-                  <Pressable onPress={() => remove(b)} hitSlop={8} accessibilityLabel="Open these dates"><Text style={s.link}>Open</Text></Pressable>
+                  {b.source !== 'calendar' && <Pressable onPress={() => remove(b)} hitSlop={8} accessibilityLabel="Open these dates"><Text style={s.link}>Open</Text></Pressable>}
                 </View>
               ))
             )}

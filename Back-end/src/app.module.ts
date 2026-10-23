@@ -13,6 +13,7 @@ import { RentalsModule } from './modules/rentals/rentals.module';
 import { EventToolsModule } from './modules/events/tools/event-tools.module';
 import { GeoModule } from './modules/geo/geo.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
+import { CalendarSyncModule } from './modules/calendar-sync/calendar-sync.module';
 
 // internal imports
 import appConfig from './config/app.config';
@@ -108,6 +109,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     EventToolsModule,
     GeoModule,
     OnboardingModule,
+    CalendarSyncModule,
   ],
   controllers: [AppController],
   providers: [
