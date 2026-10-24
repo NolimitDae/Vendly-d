@@ -15,6 +15,8 @@ export async function confirmCancelBooking(opts: {
   title?: string;
   reason?: string;
   onCancelled?: (summary: CancellationSummary | null) => void;
+  /** offered when the start time passed and the vendor never started (maybe a no-show) */
+  onReportProblem?: () => void;
 }) {
   let preview: CancellationSummary | null = null;
   try {
@@ -27,11 +29,13 @@ export async function confirmCancelBooking(opts: {
     }
   }
   const policy = preview?.policy && preview.cancelled_by === 'CUSTOMER' ? `\n\n${preview.policy.label} cancellation policy: ${preview.policy.text}` : '';
-  const body = preview ? `${preview.message}${policy}` : 'Any payment is refunded under the contract’s cancellation terms.';
+  const hint = preview?.report_problem_hint && opts.onReportProblem ? `${preview.report_problem_hint}\n\n` : '';
+  const body = preview ? `${hint}${preview.message}${policy}` : 'Any payment is refunded under the contract’s cancellation terms.';
 
   await new Promise<void>((resolve) => {
     Alert.alert(opts.title ?? (opts.role === 'VENDOR' ? 'Cancel this booking?' : 'Cancel your booking?'), body, [
       { text: 'Keep it', style: 'cancel', onPress: () => resolve() },
+      ...(hint ? [{ text: 'Report a problem', onPress: () => { opts.onReportProblem?.(); resolve(); } }] : []),
       {
         text: 'Cancel booking',
         style: 'destructive',

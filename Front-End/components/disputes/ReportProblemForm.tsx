@@ -22,9 +22,13 @@ interface Picked {
   url: string;
 }
 
-/** The customer's report: what kind of problem, what happened, photos, and what they'd like Vendly to do. */
-export default function ReportProblemForm({ bookingId, paid, onCancel, onSent }: { bookingId: string; paid: number; onCancel: () => void; onSent: () => void }) {
-  const [category, setCategory] = useState<DisputeCategory | "">("");
+/**
+ * The customer's report: what kind of problem, what happened, photos, and what they'd like Vendly to do.
+ * `limit` (the vendor's part of what was paid, from newer APIs) keeps a partial refund under what
+ * Vendly can grant; `category` preselects the kind of problem (a no-show).
+ */
+export default function ReportProblemForm({ bookingId, paid, limit, category: initialCategory, onCancel, onSent }: { bookingId: string; paid: number; limit?: number | null; category?: DisputeCategory; onCancel: () => void; onSent: () => void }) {
+  const [category, setCategory] = useState<DisputeCategory | "">(initialCategory ?? "");
   const [reason, setReason] = useState("");
   const [photos, setPhotos] = useState<Picked[]>([]);
   const [outcome, setOutcome] = useState<DisputeOutcome>("full_refund");
@@ -60,8 +64,17 @@ export default function ReportProblemForm({ bookingId, paid, onCancel, onSent }:
   };
 
   const requested = Number(amount);
+  const cap = limit ?? null;
   const amountError =
-    outcome !== "partial_refund" ? "" : !(requested > 0) ? "Enter how much you’d like back." : requested > paid ? `You can ask for up to $${paid.toFixed(2)}, what you’ve paid.` : "";
+    outcome !== "partial_refund"
+      ? ""
+      : !(requested > 0)
+        ? "Enter how much you’d like back."
+        : cap !== null && requested >= cap
+          ? `A partial refund must be less than $${cap.toFixed(2)}, the vendor’s part of what you’ve paid. To ask for everything back, choose a full refund.`
+          : cap === null && requested > paid
+            ? `You can ask for up to $${paid.toFixed(2)}, what you’ve paid.`
+            : "";
   const valid = !!category && reason.trim().length >= MIN && !amountError;
 
   const send = async () => {
@@ -162,7 +175,9 @@ export default function ReportProblemForm({ bookingId, paid, onCancel, onSent }:
         ))}
         {outcome === "partial_refund" && (
           <div className="pl-6 space-y-1">
-            <label htmlFor="dispute-amount" className="text-xs text-gray-500 dark:text-gray-400">Amount (up to ${paid.toFixed(2)})</label>
+            <label htmlFor="dispute-amount" className="text-xs text-gray-500 dark:text-gray-400">
+              {cap !== null ? `Amount (less than $${cap.toFixed(2)})` : `Amount (up to $${paid.toFixed(2)})`}
+            </label>
             <div className="flex items-center gap-1">
               <span className="text-sm text-gray-500">$</span>
               <input

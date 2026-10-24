@@ -482,11 +482,12 @@ export class UserRepository {
 
   /**
    * Why this user's account can't be deleted yet, or null: bookings (as customer or vendor) whose
-   * money isn't settled. Deleting now would leave the other party, a refund or a payout hanging.
+   * money isn't settled, money left in (or owed to) the Vendly balance, or a withdrawal still being
+   * checked. Deleting now would leave the other party, a refund or a payout hanging.
    */
   async deletionBlocker(user_id: string): Promise<string | null> {
     const mine = { OR: [{ customer_id: user_id }, { vendor_id: user_id }], deleted_at: null };
-    const [active, unreleased, disputes] = await Promise.all([
+    const [active, unreleased, disputes, user, withdrawals] = await Promise.all([
       this.prisma.booking.count({ where: { ...mine, status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] } } }),
       // done but the vendor isn't paid yet: money was taken, or a payment is still due
       this.prisma.booking.count({
@@ -498,13 +499,20 @@ export class UserRepository {
         },
       }),
       this.prisma.booking.count({ where: { ...mine, dispute_opened_at: { not: null }, dispute_resolved_at: null } }),
+      this.prisma.user.findUnique({ where: { id: user_id }, select: { balance: true } }),
+      // a withdrawal Stripe hasn't confirmed yet: its money may still come back to the balance
+      this.prisma.paymentTransaction.count({ where: { user_id, type: 'withdraw', status: { in: ['pending', 'needs_review'] } } }),
     ]);
-    if (!active && !unreleased && !disputes) return null;
+    const balance = Math.round(Number(user?.balance ?? 0) * 100) / 100;
+    if (!active && !unreleased && !disputes && !balance && !withdrawals) return null;
     const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
     const todo: string[] = [];
     if (active) todo.push(`${plural(active, 'booking is', 'bookings are')} still open: finish or cancel ${active === 1 ? 'it' : 'them'} first`);
     if (unreleased) todo.push(`${plural(unreleased, 'completed booking hasn’t', 'completed bookings haven’t')} been settled yet: the vendor is paid a few days after completion, once any payment due is made`);
     if (disputes) todo.push(`${plural(disputes, 'booking has', 'bookings have')} an open dispute: Vendly will resolve ${disputes === 1 ? 'it' : 'them'} first`);
+    if (balance > 0) todo.push(`You have $${balance.toFixed(2)} in your Vendly balance: withdraw it first, or contact support if you can’t`);
+    if (balance < 0) todo.push(`You owe Vendly $${(-balance).toFixed(2)} from an earlier refund: contact support to settle it`);
+    if (withdrawals) todo.push(`${plural(withdrawals, 'withdrawal is', 'withdrawals are')} still being processed: wait for ${withdrawals === 1 ? 'it' : 'them'} to finish, or contact support`);
     return `You can’t delete your account yet. ${todo.join('. ')}. Then try again.`;
   }
 

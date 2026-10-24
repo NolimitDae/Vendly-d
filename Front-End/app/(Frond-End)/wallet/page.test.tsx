@@ -163,6 +163,23 @@ describe('WalletPage', () => {
     });
   });
 
+  describe('no Add Funds (nothing in Vendly spends a customer balance)', () => {
+    it('offers no deposit to a customer or a vendor', async () => {
+      setupMocks();
+      const { unmount } = render(<WalletPage />);
+      await waitFor(() => expect(screen.getByText('Withdraw Funds')).toBeInTheDocument());
+      expect(screen.queryByText(/add funds/i)).not.toBeInTheDocument();
+      unmount();
+      setupMocks({ account: { hasConnectedAccount: false, accountId: null, email: '', name: '' } });
+      (AuthService.me as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'u-2', name: 'Ada', type: 'CUSTOMER' } } });
+      render(<WalletPage />);
+      await waitFor(() => expect(screen.getByText('Transaction History')).toBeInTheDocument());
+      expect(screen.queryByText(/add funds/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/deposit/i)).not.toBeInTheDocument();
+      expect(WalletService.deposit).not.toHaveBeenCalled();
+    });
+  });
+
   describe('empty transactions', () => {
     it('shows empty state when there are no transactions', async () => {
       setupMocks({ txs: [] });

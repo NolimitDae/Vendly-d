@@ -38,9 +38,9 @@ function setup(booking: Record<string, unknown> = {}) {
           released_at: null,
           dispute_opened_at: null,
           installments: [
-            { status: InstallmentStatus.PAID, amount: 300, refunded_amount: 0 },
-            { status: InstallmentStatus.PAID, amount: 100, refunded_amount: 40 },
-            { status: InstallmentStatus.SCHEDULED, amount: 500, refunded_amount: 0 },
+            { kind: 'charge', status: InstallmentStatus.PAID, amount: 300, fee_amount: 15, refunded_amount: 0 },
+            { kind: 'charge', status: InstallmentStatus.PAID, amount: 100, fee_amount: 5, refunded_amount: 40 },
+            { kind: 'charge', status: InstallmentStatus.SCHEDULED, amount: 500, fee_amount: 25, refunded_amount: 0 },
           ],
           ...booking,
         })
@@ -92,14 +92,16 @@ describe('Disputes with details and photos', () => {
     expect(PrivateStorage.put).not.toHaveBeenCalled();
   });
 
-  it('caps a partial refund at what was paid, and wants an amount only for one', async () => {
-    // paid: 300 + (100 − 40) = 360
-    await expect(setup().service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 361 })).rejects.toThrow('up to $360.00');
+  it('keeps a partial refund under the vendor’s part of what was paid (what an admin can grant), and wants an amount only for one', async () => {
+    // vendor's part paid: (300 − 15) + (100 − 5 − 40) = 340; the fee comes back only with a full refund
+    await expect(setup().service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 340 })).rejects.toThrow(
+      'A partial refund must be less than $340.00, the vendor’s part of what you’ve paid. To ask for everything back, choose a full refund.',
+    );
     await expect(setup().service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund' })).rejects.toThrow('how much');
     await expect(setup().service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'full_refund', requested_amount: 50 })).rejects.toThrow('only needed for a partial refund');
     const ok = setup();
-    await ok.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 360 });
-    expect(ok.prisma.booking.updateMany.mock.calls[0][0].data.dispute_requested_amount).toBe(360);
+    await ok.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 339.99 });
+    expect(ok.prisma.booking.updateMany.mock.calls[0][0].data.dispute_requested_amount).toBe(339.99);
   });
 
   it('refuses files that are not photos by their content, and more than 10, before storing any', async () => {
@@ -131,21 +133,32 @@ describe('Disputes with details and photos', () => {
     expect(mail.sendBookingNotification).not.toHaveBeenCalled();
   });
 
-  it('caps a partial refund on a booking paid before installments at its amount and fee, less refunds', async () => {
+  it('caps a partial refund on a booking paid before installments at its vendor price, less refunds', async () => {
     const legacy = { installments: [], paid_at: new Date('2025-01-01'), amount: 400, service_fee: 20 };
     const a = setup(legacy);
     a.prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: 100 } });
-    await expect(a.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 320.01 })).rejects.toThrow('up to $320.00');
+    await expect(a.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 300 })).rejects.toThrow('less than $300.00');
     expect(a.prisma.paymentTransaction.aggregate).toHaveBeenCalledWith({ where: { type: 'booking_refund', status: 'refunded', order_id: 'b1' }, _sum: { amount: true } });
     const b = setup(legacy);
-    await b.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 420 });
-    expect(b.prisma.booking.updateMany.mock.calls[0][0].data.dispute_requested_amount).toBe(420);
+    await b.service.openDispute('b1', 'c1', { reason: 'Half the menu was missing', outcome: 'partial_refund', requested_amount: 399 });
+    expect(b.prisma.booking.updateMany.mock.calls[0][0].data.dispute_requested_amount).toBe(399);
   });
 
   it('keeps the old checks: only the customer, once, after the service started', async () => {
     await expect(setup().service.openDispute('b1', 'x', 'Not my booking but whatever')).rejects.toThrow('Access denied');
     await expect(setup({ dispute_opened_at: new Date() }).service.openDispute('b1', 'c1', 'Second report on this one')).rejects.toThrow('already open');
-    await expect(setup({ status: BookingStatus.CONFIRMED }).service.openDispute('b1', 'c1', 'Too early to report this')).rejects.toThrow('once the service has started');
+    await expect(setup({ status: BookingStatus.PENDING }).service.openDispute('b1', 'c1', 'Too early to report this')).rejects.toThrow('once the service has started');
+  });
+
+  it('takes a report on a confirmed booking once its start time has passed (the vendor may not have shown up)', async () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000);
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    await expect(setup({ status: BookingStatus.CONFIRMED, event_start_at: future }).service.openDispute('b1', 'c1', 'The DJ is not here yet')).rejects.toThrow('once the booking’s start time has passed');
+    await expect(setup({ status: BookingStatus.CONFIRMED }).service.openDispute('b1', 'c1', 'No date on this booking')).rejects.toThrow('once the booking’s start time has passed');
+    const ok = setup({ status: BookingStatus.CONFIRMED, event_start_at: null, scheduled_at: past });
+    await ok.service.openDispute('b1', 'c1', { reason: 'The DJ never showed up at all', category: 'no_show', outcome: 'full_refund' });
+    expect(ok.prisma.booking.updateMany.mock.calls[0][0].data).toMatchObject({ dispute_category: 'no_show', dispute_outcome: 'full_refund' });
+    expect(ok.push.sendToUser).toHaveBeenCalledWith('admin1', expect.objectContaining({ title: 'New dispute' }));
   });
 
   it('shows Vendly the category, the ask and signed photo links, never the storage keys', async () => {

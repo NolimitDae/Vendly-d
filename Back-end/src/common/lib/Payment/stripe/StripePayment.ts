@@ -149,6 +149,7 @@ export class StripePayment {
     amount: number,
     currency: string,
     idempotencyKey?: string,
+    withdrawalId?: string,
   ) {
     // whole cents: Stripe rejects fractions (19.99 * 100 is 1998.9999...)
     const transfer = await getStripe().transfers.create(
@@ -156,10 +157,23 @@ export class StripePayment {
         amount: Math.round(amount * 100),
         currency: currency,
         destination: account_id,
+        // a withdrawal's transfer can be found again by its group (Stripe lists transfers by group)
+        ...(withdrawalId && { transfer_group: `withdraw_${withdrawalId}`, metadata: { withdrawal_id: withdrawalId } }),
       },
       idempotencyKey ? { idempotencyKey } : undefined,
     );
     return transfer;
+  }
+
+  /** Transfers in one group, or to one account within a time range (seconds), newest first. */
+  static async listTransfers(opts: { transferGroup?: string; destination?: string; createdFrom?: number; createdTo?: number }) {
+    const res = await getStripe().transfers.list({
+      limit: 100,
+      ...(opts.transferGroup && { transfer_group: opts.transferGroup }),
+      ...(opts.destination && { destination: opts.destination }),
+      ...(opts.createdFrom != null && { created: { gte: opts.createdFrom, ...(opts.createdTo != null && { lte: opts.createdTo }) } }),
+    });
+    return res.data;
   }
 
 

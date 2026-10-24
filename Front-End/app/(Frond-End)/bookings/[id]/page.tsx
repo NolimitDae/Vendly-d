@@ -88,6 +88,17 @@ export default function CustomerBookingDetailPage() {
   const [paymentsKey, setPaymentsKey] = useState(0);
 
   const [cancelling, setCancelling] = useState(false);
+  // open the report form (from the cancel dialog's no-show hint, here or on the bookings list)
+  const [reporting, setReporting] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("report") === "1") setReporting(true);
+  }, []);
+  const reportProblem = () => {
+    setCancelling(false);
+    setReporting(true);
+    setPaymentsKey((k) => k + 1);
+    setTimeout(() => document.getElementById("booking-payments")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+  };
   const reloadBooking = () =>
     BookingService.getOne(id)
       .then((res) => res.data?.success && setBooking(res.data.data))
@@ -223,6 +234,7 @@ export default function CustomerBookingDetailPage() {
           bookingId={booking.id}
           role="CUSTOMER"
           defaultReason="Customer cancelled"
+          onReportProblem={reportProblem}
           onClose={() => setCancelling(false)}
           onCancelled={() => {
             reloadBooking();
@@ -235,7 +247,7 @@ export default function CustomerBookingDetailPage() {
 
       <BookingExtrasSection bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} onChanged={() => setPaymentsKey((k) => k + 1)} />
 
-      <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} />
+      <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} startReporting={reporting} />
 
       {!booking.payment_plan && ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
         <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">

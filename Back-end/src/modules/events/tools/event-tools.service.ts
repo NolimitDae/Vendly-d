@@ -351,7 +351,7 @@ export class EventToolsService {
     const waiting = changed
       ? await this.prisma.bookingContract.findMany({
           where: { status: 'AWAITING_CLIENT', booking: { event_bookings: { some: { event_id: eventId } } } },
-          select: { id: true, booking: { select: { vendor_id: true, listing: { select: { title: true } } } } },
+          select: { id: true, booking_id: true, booking: { select: { vendor_id: true, listing: { select: { title: true } } } } },
         })
       : [];
     if (waiting.length) {
@@ -360,6 +360,11 @@ export class EventToolsService {
         await this.prisma.bookingContract.updateMany({ where: { id: { in: ids }, status: 'AWAITING_CLIENT' }, data: { client_email: email, last_reminder_at: null } });
       } else {
         await this.prisma.bookingContract.updateMany({ where: { id: { in: ids }, status: 'AWAITING_CLIENT' }, data: { status: 'AWAITING_VENDOR', client_email: null, last_reminder_at: null } });
+        // the vendor can answer from now on, so the requests' 72-hour clock starts here (as when a client co-signs)
+        await this.prisma.booking.updateMany({
+          where: { id: { in: waiting.map((w) => w.booking_id) }, status: BookingStatus.PENDING },
+          data: { request_opened_at: new Date(), expiry_reminded_at: null },
+        });
         for (const w of waiting) {
           await this.push
             .sendToUser(w.booking.vendor_id, {

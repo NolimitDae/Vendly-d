@@ -924,6 +924,19 @@ describe('BookingService', () => {
       expect(mockPayments.voidOpenCharges).toHaveBeenCalledWith('booking-1');
     });
 
+    it('past the start of a booking the vendor never started, points the customer to Report a problem (cancelling stays possible)', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid({ event_start_at: new Date(Date.now() - 3 * 3600 * 1000) }));
+      const preview = (await service.cancelPreview('booking-1', 'customer-1')).data as any;
+      expect(preview.percent).toBe(0);
+      expect(preview.report_problem_hint).toContain('report a problem instead');
+      // the vendor's own preview, a booking that hasn't started yet, or one in progress get no hint
+      expect(((await service.cancelPreview('booking-1', 'vendor-1')).data as any).report_problem_hint).toBeUndefined();
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
+      expect(((await service.cancelPreview('booking-1', 'customer-1')).data as any).report_problem_hint).toBeUndefined();
+      mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid({ status: BookingStatus.IN_PROGRESS, event_start_at: new Date(Date.now() - 3 * 3600 * 1000) }));
+      expect(((await service.cancelPreview('booking-1', 'customer-1')).data as any).report_problem_hint).toBeUndefined();
+    });
+
     it('refuses a preview for someone else or a booking that can no longer be cancelled', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
       await expect(service.cancelPreview('booking-1', 'stranger')).rejects.toThrow(ForbiddenException);

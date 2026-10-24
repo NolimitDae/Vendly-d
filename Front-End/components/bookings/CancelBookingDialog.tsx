@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, RotateCcw, X } from "lucide-react";
+import { AlertCircle, Loader2, RotateCcw, X } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import { BookingMoneyService, money, type CancellationSummary } from "@/service/payments/booking-money.service";
 
@@ -17,13 +17,18 @@ interface Props {
   bookingHref?: string;
   /** sent with the cancellation when the user leaves the reason empty */
   defaultReason?: string;
+  /**
+   * The booking page opens its report form; without it the hint links to the booking page
+   * (`bookingHref?report=1`). Shown when the start passed and the vendor never started.
+   */
+  onReportProblem?: () => void;
 }
 
 /**
  * Cancel confirmation that shows what cancelling now does with the money before the user confirms
  * (GET /bookings/:id/cancel-preview), and the refund result afterwards.
  */
-export default function CancelBookingDialog({ bookingId, role, onClose, onCancelled, bookingHref, defaultReason }: Props) {
+export default function CancelBookingDialog({ bookingId, role, onClose, onCancelled, bookingHref, defaultReason, onReportProblem }: Props) {
   const [preview, setPreview] = useState<CancellationSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -106,6 +111,23 @@ export default function CancelBookingDialog({ bookingId, role, onClose, onCancel
               </p>
             ) : preview ? (
               <div className="space-y-2">
+                {preview.report_problem_hint && (
+                  <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2" data-testid="report-problem-hint">
+                    <p className="flex gap-2 text-sm text-amber-800 dark:text-amber-300">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
+                      {preview.report_problem_hint}
+                    </p>
+                    {onReportProblem ? (
+                      <button type="button" onClick={onReportProblem} className="text-sm font-semibold text-primary">
+                        Report a problem
+                      </button>
+                    ) : bookingHref ? (
+                      <Link href={`${bookingHref}?report=1`} className="text-sm font-semibold text-primary">
+                        Report a problem
+                      </Link>
+                    ) : null}
+                  </div>
+                )}
                 <p className="text-sm text-gray-800 dark:text-gray-200" data-testid="cancel-preview">{preview.message}</p>
                 {preview.policy && preview.cancelled_by === "CUSTOMER" && (
                   <p className="text-xs text-gray-500 dark:text-gray-400">

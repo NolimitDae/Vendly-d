@@ -79,6 +79,20 @@ describe('ReportProblemForm', () => {
     expect(screen.queryByRole('button', { name: /^add$/i })).not.toBeInTheDocument();
   });
 
+  it('keeps a partial refund under the vendor’s part of what was paid, and can start on “didn’t show up”', async () => {
+    const user = userEvent.setup();
+    render(<ReportProblemForm bookingId="b1" paid={420} limit={400} category="no_show" onCancel={jest.fn()} onSent={jest.fn()} />);
+    expect(screen.getByLabelText('What went wrong?')).toHaveValue('no_show');
+    await user.type(screen.getByLabelText('Tell us what happened'), 'Nobody came to set up');
+    await user.click(screen.getByRole('radio', { name: 'Partial refund' }));
+    await user.type(screen.getByLabelText(/amount \(less than \$400\.00\)/i), '400');
+    expect(screen.getByText(/must be less than \$400\.00, the vendor’s part of what you’ve paid/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send report/i })).toBeDisabled();
+    await user.clear(screen.getByLabelText(/amount/i));
+    await user.type(screen.getByLabelText(/amount/i), '399.99');
+    expect(screen.getByRole('button', { name: /send report/i })).toBeEnabled();
+  });
+
   it('shows the server’s message when sending fails', async () => {
     (PaymentsService.dispute as jest.Mock).mockRejectedValue({ response: { data: { message: 'A dispute is already open.' } } });
     const user = userEvent.setup();

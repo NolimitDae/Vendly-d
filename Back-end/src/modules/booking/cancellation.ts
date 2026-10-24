@@ -138,6 +138,8 @@ export interface CancellationSummary {
   /** refunds show on the card within this window */
   refund_timing: string | null;
   message: string;
+  /** cancel preview only: the start passed and the vendor never started, so Report a problem fits better */
+  report_problem_hint?: string;
 }
 
 export const REFUND_TIMING = '5–10 business days';

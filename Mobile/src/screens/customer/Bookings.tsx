@@ -66,7 +66,14 @@ export default function CustomerBookings() {
 
   // shows what cancelling does with the money first, then the refund result
   const cancel = (b: Booking) =>
-    confirmCancelBooking({ bookingId: b.id, role: 'CUSTOMER', title: b.status === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?', onCancelled: () => load() });
+    confirmCancelBooking({
+      bookingId: b.id,
+      role: 'CUSTOMER',
+      title: b.status === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?',
+      onCancelled: () => load(),
+      // Report a problem is on the booking's page
+      onReportProblem: () => nav.navigate('BookingDetail', { bookingId: b.id }),
+    });
 
   return (
     <View style={s.root}>

@@ -7,6 +7,7 @@ import { TRANSACTIONS_COLUMNS, TRANSACTION_STATUS_OPTIONS } from "./tableConfig"
 import { usePagination } from "@/hooks";
 import { AdminService } from "@/service/admin/admin.service";
 import { Loader2 } from "lucide-react";
+import NeedsReviewWithdrawals from "./NeedsReviewWithdrawals";
 
 const STATUS_MAP: Record<string, string> = {
   paid: "Successful",
@@ -72,6 +73,7 @@ const TransactionsPageContent = () => {
 
   return (
     <div>
+      <NeedsReviewWithdrawals />
       <div className="my-5">
         <DataFilterBar
           onSearch={setSearch}

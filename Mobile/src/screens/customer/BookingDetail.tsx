@@ -70,6 +70,9 @@ export default function BookingDetail() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // opens the report form in the payments card (the cancel prompt's no-show hint)
+  const [reporting, setReporting] = useState(false);
+
   // shows what cancelling does with the money first (refund, fee kept), then the refund result
   const cancel = async () => {
     setBusy(true);
@@ -80,6 +83,10 @@ export default function BookingDetail() {
         title: booking?.status === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?',
         onCancelled: () => {
           load();
+          setPaymentsKey((k) => k + 1);
+        },
+        onReportProblem: () => {
+          setReporting(true);
           setPaymentsKey((k) => k + 1);
         },
       });
@@ -246,7 +253,7 @@ export default function BookingDetail() {
 
           <RentalReturnCard booking={booking} role="CUSTOMER" onDone={load} />
 
-          <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} onChanged={() => { load(); extras.reload(); }} />
+          <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} startReporting={reporting} onChanged={() => { load(); extras.reload(); }} />
 
           <BookingContractCard bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
 

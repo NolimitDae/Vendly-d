@@ -22,6 +22,7 @@ jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
     cancelPaymentIntent: jest.fn(),
     transferForBooking: jest.fn(),
     refundPaymentIntent: jest.fn(),
+    retrieveCheckoutSession: jest.fn(),
   },
 }));
 jest.mock('src/config/app.config', () => ({ __esModule: true, default: () => ({ app: { client_app_url: 'https://app.test' } }) }));
@@ -818,6 +819,111 @@ describe('PaymentsService', () => {
       expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
       expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
       expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('no-shows and bookings paid through Checkout', () => {
+    const disputed = (over: Record<string, unknown> = {}) => ({
+      id: 'b1', status: BookingStatus.COMPLETED, dispute_opened_at: new Date(), dispute_resolved_at: null, released_at: null, vendor_id: 'v1', customer_id: 'c1', currency: 'usd', early_released_amount: 0,
+      listing: { title: 'Glam' }, customer: { email: 'c@x.com', name: 'C' }, vendor: { email: 'v@x.com', name: 'V' }, installments: [],
+      ...over,
+    });
+    // paid in one go through Checkout: $400 + $20 fee, no installments
+    const checkout = { amount: 400, service_fee: 20, paid_at: new Date('2025-06-01'), payment_transaction_id: 'cs_1' };
+
+    beforeEach(() => {
+      prisma.bookingInstallment.findMany.mockResolvedValue([]);
+      (StripePayment.retrieveCheckoutSession as jest.Mock).mockResolvedValue({ payment_intent: 'pi_co' });
+      (StripePayment.refundPaymentIntent as jest.Mock).mockResolvedValue({ id: 're_co' });
+    });
+
+    it('a full refund of a Checkout-paid booking refunds the Checkout payment, fee included, and says so', async () => {
+      prisma.booking.findUnique.mockResolvedValue(disputed(checkout));
+      const res = await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'Vendor never came' });
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_co', 'dispute-b1-checkout-42000', 420);
+      expect(prisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'booking_refund', order_id: 'b1', status: 'refunded', amount: 420, reference_number: 're_co' }) });
+      expect(res.data.refunded).toBe(420);
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('refunded $420.00') }));
+    });
+
+    it('a partial refund comes out of the Checkout payment’s vendor part, less earlier refunds', async () => {
+      prisma.booking.findUnique.mockResolvedValue(disputed({ ...checkout, status: BookingStatus.IN_PROGRESS }));
+      prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: 100 } });
+      // vendor part left: 400 − 100 = 300
+      await expect(service.resolveDispute('b1', 'admin', { action: 'partial_refund', amount: 300, note: 'split' })).rejects.toThrow('less than $300.00');
+      const res = await service.resolveDispute('b1', 'admin', { action: 'partial_refund', amount: 120, note: 'Late by two hours' });
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_co', 'dispute-b1-checkout-12000', 120);
+      expect(res.data.refunded).toBe(120);
+      prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
+    });
+
+    it('refuses (and moves nothing) when the Checkout payment can’t be found', async () => {
+      prisma.booking.findUnique.mockResolvedValue(disputed({ ...checkout, payment_transaction_id: null }));
+      await expect(service.resolveDispute('b1', 'admin', { action: 'refund', note: 'Vendor never came' })).rejects.toThrow('could not be found');
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+      expect(prisma.booking.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ dispute_resolved_at: expect.any(Date) }) }));
+    });
+
+    it('pays the vendor only what is left of a Checkout payment after a partial refund', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), currency: 'usd', vendor_id: 'v1', amount: 400, service_fee: 20, payout_credited_at: null,
+        dispute_opened_at: new Date(), dispute_resolved_at: new Date(), early_released_amount: 0, vendor: { stripe_connect_id: 'acct_1', balance: 0 }, installments: [],
+      });
+      prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: 120 } });
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_1' });
+      jest.spyOn(service, 'sendFinalInvoice').mockResolvedValue(true);
+      await service.releaseBooking('b1');
+      expect(prisma.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ released_gross: 280 }) }));
+      prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
+    });
+
+    it('a full refund of a confirmed booking that never started (a no-show) cancels it', async () => {
+      prisma.booking.findUnique.mockResolvedValue(disputed({ status: BookingStatus.CONFIRMED, paid_at: new Date(), installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })] }));
+      jest.spyOn(service, 'refundBooking').mockResolvedValue(105);
+      await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'No-show confirmed' });
+      expect(prisma.booking.updateMany).toHaveBeenCalledWith({
+        where: { id: 'b1', status: BookingStatus.CONFIRMED },
+        data: { status: BookingStatus.CANCELLED, cancelled_at: expect.any(Date), cancel_reason: expect.stringContaining('Refunded in full') },
+      });
+    });
+
+    it('deciding for the vendor on a booking not complete yet keeps the money held until they complete it', async () => {
+      prisma.booking.findUnique.mockResolvedValue(disputed({ status: BookingStatus.CONFIRMED, paid_at: new Date(), installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })] }));
+      const release = jest.spyOn(service, 'releaseBooking');
+      const res = await service.resolveDispute('b1', 'admin', { action: 'release', note: 'The vendor was there, the customer missed them' });
+      expect(res.data.refunded).toBe(0);
+      expect(release).not.toHaveBeenCalled();
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { dispute_resolved_at: expect.any(Date), dispute_resolution: expect.stringContaining('release') } });
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('paid once they mark the booking complete') }));
+      // never cancelled: the vendor can still start and complete it, and the release clock runs then
+      expect(prisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: BookingStatus.CANCELLED }) }));
+    });
+
+    it('flags confirmed bookings still not started 2 hours after their start, once, to the vendor and admins', async () => {
+      prisma.booking.findMany.mockResolvedValueOnce([{ id: 'b9', vendor_id: 'v1', listing: { title: 'DJ set' }, customer: { name: 'Ada' }, vendor: { email: 'v@x.com', name: 'Vee' } }]);
+      const ids = await service.flagNotStarted(new Date('2026-10-24T12:00:30Z'));
+      expect(ids).toEqual(['b9']);
+      const where = prisma.booking.findMany.mock.calls[0][0].where;
+      // the whole hour of starts 2 to 3 hours before this run's hour: each booking in one run only
+      const window = { gte: new Date('2026-10-24T09:00:00Z'), lt: new Date('2026-10-24T10:00:00Z') };
+      expect(where).toMatchObject({ status: BookingStatus.CONFIRMED, dispute_opened_at: null, rental_reservations: { none: {} }, OR: [{ event_start_at: window }, { event_start_at: null, scheduled_at: window }] });
+      expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ title: 'Booking not started', body: expect.stringContaining('Start work') }), 'booking_updates');
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'v@x.com', ctaUrl: 'https://app.test/vendor/bookings/b9' }));
+      expect(push.sendToUser).toHaveBeenCalledWith('admin1', expect.objectContaining({ title: 'Bookings not started', body: expect.stringContaining('DJ set (b9)') }));
+    });
+
+    it('the timeline tells the customer when they can report a problem, and the partial-refund limit', async () => {
+      const past = new Date(Date.now() - 3 * 3600 * 1000);
+      prisma.booking.findUnique.mockResolvedValue({
+        customer_id: 'c1', vendor_id: 'v1', status: BookingStatus.CONFIRMED, amount: 200, service_fee: 10, currency: 'usd', paid_at: new Date(), release_at: null, released_at: null, dispute_opened_at: null, event_start_at: past, scheduled_at: null,
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 210, fee_amount: 10 })],
+      });
+      prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
+      const res: any = await service.timeline('b1', 'c1');
+      expect(res.data).toMatchObject({ can_dispute: true, not_started: true, vendor_paid: 200 });
+      // the vendor never gets the customer's actions
+      const vendorView: any = await service.timeline('b1', 'v1');
+      expect(vendorView.data.can_dispute).toBe(false);
     });
   });
 });
