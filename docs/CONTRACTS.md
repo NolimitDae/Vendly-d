@@ -29,7 +29,7 @@ Custom quotes: when a vendor sends a custom quote in chat, a contract is generat
 Propose exact models before writing migrations. Expected shape:
 
 - **ContractTemplate**: Vendly default templates managed by admins. Fields: category (general, photography/video, rentals, catering, entertainment, venue, beauty), version, title, body with merge fields, status (draft, active, retired), timestamps. A new version never changes contracts already signed.
-- **VendorContract**: a vendor's contract setup. Fields: vendor, type (DEFAULT or UPLOADED), the base template version (if DEFAULT), the vendor's custom field values and additional clauses, the uploaded PDF file and its SHA-256 hash (if UPLOADED), version number, status (active, archived, disabled by admin), which packages it applies to (all or selected), timestamps.
+- **VendorContract**: a vendor's contract setup. Fields: vendor, type (DEFAULT or UPLOADED), the base template version (if DEFAULT), the vendor's custom field values and additional clauses, the uploaded PDF file and its SHA-256 hash (if UPLOADED), version number, status (active, archived, disabled by admin), which packages it applies to (all, selected ones, or every package in chosen categories), timestamps.
 - **BookingContract**: one per booking, a frozen snapshot. Fields: booking, the vendor contract version used, rendered content with merge fields filled, status (draft, awaiting customer signature, awaiting vendor signature, executed, void, superseded), the executed PDF file key, final PDF SHA-256 hash, version number, and a link to the contract it replaced if it's an amendment.
 - **ContractSignature**: one per signer. Fields: booking contract, user, role (customer, planner, vendor), typed legal name, drawn signature image (optional), consent text version, signed at, IP address, user agent, app version, device platform, document hash at signing.
 - **ContractAuditEvent**: an append-only log. Events: created, viewed, signed, countersigned, executed, emailed, downloaded, voided, superseded, admin viewed. Each records who, when, IP and details. Never updated or deleted.
@@ -54,7 +54,9 @@ New screen in the vendor dashboard: **Contracts**.
 
 **Both options**
 
-- Assign the contract to all packages or selected ones.
+- Assign the contract to all packages, selected ones, or every package in chosen categories (this covers packages added to those categories later).
+- Which contract a booking uses: a contract naming the package wins over one for the package's category, which wins over one for all packages. Within the same rule the newest version wins. The same choice decides the cancellation policy shown on the package page (`Back-end/src/modules/contracts/contract-scope.ts`).
+- Saving a contract for packages or categories takes them over from older contracts; an older contract left covering nothing is archived. A contract for all packages stays as the fallback.
 - Editing creates a new version. It applies only to future bookings; existing bookings keep the version that was signed.
 - Vendors must have an active contract before accepting paid bookings, or they can choose "Use Vendly default" with one tap.
 

@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import ContractBody from "@/components/contracts/ContractBody";
 import { ContractsService, apiError, openContractFile } from "@/service/contracts/contracts.service";
 import { VendorListingService } from "@/service/vendor/vendor-listing.service";
+import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 
 interface FieldDef {
   key: string;
@@ -36,9 +37,16 @@ interface VendorContract {
   file_name: string | null;
   applies_to_all: boolean;
   listing_ids: string[];
+  category_ids?: string[];
   disabled_reason: string | null;
   created_at: string;
 }
+
+// all listings, chosen listings, or every listing in chosen categories (including new ones)
+type Scope = "all" | "listings" | "categories";
+
+const scopeOf = (c: VendorContract): Scope =>
+  c.applies_to_all ? "all" : c.category_ids?.length && !c.listing_ids.length ? "categories" : "listings";
 
 type Mode = { kind: "none" } | { kind: "default"; replaceId?: string } | { kind: "upload"; replaceId?: string };
 
@@ -88,6 +96,7 @@ export default function VendorContractsPage() {
   const [active, setActive] = useState<VendorContract[]>([]);
   const [history, setHistory] = useState<VendorContract[]>([]);
   const [listings, setListings] = useState<{ id: string; title: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [mode, setMode] = useState<Mode>({ kind: "none" });
   const [busy, setBusy] = useState(false);
 
@@ -95,8 +104,9 @@ export default function VendorContractsPage() {
   const [category, setCategory] = useState("GENERAL");
   const [values, setValues] = useState<Record<string, string>>({});
   const [terms, setTerms] = useState("");
-  const [appliesToAll, setAppliesToAll] = useState(true);
+  const [scope, setScope] = useState<Scope>("all");
   const [listingIds, setListingIds] = useState<string[]>([]);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [confirmOwn, setConfirmOwn] = useState(false);
   const [preview, setPreview] = useState<{ body: string; missing: string[] } | null>(null);
@@ -104,10 +114,11 @@ export default function VendorContractsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [t, mine, l] = await Promise.all([
+      const [t, mine, l, cats] = await Promise.all([
         ContractsService.templates(),
         ContractsService.vendorList(),
         VendorListingService.getMyListings({ limit: 100 }),
+        MarketplaceService.getCategories().catch(() => null),
       ]);
       setTemplates(t.data.data.templates);
       setUploadFields(t.data.data.upload_fields);
@@ -115,6 +126,7 @@ export default function VendorContractsPage() {
       setActive(mine.data.data.active);
       setHistory(mine.data.data.history);
       setListings((l.data?.data ?? []).map((x: any) => ({ id: x.id, title: x.title })));
+      setCategories((cats?.data?.data ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     } catch (err) {
       toast.error(apiError(err, "Couldn't load contracts"));
     } finally {
@@ -148,8 +160,9 @@ export default function VendorContractsPage() {
     setCategory(from?.template?.category ?? "GENERAL");
     setValues(from?.field_values ?? {});
     setTerms(from?.additional_terms ?? "");
-    setAppliesToAll(from ? from.applies_to_all : true);
+    setScope(from ? scopeOf(from) : "all");
     setListingIds(from?.listing_ids ?? []);
+    setCategoryIds(from?.category_ids ?? []);
     setFile(null);
     setConfirmOwn(false);
     setPreview(null);
@@ -177,8 +190,9 @@ export default function VendorContractsPage() {
       category,
       field_values: values,
       additional_terms: terms || undefined,
-      applies_to_all: appliesToAll,
-      listing_ids: appliesToAll ? [] : listingIds,
+      applies_to_all: scope === "all",
+      listing_ids: scope === "listings" ? listingIds : [],
+      category_ids: scope === "categories" ? categoryIds : [],
     };
     try {
       if (mode.replaceId) await ContractsService.vendorReplaceDefault(mode.replaceId, dto);
@@ -202,8 +216,9 @@ export default function VendorContractsPage() {
     form.append("file", file);
     form.append("confirm_ownership", String(confirmOwn));
     form.append("field_values", JSON.stringify(values));
-    form.append("applies_to_all", String(appliesToAll));
-    if (!appliesToAll) form.append("listing_ids", JSON.stringify(listingIds));
+    form.append("applies_to_all", String(scope === "all"));
+    if (scope === "listings") form.append("listing_ids", JSON.stringify(listingIds));
+    if (scope === "categories") form.append("category_ids", JSON.stringify(categoryIds));
     setBusy(true);
     try {
       if (mode.replaceId) await ContractsService.vendorReplaceUpload(mode.replaceId, form);
@@ -232,12 +247,15 @@ export default function VendorContractsPage() {
     <fieldset className="space-y-2">
       <legend className="text-sm font-medium text-gray-700 dark:text-gray-300">Applies to</legend>
       <label className="flex items-center gap-2 text-sm">
-        <input type="radio" checked={appliesToAll} onChange={() => setAppliesToAll(true)} className="accent-primary" /> All my listings
+        <input type="radio" checked={scope === "all"} onChange={() => setScope("all")} className="accent-primary" /> All my listings
       </label>
       <label className="flex items-center gap-2 text-sm">
-        <input type="radio" checked={!appliesToAll} onChange={() => setAppliesToAll(false)} className="accent-primary" /> Selected listings
+        <input type="radio" checked={scope === "listings"} onChange={() => setScope("listings")} className="accent-primary" /> Selected listings
       </label>
-      {!appliesToAll && (
+      <label className="flex items-center gap-2 text-sm">
+        <input type="radio" checked={scope === "categories"} onChange={() => setScope("categories")} className="accent-primary" /> All listings in these categories
+      </label>
+      {scope === "listings" && (
         <div className="pl-6 space-y-1 max-h-40 overflow-y-auto">
           {listings.length === 0 && <p className="text-xs text-gray-500 dark:text-gray-400">You have no listings yet.</p>}
           {listings.map((l) => (
@@ -255,6 +273,28 @@ export default function VendorContractsPage() {
           ))}
         </div>
       )}
+      {scope === "categories" && (
+        <div className="pl-6 space-y-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Listings you add to these categories later use this contract too. A contract chosen for a single listing still comes first.
+          </p>
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {categories.map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={categoryIds.includes(c.id)}
+                  onChange={(e) =>
+                    setCategoryIds((ids) => (e.target.checked ? [...ids, c.id] : ids.filter((x) => x !== c.id)))
+                  }
+                />
+                {c.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </fieldset>
   );
 
@@ -267,6 +307,14 @@ export default function VendorContractsPage() {
   }
 
   const listingName = (id: string) => listings.find((l) => l.id === id)?.title ?? "Listing";
+  const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? "Category";
+  const appliesTo = (c: VendorContract) =>
+    c.applies_to_all
+      ? "All listings"
+      : [
+          ...c.listing_ids.map(listingName),
+          ...(c.category_ids ?? []).map((id) => `All in ${categoryName(id)}`),
+        ].join(", ");
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
@@ -381,7 +429,7 @@ export default function VendorContractsPage() {
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Version {c.version} · {new Date(c.created_at).toLocaleDateString()} ·{" "}
-                      {c.applies_to_all ? "All listings" : c.listing_ids.map(listingName).join(", ")}
+                      {appliesTo(c)}
                     </p>
                     {c.field_values?.cancellation_policy && (
                       <p className="text-xs text-gray-500 dark:text-gray-400">Cancellation: {c.field_values.cancellation_policy}</p>

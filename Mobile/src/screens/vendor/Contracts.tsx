@@ -47,9 +47,16 @@ interface VendorContract {
   file_name: string | null;
   applies_to_all: boolean;
   listing_ids: string[];
+  category_ids?: string[];
   disabled_reason: string | null;
   created_at: string;
 }
+
+// all listings, chosen listings, or every listing in chosen categories (including new ones)
+type Scope = 'all' | 'listings' | 'categories';
+
+const scopeOf = (c: VendorContract): Scope =>
+  c.applies_to_all ? 'all' : c.category_ids?.length && !c.listing_ids.length ? 'categories' : 'listings';
 
 type Mode = { kind: 'list' } | { kind: 'default'; replaceId?: string } | { kind: 'upload'; replaceId?: string };
 
@@ -95,13 +102,15 @@ export default function VendorContracts() {
   const [active, setActive] = useState<VendorContract[]>([]);
   const [history, setHistory] = useState<VendorContract[]>([]);
   const [listings, setListings] = useState<{ id: string; title: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
 
   const [category, setCategory] = useState('GENERAL');
   const [values, setValues] = useState<Record<string, string>>({});
   const [terms, setTerms] = useState('');
-  const [appliesToAll, setAppliesToAll] = useState(true);
+  const [scope, setScope] = useState<Scope>('all');
   const [listingIds, setListingIds] = useState<string[]>([]);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [confirmOwn, setConfirmOwn] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -110,10 +119,11 @@ export default function VendorContracts() {
 
   const load = useCallback(async () => {
     try {
-      const [t, mine, l] = await Promise.all([
+      const [t, mine, l, cats] = await Promise.all([
         ContractsService.templates(),
         ContractsService.vendorList(),
         api.get('/vendor/listings', { params: { limit: 100 } }),
+        api.get('/marketplace/categories').catch(() => null),
       ]);
       setTemplates(t.data.data.templates);
       setUploadFields(t.data.data.upload_fields);
@@ -121,6 +131,7 @@ export default function VendorContracts() {
       setActive(mine.data.data.active);
       setHistory(mine.data.data.history);
       setListings((l.data?.data ?? []).map((x: any) => ({ id: x.id, title: x.title })));
+      setCategories((cats?.data?.data ?? []).map((x: any) => ({ id: x.id, name: x.name })));
     } catch (err) {
       Alert.alert('Error', apiError(err, "Couldn't load contracts"));
     } finally {
@@ -137,8 +148,9 @@ export default function VendorContracts() {
     setCategory(from?.template?.category ?? 'GENERAL');
     setValues(from?.field_values ?? {});
     setTerms(from?.additional_terms ?? '');
-    setAppliesToAll(from ? from.applies_to_all : true);
+    setScope(from ? scopeOf(from) : 'all');
     setListingIds(from?.listing_ids ?? []);
+    setCategoryIds(from?.category_ids ?? []);
     setFile(null);
     setConfirmOwn(false);
   };
@@ -172,7 +184,14 @@ export default function VendorContracts() {
 
   const saveDefault = () => {
     if (mode.kind !== 'default') return;
-    const dto = { category, field_values: values, additional_terms: terms || undefined, applies_to_all: appliesToAll, listing_ids: appliesToAll ? [] : listingIds };
+    const dto = {
+      category,
+      field_values: values,
+      additional_terms: terms || undefined,
+      applies_to_all: scope === 'all',
+      listing_ids: scope === 'listings' ? listingIds : [],
+      category_ids: scope === 'categories' ? categoryIds : [],
+    };
     run(
       () => (mode.replaceId ? ContractsService.vendorReplaceDefault(mode.replaceId, dto) : ContractsService.vendorCreateDefault(dto)),
       'Your contract applies to new bookings. Signed bookings keep their version.',
@@ -194,8 +213,9 @@ export default function VendorContracts() {
     form.append('file', { uri: file.uri, name: file.name || 'contract.pdf', type: 'application/pdf' } as any);
     form.append('confirm_ownership', String(confirmOwn));
     form.append('field_values', JSON.stringify(values));
-    form.append('applies_to_all', String(appliesToAll));
-    if (!appliesToAll) form.append('listing_ids', JSON.stringify(listingIds));
+    form.append('applies_to_all', String(scope === 'all'));
+    if (scope === 'listings') form.append('listing_ids', JSON.stringify(listingIds));
+    if (scope === 'categories') form.append('category_ids', JSON.stringify(categoryIds));
     run(() => ContractsService.vendorUpload(form), 'Vendly adds a booking addendum and signature page to each booking.');
   };
 
@@ -209,14 +229,32 @@ export default function VendorContracts() {
     <View style={{ gap: 8 }}>
       <Text style={s.label}>Applies to</Text>
       <View style={s.chips}>
-        <TouchableOpacity style={[s.chip, appliesToAll && s.chipOn]} onPress={() => setAppliesToAll(true)}>
-          <Text style={[s.chipText, appliesToAll && s.chipTextOn]}>All listings</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.chip, !appliesToAll && s.chipOn]} onPress={() => setAppliesToAll(false)}>
-          <Text style={[s.chipText, !appliesToAll && s.chipTextOn]}>Selected listings</Text>
-        </TouchableOpacity>
+        {([
+          ['all', 'All listings'],
+          ['listings', 'Selected listings'],
+          ['categories', 'By category'],
+        ] as const).map(([key, label]) => (
+          <TouchableOpacity key={key} style={[s.chip, scope === key && s.chipOn]} onPress={() => setScope(key)}>
+            <Text style={[s.chipText, scope === key && s.chipTextOn]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
-      {!appliesToAll &&
+      {scope === 'categories' && (
+        <Text style={s.muted}>
+          Every listing in these categories uses this contract, including ones you add later. A contract chosen for a single listing still comes first.
+        </Text>
+      )}
+      {scope === 'categories' &&
+        categories.map((c) => {
+          const on = categoryIds.includes(c.id);
+          return (
+            <Pressable key={c.id} style={s.checkRow} onPress={() => setCategoryIds((ids) => (on ? ids.filter((x) => x !== c.id) : [...ids, c.id]))}>
+              <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={DARK.accent} />
+              <Text style={s.checkText}>{c.name}</Text>
+            </Pressable>
+          );
+        })}
+      {scope === 'listings' &&
         listings.map((l) => {
           const on = listingIds.includes(l.id);
           return (
@@ -228,6 +266,14 @@ export default function VendorContracts() {
         })}
     </View>
   );
+
+  const appliesTo = (c: VendorContract) => {
+    if (c.applies_to_all) return 'All listings';
+    const parts: string[] = [];
+    if (c.listing_ids.length) parts.push(`${c.listing_ids.length} listing(s)`);
+    for (const id of c.category_ids ?? []) parts.push(`All in ${categories.find((x) => x.id === id)?.name ?? 'a category'}`);
+    return parts.join(', ');
+  };
 
   if (loading) {
     return (
@@ -340,7 +386,7 @@ export default function VendorContracts() {
         <View key={c.id} style={s.card}>
           <Text style={s.cardTitle}>{c.type === 'UPLOADED' ? `Uploaded: ${c.file_name}` : c.template?.title}</Text>
           <Text style={s.muted}>
-            Version {c.version} · {format(new Date(c.created_at), 'MMM d, yyyy')} · {c.applies_to_all ? 'All listings' : `${c.listing_ids.length} listing(s)`}
+            Version {c.version} · {format(new Date(c.created_at), 'MMM d, yyyy')} · {appliesTo(c)}
           </Text>
           <View style={s.row}>
             {c.type === 'UPLOADED' && (
