@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import { EventToolsService, usd, type BudgetSummary, type VendorTeam } from "@/service/events/eventTools.service";
 import { errorMessage } from "@/service/rentals/rentals.service";
+import { TeamEditorDialog } from "./VendorTeams";
 
 /** Budget from real bookings: committed (accepted), paid and what's left. */
 export function BookingsBudget({ eventId, refreshKey }: { eventId: string; refreshKey?: unknown }) {
@@ -105,6 +106,8 @@ export function TeamsCard({
   const [selected, setSelected] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  // the team open in the editor ("new" for a new one)
+  const [editing, setEditing] = useState<VendorTeam | "new" | null>(null);
   const load = useCallback(() => {
     EventToolsService.teams().then((r) => setTeams(r.data?.data ?? [])).catch(() => setTeams([]));
   }, []);
@@ -151,7 +154,7 @@ export function TeamsCard({
       {!teams ? (
         <Loader2 className="w-5 h-5 animate-spin text-primary" />
       ) : teams.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Save the vendors you love working with, then invite them all to your next event in one go.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Save the vendors you love working with (booked before or not), then invite them all to your next event in one go.</p>
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
@@ -162,6 +165,11 @@ export function TeamsCard({
               </span>
             ))}
           </div>
+          {team && (
+            <button onClick={() => setEditing(team)} className="text-sm text-primary hover:underline">
+              Edit {team.name}
+            </button>
+          )}
           {team && readOnly && <p className="text-xs text-gray-500 dark:text-gray-400">This event was cancelled, so you can&apos;t invite a team to it.</p>}
           {team && !readOnly && (
             <div className="space-y-2">
@@ -172,8 +180,14 @@ export function TeamsCard({
           )}
         </>
       )}
-      {bookedVendors.length > 1 && (
-        <button onClick={saveBooked} className="text-sm text-primary hover:underline">Save these {bookedVendors.length} booked vendors as a team</button>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <button onClick={() => setEditing("new")} className="text-sm text-primary hover:underline">New team</button>
+        {bookedVendors.length > 1 && (
+          <button onClick={saveBooked} className="text-sm text-primary hover:underline">Save these {bookedVendors.length} booked vendors as a team</button>
+        )}
+      </div>
+      {editing && (
+        <TeamEditorDialog team={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={load} />
       )}
     </div>
   );

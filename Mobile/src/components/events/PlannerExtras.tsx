@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Chip, GradientButton, ui } from '../brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { EventToolsService, type BudgetSummary, type VendorTeam } from '../../services/eventTools.service';
@@ -112,6 +113,7 @@ export function TeamsCard({
   /** a cancelled event: teams can be managed, but nobody can be invited to it */
   readOnly?: boolean;
 }) {
+  const nav = useNavigation<any>();
   const [teams, setTeams] = useState<VendorTeam[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -119,7 +121,8 @@ export function TeamsCard({
   const load = useCallback(() => {
     EventToolsService.teams().then((r) => setTeams(r.data?.data ?? [])).catch(() => setTeams([]));
   }, []);
-  useEffect(load, [load]);
+  // again on coming back from the team editor
+  useFocusEffect(load);
 
   const saveBooked = () => {
     if (!bookedVendors.length) return;
@@ -154,26 +157,35 @@ export function TeamsCard({
     }
   };
 
+  const selectedTeam = teams?.find((t) => t.id === selected);
   return (
     <View style={s.card}>
       <View style={s.head}><Ionicons name="people-outline" size={20} color={DARK.accent} /><Text style={s.h2}>Vendor teams</Text></View>
       {!teams ? (
         <ActivityIndicator color={DARK.accent} />
       ) : teams.length === 0 ? (
-        <Text style={s.muted}>Save the vendors you love working with, then invite them all to your next event in one go.</Text>
+        <Text style={s.muted}>Save the vendors you love working with (booked before or not), then invite them all to your next event in one go.</Text>
       ) : (
         <>
           <View style={s.chips}>{teams.map((t) => <Chip key={t.id} label={`${t.name} (${t.vendors.length})`} active={selected === t.id} onPress={() => setSelected(selected === t.id ? null : t.id)} />)}</View>
+          {!!selectedTeam && (
+            <Pressable onPress={() => nav.navigate('TeamEditor', { team: selectedTeam })} hitSlop={8} accessibilityRole="button">
+              <Text style={s.link}>Edit {selectedTeam.name}</Text>
+            </Pressable>
+          )}
           {selected && readOnly && <Text style={s.muted}>This event was cancelled, so you can&apos;t invite a team to it.</Text>}
           {selected && !readOnly && (
             <>
-              <Text style={s.muted}>{teams.find((t) => t.id === selected)?.vendors.map((v) => v.name).join(', ')}</Text>
+              <Text style={s.muted}>{selectedTeam?.vendors.map((v) => v.name).join(', ')}</Text>
               <View style={ui.field}><TextInput style={ui.input} placeholder="Add a note (optional)" placeholderTextColor={DARK.muted} value={note} onChangeText={setNote} /></View>
               <GradientButton title="Invite this team" onPress={invite} loading={busy} />
             </>
           )}
         </>
       )}
+      <Pressable style={s.ghost} onPress={() => nav.navigate('TeamEditor')} accessibilityRole="button">
+        <Text style={s.ghostText}>New team</Text>
+      </Pressable>
       {bookedVendors.length > 1 && (
         <Pressable style={s.ghost} onPress={saveBooked} accessibilityRole="button">
           <Text style={s.ghostText}>Save these {bookedVendors.length} vendors as a team</Text>
@@ -200,4 +212,5 @@ const s = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   ghost: { height: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
   ghostText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
+  link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
 });

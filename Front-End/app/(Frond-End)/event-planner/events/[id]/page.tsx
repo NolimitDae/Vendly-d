@@ -27,6 +27,7 @@ import EventFiles from "@/components/events/EventFiles";
 import { BookingsBudget, ClientShareCard, TeamsCard } from "@/components/events/PlannerExtras";
 import { EventToolsService, type TimelineItem } from "@/service/events/eventTools.service";
 import { ChatService } from "@/service/chat/chat.service";
+import { ReviewService } from "@/service/review/review.service";
 import { MessagesSquare } from "lucide-react";
 import EventStatusActions, { EventCancelledBanner, EventCompletedBanner, canEditEvent, isEventReadOnly } from "@/components/events/EventStatusActions";
 import EditEventDialog from "@/components/events/EditEventDialog";
@@ -156,6 +157,14 @@ export default function EventDetailPage() {
     if (!id) return;
     EventToolsService.timeline(id).then((r) => r.data?.success && setTimeline(r.data.data)).catch(() => {});
   }, [id, toolsKey]);
+
+  // once the event is completed: how many vendors are still waiting for a rating (the banner badge)
+  const [toRate, setToRate] = useState(0);
+  const completed = event?.status === "COMPLETED";
+  useEffect(() => {
+    if (!id || !completed) return;
+    ReviewService.forEvent(id).then((r) => setToRate(r.data?.data?.to_rate ?? 0)).catch(() => {});
+  }, [id, completed]);
   const refreshTools = () => setToolsKey((k) => k + 1);
 
   // PATCH returns the bare event row: keep the loaded bookings, tasks and budget lines
@@ -421,6 +430,8 @@ export default function EventDetailPage() {
             completedAt={event.completed_at ?? undefined}
             hasBookings={event.bookings.length > 0}
             onViewVendors={() => setTab("vendors")}
+            eventId={event.id}
+            toRate={toRate}
           />
         )}
         {readOnly && <EventCancelledBanner cancelledAt={event.cancelled_at} />}

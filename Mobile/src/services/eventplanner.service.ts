@@ -14,7 +14,16 @@ export interface EventPlannerProfile {
   license_status: 'PENDING' | 'APPROVED' | 'NOT_APPLICABLE' | 'SUSPENDED';
 }
 
+/** A verified planner's public profile (the same one the website shows). */
+export interface PublicPlannerProfile extends EventPlannerProfile {
+  user?: { id: string; name: string; avatar_url?: string | null };
+}
+
 export const EventPlannerService = {
+  /** Public: only verified planners are found. */
+  getPublicProfile: (userId: string) =>
+    api.get<{ success: boolean; data: PublicPlannerProfile }>(`/event-planner/planners/${userId}`),
+
   getMyProfile: () =>
     api.get<{ success: boolean; data: EventPlannerProfile }>('/event-planner/profile/me'),
 

@@ -4,8 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ADMIN_APPROVE_STATUS, EventStatus } from 'prisma/generated/client';
+import { ADMIN_APPROVE_STATUS, BookingStatus, EventStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+import appConfig from 'src/config/app.config';
 import {
   CreateBudgetItemDto,
   CreateEventDto,
@@ -303,6 +305,49 @@ export class EventsService {
 
     await this.prisma.eventTask.delete({ where: { id: taskId } });
     return { success: true };
+  }
+
+  /**
+   * "Rate your vendors": every completed booking the planner made on this event, with their review
+   * if they left one. Ratings are sent one by one to POST /reviews (one review per booking).
+   */
+  async vendorReviews(eventId: string, plannerId: string) {
+    const event = await this.getEventOrFail(eventId, plannerId);
+
+    const links = await this.prisma.eventBooking.findMany({
+      where: { event_id: eventId, booking: { customer_id: plannerId, status: BookingStatus.COMPLETED, deleted_at: null } },
+      orderBy: { created_at: 'asc' },
+      select: {
+        booking: {
+          select: {
+            id: true,
+            completed_at: true,
+            listing: { select: { id: true, title: true, images: true, category: { select: { name: true } } } },
+            vendor: { select: { id: true, name: true, avatar: true, vendorProfile: { select: { business_name: true } } } },
+            review: { select: { id: true, rating: true, comment: true, created_at: true } },
+          },
+        },
+      },
+    });
+
+    const items = links.map(({ booking: b }) => ({
+      booking_id: b.id,
+      completed_at: b.completed_at,
+      listing: b.listing
+        ? { id: b.listing.id, title: b.listing.title, category: b.listing.category?.name ?? null, image: b.listing.images?.[0] ? TanvirStorage.url(`listings/${b.listing.images[0]}`) : null }
+        : null,
+      vendor: {
+        id: b.vendor.id,
+        name: b.vendor.vendorProfile?.business_name || b.vendor.name || 'Vendor',
+        avatar_url: b.vendor.avatar ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${b.vendor.avatar}`) : null,
+      },
+      review: b.review,
+    }));
+
+    return {
+      success: true,
+      data: { event: { id: event.id, name: event.name, status: event.status }, items, to_rate: items.filter((i) => !i.review).length },
+    };
   }
 
   private async getEventOrFail(id: string, plannerId: string) {

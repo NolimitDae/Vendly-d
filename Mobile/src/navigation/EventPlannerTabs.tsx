@@ -13,6 +13,9 @@ import CreateEvent from '../screens/eventplanner/CreateEvent';
 import EventDetail from '../screens/eventplanner/EventDetail';
 import EPProfile from '../screens/eventplanner/Profile';
 import PlannerProfile from '../screens/eventplanner/PlannerProfile';
+import RateVendors from '../screens/eventplanner/RateVendors';
+import TeamEditor from '../screens/eventplanner/TeamEditor';
+import PlannerPublic from '../screens/shared/PlannerPublic';
 import FindVendors from '../screens/customer/FindVendors';
 import SearchResults from '../screens/customer/SearchResults';
 import ListingDetail from '../screens/customer/ListingDetail';
@@ -52,6 +55,8 @@ function HomeNavigator() {
       <HomeStack.Screen name="MyEvents" component={MyEvents} />
       <HomeStack.Screen name="CreateEvent" component={CreateEvent} />
       <HomeStack.Screen name="EventDetail" component={EventDetail} />
+      <HomeStack.Screen name="RateVendors" component={RateVendors as React.ComponentType<any>} />
+      <HomeStack.Screen name="TeamEditor" component={TeamEditor as React.ComponentType<any>} />
       <HomeStack.Screen name="FindVendors" component={FindVendors as React.ComponentType<any>} />
       <HomeStack.Screen name="SearchResults" component={SearchResults as React.ComponentType<any>} />
       <HomeStack.Screen name="ListingDetail" component={ListingDetail as React.ComponentType<any>} />
@@ -87,6 +92,7 @@ function ProfileNavigator() {
     <ProfileStack.Navigator screenOptions={STACK}>
       <ProfileStack.Screen name="EPProfile" component={EPProfile} />
       <ProfileStack.Screen name="PlannerProfile" component={PlannerProfile} />
+      <ProfileStack.Screen name="PlannerPublic" component={PlannerPublic} />
       <ProfileStack.Screen name="EditProfile" component={EditProfile} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
       <ProfileStack.Screen name="SwitchRole" component={SwitchRole} />

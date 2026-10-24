@@ -52,12 +52,24 @@ export interface BudgetSummary {
   unassigned_bookings: { id: string; vendor_name: string; title: string; total: number; paid: number; status: string }[];
 }
 
+/** A vendor as teams show them: business name, photo and their main category. */
+export interface TeamVendor {
+  id: string;
+  name: string;
+  avatar_url?: string | null;
+  category?: string | null;
+}
+
 export interface VendorTeam {
   id: string;
   name: string;
   vendor_ids: string[];
-  vendors: { id: string; name: string }[];
+  /** the vendors still available (left, suspended or blocked ones aren't listed) */
+  vendors: TeamVendor[];
 }
+
+/** Most vendors one team can hold (the API refuses more). */
+export const MAX_TEAM_SIZE = 50;
 
 type Res<T> = { success: boolean; data: T };
 
@@ -84,6 +96,8 @@ export const EventToolsService = {
   teams: () => api.get<Res<VendorTeam[]>>('/vendor-teams'),
   saveTeam: (body: { name: string; vendor_ids: string[] }, id?: string) => (id ? api.patch(`/vendor-teams/${id}`, body) : api.post('/vendor-teams', body)),
   deleteTeam: (id: string) => api.delete(`/vendor-teams/${id}`),
+  /** Any active vendor by name or category (at least 2 letters), booked before or not. */
+  searchTeamVendors: (q: string) => api.get<Res<TeamVendor[]>>('/vendor-teams/vendors', { params: { q } }),
   inviteTeam: (eventId: string, teamId: string, note?: string) => api.post<Res<{ invited: number }>>(`/events/${eventId}/invite-team`, { team_id: teamId, note }),
 };
 

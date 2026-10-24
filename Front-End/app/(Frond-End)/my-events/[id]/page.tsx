@@ -77,7 +77,12 @@ export default function SharedEventPage() {
           <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-300">
             {ev.date && <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-primary" />{dayjs(ev.date).format("dddd D MMMM YYYY")}</span>}
             {ev.venue && <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-primary" />{ev.venue}</span>}
-            {ev.planner && <span className="flex items-center gap-1.5"><User className="w-4 h-4 text-primary" />Planned by {ev.planner.name}</span>}
+            {ev.planner && (
+              <span className="flex items-center gap-1.5">
+                <User className="w-4 h-4 text-primary" />
+                Planned by <Link href={`/event-planner/${ev.planner.id}`} className="text-primary hover:underline">{ev.planner.name}</Link>
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {ev.role === "vendor" ? "You’re booked for this event. Items marked for you are highlighted; tick them off on the day." : "Your planner shared this event with you. You can follow along; changes go through your planner."}

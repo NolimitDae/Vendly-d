@@ -67,7 +67,11 @@ export default function EventShared() {
         <Card style={{ gap: 8 }}>
           {!!ev.date && <Row icon="calendar-outline" text={format(parseISO(ev.date), 'EEEE d MMMM yyyy')} />}
           {!!ev.venue && <Row icon="location-outline" text={ev.venue} />}
-          {!!ev.planner && <Row icon="person-outline" text={`Planned by ${ev.planner.name}`} />}
+          {!!ev.planner && (
+            <Pressable onPress={() => nav.navigate('PlannerPublic', { userId: ev.planner!.id })} accessibilityRole="link" accessibilityHint="Opens the planner's profile">
+              <Row icon="person-outline" text={`Planned by ${ev.planner.name}`} trailing />
+            </Pressable>
+          )}
           <Text style={s.muted}>{roleNote}</Text>
           {ev.role === 'vendor' && (
             <Pressable style={s.chatBtn} onPress={openChat} accessibilityRole="button">
@@ -108,11 +112,12 @@ export default function EventShared() {
   );
 }
 
-function Row({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+function Row({ icon, text, trailing }: { icon: keyof typeof Ionicons.glyphMap; text: string; trailing?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <Ionicons name={icon} size={18} color={DARK.accent} />
-      <Text style={s.body}>{text}</Text>
+      <Text style={[s.body, trailing && { flex: 1 }]}>{text}</Text>
+      {trailing && <Ionicons name="chevron-forward" size={16} color={DARK.muted} />}
     </View>
   );
 }
