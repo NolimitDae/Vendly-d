@@ -289,10 +289,18 @@ export default function BookingDetail() {
 
           {st === 'COMPLETED' && (
             <Card style={{ alignItems: 'center', gap: 12, borderWidth: 1, borderColor: DARK.field }}>
-              {reviewed ? (
+              {/* one review per booking: once it's there (now or earlier), no form */}
+              {reviewed || booking.review ? (
                 <>
                   <Ionicons name="heart" size={32} color={DARK.accent} />
                   <Text style={s.h2}>Thanks for your review!</Text>
+                  {!!booking.review?.rating && (
+                    <View style={{ flexDirection: 'row', gap: 4 }} accessibilityLabel={`You rated it ${booking.review.rating} out of 5`}>
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <Ionicons key={i} name="star" size={18} color={i <= booking.review!.rating ? '#F28C28' : DARK.field} />
+                      ))}
+                    </View>
+                  )}
                 </>
               ) : (
                 <>

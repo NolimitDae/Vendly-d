@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { PushService } from './push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { LIVE_NOTIFIER } from 'src/modules/application/notification/live-notifier';
 
 const mockPrisma = {
   user: { findUnique: jest.fn(), update: jest.fn() },
@@ -69,6 +70,22 @@ describe('PushService', () => {
     await service.sendToUser('u1', { title: 't', body: 'b' });
 
     expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { push_token: null } });
+  });
+
+  it("updates the user's open bells live with the new inbox item", async () => {
+    const gateway = { notifyUser: jest.fn().mockResolvedValue(undefined) };
+    const module = await Test.createTestingModule({
+      providers: [PushService, { provide: PrismaService, useValue: mockPrisma }, { provide: LIVE_NOTIFIER, useValue: gateway }],
+    }).compile();
+    const live = module.get(PushService);
+    mockPrisma.notification.create.mockResolvedValueOnce({ id: 'n1', receiver_id: 'u1', entity_id: 'b1', read_at: null });
+    mockPrisma.user.findUnique.mockResolvedValue({ push_token: null });
+
+    await live.sendToUser('u1', { title: 'Booking confirmed', body: 'See you there', data: { type: 'booking', bookingId: 'b1' } });
+
+    expect(gateway.notifyUser).toHaveBeenCalledWith('u1', {
+      notification: expect.objectContaining({ id: 'n1', read_at: null, notification_event: { id: 'ev1' }, sender: null }),
+    });
   });
 
   it('never throws when the network fails', async () => {

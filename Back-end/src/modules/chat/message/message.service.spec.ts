@@ -197,6 +197,19 @@ describe('MessageService', () => {
       );
     });
 
+    it('returns the newest page first, oldest first within the page', async () => {
+      mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+      // the database answers newest first
+      mockPrisma.$transaction.mockResolvedValue([3, [makeMessage({ id: 'msg-3' }), makeMessage({ id: 'msg-2' })]]);
+
+      const result: any = await service.findAll('conv-1', 'user-1', { page: 1, perPage: 2 });
+
+      expect(mockPrisma.message.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: 0, take: 2 }),
+      );
+      expect(result.data.map((m: any) => m.id)).toEqual(['msg-2', 'msg-3']);
+    });
+
     it('tells a 1:1 chat who has blocked whom', async () => {
       mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
       mockPrisma.$transaction.mockResolvedValue([1, [makeMessage()]]);

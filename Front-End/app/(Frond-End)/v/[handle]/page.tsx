@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import VendorShop from "@/components/marketplace/VendorShop";
 import { AppConfig } from "@/config/app.config";
 
-type Props = { params: { handle: string } };
+// Next 16: route params arrive as a Promise.
+type Props = { params: Promise<{ handle: string }> };
 
 /** Link previews (iMessage, WhatsApp, socials) show the shop's name, about text and banner. */
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
-    const res = await fetch(`${AppConfig().app.apiUrl}/marketplace/vendors/${encodeURIComponent(params.handle)}`, {
+    const { handle } = await params;
+    const res = await fetch(`${AppConfig().app.apiUrl}/marketplace/vendors/${encodeURIComponent(handle)}`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return { title: "Shop not found" };
@@ -26,6 +28,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 /** A vendor's shareable shop link: vendlymarketplace.com/v/<handle>. */
-export default function ShopPage({ params }: Props) {
-  return <VendorShop idOrHandle={params.handle} />;
+export default async function ShopPage({ params }: Props) {
+  const { handle } = await params;
+  return <VendorShop idOrHandle={handle} />;
 }

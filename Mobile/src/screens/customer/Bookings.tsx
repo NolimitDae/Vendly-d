@@ -138,7 +138,7 @@ export default function CustomerBookings() {
                 )}
                 <Pressable style={{ flex: 1 }} onPress={() => nav.navigate('BookingDetail', { bookingId: item.id })} accessibilityRole="button">
                   <BrandGradient style={s.primary}>
-                    <Text style={s.primaryText}>{item.status === 'CONFIRMED' && !item.paid_at ? 'Pay now' : item.status === 'COMPLETED' ? 'View & review' : 'View Details'}</Text>
+                    <Text style={s.primaryText}>{item.status === 'CONFIRMED' && !item.paid_at && !item.payment_plan ? 'Pay now' : item.status === 'COMPLETED' ? 'View & review' : 'View Details'}</Text>
                   </BrandGradient>
                 </Pressable>
               </View>
@@ -151,9 +151,11 @@ export default function CustomerBookings() {
 }
 
 function StatusPill({ booking }: { booking: Booking }) {
+  // A booking on a payment plan is paid in instalments, so it is never "payment due" as a whole.
+  const due = !booking.paid_at && !booking.payment_plan;
   const map: Record<BookingStatus, { label: string; color: string }> = {
     PENDING: { label: 'Awaiting vendor', color: '#fcd34d' },
-    CONFIRMED: { label: booking.paid_at ? 'Confirmed' : 'Payment due', color: booking.paid_at ? '#6ee7c7' : '#fcd34d' },
+    CONFIRMED: { label: due ? 'Payment due' : 'Confirmed', color: due ? '#fcd34d' : '#6ee7c7' },
     IN_PROGRESS: { label: 'In progress', color: DARK.accent },
     COMPLETED: { label: 'Completed', color: '#6ee7c7' },
     CANCELLED: { label: 'Cancelled', color: DARK.muted },

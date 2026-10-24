@@ -14,6 +14,7 @@ jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
     createOnboardingAccountLink: jest.fn(),
     createTransfer: jest.fn(),
     checkBalance: jest.fn(),
+    retrieveAccount: jest.fn(),
   },
 }));
 
@@ -122,11 +123,12 @@ describe('WithdrawService', () => {
 
   describe('createOnboardingLink', () => {
     it('should return an onboarding URL for a valid account id', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_connect_123' });
       (StripePayment.createOnboardingAccountLink as jest.Mock).mockResolvedValue({
         url: 'https://connect.stripe.com/onboard/acct_123',
       });
 
-      const result = await service.createOnboardingLink('acct_connect_123');
+      const result = await service.createOnboardingLink('acct_connect_123', 'user-1');
 
       expect(result.success).toBe(true);
       expect(result.data.url).toBe('https://connect.stripe.com/onboard/acct_123');
@@ -136,13 +138,23 @@ describe('WithdrawService', () => {
     });
 
     it('should throw HttpException when Stripe onboarding call fails', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_bad' });
       (StripePayment.createOnboardingAccountLink as jest.Mock).mockRejectedValue(
         new Error('Stripe error'),
       );
 
       await expect(
-        service.createOnboardingLink('acct_bad'),
+        service.createOnboardingLink('acct_bad', 'user-1'),
       ).rejects.toThrow(HttpException);
+    });
+
+    it("should refuse a link for someone else's payout account", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_mine' });
+
+      await expect(
+        service.createOnboardingLink('acct_someone_else', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(StripePayment.createOnboardingAccountLink).not.toHaveBeenCalled();
     });
   });
 
@@ -368,6 +380,26 @@ describe('WithdrawService', () => {
           select: { stripe_connect_id: true, email: true, name: true },
         }),
       );
+    });
+
+    it("should include Stripe's setup status for a connected account", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_connect_123', email: 'jane@test.com', name: 'Jane Doe' });
+      (StripePayment.retrieveAccount as jest.Mock).mockResolvedValue({ payouts_enabled: false, details_submitted: true, charges_enabled: false });
+
+      const result: any = await service.getConnectedAccountInfo('user-1');
+
+      expect(result.data).toEqual(expect.objectContaining({ accountId: 'acct_connect_123', payouts_enabled: false, details_submitted: true }));
+    });
+
+    it('should still answer when Stripe cannot be reached', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_connect_123', email: 'jane@test.com', name: 'Jane Doe' });
+      (StripePayment.retrieveAccount as jest.Mock).mockRejectedValue(new Error('down'));
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const result: any = await service.getConnectedAccountInfo('user-1');
+
+      expect(result.data.hasConnectedAccount).toBe(true);
+      expect(result.data.payouts_enabled).toBeUndefined();
     });
 
     it('should return hasConnectedAccount false when stripe_connect_id is null', async () => {

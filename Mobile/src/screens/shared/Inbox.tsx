@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,8 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { useOnboarding } from '../../context/OnboardingContext';
 import OnboardingChecklist from '../../components/OnboardingChecklist';
+import { notificationTarget } from '../../navigation/notificationTarget';
+import { SocketService } from '../../services/socket.service';
 
 interface Item {
   id: string;
@@ -21,6 +23,7 @@ interface Item {
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   booking: 'calendar-outline',
+  contract: 'document-text-outline',
   chat: 'chatbubble-ellipses-outline',
   event: 'sparkles-outline',
   payment: 'card-outline',
@@ -49,23 +52,27 @@ export default function Inbox() {
 
   useFocusEffect(useCallback(() => { load(); void onboarding.refresh(); }, [load, onboarding.refresh]));
 
+  // new ones arrive live while the inbox is open
+  useEffect(() => {
+    const onNew = (d: { notification?: Item }) => {
+      const n = d?.notification;
+      if (!n?.id) return;
+      setItems((prev) => (prev?.some((x) => x.id === n.id) ? prev : [n, ...(prev ?? [])]));
+    };
+    void SocketService.on('receiveNotification', onNew);
+    return () => SocketService.off('receiveNotification', onNew);
+  }, []);
+
   const open = (n: Item) => {
     if (!n.read_at) {
       api.post(`/notifications/${n.id}/read`).catch(() => {});
       setItems((prev) => prev?.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)) ?? prev);
     }
     const type = n.notification_event?.type;
-    const id = n.entity_id;
-    if (!id) return;
-    if (type === 'booking') {
-      nav.navigate('BookingsTab', { screen: user?.type === 'VENDOR' ? 'VendorBookingDetail' : 'BookingDetail', initial: false, params: { bookingId: id } });
-    } else if (type === 'chat') {
-      nav.navigate('MessagesTab', { screen: 'ChatDetail', initial: false, params: { conversationId: id, participantName: 'Conversation' } });
-    } else if (type === 'event') {
-      if (user?.type === 'EVENT_PLANNER') nav.navigate('HomeTab', { screen: 'EventDetail', initial: false, params: { eventId: id, eventName: '' } });
-      else if (user?.type === 'VENDOR') nav.navigate('BookingsTab', { screen: 'EventShared', initial: false, params: { eventId: id } });
-      else nav.navigate('ProfileTab', { screen: 'EventShared', initial: false, params: { eventId: id } });
-    }
+    // an ID check result keeps no status in the inbox: the rejection's wording tells them apart
+    const status = type === 'identity' && /couldn.t verify/i.test(n.notification_event?.text ?? '') ? 'REJECTED' : undefined;
+    const to = notificationTarget({ type, id: n.entity_id, status }, user?.type);
+    if (to) nav.navigate(to.tab, { screen: to.screen, initial: false, params: to.params });
   };
 
   const readAll = async () => {

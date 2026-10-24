@@ -139,10 +139,22 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
       setSent(true);
       haptic.success();
     } catch (err: any) {
-      if (err?.response?.status === 409) {
+      const status = err?.response?.status;
+      const code = err?.response?.data?.error;
+      if (status === 409 && code === 'CONTRACT_CHANGED') {
         Alert.alert('Contract updated', 'The vendor changed the contract. Please review it again.');
         setSigning(false);
         await loadPreview();
+      } else if (status === 409 && /already sent/i.test(apiError(err))) {
+        // the first try went through (e.g. its answer was lost): signing again would send a second request
+        setSigning(false);
+        setSent(true);
+      } else if (code === 'DATE_UNAVAILABLE' || code === 'OUTSIDE_WORKING_HOURS') {
+        setSigning(false);
+        Alert.alert(code === 'DATE_UNAVAILABLE' ? 'Date not available' : 'Outside the vendor’s hours', apiError(err), [
+          { text: 'Pick another time', onPress: () => navigation.goBack() },
+          { text: 'OK', style: 'cancel' },
+        ]);
       } else {
         Alert.alert('Could not send the request', apiError(err));
       }

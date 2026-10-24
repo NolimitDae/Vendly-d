@@ -76,14 +76,21 @@ const inputCls =
 /** Combines a date (YYYY-MM-DD) and time (HH:mm) in the browser's time zone into an ISO string. */
 const money = (n: number | string) => "$" + Number(n).toFixed(2);
 
-function toIso(date: string, time?: string) {
-  if (!date) return undefined;
-  // a vendor open until midnight: 24:00 is 00:00 the next day
-  if (time === "24:00") return new Date(new Date(`${date}T00:00`).getTime() + 86400e3).toISOString();
-  return new Date(`${date}T${time || "00:00"}`).toISOString();
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** The next calendar day (YYYY-MM-DD). A calendar day, not 24 hours: clocks-change days are 23 or 25 hours long. */
+export function nextDay(date: string) {
+  const d = new Date(`${date}T00:00`);
+  d.setDate(d.getDate() + 1);
+  return ymd(d);
 }
 
-const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+export function toIso(date: string, time?: string) {
+  if (!date) return undefined;
+  // a vendor open until midnight: 24:00 is 00:00 the next day
+  if (time === "24:00") return new Date(`${nextDay(date)}T00:00`).toISOString();
+  return new Date(`${date}T${time || "00:00"}`).toISOString();
+}
 
 export default function BookingModal({ listing, eventId, quote, onClose, onBookingCreated }: Props) {
   const [step, setStep] = useState<Step>("details");
@@ -164,10 +171,9 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
       .map((a) => (a.price_unit === "PER_ITEM" ? { add_on_id: a.id, quantity: picked[a.id] } : { add_on_id: a.id }));
 
   const fields = () => {
-    const end = endTime ? toIso(date, endTime) : undefined;
-    // an end time earlier than the start means the event runs past midnight
-    const endFixed =
-      end && startTime && endTime < startTime ? new Date(new Date(end).getTime() + 86400e3).toISOString() : end;
+    // an end time earlier than the start means the event runs past midnight: it ends the next day
+    const pastMidnight = !!endTime && !!startTime && endTime < startTime;
+    const endFixed = endTime ? toIso(pastMidnight ? nextDay(date) : date, endTime) : undefined;
     return {
       listing_id: listing.id,
       vendor_id: listing.vendor!.id,
@@ -239,9 +245,19 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
       onBookingCreated?.(id);
       setStep("sent");
     } catch (err: any) {
-      if (err?.response?.status === 409) {
+      const status = err?.response?.status;
+      const code = err?.response?.data?.error;
+      if (status === 409 && code === "CONTRACT_CHANGED") {
         toast.info("The contract was updated. Please review it again.");
         await loadContract();
+      } else if (status === 409 && /already sent/i.test(apiError(err, ""))) {
+        // the first try went through (e.g. its answer was lost): signing again would send a second request
+        setStep("sent");
+      } else if (code === "DATE_UNAVAILABLE" || code === "OUTSIDE_WORKING_HOURS") {
+        // the date or time no longer works: back to the details to pick another
+        toast.error(apiError(err, "Please pick another time."));
+        setPreview(null);
+        setStep("details");
       } else {
         toast.error(apiError(err, "Failed to send the booking request"));
       }

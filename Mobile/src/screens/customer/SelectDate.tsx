@@ -4,13 +4,14 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { addDays, addMonths, format, getDay, isBefore, isSameDay, isSameMonth, startOfDay, startOfMonth, parseISO } from 'date-fns';
+import { addDays, addMonths, format, getDay, isBefore, isSameDay, isSameMonth, startOfDay, startOfMonth } from 'date-fns';
 import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { MarketplaceService } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { isOpenDay, summariseHours, withZone, type WorkingHours } from '../../utils/workingHours';
 import { firstBookableDay, noticeLabel } from '../../utils/packageDetails';
+import { dateOnly } from '../../utils/dateOnly';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const BOOKED = '#F7B1B8';
@@ -31,7 +32,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
   useEffect(() => {
     MarketplaceService.getBlockedDates(listing.id)
       .then((r) => {
-        setBlocked((r.data?.data ?? []).map((b) => ({ start: startOfDay(parseISO(b.start_date)), end: startOfDay(parseISO(b.end_date)), reason: b.reason })));
+        setBlocked((r.data?.data ?? []).map((b) => ({ start: dateOnly(b.start_date), end: dateOnly(b.end_date), reason: b.reason })));
         setHours(r.data?.working_hours ?? null);
       })
       .catch(() => {});

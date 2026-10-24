@@ -217,8 +217,8 @@ export class SubscriptionsService {
         );
       }
 
-      const successUrl = `${appConfig().app.client_app_url}/dashboard/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${appConfig().app.client_app_url}/dashboard/subscription?canceled=true`;
+      const successUrl = `${appConfig().app.client_app_url}/vendor/subscription?success=true&session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${appConfig().app.client_app_url}/vendor/subscription?canceled=true`;
 
       const session = await Stripe.checkout.sessions.create({
         mode: 'subscription',

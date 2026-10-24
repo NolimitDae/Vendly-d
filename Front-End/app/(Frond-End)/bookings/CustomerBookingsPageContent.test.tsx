@@ -154,6 +154,13 @@ describe('CustomerBookingsPageContent', () => {
       });
     });
 
+    it('does not offer Pay Now for a booking paid by payment plan (its payments are on the booking)', async () => {
+      setupSuccess([makeBooking({ status: 'CONFIRMED', paid_at: null, payment_plan: 'DEPOSIT_50' })]);
+      render(<CustomerBookingsPageContent />);
+      await waitFor(() => expect(screen.getByText('Wedding Photography')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument();
+    });
+
     it('shows Paid instead of Pay Now after payment', async () => {
       setupSuccess([makeBooking({ status: 'CONFIRMED', paid_at: '2030-01-01T00:00:00Z' })]);
       render(<CustomerBookingsPageContent />);

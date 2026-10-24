@@ -64,11 +64,16 @@ export class WithdrawService {
   }
 
   // Stripe Connect Onboarding Link
-  async createOnboardingLink(accountId: string): Promise<{
+  async createOnboardingLink(accountId: string, userId: string): Promise<{
     success: boolean;
     message: string;
     data: { url: string };
   }> {
+    // An onboarding link can change where payouts go, so only the account's owner may get one.
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { stripe_connect_id: true } });
+    if (!owner?.stripe_connect_id || owner.stripe_connect_id !== accountId) {
+      throw new NotFoundException('Payout account not found');
+    }
     try {
       const accountLink = await StripePayment.createOnboardingAccountLink(accountId);
       return {
@@ -281,6 +286,22 @@ export class WithdrawService {
       throw new NotFoundException('User not found');
     }
 
+    // Whether Stripe's setup is finished, so the apps don't treat a half-done account as ready.
+    // Left out when Stripe can't be reached; the apps then fall back to "has an account".
+    let status: { payouts_enabled?: boolean; details_submitted?: boolean; charges_enabled?: boolean } = {};
+    if (user.stripe_connect_id) {
+      try {
+        const account = await StripePayment.retrieveAccount(user.stripe_connect_id);
+        status = {
+          payouts_enabled: !!account.payouts_enabled,
+          details_submitted: !!account.details_submitted,
+          charges_enabled: !!account.charges_enabled,
+        };
+      } catch (error) {
+        console.error('Connected account lookup error:', error);
+      }
+    }
+
     return {
       success: true,
       message: 'Connected account info retrieved successfully',
@@ -289,6 +310,7 @@ export class WithdrawService {
         accountId: user.stripe_connect_id,
         email: user.email,
         name: user.name,
+        ...status,
       },
     };
   }

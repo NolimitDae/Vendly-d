@@ -47,3 +47,41 @@ export function tooSoonMessage(minNoticeHours: number | null | undefined, start:
   if (new Date(start).getTime() >= earliest) return null;
   return `This package needs to be booked at least ${noticeLabel(minNoticeHours)} ahead. Please pick a later date.`;
 }
+
+/** A package can have up to this many photos. */
+export const MAX_LISTING_PHOTOS = 10;
+
+/**
+ * Reads `keep_images` (the existing photos the vendor kept, a JSON array in multipart forms).
+ * undefined means "not sent": older apps, where new photos replace all the old ones.
+ */
+export function readKeepImages(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    if (value.trim() === '') return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [value];
+    } catch {
+      return [value];
+    }
+  }
+  return [value as string];
+}
+
+/**
+ * The listing's stored photo names the vendor kept, in their order. The apps send back the photo URLs
+ * (or names) they were given; anything that isn't one of this listing's photos is ignored.
+ */
+export function keptImageNames(current: string[], keep: string[]): string[] {
+  const names = keep.map((k) => {
+    const last = String(k).split(/[?#]/)[0].split('/').pop() ?? '';
+    try {
+      return decodeURIComponent(last);
+    } catch {
+      return last;
+    }
+  });
+  return [...new Set(names)].filter((n) => current.includes(n));
+}
