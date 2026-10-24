@@ -107,7 +107,13 @@ async function bootstrap() {
     },
   });
 
-  // swagger
+  // swagger: off in production (it maps every route for anyone) unless API_DOCS=on
+  if (process.env.NODE_ENV !== 'production' || process.env.API_DOCS === 'on') setUpDocs(app);
+
+  await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
+}
+
+function setUpDocs(app: NestExpressApplication) {
   const options = new DocumentBuilder()
     .setTitle(`${process.env.APP_NAME} api`)
     .setDescription(`${process.env.APP_NAME} api docs`)
@@ -149,7 +155,5 @@ async function bootstrap() {
       persistAuthorization: true,
     },
   });
-
-  await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
 }
 bootstrap();
