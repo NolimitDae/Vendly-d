@@ -403,5 +403,15 @@ describe('AuthService', () => {
 
       await expect(service.validateUser('nobody@test.com', 'any')).rejects.toThrow(UnauthorizedException);
     });
+
+    it('gives the same answer for an unknown email and a wrong password', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      const unknown = await service.validateUser('nobody@test.com', 'any').catch((e) => e.message);
+      mockPrisma.user.findFirst.mockResolvedValue(verified);
+      mockUserRepo.validatePassword.mockResolvedValue(false);
+      const wrong = await service.validateUser('jane@test.com', 'wrong').catch((e) => e.message);
+      expect(unknown).toBe('Email or password is incorrect');
+      expect(wrong).toBe(unknown);
+    });
   });
 });

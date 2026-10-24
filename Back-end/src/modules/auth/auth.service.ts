@@ -3,6 +3,7 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import Redis from 'ioredis';
 
 //internal imports
@@ -36,6 +37,11 @@ export function heldRoles(user: { type?: string | null; roles?: string[] | null 
   }
   return SWITCHABLE_ROLES.filter((r) => held.has(r));
 }
+
+/** Sign-in with an unknown email or a wrong password gets the same answer. */
+export const WRONG_LOGIN = 'Email or password is incorrect';
+/** A bcrypt hash of nothing in particular: compared against for unknown emails so both cases take as long. */
+const DUMMY_HASH = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8.AnjT4M0nOhUvYbRKrYFnAoK9nzMa';
 
 /** How long a refresh token lives in Redis (matches JWT_REFRESH_EXPIRY's default of 7 days). */
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -1073,18 +1079,12 @@ export class AuthService {
         }
         return result;
       } else {
-        throw new UnauthorizedException('Password not matched');
-        // return {
-        //   success: false,
-        //   message: 'Password not matched',
-        // };
+        throw new UnauthorizedException(WRONG_LOGIN);
       }
     } else {
-      throw new UnauthorizedException('Email not found');
-      // return {
-      //   success: false,
-      //   message: 'Email not found',
-      // };
+      // same answer and about the same time as a wrong password, so sign-in can't reveal who has an account
+      await bcrypt.compare(_password ?? '', DUMMY_HASH).catch(() => false);
+      throw new UnauthorizedException(WRONG_LOGIN);
     }
   }
 
