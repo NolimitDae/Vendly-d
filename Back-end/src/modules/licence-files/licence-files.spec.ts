@@ -306,7 +306,8 @@ describe('start-up move', () => {
     const { service, prisma } = setup();
     const move = jest.spyOn(service, 'moveLegacy').mockResolvedValue({ rows: 0, moved: 0, failed: 0 });
     let locked = false;
-    prisma.$transaction = jest.fn(async (fn: any) => fn({ $queryRaw: async () => [{ locked }] }));
+    const client = { query: jest.fn(async () => ({ rows: [{ locked }] })), release: jest.fn() };
+    prisma.lockPool = { connect: jest.fn(async () => client) };
     await service.runLegacyMove();
     expect(move).not.toHaveBeenCalled();
     locked = true;
@@ -316,9 +317,9 @@ describe('start-up move', () => {
 
   it('never throws when the move fails', async () => {
     const { service, prisma } = setup();
-    prisma.$transaction = jest.fn(async () => {
-      throw new Error('db down');
-    });
+    prisma.lockPool = {
+      connect: jest.fn(async () => ({ query: jest.fn().mockRejectedValue(new Error('db down')), release: jest.fn() })),
+    };
     await expect(service.runLegacyMove()).resolves.toBeUndefined();
   });
 });

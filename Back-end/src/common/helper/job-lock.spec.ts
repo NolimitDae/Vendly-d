@@ -1,20 +1,53 @@
 import { withBookingLock, withJobLock } from './job-lock';
 
-const prismaWith = (locked: boolean) =>
-  ({
-    $transaction: (fn: any) => fn({ $queryRaw: async () => [{ locked }] }),
-  }) as any;
+const prismaWith = (locked: boolean, opts: { unlockFails?: boolean; connectFails?: boolean } = {}) => {
+  const query = jest.fn(async (sql: string) => {
+    if (sql.includes('pg_advisory_unlock') && opts.unlockFails) throw new Error('gone');
+    return { rows: [{ locked }] };
+  });
+  const client = { query, release: jest.fn() };
+  const connect = jest.fn(async () => {
+    if (opts.connectFails) throw new Error('timeout exceeded when trying to connect');
+    return client;
+  });
+  return { prisma: { lockPool: { connect } } as any, client };
+};
 
 describe('withJobLock', () => {
-  it('runs the job when it gets the lock', async () => {
+  it('runs the job on the lock pool, then unlocks and hands the connection back', async () => {
+    const { prisma, client } = prismaWith(true);
     const job = jest.fn().mockResolvedValue(3);
-    await expect(withJobLock(prismaWith(true), 'x', job)).resolves.toBe(3);
+    await expect(withJobLock(prisma, 'x', job)).resolves.toBe(3);
     expect(job).toHaveBeenCalledTimes(1);
+    expect(client.query).toHaveBeenLastCalledWith('SELECT pg_advisory_unlock($1)', [expect.any(String)]);
+    expect(client.release).toHaveBeenCalledWith(false);
   });
 
   it('skips the job when another server holds the lock', async () => {
+    const { prisma, client } = prismaWith(false);
     const job = jest.fn();
-    await expect(withJobLock(prismaWith(false), 'x', job)).resolves.toBeUndefined();
+    await expect(withJobLock(prisma, 'x', job)).resolves.toBeUndefined();
+    expect(job).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalledWith(false);
+  });
+
+  it('unlocks even when the job fails', async () => {
+    const { prisma, client } = prismaWith(true);
+    await expect(withJobLock(prisma, 'x', () => Promise.reject(new Error('stripe down')))).rejects.toThrow('stripe down');
+    expect(client.query).toHaveBeenLastCalledWith('SELECT pg_advisory_unlock($1)', [expect.any(String)]);
+    expect(client.release).toHaveBeenCalledWith(false);
+  });
+
+  it('throws away a connection that could not unlock, so its lock is dropped', async () => {
+    const { prisma, client } = prismaWith(true, { unlockFails: true });
+    await expect(withJobLock(prisma, 'x', async () => 1)).resolves.toBe(1);
+    expect(client.release).toHaveBeenCalledWith(true);
+  });
+
+  it('skips the run when no lock connection is free', async () => {
+    const { prisma } = prismaWith(true, { connectFails: true });
+    const job = jest.fn();
+    await expect(withJobLock(prisma, 'x', job)).resolves.toBeUndefined();
     expect(job).not.toHaveBeenCalled();
   });
 });
