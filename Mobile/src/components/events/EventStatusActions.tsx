@@ -111,10 +111,16 @@ export function EventCompletedBanner({
   completedAt,
   bookings,
   onOpenBooking,
+  onRateVendors,
+  toRate = 0,
 }: {
   completedAt?: string;
   bookings: EventBooking[];
   onOpenBooking: (bookingId: string) => void;
+  /** with it, one "Rate your vendors" button opens the event's rating screen instead of a row per booking */
+  onRateVendors?: () => void;
+  /** completed bookings not rated yet (the badge) */
+  toRate?: number;
 }) {
   const finished = bookings.filter((eb) => eb.booking.status === 'COMPLETED');
   return (
@@ -123,7 +129,26 @@ export function EventCompletedBanner({
         <Ionicons name="checkmark-circle" size={26} color="#6ee7c7" />
         <Text style={s.doneTitle}>{completedAt ? `Completed on ${format(new Date(completedAt), 'MMM d, yyyy')}` : 'Completed'}</Text>
       </View>
-      {finished.length > 0 ? (
+      {finished.length > 0 && onRateVendors ? (
+        <>
+          <Text style={s.doneBody}>How did your vendors do? Rate them all in one place.</Text>
+          <Pressable
+            onPress={onRateVendors}
+            style={({ pressed }) => [s.bookingRow, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel={toRate > 0 ? `Rate your vendors, ${toRate} to rate` : 'Rate your vendors'}
+          >
+            <Ionicons name="star-outline" size={18} color="#fcd34d" />
+            <Text style={s.bookingText} numberOfLines={1}>Rate your vendors</Text>
+            {toRate > 0 && (
+              <View style={s.countBadge}>
+                <Text style={s.countText}>{toRate}</Text>
+              </View>
+            )}
+            <Ionicons name="chevron-forward" size={18} color={DARK.muted} />
+          </Pressable>
+        </>
+      ) : finished.length > 0 ? (
         <>
           <Text style={s.doneBody}>How did your vendors do? Open a booking to leave a review.</Text>
           {finished.map((eb) => (
@@ -174,4 +199,6 @@ const s = StyleSheet.create({
   doneBody: { color: DARK.muted, fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular },
   bookingRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, borderRadius: 14, backgroundColor: DARK.field },
   bookingText: { flex: 1, color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
+  countBadge: { minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 11, backgroundColor: '#fcd34d', alignItems: 'center', justifyContent: 'center' },
+  countText: { color: '#1f2937', fontSize: 12, fontFamily: FONTS.bold },
 });

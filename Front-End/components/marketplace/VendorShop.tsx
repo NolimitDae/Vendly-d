@@ -7,6 +7,7 @@ import { ArrowLeft, Star, Package, Loader2, Link2, Store } from "lucide-react";
 import { toast } from "react-toastify";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import ReviewList from "@/components/marketplace/ReviewList";
+import { AddToTeamButton } from "@/components/events/VendorTeams";
 
 export interface VendorShopData {
   id: string;
@@ -135,6 +136,8 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
                   <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">{vendor.name}</p>
                 )}
               </div>
+
+              <AddToTeamButton vendor={{ id: vendor.id, name: displayName, avatar_url: mark ?? null, category: listings[0]?.category?.name ?? null }} />
 
               {vendor.handle && (
                 <button

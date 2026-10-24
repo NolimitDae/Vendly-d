@@ -26,6 +26,7 @@ import { searchParamsFor } from '../../services/planning.service';
 import EventStatusActions, { EventCancelledBanner, EventCompletedBanner, isEventReadOnly } from '../../components/events/EventStatusActions';
 import { EventToolsService, type TimelineItem } from '../../services/eventTools.service';
 import { ChatService } from '../../services/chat.service';
+import { ReviewService } from '../../services/review.service';
 import { apiError } from '../../services/contracts.service';
 import {
   EventsService,
@@ -66,12 +67,17 @@ export default function EventDetail() {
   const [tab, setTab] = useState<Tab>('overview');
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [budgetKey, setBudgetKey] = useState(0);
+  // completed bookings still waiting for a rating (the "Rate your vendors" badge)
+  const [toRate, setToRate] = useState(0);
 
   const load = useCallback(async () => {
     try {
       const [res, tl] = await Promise.all([EventsService.findOne(eventId), EventToolsService.timeline(eventId).catch(() => null)]);
       if (res.data?.success) setEvent(res.data.data);
       if (tl?.data?.success) setTimeline(tl.data.data);
+      if (res.data?.data?.status === 'COMPLETED') {
+        ReviewService.forEvent(eventId).then((r) => setToRate(r.data.data.to_rate)).catch(() => {});
+      }
       setBudgetKey((k) => k + 1);
     } catch {
       Alert.alert('Error', 'Failed to load event');
@@ -163,6 +169,8 @@ export default function EventDetail() {
                 completedAt={event.completed_at ?? undefined}
                 bookings={event.bookings}
                 onOpenBooking={(bookingId) => navigation.navigate('BookingsTab' as any, { screen: 'BookingDetail', initial: false, params: { bookingId } } as any)}
+                onRateVendors={() => navigation.navigate('RateVendors', { eventId: event.id, eventName: event.name })}
+                toRate={toRate}
               />
             )}
             {readOnly && <EventCancelledBanner cancelledAt={event.cancelled_at} />}

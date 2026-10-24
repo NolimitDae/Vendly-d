@@ -222,3 +222,48 @@ describe('EventsService on a cancelled event (read-only)', () => {
     await expect(service.addTask('evt-1', 'planner-1', { title: 'Thank-you cards' } as any)).resolves.toEqual({ success: true, data: { id: 't2' } });
   });
 });
+
+describe('EventsService.vendorReviews (rate your vendors)', () => {
+  const prisma = {
+    event: { findUnique: jest.fn() },
+    eventBooking: { findMany: jest.fn() },
+  };
+  const service = new EventsService(prisma as any);
+  const link = (id: string, review: unknown = null, over: Record<string, unknown> = {}) => ({
+    booking: {
+      id,
+      completed_at: new Date('2026-11-15'),
+      listing: { id: `l-${id}`, title: 'Wedding buffet', images: [], category: { name: 'Catering' } },
+      vendor: { id: `v-${id}`, name: 'Bella', avatar: null, vendorProfile: { business_name: "Bella's Catering" } },
+      review,
+      ...over,
+    },
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.event.findUnique.mockResolvedValue({ id: 'evt-1', name: 'Okafor wedding', event_planner_id: 'planner-1', status: 'COMPLETED' });
+  });
+
+  it("lists the planner's completed bookings on the event, rated or not, with how many are left", async () => {
+    prisma.eventBooking.findMany.mockResolvedValue([link('b1', { id: 'r1', rating: 5, comment: 'Lovely', created_at: new Date() }), link('b2'), link('b3', null, { listing: null })]);
+    const res = await service.vendorReviews('evt-1', 'planner-1');
+
+    expect(res.data.event).toEqual({ id: 'evt-1', name: 'Okafor wedding', status: 'COMPLETED' });
+    expect(res.data.to_rate).toBe(2);
+    expect(res.data.items.map((i) => i.booking_id)).toEqual(['b1', 'b2', 'b3']);
+    expect(res.data.items[0]).toMatchObject({ vendor: { id: 'v-b1', name: "Bella's Catering", avatar_url: null }, listing: { title: 'Wedding buffet', category: 'Catering', image: null }, review: { rating: 5 } });
+    expect(res.data.items[2].listing).toBeNull();
+    // only bookings the planner made, that are completed (the review rules)
+    expect(prisma.eventBooking.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { event_id: 'evt-1', booking: { customer_id: 'planner-1', status: 'COMPLETED', deleted_at: null } } }),
+    );
+  });
+
+  it("keeps other people's events private", async () => {
+    await expect(service.vendorReviews('evt-1', 'someone-else')).rejects.toBeInstanceOf(ForbiddenException);
+    prisma.event.findUnique.mockResolvedValue(null);
+    await expect(service.vendorReviews('missing', 'planner-1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.eventBooking.findMany).not.toHaveBeenCalled();
+  });
+});

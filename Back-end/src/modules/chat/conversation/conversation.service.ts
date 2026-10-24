@@ -10,7 +10,7 @@ import appConfig from '../../../config/app.config';
 import { DateHelper } from '../../../common/helper/date.helper';
 import { MessageGateway } from '../message/message.gateway';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
-import { blockSets, blockState } from '../safety/block';
+import { assertCanMessage, blockSets, blockState } from '../safety/block';
 
 @Injectable()
 export class ConversationService {
@@ -71,6 +71,9 @@ export class ConversationService {
         },
       };
     }
+
+    // no new 1:1 chat while either person has blocked the other (an existing one still opens, read-only)
+    await assertCanMessage(this.prisma, sender, participant_id);
 
     // create new conversation
     const newConversation = await this.prisma.conversation.create({

@@ -31,6 +31,7 @@ import Transactions from '../screens/shared/Transactions';
 import SharedEvents from '../screens/shared/SharedEvents';
 import Inbox from '../screens/shared/Inbox';
 import EventShared from '../screens/shared/EventShared';
+import PlannerPublic from '../screens/shared/PlannerPublic';
 import FaqScreen from '../screens/shared/Faq';
 import CustomerBookings from '../screens/customer/Bookings';
 import BookingDetail from '../screens/customer/BookingDetail';
@@ -112,6 +113,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="Transactions" component={Transactions} />
       <ProfileStack.Screen name="SharedEvents" component={SharedEvents} />
       <ProfileStack.Screen name="EventShared" component={EventShared} />
+      <ProfileStack.Screen name="PlannerPublic" component={PlannerPublic} />
       <ProfileStack.Screen name="Faq" component={FaqScreen} />
     </ProfileStack.Navigator>
   );

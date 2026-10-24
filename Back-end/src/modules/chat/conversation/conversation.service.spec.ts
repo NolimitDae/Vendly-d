@@ -104,6 +104,26 @@ describe('ConversationService', () => {
         expect.objectContaining({ data: expect.anything() }),
       );
     });
+
+    it('does not start a new chat when either person has blocked the other', async () => {
+      mockPrisma.conversation.findFirst.mockResolvedValue(null);
+      mockPrisma.conversation.create.mockClear();
+      mockPrisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'user-2', blocked_id: 'user-1' }]);
+      await expect(service.create({ participant_id: 'user-2' }, 'user-1')).rejects.toThrow("You can't message this person.");
+
+      mockPrisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'user-1', blocked_id: 'user-2' }]);
+      await expect(service.create({ participant_id: 'user-2' }, 'user-1')).rejects.toThrow('You blocked this person. Unblock them to send a message.');
+      expect(mockPrisma.conversation.create).not.toHaveBeenCalled();
+    });
+
+    it('still opens an existing chat with someone blocked (it shows as blocked there)', async () => {
+      mockPrisma.conversation.findFirst.mockResolvedValue({ id: 'conv-1', participants: [mockParticipant('user-1'), mockParticipant('user-2')] });
+      mockPrisma.userBlock.findMany.mockClear();
+      const result = await service.create({ participant_id: 'user-2' }, 'user-1');
+      expect((result.conversation as any).id).toBe('conv-1');
+      // blocks aren't checked for an existing chat: it opens and shows the blocked state itself
+      expect(mockPrisma.userBlock.findMany).not.toHaveBeenCalled();
+    });
   });
 
   describe('findAll', () => {

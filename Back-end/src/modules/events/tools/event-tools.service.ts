@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus, InstallmentStatus } from 'prisma/generated/enums';
+import { BookingStatus, InstallmentStatus, ListingStatus, UserType } from 'prisma/generated/enums';
+import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { MailService } from 'src/mail/mail.service';
 import { MessageGateway } from 'src/modules/chat/message/message.gateway';
@@ -16,6 +17,32 @@ export type EventRole = 'planner' | 'vendor' | 'client';
 const ACTIVE: BookingStatus[] = [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED];
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const FILE_LINK_TTL = 10 * 60;
+/** Most vendors one saved team can hold (an invite messages each of them). */
+export const MAX_TEAM_SIZE = 50;
+
+/** A vendor a planner can put in a team: a vendor account that isn't deleted or suspended (status 0). */
+const activeVendorWhere = (...more: object[]) => ({
+  deleted_at: null,
+  AND: [{ OR: [{ type: UserType.VENDOR }, { roles: { has: UserType.VENDOR } }] }, { OR: [{ status: null }, { status: { not: 0 } }] }, ...more],
+});
+
+const TEAM_VENDOR_SELECT = {
+  id: true,
+  name: true,
+  avatar: true,
+  vendorProfile: { select: { business_name: true } },
+  // the first package's category, shown under the name ("Catering")
+  vendorListings: { where: { status: ListingStatus.ACTIVE, deleted_at: null }, orderBy: { created_at: 'asc' as const }, take: 1, select: { category: { select: { name: true } } } },
+};
+
+type TeamVendorRow = { id: string; name: string | null; avatar: string | null; vendorProfile: { business_name: string | null } | null; vendorListings: { category: { name: string } | null }[] };
+
+const teamVendorCard = (v: TeamVendorRow) => ({
+  id: v.id,
+  name: v.vendorProfile?.business_name || v.name || 'Vendor',
+  avatar_url: v.avatar ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${v.avatar}`) : null,
+  category: v.vendorListings?.[0]?.category?.name ?? null,
+});
 
 export interface TimelineInput {
   starts_at: string;
@@ -365,29 +392,68 @@ export class EventToolsService {
 
   // ─── Saved vendor teams ───────────────────────────────────────────────────
 
-  private async knownVendors(plannerId: string, vendorIds: string[]) {
-    const ids = [...new Set(vendorIds)].slice(0, 50);
-    const vendors = await this.prisma.user.findMany({ where: { id: { in: ids }, type: 'VENDOR', deleted_at: null }, select: { id: true } });
-    if (vendors.length !== ids.length) throw new BadRequestException('Some of those accounts are not vendors.');
+  /** The vendors for a team: real, active vendor accounts (booked before or not), and nobody either side has blocked. */
+  private async teamVendors(plannerId: string, vendorIds: string[]) {
+    const ids = [...new Set(vendorIds)];
+    if (ids.length > MAX_TEAM_SIZE) throw new BadRequestException(`A team can have up to ${MAX_TEAM_SIZE} vendors.`);
+    if (ids.includes(plannerId)) throw new BadRequestException("You can't add yourself to your own team.");
+    const vendors = await this.prisma.user.findMany({ where: { id: { in: ids }, ...activeVendorWhere() }, select: { id: true } });
+    if (vendors.length !== ids.length) throw new BadRequestException('Some of those accounts are not active vendors.');
+    const blocks = await blockSets(this.prisma, plannerId);
+    if (ids.some((id) => blocks.blockedByMe.has(id) || blocks.blockedMe.has(id))) {
+      throw new BadRequestException("You can't add someone you've blocked or who has blocked you.");
+    }
     return ids;
   }
 
   async teams(plannerId: string) {
     const teams = await this.prisma.vendorTeam.findMany({ where: { planner_id: plannerId }, orderBy: { name: 'asc' } });
     const ids = [...new Set(teams.flatMap((t) => t.vendor_ids))];
-    const vendors = await this.prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, avatar: true, vendorProfile: { select: { business_name: true } } } });
-    const byId = new Map(vendors.map((v) => [v.id, { id: v.id, name: v.vendorProfile?.business_name || v.name }]));
+    const [vendors, blocks] = await Promise.all([
+      this.prisma.user.findMany({ where: { id: { in: ids }, ...activeVendorWhere() }, select: TEAM_VENDOR_SELECT }),
+      blockSets(this.prisma, plannerId),
+    ]);
+    // vendors who left, were suspended or are blocked either way aren't listed; saving the team drops them
+    const listed = vendors.filter((v) => !blocks.blockedByMe.has(v.id) && !blocks.blockedMe.has(v.id));
+    const byId = new Map(listed.map((v) => [v.id, teamVendorCard(v)]));
     return { success: true, data: teams.map((t) => ({ ...t, vendors: t.vendor_ids.map((id) => byId.get(id)).filter(Boolean) })) };
   }
 
+  /** Active vendors by business name, account name or package category, to add to a team. */
+  async searchTeamVendors(plannerId: string, q?: string) {
+    const term = (typeof q === 'string' ? q : '').trim().slice(0, 80);
+    if (term.length < 2) return { success: true, data: [] };
+    const blocks = await blockSets(this.prisma, plannerId);
+    const contains = { contains: term, mode: 'insensitive' as const };
+    const vendors = await this.prisma.user.findMany({
+      where: {
+        // not yourself, and nobody either side has blocked
+        id: { notIn: [plannerId, ...blocks.blockedByMe, ...blocks.blockedMe] },
+        ...activeVendorWhere({
+          OR: [
+            { name: contains },
+            { vendorProfile: { business_name: contains } },
+            { vendorListings: { some: { status: ListingStatus.ACTIVE, deleted_at: null, category: { name: contains } } } },
+          ],
+        }),
+      },
+      orderBy: { name: 'asc' },
+      take: 20,
+      select: TEAM_VENDOR_SELECT,
+    });
+    return { success: true, data: vendors.map(teamVendorCard) };
+  }
+
   async saveTeam(plannerId: string, dto: { name: string; vendor_ids: string[] }, teamId?: string) {
-    const ids = await this.knownVendors(plannerId, dto.vendor_ids ?? []);
+    const name = dto.name?.trim();
+    if (!name) throw new BadRequestException('Give the team a name.');
+    const ids = await this.teamVendors(plannerId, dto.vendor_ids ?? []);
     if (teamId) {
-      const done = await this.prisma.vendorTeam.updateMany({ where: { id: teamId, planner_id: plannerId }, data: { name: dto.name.trim(), vendor_ids: ids } });
+      const done = await this.prisma.vendorTeam.updateMany({ where: { id: teamId, planner_id: plannerId }, data: { name, vendor_ids: ids } });
       if (!done.count) throw new NotFoundException('Team not found');
       return { success: true, data: await this.prisma.vendorTeam.findUnique({ where: { id: teamId } }) };
     }
-    return { success: true, data: await this.prisma.vendorTeam.create({ data: { planner_id: plannerId, name: dto.name.trim(), vendor_ids: ids } }) };
+    return { success: true, data: await this.prisma.vendorTeam.create({ data: { planner_id: plannerId, name, vendor_ids: ids } }) };
   }
 
   async deleteTeam(plannerId: string, teamId: string) {

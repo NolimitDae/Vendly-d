@@ -15,6 +15,22 @@ export interface PendingReview {
   vendor: { id: string; name: string; avatar_url: string | null };
 }
 
+/** One completed booking on a planner's event, with the planner's review once they leave it. */
+export interface EventVendorReview {
+  booking_id: string;
+  completed_at: string | null;
+  listing: { id: string; title: string; category: string | null; image: string | null } | null;
+  vendor: { id: string; name: string; avatar_url: string | null };
+  review: { id: string; rating: number; comment: string | null; created_at: string } | null;
+}
+
+export interface EventVendorReviews {
+  event: { id: string; name: string; status: string };
+  items: EventVendorReview[];
+  /** completed bookings not rated yet */
+  to_rate: number;
+}
+
 export interface VendorReview {
   id: string;
   rating: number;
@@ -51,6 +67,9 @@ export const ReviewService = {
 
   create: async (data: { booking_id: string; rating: number; comment?: string }) =>
     Fetch.post("/reviews", data, authHeaders()),
+
+  /** "Rate your vendors": completed bookings on one of the planner's events, rated or not. */
+  forEvent: async (eventId: string) => Fetch.get(`/events/${eventId}/vendor-reviews`, authHeaders()),
 
   reply: async (reviewId: string, reply: string) =>
     Fetch.patch(`/reviews/${reviewId}/reply`, { reply }, authHeaders()),

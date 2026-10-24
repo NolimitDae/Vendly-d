@@ -223,10 +223,16 @@ export function EventCompletedBanner({
   completedAt,
   hasBookings,
   onViewVendors,
+  eventId,
+  toRate = 0,
 }: {
   completedAt?: string;
   hasBookings: boolean;
   onViewVendors: () => void;
+  /** with it, "Rate your vendors" opens the event's own rating page instead of My Bookings */
+  eventId?: string;
+  /** completed bookings on the event not rated yet (the badge) */
+  toRate?: number;
 }) {
   return (
     <div
@@ -240,7 +246,9 @@ export function EventCompletedBanner({
         </p>
         {hasBookings && (
           <p className="text-sm text-green-700 dark:text-green-400 mt-1">
-            How did your vendors do? You can leave a review for each completed booking from My Bookings.
+            {eventId
+              ? "How did your vendors do? Rate them all in one place."
+              : "How did your vendors do? You can leave a review for each completed booking from My Bookings."}
           </p>
         )}
       </div>
@@ -253,12 +261,27 @@ export function EventCompletedBanner({
           >
             View vendors
           </button>
-          <Link
-            href="/bookings"
-            className="px-4 py-2 rounded-xl bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition"
-          >
-            Review vendors
-          </Link>
+          {eventId ? (
+            <Link
+              href={`/event-planner/events/${eventId}/reviews`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition"
+            >
+              Rate your vendors
+              {toRate > 0 && (
+                <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-white text-green-700 text-xs font-bold inline-flex items-center justify-center">
+                  {toRate}
+                  <span className="sr-only"> to rate</span>
+                </span>
+              )}
+            </Link>
+          ) : (
+            <Link
+              href="/bookings"
+              className="px-4 py-2 rounded-xl bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition"
+            >
+              Review vendors
+            </Link>
+          )}
         </div>
       )}
     </div>

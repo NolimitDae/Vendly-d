@@ -250,9 +250,9 @@ export function Chip({
 }
 
 /** Floating "Do you have any question?" bubble that opens a chat with the vendor. */
-export function ChatBubble({ onPress }: { onPress: () => void }) {
+export function ChatBubble({ onPress, label = 'Message the vendor' }: { onPress: () => void; label?: string }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Message the vendor" style={ui.bubble}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={ui.bubble}>
       <BrandGradient style={ui.bubbleIcon}>
         <Ionicons name="chatbubble-ellipses-outline" size={20} color="#fff" />
       </BrandGradient>

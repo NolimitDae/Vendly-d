@@ -161,6 +161,18 @@ describe("EventCompletedBanner", () => {
     expect(onViewVendors).toHaveBeenCalled();
   });
 
+  it("opens the event's own rating page with a count of vendors left to rate", () => {
+    render(<EventCompletedBanner completedAt="2026-11-15T10:00:00Z" hasBookings onViewVendors={jest.fn()} eventId="evt-1" toRate={2} />);
+    const link = screen.getByRole("link", { name: "Rate your vendors 2 to rate" });
+    expect(link).toHaveAttribute("href", "/event-planner/events/evt-1/reviews");
+    expect(screen.getByText(/rate them all in one place/i)).toBeInTheDocument();
+  });
+
+  it("drops the badge once every vendor is rated", () => {
+    render(<EventCompletedBanner hasBookings onViewVendors={jest.fn()} eventId="evt-1" toRate={0} />);
+    expect(screen.getByRole("link", { name: "Rate your vendors" })).toBeInTheDocument();
+  });
+
   it("skips the review prompt when the event had no vendors", () => {
     render(<EventCompletedBanner completedAt="2026-11-15T10:00:00Z" hasBookings={false} onViewVendors={jest.fn()} />);
     expect(screen.queryByRole("link")).toBeNull();

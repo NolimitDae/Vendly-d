@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/
 import { DARK, FONTS } from '../../constants/colors';
 import { EventPlannerService } from '../../services/eventplanner.service';
 import { apiMessage } from '../auth/SignIn';
+import { useAuth } from '../../context/AuthContext';
 
 const EVENT_TYPES = [
   { label: 'Wedding', value: 'WEDDING' },
@@ -23,6 +24,7 @@ const EVENT_TYPES = [
 export default function PlannerProfile() {
   const nav = useNavigation<NativeStackNavigationProp<any>>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -80,6 +82,11 @@ export default function PlannerProfile() {
               <Text style={s.noteText}>{status === 'APPROVED' ? 'Verified by Vendly. Clients can see this profile.' : status === 'SUSPENDED' ? 'This profile is suspended. Contact support.' : 'Pending review. You can edit while you wait.'}</Text>
             </View>
           )}
+          {status === 'APPROVED' && !!user && (
+            <Pressable onPress={() => nav.navigate('PlannerPublic', { userId: user.id })} accessibilityRole="link" hitSlop={8}>
+              <Text style={s.link}>See your public profile</Text>
+            </Pressable>
+          )}
           <Field label="Business Name" placeholder="e.g. Bloom Events Co." value={form.business_name} onChangeText={set('business_name')} />
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Description</Text>
@@ -112,4 +119,5 @@ const s = StyleSheet.create({
   noteText: { flex: 1, color: '#fff', fontSize: 13, lineHeight: 19, fontFamily: FONTS.medium },
   textarea: { height: undefined, paddingVertical: 14, alignItems: 'flex-start' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
 });

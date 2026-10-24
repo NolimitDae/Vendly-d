@@ -16,7 +16,7 @@ const prisma: any = {
   eventBooking: { findMany: jest.fn().mockResolvedValue([]) },
   budgetItem: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), create: jest.fn() },
   booking: { findUnique: jest.fn() },
-  vendorTeam: { findFirst: jest.fn() },
+  vendorTeam: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
   conversation: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
   message: { create: jest.fn() },
   userBlock: { findMany: jest.fn().mockResolvedValue([]) },
@@ -233,6 +233,77 @@ describe('EventToolsService', () => {
       expect(res.data.invited).toBe(1);
       expect(prisma.message.create).toHaveBeenCalledTimes(1);
       expect(push.sendToUser).toHaveBeenCalledWith('v3', expect.anything(), 'messages');
+    });
+  });
+
+  describe('saving a team (any active vendor, booked or not)', () => {
+    const vendorRow = (id: string, over: Record<string, unknown> = {}) => ({ id, name: `User ${id}`, avatar: null, vendorProfile: { business_name: `Shop ${id}` }, vendorListings: [{ category: { name: 'Catering' } }], ...over });
+
+    it('saves vendors the planner has never booked', async () => {
+      prisma.user.findMany.mockResolvedValueOnce([{ id: 'v7' }, { id: 'v8' }]);
+      prisma.vendorTeam.create.mockResolvedValue({ id: 't1' });
+      await service.saveTeam('planner', { name: '  Dream team ', vendor_ids: ['v7', 'v8', 'v7'] });
+      expect(prisma.vendorTeam.create).toHaveBeenCalledWith({ data: { planner_id: 'planner', name: 'Dream team', vendor_ids: ['v7', 'v8'] } });
+      // only active vendor accounts count: not deleted, not suspended, holding the vendor role
+      const where = prisma.user.findMany.mock.calls[0][0].where;
+      expect(where).toMatchObject({ id: { in: ['v7', 'v8'] }, deleted_at: null });
+      expect(JSON.stringify(where.AND)).toContain('"status":{"not":0}');
+      expect(JSON.stringify(where.AND)).toContain('"roles":{"has":"VENDOR"}');
+    });
+
+    it('refuses accounts that are not active vendors', async () => {
+      prisma.user.findMany.mockResolvedValueOnce([{ id: 'v7' }]);
+      await expect(service.saveTeam('planner', { name: 'Team', vendor_ids: ['v7', 'customer'] })).rejects.toThrow('Some of those accounts are not active vendors.');
+      expect(prisma.vendorTeam.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses vendors either side has blocked', async () => {
+      prisma.user.findMany.mockResolvedValueOnce([{ id: 'v7' }]).mockResolvedValueOnce([{ id: 'v7' }]);
+      prisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'v7', blocked_id: 'planner' }]);
+      await expect(service.saveTeam('planner', { name: 'Team', vendor_ids: ['v7'] })).rejects.toThrow("You can't add someone you've blocked or who has blocked you.");
+      prisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'planner', blocked_id: 'v7' }]);
+      await expect(service.saveTeam('planner', { name: 'Team', vendor_ids: ['v7'] }, 't1')).rejects.toThrow(BadRequestException);
+      expect(prisma.vendorTeam.create).not.toHaveBeenCalled();
+      expect(prisma.vendorTeam.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('caps the size, needs a name and leaves the planner out', async () => {
+      const many = Array.from({ length: 51 }, (_, i) => `v${i}`);
+      await expect(service.saveTeam('planner', { name: 'Big', vendor_ids: many })).rejects.toThrow('A team can have up to 50 vendors.');
+      await expect(service.saveTeam('planner', { name: '  ', vendor_ids: ['v1'] })).rejects.toThrow('Give the team a name.');
+      await expect(service.saveTeam('planner', { name: 'Me', vendor_ids: ['planner'] })).rejects.toThrow("You can't add yourself to your own team.");
+    });
+
+    it("only edits the planner's own team", async () => {
+      prisma.user.findMany.mockResolvedValueOnce([{ id: 'v7' }]);
+      prisma.vendorTeam.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.saveTeam('planner', { name: 'Team', vendor_ids: ['v7'] }, 'someone-elses')).rejects.toThrow('Team not found');
+      expect(prisma.vendorTeam.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'someone-elses', planner_id: 'planner' } }));
+    });
+
+    it('lists teams with only the vendors still available, with name and category', async () => {
+      prisma.vendorTeam.findMany.mockResolvedValue([{ id: 't1', name: 'Team', vendor_ids: ['v1', 'gone', 'v2'] }]);
+      prisma.user.findMany.mockResolvedValueOnce([vendorRow('v1', { avatar: 'a.jpg' }), vendorRow('v2')]);
+      prisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'v2', blocked_id: 'planner' }]);
+      const res = await service.teams('planner');
+      expect(res.data[0].vendors).toEqual([{ id: 'v1', name: 'Shop v1', avatar_url: 'https://cdn.test/a/a.jpg', category: 'Catering' }]);
+    });
+
+    it('searches active vendors by name or category, leaving out the planner and blocked people', async () => {
+      prisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'planner', blocked_id: 'v9' }]);
+      prisma.user.findMany.mockResolvedValueOnce([vendorRow('v1', { vendorProfile: null, vendorListings: [] })]);
+      const res = await service.searchTeamVendors('planner', '  cater ');
+      expect(res.data).toEqual([{ id: 'v1', name: 'User v1', avatar_url: null, category: null }]);
+      const args = prisma.user.findMany.mock.calls[0][0];
+      expect(args.where.id).toEqual({ notIn: ['planner', 'v9'] });
+      expect(JSON.stringify(args.where.AND)).toContain('"contains":"cater"');
+      expect(args.take).toBe(20);
+    });
+
+    it('needs at least two letters to search', async () => {
+      await expect(service.searchTeamVendors('planner', 'a')).resolves.toEqual({ success: true, data: [] });
+      await expect(service.searchTeamVendors('planner', undefined)).resolves.toEqual({ success: true, data: [] });
+      expect(prisma.user.findMany).not.toHaveBeenCalled();
     });
   });
 });

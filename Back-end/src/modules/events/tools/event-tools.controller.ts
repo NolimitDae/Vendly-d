@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Res, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiConsumes, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
@@ -7,7 +7,7 @@ import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEmail, IsOptional, Is
 import type { Response } from 'express';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
-import { EventToolsService } from './event-tools.service';
+import { EventToolsService, MAX_TEAM_SIZE } from './event-tools.service';
 
 export class TimelineItemDto {
   @ApiProperty() @IsDateString() starts_at: string;
@@ -42,7 +42,7 @@ export class VendorTeamDto {
   @ApiProperty({ type: [String] })
   @Transform(({ value }) => (Array.isArray(value) ? value : []))
   @IsArray()
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(MAX_TEAM_SIZE, { message: `A team can have up to ${MAX_TEAM_SIZE} vendors.` })
   @IsString({ each: true })
   vendor_ids: string[];
 }
@@ -151,6 +151,13 @@ export class EventToolsController {
   @Get('vendor-teams')
   teams(@GetUser() user: any) {
     return this.service.teams(user.id);
+  }
+
+  /** Any active vendor (booked before or not) to add to a team: ?q= business name, name or category */
+  @UseGuards(JwtAuthGuard)
+  @Get('vendor-teams/vendors')
+  searchTeamVendors(@GetUser() user: any, @Query('q') q?: string) {
+    return this.service.searchTeamVendors(user.id, q);
   }
 
   @UseGuards(JwtAuthGuard)

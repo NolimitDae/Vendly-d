@@ -72,6 +72,12 @@ export class EventsController {
     return this.service.linkBooking(id, dto.booking_id, user.id);
   }
 
+  /** Completed bookings on the event, rated or not, for "Rate your vendors". */
+  @Get(':id/vendor-reviews')
+  vendorReviews(@GetUser() user: any, @Param('id') id: string) {
+    return this.service.vendorReviews(id, user.id);
+  }
+
   @Get(':id/budget')
   getBudget(@GetUser() user: any, @Param('id') id: string) {
     return this.service.getBudget(id, user.id);

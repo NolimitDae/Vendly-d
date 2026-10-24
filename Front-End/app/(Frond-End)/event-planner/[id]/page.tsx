@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { EventPlannerService } from "@/service/event-planner/event-planner.service";
+import { whoAmI } from "@/lib/currentUser";
+import { isLoggedIn } from "@/lib/session";
+import MessageButton from "@/components/chat/MessageButton";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -29,6 +32,7 @@ interface PlannerDetail {
     id: string;
     name: string;
     avatar?: string;
+    avatar_url?: string | null;
     phone?: string;
   };
   vendorProfile?: {
@@ -53,6 +57,12 @@ export default function EventPlannerDetailPage() {
   const [planner, setPlanner] = useState<PlannerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  // who is looking, so planners don't get a "Message" button on their own profile
+  const [viewerId, setViewerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isLoggedIn()) whoAmI().then((me) => setViewerId(me.id));
+  }, []);
 
   useEffect(() => {
     EventPlannerService.getProfile(id)
@@ -97,9 +107,9 @@ export default function EventPlannerDetailPage() {
           <div className="lg:col-span-1 space-y-4">
             {/* Profile card */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm text-center">
-              {planner.user?.avatar ? (
+              {planner.user?.avatar_url ? (
                 <Image
-                  src={planner.user.avatar}
+                  src={planner.user.avatar_url}
                   alt={displayName}
                   width={96}
                   height={96}
@@ -121,6 +131,13 @@ export default function EventPlannerDetailPage() {
                 <div className="flex items-center justify-center gap-1.5 mt-2 text-green-600 text-sm">
                   <CheckCircle className="w-4 h-4" />
                   <span>Verified Planner</span>
+                </div>
+              )}
+
+              {planner.user && planner.user.id !== viewerId && (
+                <div className="mt-5">
+                  <MessageButton userId={planner.user.id} name={displayName} />
+                  <p className="text-xs text-gray-400 mt-2">Do you have any questions? Ask {displayName} here.</p>
                 </div>
               )}
             </div>

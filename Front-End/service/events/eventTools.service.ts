@@ -60,12 +60,24 @@ export interface BudgetSummary {
   unassigned_bookings: { id: string; vendor_name: string; title: string; total: number; paid: number; status: string }[];
 }
 
+/** A vendor as teams show them: business name, photo and their main category. */
+export interface TeamVendor {
+  id: string;
+  name: string;
+  avatar_url?: string | null;
+  category?: string | null;
+}
+
 export interface VendorTeam {
   id: string;
   name: string;
   vendor_ids: string[];
-  vendors: { id: string; name: string }[];
+  /** the vendors still available (left, suspended or blocked ones aren't listed) */
+  vendors: TeamVendor[];
 }
+
+/** Most vendors one team can hold (the API refuses more). */
+export const MAX_TEAM_SIZE = 50;
 
 export const EventToolsService = {
   overview: (eventId: string) => Fetch.get(`/events/${eventId}/overview`, authHeaders()),
@@ -91,6 +103,8 @@ export const EventToolsService = {
   teams: () => Fetch.get("/vendor-teams", authHeaders()),
   saveTeam: (body: { name: string; vendor_ids: string[] }, id?: string) => (id ? Fetch.patch(`/vendor-teams/${id}`, body, authHeaders()) : Fetch.post("/vendor-teams", body, authHeaders())),
   deleteTeam: (id: string) => Fetch.delete(`/vendor-teams/${id}`, authHeaders()),
+  /** Any active vendor by name or category (at least 2 letters), booked before or not. */
+  searchTeamVendors: (q: string) => Fetch.get(`/vendor-teams/vendors?q=${encodeURIComponent(q)}`, authHeaders()),
   inviteTeam: (eventId: string, teamId: string, note?: string) => Fetch.post(`/events/${eventId}/invite-team`, { team_id: teamId, note }, authHeaders()),
 };
 

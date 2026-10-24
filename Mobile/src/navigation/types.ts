@@ -12,6 +12,10 @@ export type EventPlannerStackParams = {
   CreateEvent: { event?: EditableEvent } | undefined;
   EventDetail: { eventId: string; eventName: string };
   PlannerProfile: undefined;
+  /** "Rate your vendors": every completed booking on the event, rated or not */
+  RateVendors: { eventId: string; eventName?: string };
+  /** create (optionally starting with some vendors) or edit a saved vendor team */
+  TeamEditor: { team?: import('../services/eventTools.service').VendorTeam; initialVendors?: import('../services/eventTools.service').TeamVendor[] } | undefined;
 };
 
 export type EPTabParams = {
@@ -98,6 +102,7 @@ export type CustomerProfileStackParams = {
   Transactions: { role?: 'customer' | 'vendor' } | undefined;
   SharedEvents: undefined;
   EventShared: { eventId: string; section?: 'schedule' | 'vendors' | 'files' | 'contracts' };
+  PlannerPublic: { userId: string };
   Faq: undefined;
 };
 
@@ -134,6 +139,7 @@ export type VendorBookingsStackParams = {
   VendorBookings: undefined;
   VendorBookingDetail: { bookingId: string };
   EventShared: { eventId: string; section?: 'schedule' | 'vendors' | 'files' | 'contracts' };
+  PlannerPublic: { userId: string };
 };
 
 export type VendorProfileStackParams = {
