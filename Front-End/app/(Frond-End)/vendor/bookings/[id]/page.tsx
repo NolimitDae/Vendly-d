@@ -27,6 +27,7 @@ import VendorDisputeCard, { type DisputeFields } from "@/components/disputes/Ven
 import CancelBookingDialog from "@/components/bookings/CancelBookingDialog";
 import RefundCard from "@/components/bookings/RefundCard";
 import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceButton";
+import { InspirationPhotos } from "@/components/bookings/InspirationPhotos";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { closesIn } from "@/lib/requests";
@@ -65,6 +66,8 @@ interface Booking extends DisputeFields {
   cancelled_at?: string | null;
   scheduled_at?: string;
   message?: string;
+  /** reference photos sent with the request (short-lived signed links) */
+  request_photo_urls?: string[];
   created_at: string;
   /** an open request closes on its own at this time */
   request_expires_at?: string | null;
@@ -253,6 +256,11 @@ export default function VendorBookingDetailPage() {
             <div className="col-span-2">
               <p className="text-gray-400 text-xs">Customer note</p>
               <p className="text-gray-700 dark:text-gray-300">{booking.message}</p>
+            </div>
+          )}
+          {!!booking.request_photo_urls?.length && (
+            <div className="col-span-2">
+              <InspirationPhotos urls={booking.request_photo_urls} title="Inspiration photos from the customer" />
             </div>
           )}
         </div>

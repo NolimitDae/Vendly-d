@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { IsNumber, IsString, MaxLength, Min } from 'class-validator';
+import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { PlatformSettingsService } from './platform-settings.service';
 import { PromoService } from './promo.service';
@@ -30,12 +31,12 @@ export class FlagsController {
     return this.settings.enabledFlags();
   }
 
-  /** Checks a promo code against a price without using it up. */
+  /** Checks a promo code against a price without using it up (same answer as sending the booking). */
   @Post('promo/check')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Throttle({ short: { limit: 10, ttl: 60_000 } })
-  async check(@Body() dto: PromoCheckDto) {
-    return { success: true, data: await this.promos.quote(dto.code, dto.price) };
+  async check(@GetUser('userId') userId: string, @Body() dto: PromoCheckDto) {
+    return { success: true, data: await this.promos.quote(dto.code, dto.price, userId) };
   }
 }

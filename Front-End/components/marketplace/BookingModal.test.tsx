@@ -434,4 +434,22 @@ describe('BookingModal', () => {
       expect(screen.queryByText(/^Works /)).toBeNull();
     });
   });
+
+  it('sends inspiration photos with the signed request', async () => {
+    URL.createObjectURL = jest.fn(() => 'blob:preview');
+    URL.revokeObjectURL = jest.fn();
+    (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
+    (BookingService.create as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'booking-3' } } });
+    const user = userEvent.setup();
+    render(<BookingModal listing={listing} onClose={onClose} />);
+    await fillDetails(user);
+    await user.upload(screen.getByLabelText('Add inspiration photos'), [new File(['x'], 'cake.jpg', { type: 'image/jpeg' })]);
+    await user.click(screen.getByRole('button', { name: /review contract/i }));
+    await user.click(await screen.findByLabelText(/sign electronically/i));
+    await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+    await user.click(screen.getByRole('button', { name: /sign & send request/i }));
+    await waitFor(() => expect(BookingService.create).toHaveBeenCalled());
+    const [, photos] = (BookingService.create as jest.Mock).mock.calls[0];
+    expect(photos.map((f: File) => f.name)).toEqual(['cake.jpg']);
+  });
 });

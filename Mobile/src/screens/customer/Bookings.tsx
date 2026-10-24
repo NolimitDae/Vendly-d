@@ -11,13 +11,21 @@ import { DARK, FONTS } from '../../constants/colors';
 import { BookingService, type Booking, type BookingStatus } from '../../services/booking.service';
 import type { CustomerBookingsStackParams } from '../../navigation/types';
 import { confirmCancelBooking } from '../../components/booking/cancelBooking';
+import { customerTabOf, type CustomerTab } from '../../utils/bookingTabs';
 
-type Tab = 'previous' | 'pending' | 'upcoming';
-const TABS: { key: Tab; label: string; statuses: BookingStatus[] }[] = [
-  { key: 'previous', label: 'Previous', statuses: ['COMPLETED', 'CANCELLED', 'REJECTED'] },
-  { key: 'pending', label: 'Pending', statuses: ['PENDING'] },
-  { key: 'upcoming', label: 'Upcoming', statuses: ['CONFIRMED', 'IN_PROGRESS'] },
+// the order in the design; every booking is in exactly one
+const TABS: { key: CustomerTab; label: string }[] = [
+  { key: 'active', label: 'Active' },
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'complete', label: 'Complete' },
 ];
+const EMPTY: Record<CustomerTab, string> = {
+  active: 'Nothing happening right now',
+  upcoming: 'Nothing booked yet',
+  pending: 'No requests waiting',
+  complete: 'No past bookings',
+};
 
 export const bookingWhen = (b: Booking) => {
   const start = b.event_start_at ?? b.scheduled_at;
@@ -31,7 +39,7 @@ export const bookingWhen = (b: Booking) => {
 export default function CustomerBookings() {
   const nav = useNavigation<NativeStackNavigationProp<CustomerBookingsStackParams>>();
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<Tab>('upcoming');
+  const [tab, setTab] = useState<CustomerTab>('upcoming');
   const [all, setAll] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,10 +59,10 @@ export default function CustomerBookings() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const current = TABS.find((t) => t.key === tab)!;
+  const now = new Date();
   const items = all
-    .filter((b) => current.statuses.includes(b.status))
-    .sort((a, b) => (a.event_start_at ?? a.scheduled_at ?? a.created_at).localeCompare(b.event_start_at ?? b.scheduled_at ?? b.created_at) * (tab === 'previous' ? -1 : 1));
+    .filter((b) => customerTabOf(b, now) === tab)
+    .sort((a, b) => (a.event_start_at ?? a.scheduled_at ?? a.created_at).localeCompare(b.event_start_at ?? b.scheduled_at ?? b.created_at) * (tab === 'complete' ? -1 : 1));
 
   // shows what cancelling does with the money first, then the refund result
   const cancel = (b: Booking) =>
@@ -73,8 +81,12 @@ export default function CustomerBookings() {
             <View style={s.segment}>
               {TABS.map((t) => {
                 const on = t.key === tab;
-                const count = all.filter((b) => t.statuses.includes(b.status)).length;
-                const label = <Text style={[s.segmentText, on && { color: '#fff' }]}>{t.label}{count && t.key !== 'previous' ? ` (${count})` : ''}</Text>;
+                const count = all.filter((b) => customerTabOf(b, now) === t.key).length;
+                const label = (
+                  <Text style={[s.segmentText, on && { color: '#fff' }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {t.label}{count && t.key !== 'complete' ? ` (${count})` : ''}
+                  </Text>
+                );
                 return (
                   <Pressable key={t.key} onPress={() => setTab(t.key)} style={{ flex: 1 }} accessibilityRole="tab" accessibilityState={{ selected: on }}>
                     {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
@@ -90,7 +102,7 @@ export default function CustomerBookings() {
           ) : (
             <View style={s.empty}>
               <Ionicons name="calendar-outline" size={44} color={DARK.muted} />
-              <Text style={s.emptyTitle}>{tab === 'pending' ? 'No requests waiting' : tab === 'upcoming' ? 'Nothing booked yet' : 'No past bookings'}</Text>
+              <Text style={s.emptyTitle}>{EMPTY[tab]}</Text>
               <Text style={s.emptyText}>{tab === 'upcoming' ? 'Find a vendor on the Home tab to make your first booking.' : ''}</Text>
             </View>
           )
@@ -145,7 +157,8 @@ function StatusPill({ booking }: { booking: Booking }) {
     IN_PROGRESS: { label: 'In progress', color: DARK.accent },
     COMPLETED: { label: 'Completed', color: '#6ee7c7' },
     CANCELLED: { label: 'Cancelled', color: DARK.muted },
-    REJECTED: { label: 'Declined', color: '#fca5a5' },
+    // a request nobody answered in time closed on its own
+    REJECTED: { label: booking.expired_at ? 'Expired' : 'Declined', color: '#fca5a5' },
   };
   const st = map[booking.status] ?? map.PENDING;
   return <Text style={[s.pill, { color: st.color }]}>{st.label}</Text>;
@@ -157,7 +170,7 @@ const s = StyleSheet.create({
   title: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold, textAlign: 'center' },
   segment: { flexDirection: 'row', padding: 4, borderRadius: 100, backgroundColor: DARK.card },
   segmentItem: { height: 44, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  segmentText: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.medium },
+  segmentText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium, paddingHorizontal: 4 },
   empty: { alignItems: 'center', paddingVertical: 48, gap: 8 },
   emptyTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   emptyText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular, textAlign: 'center' },

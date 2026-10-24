@@ -7,7 +7,12 @@ import { toast } from "react-toastify";
 import { MoneyService, type Promo } from "@/service/admin/money.service";
 
 const field = "h-10 px-4 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white";
-const empty = { code: "", description: "", kind: "percent" as "percent" | "amount", value: "", min_amount: "", max_uses: "", expires_at: "" };
+const empty = { code: "", description: "", kind: "percent" as "percent" | "amount", value: "", min_amount: "", max_uses: "", expires_at: "", once_per_customer: false, first_booking_only: false };
+
+const limits = [
+  { key: "once_per_customer", label: "Once per customer" },
+  { key: "first_booking_only", label: "First booking only" },
+] as const;
 
 export default function PromosPageContent() {
   const [promos, setPromos] = useState<Promo[]>([]);
@@ -39,6 +44,8 @@ export default function PromosPageContent() {
         min_amount: form.min_amount ? Number(form.min_amount) : null,
         max_uses: form.max_uses ? Number(form.max_uses) : null,
         expires_at: form.expires_at || null,
+        once_per_customer: form.once_per_customer,
+        first_booking_only: form.first_booking_only,
       });
       toast.success("Promo code created");
       setForm(empty);
@@ -54,6 +61,15 @@ export default function PromosPageContent() {
     try {
       if (p.active) await MoneyService.deactivatePromo(p.id);
       else await MoneyService.updatePromo(p.id, { active: true });
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Couldn't update code");
+    }
+  };
+
+  const setLimit = async (p: Promo, key: (typeof limits)[number]["key"], on: boolean) => {
+    try {
+      await MoneyService.updatePromo(p.id, { [key]: on });
       load();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? "Couldn't update code");
@@ -78,6 +94,15 @@ export default function PromosPageContent() {
           <input aria-label="Max uses" placeholder="Max uses (optional)" inputMode="numeric" className={field} value={form.max_uses} onChange={(e) => setForm({ ...form, max_uses: e.target.value.replace(/\D/g, "") })} />
           <input aria-label="Expires" type="date" className={field} value={form.expires_at} onChange={(e) => setForm({ ...form, expires_at: e.target.value })} />
         </div>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {limits.map((l) => (
+            <label key={l.key} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input type="checkbox" className="accent-primary w-4 h-4" checked={form[l.key]} onChange={(e) => setForm({ ...form, [l.key]: e.target.checked })} />
+              {l.label}
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">First booking only: for customers with no confirmed or paid booking yet. Declined, expired and unpaid cancelled requests don’t use up a once-per-customer code.</p>
         <p className="text-xs text-gray-500 dark:text-gray-400">Discounts come off the vendor’s price; Vendly absorbs nothing, so agree promos with vendors first.</p>
         <button disabled={saving} className="px-5 h-10 rounded-full bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60">Create code</button>
       </form>
@@ -93,13 +118,14 @@ export default function PromosPageContent() {
                 <th className="px-4 py-2">Discount</th>
                 <th className="px-4 py-2">Used</th>
                 <th className="px-4 py-2">Expires</th>
+                <th className="px-4 py-2">Limits</th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody>
               {promos.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-gray-500">No promo codes yet.</td>
+                  <td colSpan={6} className="px-4 py-6 text-center text-gray-500">No promo codes yet.</td>
                 </tr>
               )}
               {promos.map((p) => (
@@ -111,6 +137,14 @@ export default function PromosPageContent() {
                   <td className="px-4 py-2">{p.percent_off != null ? `${Number(p.percent_off)}%` : `$${Number(p.amount_off).toFixed(2)}`}</td>
                   <td className="px-4 py-2">{p.uses}{p.max_uses != null ? ` / ${p.max_uses}` : ""}</td>
                   <td className="px-4 py-2">{p.expires_at ? dayjs(p.expires_at).format("MMM D, YYYY") : "Never"}</td>
+                  <td className="px-4 py-2">
+                    {limits.map((l) => (
+                      <label key={l.key} className="flex items-center gap-2 whitespace-nowrap text-xs text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" className="accent-primary" aria-label={`${l.label} for ${p.code}`} checked={!!p[l.key]} onChange={(e) => setLimit(p, l.key, e.target.checked)} />
+                        {l.label}
+                      </label>
+                    ))}
+                  </td>
                   <td className="px-4 py-2 text-right">
                     <button onClick={() => toggle(p)} className={`text-xs font-semibold ${p.active ? "text-red-500" : "text-primary"}`}>{p.active ? "Deactivate" : "Reactivate"}</button>
                   </td>

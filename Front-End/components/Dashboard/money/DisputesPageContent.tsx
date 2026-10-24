@@ -8,6 +8,7 @@ import { MoneyService, type Dispute } from "@/service/admin/money.service";
 import { ContractsService, apiError } from "@/service/contracts/contracts.service";
 import AdminContractCard from "@/components/contracts/AdminContractCard";
 import DisputeDetails from "@/components/disputes/DisputeDetails";
+import { InspirationPhotos } from "@/components/bookings/InspirationPhotos";
 
 const money = (n: number | string) => "$" + Number(n).toFixed(2);
 
@@ -101,6 +102,7 @@ export default function DisputesPageContent() {
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">“{d.dispute_reason}”</p>
             <DisputeDetails d={d} />
+            <InspirationPhotos urls={d.request_photo_urls} title="Inspiration photos sent with the request" />
             {d.dispute_vendor_reply ? (
               <div className="text-sm bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Vendor’s reply{d.dispute_vendor_replied_at ? ` · ${dayjs(d.dispute_vendor_replied_at).format("MMM D, h:mm A")}` : ""}</p>

@@ -2,6 +2,8 @@ import { CookieHelper } from "../../helper/cookie.helper";
 import { Fetch } from "../../lib/Fetch";
 import type { BookingFields, SignaturePayload } from "../contracts/contracts.service";
 
+export type CustomerBookingTab = "active" | "upcoming" | "pending" | "complete";
+
 const authHeaders = () => ({
   headers: {
     "Content-Type": "application/json",
@@ -10,11 +12,20 @@ const authHeaders = () => ({
 });
 
 export const BookingService = {
-  /** Sends a signed booking request (see ContractsService.bookingPreview). */
-  create: async (data: BookingFields & { preview_token: string; signature: SignaturePayload }) =>
-    Fetch.post("/bookings", data, authHeaders()),
+  /** Sends a signed booking request (see ContractsService.bookingPreview), with any inspiration photos. */
+  create: async (data: BookingFields & { preview_token: string; signature: SignaturePayload }, photos: File[] = []) => {
+    if (!photos.length) return Fetch.post("/bookings", data, authHeaders());
+    // the request has nested fields, so it travels as JSON next to the files
+    const form = new FormData();
+    form.append("request", JSON.stringify(data));
+    photos.forEach((p) => form.append("photos", p));
+    return Fetch.post("/bookings/with-photos", form, {
+      headers: { Authorization: `Bearer ${CookieHelper.get({ key: "token" })}` },
+    });
+  },
 
-  getMyAsCustomer: async (params?: { page?: number; limit?: number; status?: string }) => {
+  /** `tab`: pending (waiting for the vendor), upcoming (confirmed), active (in progress or happening now), complete (done, cancelled, declined, expired). */
+  getMyAsCustomer: async (params?: { page?: number; limit?: number; status?: string; tab?: CustomerBookingTab }) => {
     const query = new URLSearchParams();
     if (params) Object.entries(params).forEach(([k, v]) => v && query.set(k, String(v)));
     return Fetch.get(`/bookings/my/customer?${query.toString()}`, authHeaders());

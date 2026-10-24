@@ -9,6 +9,7 @@ import { format, parseISO } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
+import { InspirationPhotos } from '../../components/booking/InspirationPhotos';
 import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { BookingService, type Booking } from '../../services/booking.service';
@@ -253,6 +254,7 @@ export default function VendorBookingDetail() {
             )}
             {booking.guest_count != null && <Row icon="people-outline" label="Guests" value={String(booking.guest_count)} />}
             {!!booking.message && <Row icon="chatbox-ellipses-outline" label="Notes" value={booking.message} />}
+            <InspirationPhotos urls={booking.request_photo_urls} title="Inspiration photos from the customer" />
             <View style={s.dashed} />
             <Text style={s.h2}>Price Details</Text>
             <Row label="Your price" value={money(booking.amount)} />

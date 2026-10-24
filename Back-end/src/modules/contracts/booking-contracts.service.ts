@@ -15,6 +15,7 @@ import { PaymentPlan, QuoteStatus } from 'prisma/generated/enums';
 import { buildSchedule } from 'src/modules/payments/payment-schedule';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { PromoService } from 'src/modules/platform/promo.service';
+import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
 import {
@@ -176,11 +177,11 @@ export class BookingContractsService {
     return platformServiceFee(price, categoryId);
   }
 
-  /** Listing price after an optional promo code. Throws a friendly 400 for a bad code. */
-  private async priceAfterPromo(price: unknown, promoCode?: string | null) {
+  /** Listing price after an optional promo code. Throws a friendly 400 for a bad code (or one this customer can't use). */
+  private async priceAfterPromo(price: unknown, promoCode: string | null | undefined, customerId: string) {
     const base = Number(price ?? 0);
     if (!promoCode?.trim()) return { price: base, discount: 0, code: null as string | null };
-    const q = await this.promos.quote(promoCode, base);
+    const q = await this.promos.quote(promoCode, base, customerId);
     return { price: Math.round((base - q.discount) * 100) / 100, discount: q.discount, code: q.code };
   }
 
@@ -302,7 +303,7 @@ export class BookingContractsService {
     }
     const { lines: addOnLines, fees } = await this.addOns.priceSelection(ctx.listing.id, dto.add_ons, dto);
     const subtotal = round2(pkg.amount + addOnLines.reduce((s, l) => s + l.amount, 0));
-    const priced = await this.priceAfterPromo(subtotal, dto.promo_code);
+    const priced = await this.priceAfterPromo(subtotal, dto.promo_code, userId);
     const data = buildMergeData({
       booking: {
         id: bookingId,
@@ -438,11 +439,12 @@ export class BookingContractsService {
    * Step 2: the customer signs and sends the request. Creates the booking, the frozen
    * contract snapshot and the customer's signature in one transaction.
    */
-  async createSignedBooking(userId: string, dto: SignedBookingRequestDto, meta: RequestMeta) {
+  async createSignedBooking(userId: string, dto: SignedBookingRequestDto, meta: RequestMeta, photos: { buffer: Buffer; size?: number }[] = []) {
     const claims = verifyPreview(dto.preview_token);
     if (!claims || claims.uid !== userId || claims.lid !== dto.listing_id) {
       throw new BadRequestException('The contract preview has expired. Please review the contract again.');
     }
+    const photoExts = checkRequestPhotos(photos);
     if (await this.prisma.booking.findUnique({ where: { id: claims.bid }, select: { id: true } })) {
       throw new ConflictException('This booking request was already sent.');
     }
@@ -465,6 +467,8 @@ export class BookingContractsService {
         ? p.event.client_email.trim().toLowerCase()
         : null;
 
+    // inspiration photos are stored first and removed again if the booking isn't created
+    const photoKeys = photos.length ? await storeRequestPhotos(claims.bid, photos, photoExts) : [];
     const booking = await this.prisma.$transaction(async (tx) => {
       const b = await tx.booking.create({
         data: {
@@ -484,6 +488,7 @@ export class BookingContractsService {
           payment_method_id: dto.payment_method_id,
           promo_code: p.priced.code,
           discount: p.priced.discount || null,
+          request_photos: photoKeys,
           status: BookingStatus.PENDING,
         },
       });
@@ -505,7 +510,7 @@ export class BookingContractsService {
           })),
         });
       }
-      if (p.priced.code) await this.promos.redeem(tx, p.priced.code);
+      if (p.priced.code) await this.promos.redeem(tx, p.priced.code, { customerId: userId, bookingId: b.id });
       if (p.quote) {
         // claim the quote: two requests can't both use it
         const claimed = await tx.quote.updateMany({ where: { id: p.quote.id, status: QuoteStatus.PENDING }, data: { status: QuoteStatus.ACCEPTED, booking_id: b.id } });
@@ -534,6 +539,9 @@ export class BookingContractsService {
       });
       await this.audit(tx, { booking_contract_id: contract.id, actor_id: userId, actor_role: role, action: ContractAuditAction.SIGNED, meta });
       return b;
+    }).catch(async (err) => {
+      await removeRequestPhotos(photoKeys);
+      throw err;
     });
 
     return Object.assign(booking, { awaiting_client: !!clientEmail });

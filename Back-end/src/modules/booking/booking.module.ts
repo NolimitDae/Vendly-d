@@ -9,10 +9,11 @@ import { EventToolsModule } from 'src/modules/events/tools/event-tools.module';
 import { BookingController } from './booking.controller';
 import { BookingService } from './booking.service';
 import { BookingRemindersService } from './booking-reminders.service';
+import { RequestPhotosController } from './request-photos.controller';
 
 @Module({
   imports: [PrismaModule, MailModule, PushModule, ContractsModule, PaymentsModule, ChatExtrasModule, EventToolsModule],
-  controllers: [BookingController],
+  controllers: [BookingController, RequestPhotosController],
   providers: [BookingService, BookingRemindersService],
   exports: [BookingService],
 })

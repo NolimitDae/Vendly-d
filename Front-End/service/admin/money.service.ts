@@ -42,6 +42,8 @@ export interface Dispute {
   dispute_ask?: string;
   /** short-lived signed links to the customer's photos */
   dispute_photo_urls?: string[];
+  /** the inspiration photos sent with the booking request (signed links) */
+  request_photo_urls?: string[];
   listing?: { title: string } | null;
   customer: { id: string; name: string; email: string };
   vendor: { id: string; name: string; email: string };
@@ -60,6 +62,8 @@ export interface Promo {
   uses: number;
   expires_at?: string | null;
   active: boolean;
+  once_per_customer?: boolean;
+  first_booking_only?: boolean;
 }
 
 export interface Flag {

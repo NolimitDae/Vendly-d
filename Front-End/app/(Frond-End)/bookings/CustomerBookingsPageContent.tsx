@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { BookingService } from "@/service/booking/booking.service";
+import { BookingService, type CustomerBookingTab } from "@/service/booking/booking.service";
 import { vendorAnswersWithin } from "@/lib/requests";
 import { ReviewService } from "@/service/review/review.service";
 import ReviewPrompt from "@/components/reviews/ReviewPrompt";
@@ -31,6 +31,18 @@ const STATUS_COLORS: Record<string, string> = {
   REJECTED: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
 };
 
+// the order in the design; every booking is in exactly one (the API sorts each)
+const TABS: { key: CustomerBookingTab; label: string; empty: string }[] = [
+  { key: "active", label: "Active", empty: "Nothing happening right now" },
+  { key: "upcoming", label: "Upcoming", empty: "Nothing coming up yet" },
+  { key: "pending", label: "Pending", empty: "No requests waiting for a vendor" },
+  { key: "complete", label: "Complete", empty: "No past bookings yet" },
+];
+
+/** The badge: cancelled, declined and expired bookings sit in Complete, so each says what happened. */
+const statusLabel = (b: { status: string; expired_at?: string | null }) =>
+  b.status === "REJECTED" ? (b.expired_at ? "EXPIRED" : "DECLINED") : b.status.replace("_", " ");
+
 interface Booking {
   /** an open request closes on its own at this time */
   request_expires_at?: string | null;
@@ -46,13 +58,15 @@ interface Booking {
   review?: { id: string; rating: number } | null;
   service_fee?: number | string | null;
   paid_at?: string | null;
+  /** set when the vendor didn't answer the request in time */
+  expired_at?: string | null;
 }
 
 export default function CustomerBookingsPageContent() {
   const searchParams = useSearchParams();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [tab, setTab] = useState<CustomerBookingTab>("upcoming");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, last_page: 1 });
   // the booking whose cancel confirmation (with its refund preview) is open
@@ -72,10 +86,7 @@ export default function CustomerBookingsPageContent() {
   const fetchBookings = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await BookingService.getMyAsCustomer({
-        page,
-        status: statusFilter || undefined,
-      });
+      const res = await BookingService.getMyAsCustomer({ page, tab });
       if (res.data?.success) {
         setBookings(res.data.data);
         setMeta(res.data.meta);
@@ -85,7 +96,7 @@ export default function CustomerBookingsPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter]);
+  }, [page, tab]);
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
@@ -113,19 +124,21 @@ export default function CustomerBookingsPageContent() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">My Bookings</h1>
         <ReviewPrompt className="mb-6" />
 
-        {/* Filters */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-          {["", "PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"].map((s) => (
+        {/* Tabs */}
+        <div role="tablist" aria-label="Bookings" className="flex gap-2 mb-6 overflow-x-auto pb-1">
+          {TABS.map((t) => (
             <button
-              key={s}
-              onClick={() => { setStatusFilter(s); setPage(1); }}
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => { setTab(t.key); setPage(1); }}
               className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
-                statusFilter === s
+                tab === t.key
                   ? "bg-primary text-primary-foreground"
                   : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
               }`}
             >
-              {s || "All"}
+              {t.label}
             </button>
           ))}
         </div>
@@ -137,7 +150,7 @@ export default function CustomerBookingsPageContent() {
         ) : bookings.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
             <Calendar className="w-12 h-12 mx-auto mb-4 opacity-40" />
-            <p className="text-lg">No bookings yet</p>
+            <p className="text-lg">{TABS.find((t) => t.key === tab)?.empty}</p>
             <Link href="/marketplace" className="mt-3 inline-block text-primary hover:underline text-sm">
               Browse services
             </Link>
@@ -173,7 +186,7 @@ export default function CustomerBookingsPageContent() {
                         </p>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${STATUS_COLORS[booking.status] ?? ""}`}>
-                        {booking.status.replace("_", " ")}
+                        {statusLabel(booking)}
                       </span>
                     </div>
 

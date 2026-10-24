@@ -8,6 +8,7 @@ import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../compone
 import SignContractView from '../../components/contracts/SignContractView';
 import { DARK, FONTS } from '../../constants/colors';
 import AddCardSheet from '../../components/AddCardSheet';
+import { InspirationPhotosPicker, type PickedPhoto } from '../../components/booking/InspirationPhotos';
 import { CardRow } from './PaymentMethods';
 import { PaymentsService, PLAN_LABELS, type PaymentPlan, type SavedCard } from '../../services/payments.service';
 import { openChatWith } from '../../navigation/openChat';
@@ -61,6 +62,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<string | undefined>(undefined);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
 
   useEffect(() => {
     PaymentsService.cards()
@@ -132,7 +134,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
     if (!preview) return;
     setBusy(true);
     try {
-      await BookingService.createBooking({ ...fields, preview_token: preview.preview_token, signature });
+      await BookingService.createBooking({ ...fields, preview_token: preview.preview_token, signature }, photos);
       setSigning(false);
       setSent(true);
       haptic.success();
@@ -239,6 +241,12 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
             <Ionicons name="shield-checkmark-outline" size={16} color={DARK.accent} />
             <Text style={s.noteText}>Nothing is charged now. Your card is charged once {listing.vendorName} accepts, and Vendly holds the money until the service is done.</Text>
           </View>
+        </Card>
+
+        <Card style={{ gap: 10 }}>
+          <Text style={s.h2}>Inspiration photos</Text>
+          <Text style={s.noteText}>Show {listing.vendorName} what you have in mind (optional).</Text>
+          <InspirationPhotosPicker photos={photos} onChange={setPhotos} />
         </Card>
 
         <Card style={{ gap: 10 }}>

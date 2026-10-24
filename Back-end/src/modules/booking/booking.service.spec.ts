@@ -148,7 +148,7 @@ describe('BookingService', () => {
       const result = await service.create('customer-1', signedRequest, { ip: '1.2.3.4' });
 
       expect(result.success).toBe(true);
-      expect(mockContracts.createSignedBooking).toHaveBeenCalledWith('customer-1', signedRequest, { ip: '1.2.3.4' });
+      expect(mockContracts.createSignedBooking).toHaveBeenCalledWith('customer-1', signedRequest, { ip: '1.2.3.4' }, []);
       expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.objectContaining({ data: { type: 'booking', bookingId: 'booking-1' } }), 'booking_updates');
     });
 

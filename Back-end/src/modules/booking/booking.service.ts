@@ -27,6 +27,8 @@ import { requestExpiresAt } from './booking-requests';
 import { withBookingLock } from 'src/common/helper/job-lock';
 import { eventDays } from 'src/modules/calendar-sync/busy-days';
 import { disputePhotoUrls } from 'src/modules/payments/dispute-files';
+import { requestPhotoUrls } from './request-photos';
+import { CustomerBookingTab, customerTabOrder, customerTabWhere } from './customer-tabs';
 
 /** Extra tabs on the vendor's bookings list. */
 export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
@@ -78,10 +80,10 @@ export class BookingService {
     }, 'booking_updates');
   }
 
-  async create(customerId: string, dto: SignedBookingRequestDto, meta: RequestMeta = {}) {
+  async create(customerId: string, dto: SignedBookingRequestDto, meta: RequestMeta = {}, photos: { buffer: Buffer; size?: number }[] = []) {
     // validates the listing, the signed contract and creates booking + contract atomically
-    const created = await this.contracts.createSignedBooking(customerId, dto, meta);
-    track('booking_requested', customerId, { booking_id: created.id, listing_id: dto.listing_id, with_quote: !!dto.quote_id, for_event: !!dto.event_id });
+    const created = await this.contracts.createSignedBooking(customerId, dto, meta, photos);
+    track('booking_requested', customerId, { booking_id: created.id, listing_id: dto.listing_id, with_quote: !!dto.quote_id, for_event: !!dto.event_id, photos: photos.length });
     const booking = await this.prisma.booking.findUniqueOrThrow({
       where: { id: created.id },
       include: this.bookingIncludes(),
@@ -622,8 +624,15 @@ export class BookingService {
 
   async getMyBookingsAsCustomer(
     customerId: string,
-    query: { page?: number; limit?: number; status?: BookingStatus },
+    query: { page?: number; limit?: number; status?: BookingStatus; tab?: CustomerBookingTab },
   ) {
+    if (query.tab) {
+      return this.getPaginatedBookings(
+        { customer_id: customerId, AND: [customerTabWhere(query.tab), ...(query.status ? [{ status: query.status }] : [])] },
+        query,
+        customerTabOrder(query.tab),
+      );
+    }
     return this.getPaginatedBookings(
       { customer_id: customerId, ...(query.status ? { status: query.status } : {}) },
       query,
@@ -691,6 +700,7 @@ export class BookingService {
     const data = this.formatBooking(booking);
     // the customer and the vendor see the dispute photos through short-lived signed links
     data.dispute_photo_urls = disputePhotoUrls(booking.dispute_photos, userId, booking.id);
+    data.request_photo_urls = requestPhotoUrls(booking.request_photos, userId, booking.id);
     // a vendor deciding on a request sees what else they've already agreed to that day
     if (booking.vendor_id === userId && booking.status === BookingStatus.PENDING) {
       data.same_day_bookings = await this.sameDayBookings(booking).catch(() => []);

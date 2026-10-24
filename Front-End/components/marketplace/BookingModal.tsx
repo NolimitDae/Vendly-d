@@ -13,6 +13,7 @@ import {
 } from "@/service/contracts/contracts.service";
 import SignContractPanel from "@/components/contracts/SignContractPanel";
 import SavedCards from "@/components/payments/SavedCards";
+import { InspirationPhotosPicker } from "@/components/bookings/InspirationPhotos";
 import { PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
 import { toast } from "react-toastify";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
@@ -94,6 +95,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState<string | null>(null);
   const [promo, setPromo] = useState("");
+  const [photos, setPhotos] = useState<File[]>([]);
   // add-on id -> quantity (1 unless priced "each")
   const [picked, setPicked] = useState<Record<string, number>>({});
   const addOns = listing.add_ons ?? [];
@@ -223,7 +225,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
     if (!preview) return;
     setLoading(true);
     try {
-      const res = await BookingService.create({ ...fields(), preview_token: preview.preview_token, signature });
+      const res = await BookingService.create({ ...fields(), preview_token: preview.preview_token, signature }, photos);
       const id: string = res.data.data.id;
       setBookingId(id);
       onBookingCreated?.(id);
@@ -480,6 +482,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                 className={`${inputCls} resize-none`}
               />
             </div>
+            <InspirationPhotosPicker onChange={setPhotos} />
             <div>
               <label htmlFor="promo" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Promo code (optional)</label>
               <input id="promo" value={promo} onChange={(e) => setPromo(e.target.value.toUpperCase())} maxLength={50} className={inputCls} />

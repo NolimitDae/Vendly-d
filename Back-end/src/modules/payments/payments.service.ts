@@ -15,6 +15,7 @@ import { track } from 'src/common/analytics';
 import { vendorEarnings } from './vendor-earnings';
 import { bookingTitle, cardText, money, shortDate } from './money-text';
 import { checkDisputePhotos, describeDisputeAsk, disputePhotoUrls, removeDisputePhotos, storeDisputePhotos } from './dispute-files';
+import { requestPhotoUrls } from 'src/modules/booking/request-photos';
 
 /** A customer's report: the reason, and from newer apps what kind of problem and what they ask for. */
 export interface DisputeInput {
@@ -916,7 +917,7 @@ export class PaymentsService {
       select: {
         id: true, status: true, amount: true, service_fee: true, currency: true, dispute_opened_at: true, dispute_reason: true, dispute_resolved_at: true, dispute_resolution: true, released_at: true, completed_at: true,
         dispute_vendor_reply: true, dispute_vendor_replied_at: true,
-        dispute_category: true, dispute_outcome: true, dispute_requested_amount: true, dispute_photos: true,
+        dispute_category: true, dispute_outcome: true, dispute_requested_amount: true, dispute_photos: true, request_photos: true,
         listing: { select: { title: true } },
         customer: { select: { id: true, name: true, email: true } },
         vendor: { select: { id: true, name: true, email: true } },
@@ -927,12 +928,14 @@ export class PaymentsService {
     });
     return {
       success: true,
-      data: rows.map(({ dispute_photos, ...r }) => ({
+      data: rows.map(({ dispute_photos, request_photos, ...r }) => ({
         ...r,
         dispute_requested_amount: r.dispute_requested_amount != null ? Number(r.dispute_requested_amount) : null,
         dispute_ask: describeDisputeAsk({ category: r.dispute_category, outcome: r.dispute_outcome, requested_amount: r.dispute_requested_amount }),
         // signed, expiring links; the stored keys never leave the API
         dispute_photo_urls: disputePhotoUrls(dispute_photos, adminId, r.id),
+        // what the customer showed the vendor when they asked for the booking
+        request_photo_urls: requestPhotoUrls(request_photos, adminId, r.id),
         paid: round2(r.installments.filter((i) => i.status === InstallmentStatus.PAID || i.status === InstallmentStatus.REFUNDED).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0)),
         has_proof: r.proofs.length > 0,
       })),

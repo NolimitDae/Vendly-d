@@ -8,6 +8,7 @@ import { vendorAnswersWithin } from '../../utils/requests';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
+import { InspirationPhotos } from '../../components/booking/InspirationPhotos';
 import PaymentTimeline from '../../components/PaymentTimeline';
 import RentalReturnCard from '../../components/RentalReturnCard';
 import { DARK, FONTS } from '../../constants/colors';
@@ -213,6 +214,7 @@ export default function BookingDetail() {
             )}
             {booking.guest_count != null && <Row icon="people-outline" label="Guests" value={String(booking.guest_count)} />}
             {!!booking.message && <Row icon="chatbox-ellipses-outline" label="Notes" value={booking.message} />}
+            <InspirationPhotos urls={booking.request_photo_urls} title="Your inspiration photos" />
 
             <View style={s.dashed} />
             <Text style={s.h2}>Price Details</Text>
