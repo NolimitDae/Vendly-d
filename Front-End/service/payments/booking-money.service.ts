@@ -24,6 +24,8 @@ export interface CancellationSummary {
   refund_timing: string | null;
   /** plain sentence for whoever asked */
   message: string;
+  /** preview only: the start time passed and the vendor never started, so Report a problem fits better */
+  report_problem_hint?: string;
 }
 
 export type TransactionType = "payment" | "refund" | "payout" | "fee";

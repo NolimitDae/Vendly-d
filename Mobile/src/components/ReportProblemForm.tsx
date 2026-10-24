@@ -19,9 +19,13 @@ const MAX = 2000;
 
 type Photo = { uri: string; name: string; type: string };
 
-/** The customer's report: kind of problem, what happened, up to 10 photos, and what they'd like. */
-export default function ReportProblemForm({ bookingId, paid, onCancel, onSent }: { bookingId: string; paid: number; onCancel: () => void; onSent: () => void }) {
-  const [category, setCategory] = useState<DisputeCategory | null>(null);
+/**
+ * The customer's report: kind of problem, what happened, up to 10 photos, and what they'd like.
+ * `limit` (the vendor's part of what was paid, from newer APIs) keeps a partial refund under what
+ * Vendly can grant; `category` preselects the kind of problem (a no-show).
+ */
+export default function ReportProblemForm({ bookingId, paid, limit, category: initialCategory, onCancel, onSent }: { bookingId: string; paid: number; limit?: number | null; category?: DisputeCategory; onCancel: () => void; onSent: () => void }) {
+  const [category, setCategory] = useState<DisputeCategory | null>(initialCategory ?? null);
   const [reason, setReason] = useState('');
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [outcome, setOutcome] = useState<DisputeOutcome>('full_refund');
@@ -42,8 +46,17 @@ export default function ReportProblemForm({ bookingId, paid, onCancel, onSent }:
   };
 
   const requested = Number(amount);
+  const cap = limit ?? null;
   const amountError =
-    outcome !== 'partial_refund' ? '' : !(requested > 0) ? 'Enter how much you’d like back.' : requested > paid ? `You can ask for up to $${paid.toFixed(2)}, what you’ve paid.` : '';
+    outcome !== 'partial_refund'
+      ? ''
+      : !(requested > 0)
+        ? 'Enter how much you’d like back.'
+        : cap !== null && requested >= cap
+          ? `A partial refund must be less than $${cap.toFixed(2)}, the vendor’s part of what you’ve paid. To ask for everything back, choose a full refund.`
+          : cap === null && requested > paid
+            ? `You can ask for up to $${paid.toFixed(2)}, what you’ve paid.`
+            : '';
   const valid = !!category && reason.trim().length >= MIN && !amountError;
 
   const send = async () => {
@@ -121,11 +134,11 @@ export default function ReportProblemForm({ bookingId, paid, onCancel, onSent }:
             <TextInput
               style={ui.input}
               keyboardType="decimal-pad"
-              placeholder={`Up to ${paid.toFixed(2)}`}
+              placeholder={cap !== null ? `Less than ${cap.toFixed(2)}` : `Up to ${paid.toFixed(2)}`}
               placeholderTextColor={DARK.muted}
               value={amount}
               onChangeText={(t) => setAmount(t.replace(/[^0-9.]/g, ''))}
-              accessibilityLabel={`Amount, up to $${paid.toFixed(2)}`}
+              accessibilityLabel={cap !== null ? `Amount, less than $${cap.toFixed(2)}` : `Amount, up to $${paid.toFixed(2)}`}
             />
           </View>
           {amount !== '' && !!amountError && <Text style={s.error}>{amountError}</Text>}

@@ -20,12 +20,15 @@ const STATUS: Record<Installment["status"], { label: string; cls: string; Icon: 
   REFUNDED: { label: "Refunded", cls: "text-primary", Icon: RotateCcw },
 };
 
-/** Customer's payment timeline for a booking with retry, confirm-work and report-a-problem actions. */
-export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }: { bookingId: string; bookingStatus: string; onChanged?: () => void }) {
+/**
+ * Customer's payment timeline for a booking with retry, confirm-work and report-a-problem actions.
+ * `startReporting` opens the report form straight away (from the cancel dialog's no-show hint).
+ */
+export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, startReporting }: { bookingId: string; bookingStatus: string; onChanged?: () => void; startReporting?: boolean }) {
   const [t, setT] = useState<Timeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [disputing, setDisputing] = useState(false);
+  const [disputing, setDisputing] = useState(!!startReporting);
 
   const load = useCallback(async () => {
     try {
@@ -56,50 +59,59 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
   };
 
   if (loading) return <Loader2 className="w-5 h-5 animate-spin text-primary" />;
-  if (!t || t.installments.length === 0) return null;
+  if (!t) return null;
 
   const canApprove = bookingStatus === "COMPLETED" && !t.customer_approved_at && !t.released_at && !t.dispute;
-  const canDispute = ["IN_PROGRESS", "COMPLETED"].includes(bookingStatus) && !t.released_at && !t.dispute;
+  // the API says when (it also allows a confirmed booking past its start: a no-show); older APIs don't
+  const canDispute = t.can_dispute ?? (["IN_PROGRESS", "COMPLETED"].includes(bookingStatus) && !t.released_at && !t.dispute);
+  // paid in one go through Checkout: no plan to show, only the report
+  const hasPlan = t.installments.length > 0;
+  if (!hasPlan && !canDispute && !t.dispute) return null;
 
   return (
-    <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-4">
+    <section id="booking-payments" className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-4">
       <div>
         <h2 className="font-semibold text-gray-900 dark:text-white">Payments</h2>
         {t.plan && <p className="text-xs text-gray-500 dark:text-gray-400">{PLAN_LABELS[t.plan]}</p>}
       </div>
 
-      <ul className="space-y-3">
-        {t.installments.map((i) => {
-          const st = STATUS[i.status];
-          return (
-            <li key={i.id} className="flex items-start gap-3">
-              <st.Icon className={`w-5 h-5 mt-0.5 ${st.cls}`} />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">{i.label}</p>
-                <p className={`text-xs ${st.cls}`}>
-                  {st.label}
-                  {i.status === "PAID" && i.paid_at ? ` · ${dayjs(i.paid_at).format("MMM D")}` : ""}
-                  {i.status === "SCHEDULED" && i.attempts === 0 ? ` · due ${dayjs(i.due_at).format("MMM D, YYYY")}` : ""}
-                  {i.status === "SCHEDULED" && i.attempts > 0 && i.next_attempt_at ? ` · retrying ${dayjs(i.next_attempt_at).format("MMM D, h:mm A")}` : ""}
-                  {i.refunded_amount > 0 ? ` · ${money(i.refunded_amount)} refunded` : ""}
-                </p>
-                {i.last_error && i.status !== "PAID" && <p className="text-xs text-red-500">{i.last_error}</p>}
-                {i.status === "FAILED" && (
-                  <button type="button" disabled={busy} onClick={() => run(() => PaymentsService.retry(bookingId, i.id), "Payment failed again")} className="mt-1 text-xs font-semibold text-primary">
-                    Try again
-                  </button>
-                )}
-              </div>
-              <span className="text-sm font-semibold text-gray-900 dark:text-white">{money(i.amount)}</span>
-            </li>
-          );
-        })}
-      </ul>
+      {hasPlan && (
+        <>
+          <ul className="space-y-3">
+            {t.installments.map((i) => {
+              const st = STATUS[i.status];
+              return (
+                <li key={i.id} className="flex items-start gap-3">
+                  <st.Icon className={`w-5 h-5 mt-0.5 ${st.cls}`} />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{i.label}</p>
+                    <p className={`text-xs ${st.cls}`}>
+                      {st.label}
+                      {i.status === "PAID" && i.paid_at ? ` · ${dayjs(i.paid_at).format("MMM D")}` : ""}
+                      {i.status === "SCHEDULED" && i.attempts === 0 ? ` · due ${dayjs(i.due_at).format("MMM D, YYYY")}` : ""}
+                      {i.status === "SCHEDULED" && i.attempts > 0 && i.next_attempt_at ? ` · retrying ${dayjs(i.next_attempt_at).format("MMM D, h:mm A")}` : ""}
+                      {i.refunded_amount > 0 ? ` · ${money(i.refunded_amount)} refunded` : ""}
+                    </p>
+                    {i.last_error && i.status !== "PAID" && <p className="text-xs text-red-500">{i.last_error}</p>}
+                    {i.status === "FAILED" && (
+                      <button type="button" disabled={busy} onClick={() => run(() => PaymentsService.retry(bookingId, i.id), "Payment failed again")} className="mt-1 text-xs font-semibold text-primary">
+                        Try again
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">{money(i.amount)}</span>
+                </li>
+              );
+            })}
+          </ul>
 
-      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-3">
-        <span>Paid {money(t.paid)} of {money(t.total)}</span>
-        {t.outstanding > 0 && <span>{money(t.outstanding)} to go</span>}
-      </div>
+          <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-3">
+            <span>Paid {money(t.paid)} of {money(t.total)}</span>
+            {t.outstanding > 0 && <span>{money(t.outstanding)} to go</span>}
+          </div>
+        </>
+      )}
+
       {!!t.given_back && t.given_back > 0 && (
         <p className="text-xs text-green-600 flex gap-2"><RotateCcw className="w-4 h-4" />The vendor gave you {money(t.given_back)} back. It came off what you owe or was refunded to your card.</p>
       )}
@@ -113,6 +125,12 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
       ) : t.paid > 0 ? (
         <p className="text-xs text-gray-600 dark:text-gray-300 flex gap-2"><ShieldCheck className="w-4 h-4 text-primary" />Vendly holds your payment until the service is done.</p>
       ) : null}
+      {canDispute && t.not_started && (
+        <p className="text-xs text-amber-700 dark:text-amber-300 flex gap-2" data-testid="no-show-hint">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          The start time has passed and the vendor hasn’t started. If they didn’t show up, report a problem: your payment stays held while Vendly sorts it out.
+        </p>
+      )}
 
       {(canApprove || canDispute) && (
         <div className="flex flex-wrap items-center gap-3">
@@ -131,7 +149,16 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
           )}
         </div>
       )}
-      {disputing && <ReportProblemForm bookingId={bookingId} paid={t.paid} onCancel={() => setDisputing(false)} onSent={() => { setDisputing(false); load(); onChanged?.(); }} />}
+      {disputing && canDispute && (
+        <ReportProblemForm
+          bookingId={bookingId}
+          paid={t.paid}
+          limit={t.vendor_paid}
+          category={t.not_started ? "no_show" : undefined}
+          onCancel={() => setDisputing(false)}
+          onSent={() => { setDisputing(false); load(); onChanged?.(); }}
+        />
+      )}
       {t.dispute && <YourReport bookingId={bookingId} />}
     </section>
   );

@@ -25,14 +25,15 @@ const STATUS: Record<Installment['status'], { label: string; color: string; icon
 
 /**
  * The customer's view of a booking's money: plan, each charge, what is held, and the actions
- * that move it (retry a failed charge, confirm the work, report a problem).
+ * that move it (retry a failed charge, confirm the work, report a problem). `startReporting`
+ * opens the report form straight away (from the cancel prompt's no-show hint).
  */
-export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }: { bookingId: string; bookingStatus: string; onChanged?: () => void }) {
+export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, startReporting }: { bookingId: string; bookingStatus: string; onChanged?: () => void; startReporting?: boolean }) {
   const [t, setT] = useState<Timeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [addingFor, setAddingFor] = useState<string | null>(null);
-  const [disputing, setDisputing] = useState(false);
+  const [disputing, setDisputing] = useState(!!startReporting);
 
   const load = useCallback(async () => {
     try {
@@ -60,17 +61,21 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
   };
 
   if (loading) return <ActivityIndicator color={DARK.accent} />;
-  if (!t || t.installments.length === 0) return null;
+  if (!t) return null;
 
   const canApprove = bookingStatus === 'COMPLETED' && !t.customer_approved_at && !t.released_at && !t.dispute;
-  const canDispute = ['IN_PROGRESS', 'COMPLETED'].includes(bookingStatus) && !t.released_at && !t.dispute;
+  // the API says when (it also allows a confirmed booking past its start: a no-show); older APIs don't
+  const canDispute = t.can_dispute ?? (['IN_PROGRESS', 'COMPLETED'].includes(bookingStatus) && !t.released_at && !t.dispute);
+  // paid in one go through Checkout: no plan to show, only the report
+  const hasPlan = t.installments.length > 0;
+  if (!hasPlan && !canDispute && !t.dispute) return null;
 
   return (
     <Card style={{ gap: 14, borderWidth: 1, borderColor: DARK.field }}>
       <Text style={s.h2}>Payments</Text>
       {t.plan && <Text style={s.muted}>{PLAN_LABELS[t.plan]}</Text>}
 
-      {t.installments.map((i) => {
+      {hasPlan && t.installments.map((i) => {
         const st = STATUS[i.status];
         return (
           <View key={i.id} style={s.row}>
@@ -101,11 +106,15 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
         );
       })}
 
-      <View style={s.line} />
-      <View style={s.totals}>
-        <Text style={s.muted}>Paid {money(t.paid)} of {money(t.total)}</Text>
-        {t.outstanding > 0 && <Text style={s.muted}>{money(t.outstanding)} to go</Text>}
-      </View>
+      {hasPlan && (
+        <>
+          <View style={s.line} />
+          <View style={s.totals}>
+            <Text style={s.muted}>Paid {money(t.paid)} of {money(t.total)}</Text>
+            {t.outstanding > 0 && <Text style={s.muted}>{money(t.outstanding)} to go</Text>}
+          </View>
+        </>
+      )}
       {Number(t.given_back ?? 0) > 0 && (
         <View style={s.note}>
           <Ionicons name="gift-outline" size={16} color="#6ee7c7" />
@@ -134,6 +143,12 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
           <Text style={s.noteText}>Vendly holds your payment until the service is done.</Text>
         </View>
       ) : null}
+      {canDispute && t.not_started && (
+        <View style={s.note}>
+          <Ionicons name="alert-circle-outline" size={16} color="#fcd34d" />
+          <Text style={s.noteText}>The start time has passed and the vendor hasn’t started. If they didn’t show up, report a problem: your payment stays held while Vendly sorts it out.</Text>
+        </View>
+      )}
 
       {canApprove && (
         <GradientButton title="Confirm work was done" onPress={() => Alert.alert('Confirm and pay the vendor?', 'Only confirm once you are happy with the service.', [{ text: 'Not yet', style: 'cancel' }, { text: 'Confirm', onPress: () => run(() => PaymentsService.approve(bookingId), 'Could not confirm') }])} loading={busy} />
@@ -143,10 +158,12 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged }:
           <Text style={s.link}>Report a problem</Text>
         </Pressable>
       )}
-      {disputing && (
+      {disputing && canDispute && (
         <ReportProblemForm
           bookingId={bookingId}
           paid={t.paid}
+          limit={t.vendor_paid}
+          category={t.not_started ? 'no_show' : undefined}
           onCancel={() => setDisputing(false)}
           onSent={() => {
             setDisputing(false);

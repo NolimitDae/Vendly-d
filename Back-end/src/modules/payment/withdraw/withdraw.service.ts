@@ -4,15 +4,25 @@ import {
   NotFoundException,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { CreateWithdrawDto, WithdrawResponse } from './dto/create-withdraw.dto';
 import { UpdateWithdrawDto } from './dto/update-withdraw.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
+import { withJobLock } from 'src/common/helper/job-lock';
+import { PushService } from 'src/modules/push/push.service';
 import * as Sentry from '@sentry/nestjs';
 
 /** Smallest withdrawal in dollars (the website says the same). */
 export const MIN_WITHDRAW = 20;
+
+/** A withdrawal Stripe didn't confirm is looked up once it is this old (a request still in flight has finished by then). */
+const REVIEW_AFTER_MS = 60 * 60 * 1000;
+
+/** How a withdrawal left "needs_review" is settled: the transfer went out, or the money goes back to the balance. */
+export type WithdrawalOutcome = 'completed' | 'returned';
 
 /** True when Stripe answered and turned the transfer down, so nothing was sent; false when the outcome is unknown. */
 const stripeRefused = (err: any) => {
@@ -23,7 +33,12 @@ const stripeRefused = (err: any) => {
 
 @Injectable()
 export class WithdrawService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(WithdrawService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushService,
+  ) {}
 
   // Stripe Connected Account
   async createConnectedAccount(
@@ -172,7 +187,7 @@ export class WithdrawService {
       );
     }
 
-    const send = () => StripePayment.createTransfer(accountId, amount, currency, `withdraw-${pending.id}`);
+    const send = () => StripePayment.createTransfer(accountId, amount, currency, `withdraw-${pending.id}`, pending.id);
     let transfer: Awaited<ReturnType<typeof send>>;
     try {
       try {
@@ -228,6 +243,115 @@ export class WithdrawService {
         status: 'completed',
       },
     };
+  }
+
+  // ─── Withdrawals Stripe didn't confirm ("needs_review") ──────────────────
+
+  /** Hourly: looks each one up in Stripe and settles it, or leaves it for an admin when that's not clear. */
+  @Cron(CronExpression.EVERY_HOUR)
+  cronReviewWithdrawals() {
+    return withJobLock(this.prisma, 'withdraw-review', () => this.reviewWithdrawals());
+  }
+
+  async reviewWithdrawals(now = new Date()) {
+    const rows = await this.prisma.paymentTransaction.findMany({
+      where: { type: 'withdraw', status: 'needs_review', created_at: { lte: new Date(now.getTime() - REVIEW_AFTER_MS) } },
+      orderBy: { created_at: 'asc' },
+      take: 100,
+    });
+    const settled: { id: string; outcome: WithdrawalOutcome }[] = [];
+    for (const row of rows) {
+      try {
+        const found = await this.findTransfer(row);
+        // more than one transfer could be it: an admin decides
+        if (found === 'unclear') continue;
+        const outcome: WithdrawalOutcome = found ? 'completed' : 'returned';
+        if (await this.settleWithdrawal(row.id, outcome, found?.id)) settled.push({ id: row.id, outcome });
+      } catch (e) {
+        // Stripe didn't answer: try again next hour
+        this.logger.error(`withdrawal review ${row.id}`, e);
+        Sentry.captureException(e, { tags: { job: 'withdraw-review' }, extra: { transaction_id: row.id } });
+      }
+    }
+    return settled;
+  }
+
+  /**
+   * The Stripe transfer behind a withdrawal: found by its group (withdrawals made since the group was
+   * added), else, for older ones, the only plain transfer of that amount to the vendor's account made
+   * within an hour of the request. Null when there is none (nothing was sent).
+   */
+  private async findTransfer(row: { id: string; user_id: string | null; amount: unknown; created_at: Date }): Promise<{ id: string } | null | 'unclear'> {
+    const grouped = await StripePayment.listTransfers({ transferGroup: `withdraw_${row.id}` });
+    if (grouped.length) return { id: grouped[0].id };
+    const user = row.user_id ? await this.prisma.user.findUnique({ where: { id: row.user_id }, select: { stripe_connect_id: true } }) : null;
+    if (!user?.stripe_connect_id) return null;
+    const at = Math.floor(row.created_at.getTime() / 1000);
+    const cents = Math.round(Number(row.amount) * 100);
+    const candidates = (await StripePayment.listTransfers({ destination: user.stripe_connect_id, createdFrom: at - 300, createdTo: at + 3600 })).filter(
+      // booking payouts carry a group and metadata; an older withdrawal's transfer has neither
+      (t) => t.amount === cents && !t.transfer_group && !t.metadata?.booking_id && (!t.metadata?.withdrawal_id || t.metadata.withdrawal_id === row.id),
+    );
+    if (!candidates.length) return null;
+    // a transfer already recorded on another withdrawal isn't this one
+    const taken = await this.prisma.paymentTransaction.findMany({ where: { type: 'withdraw', reference_number: { in: candidates.map((t) => t.id) }, id: { not: row.id } }, select: { reference_number: true } });
+    const free = candidates.filter((t) => !taken.some((r) => r.reference_number === t.id));
+    if (free.length === 1) return { id: free[0].id };
+    return free.length ? 'unclear' : null;
+  }
+
+  /**
+   * Settles a "needs_review" withdrawal once: completed (the transfer went out), or returned (the
+   * money goes back into the balance and the withdrawal is marked failed). The status claim means
+   * the hourly check and an admin can never both act on it. True when this call settled it.
+   */
+  async settleWithdrawal(id: string, outcome: WithdrawalOutcome, transferId?: string) {
+    const row = await this.prisma.paymentTransaction.findUnique({ where: { id } });
+    if (!row || row.type !== 'withdraw') throw new NotFoundException('Withdrawal not found');
+    const amount = Math.round(Number(row.amount) * 100) / 100;
+    const done = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.paymentTransaction.updateMany({
+        where: { id, type: 'withdraw', status: 'needs_review' },
+        data:
+          outcome === 'completed'
+            ? { status: 'completed', paid_amount: amount, paid_currency: row.currency, ...(transferId && { reference_number: transferId }) }
+            : { status: 'failed' },
+      });
+      if (claimed.count !== 1) return false;
+      if (outcome === 'returned' && row.user_id) await tx.user.update({ where: { id: row.user_id }, data: { balance: { increment: amount } } });
+      return true;
+    });
+    if (done && row.user_id) {
+      void this.push
+        .sendToUser(row.user_id, {
+          title: outcome === 'completed' ? 'Withdrawal sent' : 'Withdrawal returned to your balance',
+          body:
+            outcome === 'completed'
+              ? `Your withdrawal of $${amount.toFixed(2)} went through to your payout account.`
+              : `Your withdrawal of $${amount.toFixed(2)} didn’t go through, so the money is back in your Vendly balance. You can withdraw it again.`,
+          data: { type: 'payout' },
+        }, 'payments')
+        .catch(() => null);
+    }
+    return done;
+  }
+
+  /** Admin: withdrawals waiting for a check, oldest first. */
+  async listNeedsReview() {
+    const rows = await this.prisma.paymentTransaction.findMany({
+      where: { type: 'withdraw', status: 'needs_review' },
+      orderBy: { created_at: 'asc' },
+      take: 200,
+      select: { id: true, amount: true, currency: true, created_at: true, user: { select: { id: true, name: true, email: true, stripe_connect_id: true } } },
+    });
+    return { success: true, data: rows.map((r) => ({ ...r, amount: Number(r.amount) })) };
+  }
+
+  /** Admin: settle one by hand after checking Stripe. */
+  async adminSettle(id: string, outcome: WithdrawalOutcome, transferId?: string) {
+    const done = await this.settleWithdrawal(id, outcome, transferId?.trim() || undefined);
+    if (!done) throw new BadRequestException('This withdrawal was already settled.');
+    return { success: true, data: { id, outcome } };
   }
 
   //Check Connected Account Balance

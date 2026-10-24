@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import CancelBookingDialog from './CancelBookingDialog';
 import RefundCard from './RefundCard';
 import InvoiceButton, { invoiceAvailable } from './InvoiceButton';
+import PaymentTimeline from '@/components/payments/PaymentTimeline';
 
 jest.mock('next/link', () => ({
   __esModule: true,
@@ -14,9 +15,10 @@ jest.mock('@/service/booking/booking.service', () => ({
   BookingService: { cancel: jest.fn() },
 }));
 
-jest.mock('@/service/payments/payments.service', () => ({
-  PaymentsService: { timeline: jest.fn() },
-}));
+jest.mock('@/service/payments/payments.service', () => {
+  const actual = jest.requireActual('@/service/payments/payments.service');
+  return { ...actual, PaymentsService: { timeline: jest.fn(), dispute: jest.fn() } };
+});
 
 jest.mock('@/service/payments/booking-money.service', () => ({
   BookingMoneyService: { cancelPreview: jest.fn() },
@@ -53,10 +55,51 @@ describe('CancelBookingDialog (vendor)', () => {
     expect(screen.getByText(/Refund \$472\.50/)).toBeInTheDocument();
   });
 
+  it('past the start of a booking the vendor never started, points the customer to Report a problem, and still lets them cancel', async () => {
+    (BookingMoneyService.cancelPreview as jest.Mock).mockResolvedValue({
+      data: { data: { cancelled_by: 'CUSTOMER', refund_total: 0, policy: null, message: "You won't get a refund.", report_problem_hint: 'The start time has passed and the vendor hasn’t started this booking. If they didn’t show up, report a problem instead.' } },
+    });
+    const onReportProblem = jest.fn();
+    const user = userEvent.setup();
+    const { unmount } = render(<CancelBookingDialog bookingId="b1" role="CUSTOMER" onClose={jest.fn()} onReportProblem={onReportProblem} />);
+    expect(await screen.findByText(/If they didn’t show up, report a problem instead/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Report a problem' }));
+    expect(onReportProblem).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /^cancel booking$/i })).toBeEnabled();
+    unmount();
+    // from the bookings list: a link to the booking page, which opens the report
+    render(<CancelBookingDialog bookingId="b1" role="CUSTOMER" onClose={jest.fn()} bookingHref="/bookings/b1" />);
+    expect(await screen.findByRole('link', { name: 'Report a problem' })).toHaveAttribute('href', '/bookings/b1?report=1');
+  });
+
   it('still lets the user cancel when the preview cannot load', async () => {
     (BookingMoneyService.cancelPreview as jest.Mock).mockRejectedValue({ response: { data: { message: 'Cannot cancel a booking in COMPLETED status' } } });
     render(<CancelBookingDialog bookingId="b1" role="CUSTOMER" onClose={jest.fn()} />);
     expect(await screen.findByText('Cannot cancel a booking in COMPLETED status')).toBeInTheDocument();
+  });
+});
+
+describe('PaymentTimeline (possible no-show)', () => {
+  const timeline = { plan: null, currency: 'usd', total: 420, paid: 0, outstanding: 0, dispute: null, installments: [], can_dispute: true, not_started: true, vendor_paid: 400 };
+
+  it('offers Report a problem on a confirmed booking past its start, even one paid through Checkout', async () => {
+    (PaymentsService.timeline as jest.Mock).mockResolvedValue({ data: { data: timeline } });
+    const user = userEvent.setup();
+    render(<PaymentTimeline bookingId="b1" bookingStatus="CONFIRMED" />);
+    expect(await screen.findByTestId('no-show-hint')).toHaveTextContent('If they didn’t show up, report a problem');
+    await user.click(screen.getByRole('button', { name: 'Report a problem' }));
+    expect(screen.getByLabelText('What went wrong?')).toHaveValue('no_show');
+  });
+
+  it('opens the report straight away when asked to, and not when the API says no', async () => {
+    (PaymentsService.timeline as jest.Mock).mockResolvedValue({ data: { data: timeline } });
+    const { unmount } = render(<PaymentTimeline bookingId="b1" bookingStatus="CONFIRMED" startReporting />);
+    expect(await screen.findByRole('form', { name: 'Report a problem' })).toBeInTheDocument();
+    unmount();
+    (PaymentsService.timeline as jest.Mock).mockResolvedValue({ data: { data: { ...timeline, can_dispute: false, not_started: false } } });
+    const { container } = render(<PaymentTimeline bookingId="b1" bookingStatus="CONFIRMED" startReporting />);
+    await waitFor(() => expect(PaymentsService.timeline).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 });
 

@@ -40,6 +40,12 @@ export interface PaymentTimeline {
   released_at?: string | null;
   customer_approved_at?: string | null;
   dispute: { opened_at: string; resolved_at?: string | null } | null;
+  /** the customer can report a problem now (older APIs leave it out) */
+  can_dispute?: boolean;
+  /** confirmed, its start time has passed and the vendor never started: maybe a no-show */
+  not_started?: boolean;
+  /** the vendor's part of what was paid: a partial refund asked for stays under it */
+  vendor_paid?: number | null;
   installments: Installment[];
 }
 

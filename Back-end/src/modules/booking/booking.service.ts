@@ -30,6 +30,7 @@ import { eventDays } from 'src/modules/calendar-sync/busy-days';
 import { disputePhotoUrls } from 'src/modules/payments/dispute-files';
 import { requestPhotoUrls } from './request-photos';
 import { CustomerBookingTab, customerTabOrder, customerTabWhere } from './customer-tabs';
+import { NO_SHOW_HINT, pastStartNotStarted } from './no-show';
 
 /** Extra tabs on the vendor's bookings list. */
 export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
@@ -472,9 +473,13 @@ export class BookingService {
     if (!CANCELLABLE.includes(booking.status)) throw new BadRequestException(`Cannot cancel a booking in ${booking.status} status`);
     if (booking.dispute_opened_at && !booking.dispute_resolved_at) throw new BadRequestException(OPEN_DISPUTE);
     const by = isCustomer ? 'CUSTOMER' : 'VENDOR';
-    const terms = await this.cancellationTerms(booking, by, new Date());
+    const now = new Date();
+    const terms = await this.cancellationTerms(booking, by, now);
     const card = isCustomer ? await this.payments.cardLabel(booking.payment_method_id).catch(() => null) : null;
-    return { success: true, data: this.describeCancellation(terms, by, card, false) };
+    // past the start and never started (maybe a no-show): the policy would pay the vendor, so the
+    // apps point the customer to Report a problem first. Cancelling stays possible.
+    const reportInstead = isCustomer && !!booking.paid_at && pastStartNotStarted(booking, now);
+    return { success: true, data: { ...this.describeCancellation(terms, by, card, false), ...(reportInstead && { report_problem_hint: NO_SHOW_HINT }) } };
   }
 
   /**

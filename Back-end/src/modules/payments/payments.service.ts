@@ -16,6 +16,7 @@ import { vendorEarnings } from './vendor-earnings';
 import { bookingTitle, cardText, money, shortDate } from './money-text';
 import { checkDisputePhotos, describeDisputeAsk, disputePhotoUrls, removeDisputePhotos, storeDisputePhotos } from './dispute-files';
 import { requestPhotoUrls } from 'src/modules/booking/request-photos';
+import { NOT_STARTED_FLAG_HOURS, notStartedWindow, pastStartNotStarted } from 'src/modules/booking/no-show';
 
 /** A customer's report: the reason, and from newer apps what kind of problem and what they ask for. */
 export interface DisputeInput {
@@ -47,6 +48,15 @@ export interface RefundPart {
 
 /** Stripe statuses a saved-card charge can land in that still need the customer. */
 const NEEDS_CUSTOMER = new Set(['requires_action', 'requires_payment_method', 'requires_confirmation']);
+
+/** What paidSoFar and checkoutPart read from a booking. */
+interface CheckoutBooking {
+  amount?: unknown;
+  service_fee?: unknown;
+  paid_at?: Date | null;
+  payment_transaction_id?: string | null;
+  installments?: { kind: string; status: InstallmentStatus; amount: unknown; fee_amount: unknown; refunded_amount: unknown }[];
+}
 
 @Injectable()
 export class PaymentsService {
@@ -457,30 +467,44 @@ export class PaymentsService {
 
   /**
    * Customer reports a problem: what went wrong, what kind of problem, what they ask for (a partial
-   * refund is capped at what they paid) and up to 10 photos, kept in private storage. Older apps send
-   * the reason alone.
+   * refund stays under the vendor's part of what they paid, the most Vendly can give back short of a
+   * full refund) and up to 10 photos, kept in private storage. Older apps send the reason alone.
+   * Open once the service has started, or on a confirmed booking whose start time has passed (the
+   * vendor may not have shown up).
    */
   async openDispute(bookingId: string, customerId: string, input: string | DisputeInput, photos: { buffer: Buffer; size?: number }[] = []) {
     const d: DisputeInput = typeof input === 'string' ? { reason: input } : input;
     const reason = d.reason.trim();
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { customer_id: true, status: true, amount: true, service_fee: true, paid_at: true, released_at: true, dispute_opened_at: true, installments: { select: { status: true, amount: true, refunded_amount: true } } },
+      select: {
+        customer_id: true, status: true, amount: true, service_fee: true, paid_at: true, payment_transaction_id: true, released_at: true, dispute_opened_at: true, event_start_at: true, scheduled_at: true,
+        installments: { select: { kind: true, status: true, amount: true, fee_amount: true, refunded_amount: true } },
+      },
     });
     if (!b) throw new NotFoundException('Booking not found');
     if (b.customer_id !== customerId) throw new ForbiddenException('Access denied');
     if (b.released_at) throw new BadRequestException('Payment for this booking has already been released. Contact support.');
     if (b.dispute_opened_at) throw new BadRequestException('A dispute is already open.');
-    if (!([BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED] as BookingStatus[]).includes(b.status)) throw new BadRequestException('You can dispute a booking once the service has started.');
+    if (!([BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED] as BookingStatus[]).includes(b.status) && !pastStartNotStarted(b)) {
+      throw new BadRequestException(b.status === BookingStatus.CONFIRMED ? 'You can report a problem once the booking’s start time has passed.' : 'You can dispute a booking once the service has started.');
+    }
     if (reason.length < 10) throw new BadRequestException('Tell Vendly what went wrong (at least 10 characters).');
 
     let requested: number | null = null;
     if (d.requested_amount != null && d.outcome !== 'partial_refund') throw new BadRequestException('An amount is only needed for a partial refund.');
     if (d.outcome === 'partial_refund') {
       requested = round2(Number(d.requested_amount ?? 0));
-      const paid = await this.paidSoFar(bookingId, b);
+      const { vendorPaid } = await this.paidSoFar(bookingId, b);
       if (!(requested > 0)) throw new BadRequestException('Enter how much you’d like back.');
-      if (requested > paid) throw new BadRequestException(`You can ask for up to $${paid.toFixed(2)}, what you’ve paid so far.`);
+      // the same limit an admin has for a partial refund: the Vendly Protection fee comes back only with a full refund
+      if (requested >= vendorPaid) {
+        throw new BadRequestException(
+          vendorPaid > 0
+            ? `A partial refund must be less than $${vendorPaid.toFixed(2)}, the vendor’s part of what you’ve paid. To ask for everything back, choose a full refund.`
+            : 'Nothing you’ve paid can be partly refunded yet. Choose a full refund instead.',
+        );
+      }
     }
     const exts = checkDisputePhotos(photos);
     const keys = photos.length ? await storeDisputePhotos(bookingId, photos, exts) : [];
@@ -513,21 +537,57 @@ export class PaymentsService {
   }
 
   /**
-   * What the customer has paid for a booking, less what was already refunded. Bookings paid through
-   * hosted Checkout before installments have none: their payment is the booking's amount plus fee,
-   * and their refunds are `booking_refund` transaction rows (order_id = the booking).
+   * What the customer has paid for a booking, less what was already refunded, and the vendor's part
+   * of it (the Vendly Protection fee left out): installments plus any one-off Checkout payment.
    */
-  private async paidSoFar(
-    bookingId: string,
-    b: { amount?: unknown; service_fee?: unknown; paid_at?: Date | null; installments?: { status: InstallmentStatus; amount: unknown; refunded_amount: unknown }[] },
-  ): Promise<number> {
+  private async paidSoFar(bookingId: string, b: CheckoutBooking): Promise<{ paid: number; vendorPaid: number }> {
+    const paid = (b.installments ?? []).filter(isPaid);
+    const checkout = await this.checkoutPart(bookingId, b);
+    return {
+      paid: round2(paid.reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0) + (checkout?.paid ?? 0)),
+      vendorPaid: round2(paid.reduce((s, i) => s + vendorPortion(i), 0) + (checkout?.vendorPaid ?? 0)),
+    };
+  }
+
+  /**
+   * The part of a booking paid in one go through hosted Checkout (bookings from before payment
+   * plans; Pay now still opens it for a booking without a plan), or null when there is none. It has
+   * no installment: its payment is the booking's amount plus fee, and its refunds are the
+   * `booking_refund` rows (order_id = the booking) that aren't refunds of installments.
+   */
+  private async checkoutPart(bookingId: string, b: CheckoutBooking): Promise<{ paid: number; vendorPaid: number } | null> {
     const installments = b.installments ?? [];
-    if (installments.length || !b.paid_at) {
-      return round2(installments.filter(isPaid).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0));
+    if (!b.paid_at || installments.some((i) => i.kind === 'charge')) return null;
+    // with other installments (an add-on) paid_at alone doesn't show that, so the checkout payment must be on record
+    if (installments.length) {
+      const recorded = b.payment_transaction_id
+        ? await this.prisma.paymentTransaction.count({ where: { reference_number: b.payment_transaction_id, type: 'booking_payment', status: 'succeeded' } })
+        : 0;
+      if (!recorded) return null;
     }
-    const legacy = await this.prisma.paymentTransaction.aggregate({ where: { type: 'booking_refund', status: 'refunded', order_id: bookingId }, _sum: { amount: true } });
-    const refunded = Number(legacy?._sum?.amount ?? 0);
-    return Math.max(0, round2(Number(b.amount ?? 0) + Number(b.service_fee ?? 0) - refunded));
+    const rows = await this.prisma.paymentTransaction.aggregate({ where: { type: 'booking_refund', status: 'refunded', order_id: bookingId }, _sum: { amount: true } });
+    const fromInstallments = installments.reduce((s, i) => s + Number(i.refunded_amount), 0);
+    const refunded = Math.max(0, round2(Number(rows?._sum?.amount ?? 0) - fromInstallments));
+    return {
+      paid: Math.max(0, round2(Number(b.amount ?? 0) + Number(b.service_fee ?? 0) - refunded)),
+      // refunds come out of the vendor's price first (a customer cancellation keeps the fee)
+      vendorPaid: Math.max(0, round2(Number(b.amount ?? 0) - refunded)),
+    };
+  }
+
+  /** Refunds `amount` of a booking's one-off Checkout payment (as a cancellation does) and records it. */
+  private async refundCheckout(b: { id: string; customer_id?: string | null; payment_transaction_id?: string | null; currency?: string | null }, amount: number, reasonKey: string) {
+    if (amount <= 0) return 0;
+    const ref = b.payment_transaction_id ?? '';
+    const session = ref.startsWith('cs_') ? await StripePayment.retrieveCheckoutSession(ref) : null;
+    const paymentIntentId = ref.startsWith('pi_') ? ref : typeof session?.payment_intent === 'string' ? session.payment_intent : session?.payment_intent?.id;
+    if (!paymentIntentId) throw new BadRequestException('The card payment for this booking could not be found, so nothing was refunded. Refund it in Stripe by hand.');
+    // keyed on the amount too: a retry of the same decision never refunds twice
+    const refund = await StripePayment.refundPaymentIntent(paymentIntentId, `${reasonKey}-checkout-${Math.round(amount * 100)}`, amount);
+    await this.prisma.paymentTransaction.create({
+      data: { user_id: b.customer_id ?? null, type: 'booking_refund', provider: 'stripe', reference_number: refund.id, order_id: b.id, status: 'refunded', amount, currency: b.currency ?? 'usd' },
+    });
+    return amount;
   }
 
   /** The vendor and Vendly's admins hear about a new dispute straight away; the payout stays held meanwhile. */
@@ -611,7 +671,7 @@ export class PaymentsService {
   private async releaseBookingLocked(bookingId: string) {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { id: true, status: true, released_at: true, currency: true, vendor_id: true, amount: true, paid_at: true, payment_transaction_id: true, payout_credited_at: true, dispute_opened_at: true, dispute_resolved_at: true, early_released_amount: true, vendor: { select: { stripe_connect_id: true, balance: true } }, installments: true },
+      select: { id: true, status: true, released_at: true, currency: true, vendor_id: true, amount: true, service_fee: true, paid_at: true, payment_transaction_id: true, payout_credited_at: true, dispute_opened_at: true, dispute_resolved_at: true, early_released_amount: true, vendor: { select: { stripe_connect_id: true, balance: true } }, installments: true },
     });
     if (!b || b.status !== BookingStatus.COMPLETED || b.released_at) return null;
     if (b.dispute_opened_at && !b.dispute_resolved_at) return null;
@@ -624,15 +684,10 @@ export class PaymentsService {
     // only what was actually paid (and not paid out already); an installment refunded past the
     // vendor's part (fee included) counts as nothing, never as minus
     const paid = b.installments.filter((i) => isPaid(i) && !i.paid_out_at);
-    // legacy checkout bookings have no payment-plan charges: their price was paid in one go. With other
-    // installments (an add-on) paid_at alone doesn't show that, so the checkout payment must be on record
+    // legacy checkout bookings have no payment-plan charges: their price was paid in one go, less
+    // anything refunded from it since (a partial refund after a dispute)
     let legacy = 0;
-    if (!b.installments.some((i) => i.kind === 'charge') && !b.payout_credited_at) {
-      const checkoutPaid =
-        !b.installments.length ||
-        (!!b.payment_transaction_id && (await this.prisma.paymentTransaction.count({ where: { reference_number: b.payment_transaction_id, type: 'booking_payment', status: 'succeeded' } })) > 0);
-      if (checkoutPaid) legacy = Number(b.amount ?? 0);
-    }
+    if (!b.payout_credited_at) legacy = (await this.checkoutPart(bookingId, b))?.vendorPaid ?? 0;
     const gross = round2(legacy + paid.reduce((sum, i) => sum + vendorPortion(i), 0));
     const commission = round2((Math.max(0, gross) * currentFees().commission) / 100);
     const share = round2(gross - commission - Number(b.early_released_amount ?? 0));
@@ -960,19 +1015,22 @@ export class PaymentsService {
       orderBy: { dispute_opened_at: 'asc' },
       select: {
         id: true, status: true, amount: true, service_fee: true, currency: true, dispute_opened_at: true, dispute_reason: true, dispute_resolved_at: true, dispute_resolution: true, released_at: true, completed_at: true,
+        paid_at: true, payment_transaction_id: true,
         dispute_vendor_reply: true, dispute_vendor_replied_at: true,
         dispute_category: true, dispute_outcome: true, dispute_requested_amount: true, dispute_photos: true, request_photos: true,
         listing: { select: { title: true } },
         customer: { select: { id: true, name: true, email: true } },
         vendor: { select: { id: true, name: true, email: true } },
-        installments: { select: { status: true, amount: true, fee_amount: true, refunded_amount: true } },
+        installments: { select: { kind: true, status: true, amount: true, fee_amount: true, refunded_amount: true } },
         proofs: { select: { id: true, created_at: true }, orderBy: { created_at: 'desc' }, take: 1 },
       },
       take: 200,
     });
+    // a booking paid in one go through Checkout has no installment for that payment
+    const checkouts = await Promise.all(rows.map((r) => this.checkoutPart(r.id, r)));
     return {
       success: true,
-      data: rows.map(({ dispute_photos, request_photos, ...r }) => ({
+      data: rows.map(({ dispute_photos, request_photos, payment_transaction_id: _p, ...r }, i) => ({
         ...r,
         dispute_requested_amount: r.dispute_requested_amount != null ? Number(r.dispute_requested_amount) : null,
         dispute_ask: describeDisputeAsk({ category: r.dispute_category, outcome: r.dispute_outcome, requested_amount: r.dispute_requested_amount }),
@@ -980,7 +1038,9 @@ export class PaymentsService {
         dispute_photo_urls: disputePhotoUrls(dispute_photos, adminId, r.id),
         // what the customer showed the vendor when they asked for the booking
         request_photo_urls: requestPhotoUrls(request_photos, adminId, r.id),
-        paid: round2(r.installments.filter((i) => i.status === InstallmentStatus.PAID || i.status === InstallmentStatus.REFUNDED).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0)),
+        paid: round2(r.installments.filter((i) => i.status === InstallmentStatus.PAID || i.status === InstallmentStatus.REFUNDED).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0) + (checkouts[i]?.paid ?? 0)),
+        // a partial refund must stay under this (the Vendly Protection fee goes back only with a full refund)
+        vendor_paid: round2(r.installments.filter((i) => i.status === InstallmentStatus.PAID).reduce((s, i) => s + vendorPortion(i), 0) + (checkouts[i]?.vendorPaid ?? 0)),
         has_proof: r.proofs.length > 0,
       })),
     };
@@ -989,6 +1049,9 @@ export class PaymentsService {
   /**
    * Admin decision on a dispute. refund: everything back to the customer (fee included), nothing to
    * the vendor. partial_refund: `amount` back to the customer, the rest released. release: vendor paid in full.
+   * A one-off Checkout payment is refunded like the installments. On a booking that isn't complete
+   * yet (a reported no-show) the rest is paid out once the vendor marks it complete; a full refund
+   * of a booking that was never started cancels it.
    */
   async resolveDispute(bookingId: string, adminId: string, input: { action: 'refund' | 'partial_refund' | 'release'; amount?: number; note: string }) {
     const res = await withBookingLock(this.prisma, bookingId, () => this.settleDisputeLocked(bookingId, adminId, input));
@@ -1003,24 +1066,34 @@ export class PaymentsService {
   private async settleDisputeLocked(bookingId: string, adminId: string, input: { action: 'refund' | 'partial_refund' | 'release'; amount?: number; note: string }) {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { id: true, status: true, dispute_opened_at: true, dispute_resolved_at: true, released_at: true, vendor_id: true, currency: true, early_released_amount: true, listing: { select: { title: true } }, customer: { select: { email: true, name: true } }, vendor: { select: { email: true, name: true } }, installments: true },
+      select: {
+        id: true, status: true, dispute_opened_at: true, dispute_resolved_at: true, released_at: true, vendor_id: true, customer_id: true, currency: true, early_released_amount: true,
+        amount: true, service_fee: true, paid_at: true, payment_transaction_id: true,
+        listing: { select: { title: true } }, customer: { select: { email: true, name: true } }, vendor: { select: { email: true, name: true } }, installments: true,
+      },
     });
     if (!b) throw new NotFoundException('Booking not found');
     if (!b.dispute_opened_at || b.dispute_resolved_at) throw new BadRequestException('This booking has no open dispute.');
     if (b.released_at) throw new BadRequestException('Payment for this booking was already released.');
     const paid = round2(b.installments.filter((i) => i.status === InstallmentStatus.PAID).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0));
+    // paid in one go through Checkout (no installment for it): refunded from that payment
+    const checkout = await this.checkoutPart(bookingId, b);
     // a partial refund comes out of the vendor's part; the Vendly Protection fee goes back only with a full refund
-    const vendorPaid = round2(b.installments.filter((i) => i.status === InstallmentStatus.PAID).reduce((s, i) => s + vendorPortion(i), 0));
+    const vendorPaid = round2(b.installments.filter((i) => i.status === InstallmentStatus.PAID).reduce((s, i) => s + vendorPortion(i), 0) + (checkout?.vendorPaid ?? 0));
+    const key = `dispute-${bookingId}`;
 
     let refunded = 0;
     if (input.action === 'refund') {
-      refunded = await this.refundBooking(bookingId, paid, `dispute-${bookingId}`);
+      // the Checkout refund first: if Stripe refuses it nothing else has moved and the admin can try again
+      if (checkout) refunded = await this.refundCheckout(b, checkout.paid, key);
+      refunded = round2(refunded + (await this.refundBooking(bookingId, paid, key)));
       // nothing more is charged on a fully refunded booking
       await this.prisma.bookingExtra.updateMany({ where: { booking_id: bookingId, status: { in: [BookingExtraStatus.PENDING, BookingExtraStatus.IN_REVIEW] } }, data: { status: BookingExtraStatus.CANCELLED } });
     } else if (input.action === 'partial_refund') {
       const amt = round2(Number(input.amount ?? 0));
       if (amt <= 0 || amt >= vendorPaid) throw new BadRequestException(`A partial refund must be more than $0 and less than $${vendorPaid.toFixed(2)} (the vendor's part of what was paid).`);
-      refunded = await this.refundBooking(bookingId, amt, `dispute-${bookingId}`, { keepFees: true });
+      if (checkout) refunded = await this.refundCheckout(b, round2(Math.min(amt, checkout.vendorPaid)), key);
+      if (amt > refunded) refunded = round2(refunded + (await this.refundBooking(bookingId, round2(amt - refunded), key, { keepFees: true })));
     }
     const note = `${input.action}${refunded ? ` ($${refunded.toFixed(2)} refunded)` : ''} by admin ${adminId}: ${input.note}`;
     await this.prisma.booking.update({ where: { id: bookingId }, data: { dispute_resolved_at: new Date(), dispute_resolution: note } });
@@ -1028,15 +1101,24 @@ export class PaymentsService {
     if (input.action === 'refund') {
       // vendor gets nothing; anything paid out early is owed back
       const early = Number(b.early_released_amount ?? 0);
-      await this.prisma.booking.update({ where: { id: bookingId }, data: { released_at: new Date(), payout_credited_at: new Date() } });
+      const now = new Date();
+      await this.prisma.booking.update({ where: { id: bookingId }, data: { released_at: now, payout_credited_at: now } });
       if (early > 0) await this.recordRecovery(b.vendor_id, bookingId, -early, b.currency ?? 'usd');
+      // a booking the vendor never started (a no-show) is over: it leaves the vendor's upcoming work
+      if (b.status === BookingStatus.CONFIRMED) {
+        await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.CANCELLED, cancelled_at: now, cancel_reason: 'Refunded in full by Vendly after a reported problem' } });
+      }
     }
 
     const title = b.listing?.title ?? 'your booking';
+    // not complete yet: what isn't refunded is paid out once the vendor marks the booking complete
+    const later = b.status !== BookingStatus.COMPLETED ? ' The vendor is paid once they mark the booking complete.' : '';
     const message =
       input.action === 'release'
-        ? `Vendly reviewed the problem reported on ${title} and released the payment to the vendor. ${input.note}`
-        : `Vendly reviewed the problem reported on ${title} and refunded $${refunded.toFixed(2)} to the customer. ${input.note}`;
+        ? later
+          ? `Vendly reviewed the problem reported on ${title} and decided for the vendor.${later} ${input.note}`
+          : `Vendly reviewed the problem reported on ${title} and released the payment to the vendor. ${input.note}`
+        : `Vendly reviewed the problem reported on ${title} and refunded $${refunded.toFixed(2)} to the customer.${input.action === 'partial_refund' ? later : ''} ${input.note}`;
     for (const who of [b.customer, b.vendor]) {
       if (who?.email) await this.mail.sendBookingNotification({ to: who.email, recipientName: who.name ?? '', subject: `Dispute resolved — ${title}`, message, status: 'DISPUTE_RESOLVED', listingTitle: title }).catch(() => null);
     }
@@ -1203,7 +1285,55 @@ export class PaymentsService {
 
   @Cron(CronExpression.EVERY_HOUR)
   cronMoneyCheck() {
-    return withJobLock(this.prisma, 'money-check', () => this.runMoneyCheck());
+    return withJobLock(this.prisma, 'money-check', async () => {
+      const res = await this.runMoneyCheck();
+      // under the same lock: each booking is flagged by one server only
+      await this.flagNotStarted().catch((e) => {
+        this.logger.error('not-started check', e);
+        Sentry.captureException(e, { tags: { job: 'not-started' } });
+      });
+      return res;
+    });
+  }
+
+  /**
+   * Confirmed bookings the vendor still hasn't started 2 hours after their start time (maybe a
+   * no-show): the vendor is asked to start or sort it out with the customer, and Vendly's admins
+   * hear about it. Each booking falls in exactly one hourly window, so it is flagged once. Rentals
+   * are left out: they can stay confirmed until the items come back.
+   */
+  async flagNotStarted(now = new Date()) {
+    const window = notStartedWindow(now);
+    const rows = await this.prisma.booking.findMany({
+      where: {
+        status: BookingStatus.CONFIRMED,
+        deleted_at: null,
+        // a reported problem already reached the vendor and Vendly
+        dispute_opened_at: null,
+        rental_reservations: { none: {} },
+        OR: [{ event_start_at: window }, { event_start_at: null, scheduled_at: window }],
+      },
+      select: { id: true, vendor_id: true, listing: { select: { title: true } }, customer: { select: { name: true } }, vendor: { select: { email: true, name: true } } },
+      orderBy: { id: 'asc' },
+      take: 500,
+    });
+    if (!rows.length) return [];
+    const clientUrl = appConfig().app.client_app_url;
+    for (const b of rows) {
+      const title = b.listing?.title ?? 'a booking';
+      const body = `${title} for ${b.customer?.name ?? 'your customer'} was due to start ${NOT_STARTED_FLAG_HOURS} hours ago and hasn’t been started. If you’re on it, tap Start work. If you can’t make it, message the customer now: they can report a problem to Vendly.`;
+      void this.push.sendToUser(b.vendor_id, { title: 'Booking not started', body, data: { type: 'booking', bookingId: b.id } }, 'booking_updates');
+      if (b.vendor?.email) {
+        await this.mail
+          .sendBookingNotification({ to: b.vendor.email, recipientName: b.vendor.name ?? '', subject: `Not started yet — ${title}`, message: body, status: 'CONFIRMED', listingTitle: title, ctaUrl: `${clientUrl}/vendor/bookings/${b.id}`, topic: 'booking_updates' })
+          .catch(() => null);
+      }
+    }
+    const admins = await this.prisma.user.findMany({ where: { type: 'ADMIN', deleted_at: null }, select: { id: true } });
+    const list = rows.map((b) => `${b.listing?.title ?? 'Booking'} (${b.id})`).join(', ');
+    const body = `${rows.length === 1 ? 'A confirmed booking was' : `${rows.length} confirmed bookings were`} not started ${NOT_STARTED_FLAG_HOURS} hours after the start time: ${list}. The vendors were asked to start or contact the customer.`;
+    for (const a of admins) void this.push.sendToUser(a.id, { title: 'Bookings not started', body: body.slice(0, 1000), data: { type: 'not_started' } });
+    return rows.map((b) => b.id);
   }
 
   /**
@@ -1397,7 +1527,11 @@ export class PaymentsService {
   async timeline(bookingId: string, userId: string) {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { customer_id: true, vendor_id: true, status: true, amount: true, service_fee: true, security_deposit: true, currency: true, payment_plan: true, payment_method_id: true, paid_at: true, release_at: true, released_at: true, customer_approved_at: true, dispute_opened_at: true, dispute_resolved_at: true, installments: { orderBy: { sequence: 'asc' } } },
+      select: {
+        customer_id: true, vendor_id: true, status: true, amount: true, service_fee: true, security_deposit: true, currency: true, payment_plan: true, payment_method_id: true, payment_transaction_id: true,
+        paid_at: true, release_at: true, released_at: true, customer_approved_at: true, dispute_opened_at: true, dispute_resolved_at: true, event_start_at: true, scheduled_at: true,
+        installments: { orderBy: { sequence: 'asc' } },
+      },
     });
     if (!b) throw new NotFoundException('Booking not found');
     if (b.customer_id !== userId && b.vendor_id !== userId) throw new ForbiddenException('Access denied');
@@ -1419,6 +1553,11 @@ export class PaymentsService {
       : Math.max(0, total - paid);
     const extras = b.installments.filter((i) => i.kind !== 'charge' && i.status === InstallmentStatus.PAID).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0);
     const givenBack = await this.prisma.paymentTransaction.aggregate({ where: { type: 'vendor_give_back', reference_number: bookingId }, _sum: { amount: true } });
+    // the start time passed and the vendor never started: the customer may report a no-show
+    const notStarted = pastStartNotStarted(b);
+    const canDispute = b.customer_id === userId && !b.released_at && !b.dispute_opened_at && (b.status === BookingStatus.IN_PROGRESS || b.status === BookingStatus.COMPLETED || notStarted);
+    // a partial refund the customer asks for stays under this (the vendor's part of what was paid)
+    const vendorPaid = canDispute ? (await this.paidSoFar(bookingId, b)).vendorPaid : null;
     return {
       success: true,
       data: {
@@ -1438,6 +1577,9 @@ export class PaymentsService {
         released_at: b.released_at,
         customer_approved_at: b.customer_approved_at,
         dispute: b.dispute_opened_at ? { opened_at: b.dispute_opened_at, resolved_at: b.dispute_resolved_at } : null,
+        can_dispute: canDispute,
+        not_started: notStarted,
+        vendor_paid: vendorPaid,
         security_deposit: b.security_deposit != null ? Number(b.security_deposit) : null,
         fees_charged: Math.round(extras * 100) / 100,
         installments: b.installments.map((i) => ({

@@ -34,3 +34,16 @@ export function requestExpiresAt(booking: {
 }
 
 export const hoursFromNow = (h: number, now = new Date()) => new Date(now.getTime() + h * HOUR);
+
+/** A planner's request waiting for their client's co-signature, with no event date, closes this long after it was made. */
+export const CLIENT_SIGN_DAYS = 14;
+
+/**
+ * When a request still waiting for the planner's client to co-sign is closed: when the event
+ * starts (date-only starts count from the end of that day), or 14 days after the request without a date.
+ */
+export function clientSignExpiresAt(booking: { created_at: Date | string; event_start_at?: Date | string | null }): Date {
+  if (!booking.event_start_at) return new Date(new Date(booking.created_at).getTime() + CLIENT_SIGN_DAYS * 24 * HOUR);
+  const start = new Date(booking.event_start_at);
+  return isMidnightUtc(start) ? new Date(start.getTime() + 24 * HOUR) : start;
+}

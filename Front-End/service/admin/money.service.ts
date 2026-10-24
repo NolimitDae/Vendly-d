@@ -48,6 +48,8 @@ export interface Dispute {
   customer: { id: string; name: string; email: string };
   vendor: { id: string; name: string; email: string };
   paid: number;
+  /** the vendor's part of what was paid: a partial refund must be less than this */
+  vendor_paid?: number;
   has_proof: boolean;
 }
 
@@ -70,6 +72,15 @@ export interface Flag {
   key: string;
   enabled: boolean;
   description?: string | null;
+}
+
+/** A withdrawal Stripe didn't confirm; the hourly check settles most, an admin the rest. */
+export interface NeedsReviewWithdrawal {
+  id: string;
+  amount: number;
+  currency?: string | null;
+  created_at: string;
+  user?: { id: string; name?: string | null; email?: string | null; stripe_connect_id?: string | null } | null;
 }
 
 export interface RevenueDay {
@@ -100,6 +111,11 @@ export const MoneyService = {
     Fetch.post(`/admin/disputes/${bookingId}/resolve`, body, json()),
 
   revenue: (from: string, to: string) => Fetch.get(`/admin/reports/revenue?from=${from}&to=${to}`, json()),
+
+  needsReviewWithdrawals: () => Fetch.get("/admin/withdrawals/needs-review", json()),
+  /** completed: the transfer went out; returned: the money goes back to the vendor's balance */
+  settleWithdrawal: (id: string, outcome: "completed" | "returned", transfer_id?: string) =>
+    Fetch.post(`/admin/withdrawals/${id}/settle`, transfer_id ? { outcome, transfer_id } : { outcome }, json()),
 
   /** 0 suspends, 1 restores; the reason (optional) is shown to the user and kept in their history. */
   setUserStatus: (id: string, status: 0 | 1, reason?: string) =>

@@ -54,7 +54,9 @@ export default function DisputesPageContent() {
 
   const resolve = async (d: Dispute) => {
     if (note.trim().length < 5) return toast.error("Add a short note explaining the decision");
-    if (action === "partial_refund" && !(Number(amount) > 0 && Number(amount) < d.paid)) return toast.error(`Refund must be between $0 and ${money(d.paid)}`);
+    // a partial refund comes out of the vendor's part (older APIs: what was paid)
+    const partialMax = d.vendor_paid ?? d.paid;
+    if (action === "partial_refund" && !(Number(amount) > 0 && Number(amount) < partialMax)) return toast.error(`Refund must be between $0 and ${money(partialMax)}`);
     if (!confirm(action === "release" ? "Release the payment to the vendor?" : `Refund ${action === "refund" ? money(d.paid) : money(amount)} to the customer?`)) return;
     setBusy(true);
     try {
@@ -133,7 +135,7 @@ export default function DisputesPageContent() {
                     ))}
                   </div>
                   {action === "partial_refund" && (
-                    <input aria-label="Refund amount" placeholder={`Amount to refund (max ${money(d.paid)})`} value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} className="w-full h-10 px-4 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm" />
+                    <input aria-label="Refund amount" placeholder={`Amount to refund (less than ${money(d.vendor_paid ?? d.paid)})`} value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} className="w-full h-10 px-4 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm" />
                   )}
                   <textarea aria-label="Decision note" rows={2} placeholder="Note for the record (both sides see it in the email)" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm" />
                   <div className="flex gap-2">

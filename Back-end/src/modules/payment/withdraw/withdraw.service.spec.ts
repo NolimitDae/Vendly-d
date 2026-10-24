@@ -7,6 +7,7 @@ import {
 import { WithdrawService } from './withdraw.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
+import { PushService } from 'src/modules/push/push.service';
 
 jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
   StripePayment: {
@@ -15,8 +16,10 @@ jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
     createTransfer: jest.fn(),
     checkBalance: jest.fn(),
     retrieveAccount: jest.fn(),
+    listTransfers: jest.fn(),
   },
 }));
+jest.mock('src/modules/push/push.service', () => ({ PushService: class {} }));
 
 const mockPrisma: any = {
   user: {
@@ -27,10 +30,13 @@ const mockPrisma: any = {
   paymentTransaction: {
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
+    findUnique: jest.fn(),
     findMany: jest.fn(),
   },
   $transaction: jest.fn(),
 };
+const mockPush = { sendToUser: jest.fn().mockResolvedValue(undefined) };
 
 const mockUser = {
   id: 'user-1',
@@ -60,6 +66,7 @@ describe('WithdrawService', () => {
       providers: [
         WithdrawService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: PushService, useValue: mockPush },
       ],
     }).compile();
 
@@ -189,7 +196,7 @@ describe('WithdrawService', () => {
       expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ user_id: 'user-1', type: 'withdraw', status: 'pending', amount: 100 }) }),
       );
-      expect(StripePayment.createTransfer).toHaveBeenCalledWith(mockUserWithConnect.stripe_connect_id, 100, 'usd', 'withdraw-txn-pending');
+      expect(StripePayment.createTransfer).toHaveBeenCalledWith(mockUserWithConnect.stripe_connect_id, 100, 'usd', 'withdraw-txn-pending', 'txn-pending');
       // the balance is only taken once, before the transfer
       expect(mockPrisma.user.update).not.toHaveBeenCalled();
       expect(mockPrisma.paymentTransaction.update).toHaveBeenCalledWith({
@@ -211,7 +218,7 @@ describe('WithdrawService', () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
       (StripePayment.createTransfer as jest.Mock).mockResolvedValue({ id: 'tr_2' });
       await service.processWithdraw('user-1', { amount: 20.005, currency: 'usd' });
-      expect(StripePayment.createTransfer).toHaveBeenCalledWith('acct_connect_123', 20.01, 'usd', 'withdraw-txn-pending');
+      expect(StripePayment.createTransfer).toHaveBeenCalledWith('acct_connect_123', 20.01, 'usd', 'withdraw-txn-pending', 'txn-pending');
     });
 
     it('puts the money back when Stripe turns the transfer down', async () => {
@@ -230,7 +237,7 @@ describe('WithdrawService', () => {
 
       const result = await service.processWithdraw('user-1', withdrawDto);
       expect(result.data?.transfer_id).toBe('tr_3');
-      expect(StripePayment.createTransfer).toHaveBeenNthCalledWith(2, 'acct_connect_123', 100, 'usd', 'withdraw-txn-pending');
+      expect(StripePayment.createTransfer).toHaveBeenNthCalledWith(2, 'acct_connect_123', 100, 'usd', 'withdraw-txn-pending', 'txn-pending');
       expect(mockPrisma.user.update).not.toHaveBeenCalled();
     });
 
@@ -446,6 +453,85 @@ describe('WithdrawService', () => {
       await expect(
         service.getConnectedAccountInfo('ghost-user'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── needs_review withdrawals ─────────────────────────────────────────────
+
+  describe('withdrawals Stripe did not confirm', () => {
+    const now = new Date('2026-10-24T12:00:00Z');
+    const created = new Date('2026-10-24T09:00:00Z');
+    const row = { id: 'w1', type: 'withdraw', status: 'needs_review', user_id: 'user-1', amount: 150, currency: 'usd', created_at: created };
+
+    beforeEach(() => {
+      mockPrisma.paymentTransaction.findMany.mockResolvedValue([row]);
+      mockPrisma.paymentTransaction.findUnique.mockResolvedValue(row);
+      mockPrisma.paymentTransaction.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_connect_123' });
+    });
+
+    it('marks it completed when its transfer is found by its group', async () => {
+      (StripePayment.listTransfers as jest.Mock).mockResolvedValueOnce([{ id: 'tr_9', amount: 15000 }]);
+      expect(await service.reviewWithdrawals(now)).toEqual([{ id: 'w1', outcome: 'completed' }]);
+      expect(StripePayment.listTransfers).toHaveBeenCalledWith({ transferGroup: 'withdraw_w1' });
+      // only rows old enough that a request in flight has finished
+      expect(mockPrisma.paymentTransaction.findMany.mock.calls[0][0].where).toEqual({ type: 'withdraw', status: 'needs_review', created_at: { lte: new Date('2026-10-24T11:00:00Z') } });
+      expect(mockPrisma.paymentTransaction.updateMany).toHaveBeenCalledWith({
+        where: { id: 'w1', type: 'withdraw', status: 'needs_review' },
+        data: { status: 'completed', paid_amount: 150, paid_currency: 'usd', reference_number: 'tr_9' },
+      });
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('user-1', expect.objectContaining({ title: 'Withdrawal sent' }), 'payments');
+    });
+
+    it('finds an older withdrawal’s plain transfer by account, amount and time', async () => {
+      (StripePayment.listTransfers as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { id: 'tr_booking', amount: 15000, transfer_group: 'booking_b1', metadata: { booking_id: 'b1' } },
+          { id: 'tr_other', amount: 9900, transfer_group: null, metadata: {} },
+          { id: 'tr_old', amount: 15000, transfer_group: null, metadata: {} },
+        ]);
+      mockPrisma.paymentTransaction.findMany.mockResolvedValueOnce([row]).mockResolvedValueOnce([]);
+      expect(await service.reviewWithdrawals(now)).toEqual([{ id: 'w1', outcome: 'completed' }]);
+      const at = Math.floor(created.getTime() / 1000);
+      expect(StripePayment.listTransfers).toHaveBeenLastCalledWith({ destination: 'acct_connect_123', createdFrom: at - 300, createdTo: at + 3600 });
+      expect(mockPrisma.paymentTransaction.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reference_number: 'tr_old' }) }));
+    });
+
+    it('puts the money back and marks it failed when no transfer was made', async () => {
+      (StripePayment.listTransfers as jest.Mock).mockResolvedValue([]);
+      expect(await service.reviewWithdrawals(now)).toEqual([{ id: 'w1', outcome: 'returned' }]);
+      expect(mockPrisma.paymentTransaction.updateMany).toHaveBeenCalledWith({ where: { id: 'w1', type: 'withdraw', status: 'needs_review' }, data: { status: 'failed' } });
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'user-1' }, data: { balance: { increment: 150 } } });
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('user-1', expect.objectContaining({ body: expect.stringContaining('back in your Vendly balance') }), 'payments');
+    });
+
+    it('leaves it for an admin when two transfers could be it, or Stripe does not answer', async () => {
+      (StripePayment.listTransfers as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce([
+        { id: 'tr_a', amount: 15000, transfer_group: null, metadata: {} },
+        { id: 'tr_b', amount: 15000, transfer_group: null, metadata: {} },
+      ]);
+      mockPrisma.paymentTransaction.findMany.mockResolvedValueOnce([row]).mockResolvedValueOnce([]);
+      expect(await service.reviewWithdrawals(now)).toEqual([]);
+      (StripePayment.listTransfers as jest.Mock).mockRejectedValueOnce(new Error('timeout'));
+      expect(await service.reviewWithdrawals(now)).toEqual([]);
+      expect(mockPrisma.paymentTransaction.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('never credits twice: an admin and the check can’t both settle it', async () => {
+      mockPrisma.paymentTransaction.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+      await service.adminSettle('w1', 'returned');
+      await expect(service.adminSettle('w1', 'returned')).rejects.toThrow('already settled');
+      expect(mockPrisma.user.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('lists the ones waiting for a check', async () => {
+      mockPrisma.paymentTransaction.findMany.mockResolvedValueOnce([{ id: 'w1', amount: '150.00', currency: 'usd', created_at: created, user: { id: 'user-1', name: 'Jane', email: 'j@x.test', stripe_connect_id: 'acct_1' } }]);
+      const res = await service.listNeedsReview();
+      expect(res.data[0]).toMatchObject({ id: 'w1', amount: 150, user: { name: 'Jane' } });
+      expect(mockPrisma.paymentTransaction.findMany.mock.calls[0][0].where).toEqual({ type: 'withdraw', status: 'needs_review' });
     });
   });
 });

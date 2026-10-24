@@ -10,7 +10,6 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  Info,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import dayjs from "dayjs";
@@ -67,15 +66,6 @@ export default function WalletPage() {
   const [loadingPage, setLoadingPage] = useState(true);
   const [loadingBalance, setLoadingBalance] = useState(false);
 
-  /* Deposit state */
-  const [depositAmount, setDepositAmount] = useState("");
-  const [depositing, setDepositing] = useState(false);
-  const [depositResult, setDepositResult] = useState<{
-    payment_intent_id: string;
-    client_secret: string;
-    amount: number;
-  } | null>(null);
-
   /* Withdraw state */
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
@@ -120,32 +110,6 @@ export default function WalletPage() {
       // silent — user may not have a connected account
     } finally {
       setLoadingBalance(false);
-    }
-  };
-
-  /* ─── Deposit ────────────────────────────────────────────────── */
-  const handleDeposit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amount = parseFloat(depositAmount);
-    if (!amount || amount <= 0) {
-      toast.error("Enter a valid deposit amount");
-      return;
-    }
-    setDepositing(true);
-    setDepositResult(null);
-    try {
-      const res = await WalletService.deposit(amount);
-      if (res.data?.success) {
-        setDepositResult(res.data.data);
-        setDepositAmount("");
-        toast.success("Payment intent created — complete the payment below.");
-      } else {
-        toast.error(res.data?.message ?? "Deposit failed");
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? "Deposit failed");
-    } finally {
-      setDepositing(false);
     }
   };
 
@@ -248,156 +212,59 @@ export default function WalletPage() {
           </div>
         </div>
 
-        {/* ── Balance card ───────────────────────────────────── */}
-        <div className="gradient-bg rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-white/70 text-sm font-medium mb-1">
-                {isVendor ? "Available Balance (Stripe)" : "Wallet Balance"}
-              </p>
-              {loadingBalance ? (
-                <Loader2 className="w-6 h-6 animate-spin text-white/70 mt-2" />
-              ) : stripeBalance ? (
-                <>
-                  <p className="text-4xl font-bold tracking-tight">
-                    ${stripeBalance.available.amount.toFixed(2)}
-                  </p>
-                  <p className="text-white/60 text-sm mt-1">
-                    ${stripeBalance.pending.amount.toFixed(2)} pending
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-4xl font-bold tracking-tight">—</p>
-                  <p className="text-white/60 text-xs mt-1">
-                    {isVendor
-                      ? "Connect a Stripe account to see your balance"
-                      : "Balance updates after deposit confirmation"}
-                  </p>
-                </>
+        {/* ── Balance card (vendors; customers have no balance: Add Funds is gone, nothing spends one) ── */}
+        {isVendor && (
+          <div className="gradient-bg rounded-2xl p-6 text-white shadow-lg">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-white/70 text-sm font-medium mb-1">
+                  Available Balance (Stripe)
+                </p>
+                {loadingBalance ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-white/70 mt-2" />
+                ) : stripeBalance ? (
+                  <>
+                    <p className="text-4xl font-bold tracking-tight">
+                      ${stripeBalance.available.amount.toFixed(2)}
+                    </p>
+                    <p className="text-white/60 text-sm mt-1">
+                      ${stripeBalance.pending.amount.toFixed(2)} pending
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-4xl font-bold tracking-tight">—</p>
+                    <p className="text-white/60 text-xs mt-1">
+                      Connect a Stripe account to see your balance
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {accountInfo?.hasConnectedAccount && (
+                <button
+                  onClick={refreshStripeBalance}
+                  disabled={loadingBalance}
+                  className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
+                  title="Refresh balance"
+                >
+                  <RefreshCw className={cn("w-4 h-4", loadingBalance && "animate-spin")} />
+                </button>
               )}
             </div>
 
-            {isVendor && accountInfo?.hasConnectedAccount && (
-              <button
-                onClick={refreshStripeBalance}
-                disabled={loadingBalance}
-                className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition disabled:opacity-50"
-                title="Refresh balance"
-              >
-                <RefreshCw className={cn("w-4 h-4", loadingBalance && "animate-spin")} />
-              </button>
-            )}
-          </div>
-
-          {isVendor && accountInfo?.hasConnectedAccount && (
-            <div className="mt-4 pt-4 border-t border-white/20 flex items-center gap-2 text-sm text-white/70">
-              <CheckCircle2 className="w-4 h-4 text-green-300" />
-              Stripe payout account connected
-            </div>
-          )}
-        </div>
-
-        {/* ── Action cards ──────────────────────────────────── */}
-        <div className={cn("grid gap-5", isVendor ? "md:grid-cols-2" : "md:grid-cols-1 max-w-xl")}>
-
-          {/* Deposit */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <ArrowDownCircle className="w-5 h-5 text-green-500" />
-              <h2 className="font-semibold text-gray-900 dark:text-white">Add Funds</h2>
-            </div>
-
-            {depositResult ? (
-              <div className="space-y-3">
-                <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-xl">
-                  <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                      Payment Intent Created
-                    </p>
-                    <p className="text-xs text-green-600/70 dark:text-green-500/70 mt-0.5">
-                      Amount: ${depositResult.amount.toFixed(2)} USD
-                    </p>
-                  </div>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl space-y-1.5">
-                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Payment Intent ID
-                  </p>
-                  <p className="text-xs font-mono text-gray-700 dark:text-gray-300 break-all">
-                    {depositResult.payment_intent_id}
-                  </p>
-                </div>
-                <div className="flex items-start gap-1.5 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-                  <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">
-                    In production, use Stripe.js with the{" "}
-                    <code className="bg-blue-100 dark:bg-blue-900/30 px-1 rounded text-[11px]">
-                      client_secret
-                    </code>{" "}
-                    to confirm the card payment. Your balance updates automatically after confirmation.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setDepositResult(null)}
-                  className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition dark:text-gray-400"
-                >
-                  New deposit
-                </button>
+            {accountInfo?.hasConnectedAccount && (
+              <div className="mt-4 pt-4 border-t border-white/20 flex items-center gap-2 text-sm text-white/70">
+                <CheckCircle2 className="w-4 h-4 text-green-300" />
+                Stripe payout account connected
               </div>
-            ) : (
-              <form onSubmit={handleDeposit} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                    Amount (USD)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">
-                      $
-                    </span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={depositAmount}
-                      onChange={(e) => setDepositAmount(e.target.value)}
-                      className="w-full pl-7 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {[25, 50, 100, 200].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setDepositAmount(String(preset))}
-                      className={cn(
-                        "flex-1 py-1.5 text-xs rounded-lg border transition font-medium",
-                        depositAmount === String(preset)
-                          ? "border-primary/50 bg-primary/10 text-primary"
-                          : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-primary/30",
-                      )}
-                    >
-                      ${preset}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="submit"
-                  disabled={depositing || !depositAmount}
-                  className="w-full py-2.5 gradient-bg text-white text-sm font-medium rounded-xl hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {depositing && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {depositing ? "Creating payment…" : "Add Funds"}
-                </button>
-              </form>
             )}
           </div>
+        )}
 
-          {/* Withdraw (vendors only) */}
-          {isVendor && (
+        {/* ── Withdraw (vendors only) ───────────────────────── */}
+        {isVendor && (
+          <div className="grid gap-5 max-w-xl">
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <ArrowUpCircle className="w-5 h-5 text-orchid-500" />
@@ -477,8 +344,8 @@ export default function WalletPage() {
                 </form>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ── Booking charges and refunds ───────────────────── */}
         <TransactionsList role="customer" title="Booking payments and refunds" />
