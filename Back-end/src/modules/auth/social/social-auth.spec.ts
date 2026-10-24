@@ -61,7 +61,7 @@ describe('SocialAuthService', () => {
     account: { findUnique: jest.fn(), create: jest.fn() },
     user: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
   };
-  const users: any = { createUser: jest.fn() };
+  const users: any = { createUser: jest.fn(), verify2FA: jest.fn() };
   const auth: any = { login: jest.fn().mockResolvedValue({ success: true, authorization: { access_token: 'jwt' } }) };
   const service = new SocialAuthService(prisma, users, auth);
   const identity = { provider: 'google' as const, sub: 'g-123', email: 'ada@gmail.com', email_verified: true, name: 'Ada Obi' };
@@ -111,6 +111,39 @@ describe('SocialAuthService', () => {
     prisma.account.findUnique.mockResolvedValue(null);
     (tokens.verifyGoogle as jest.Mock).mockResolvedValue({ ...identity, email_verified: false });
     await expect(service.signIn({ provider: 'google', id_token: 't' })).rejects.toThrow(/isn’t verified/);
+  });
+
+  describe('two-step sign-in', () => {
+    beforeEach(() => prisma.user.findUnique.mockResolvedValue({ ...active, is_two_factor_enabled: 1 }));
+
+    it('asks for the code instead of signing in, like a password sign-in', async () => {
+      prisma.account.findUnique.mockResolvedValue({ user_id: 'u1' });
+      const err = await service.signIn({ provider: 'google', id_token: 't' }).catch((e) => e);
+      expect(err).toMatchObject({ status: 401, message: 'Token is required' });
+      expect(auth.login).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses a wrong code and signs in with the right one, checking the Google token again', async () => {
+      prisma.account.findUnique.mockResolvedValue({ user_id: 'u1' });
+      users.verify2FA.mockResolvedValueOnce(false);
+      await expect(service.signIn({ provider: 'google', id_token: 't', token: '000000' })).rejects.toMatchObject({ status: 401, message: 'Invalid token' });
+      users.verify2FA.mockResolvedValueOnce(true);
+      await expect(service.signIn({ provider: 'google', id_token: 't2', token: '123456' })).resolves.toMatchObject({ success: true });
+      expect(users.verify2FA).toHaveBeenLastCalledWith('u1', '123456');
+      expect(tokens.verifyGoogle).toHaveBeenLastCalledWith('t2');
+      expect(auth.login).toHaveBeenCalledTimes(1);
+    });
+
+    it('links an existing email account only once the code is right', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue({ id: 'u1' });
+      await expect(service.signIn({ provider: 'google', id_token: 't' })).rejects.toThrow('Token is required');
+      expect(prisma.account.create).not.toHaveBeenCalled();
+      users.verify2FA.mockResolvedValueOnce(true);
+      await service.signIn({ provider: 'google', id_token: 't', token: '123456' });
+      expect(prisma.account.create).toHaveBeenCalledWith({ data: { user_id: 'u1', type: 'oauth', provider: 'google', provider_account_id: 'g-123' } });
+    });
   });
 
   it('turns token problems into a 401', async () => {

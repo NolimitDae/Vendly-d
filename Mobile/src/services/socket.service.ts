@@ -40,6 +40,11 @@ export const SocketService = {
     s.emit('joinroom', { room_id: conversationId });
   },
 
+  /** Leaving a chat (or the app going to the background): its new messages are pushed again. */
+  leaveRoom(conversationId: string) {
+    socket?.emit('leaveroom', { room_id: conversationId });
+  },
+
   async onMessage(cb: (data: any) => void) {
     const s = await getSocket();
     s.on('message', cb);

@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api } from './api';
+import { api, PUSH_TOKEN_KEY } from './api';
 
 /** Settings kept on this phone only: the in-app sound switch (and, from older versions, all of them). */
 export const LOCAL_PREFS_KEY = 'vendly_notification_prefs';
@@ -55,6 +55,7 @@ export const NotificationsService = {
 
   async savePushToken(token: string): Promise<void> {
     await api.post('/auth/push-token', { token, platform: Platform.OS });
+    await AsyncStorage.setItem(PUSH_TOKEN_KEY, token).catch(() => undefined);
   },
 
   getPrefs: () => api.get<{ success: boolean; data: NotificationPrefs }>('/auth/notification-prefs'),

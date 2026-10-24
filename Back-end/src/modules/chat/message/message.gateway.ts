@@ -103,6 +103,14 @@ export class MessageGateway
     client.emit('joinedRoom', { room_id: roomId });
   }
 
+  /** Leaving a chat screen: new messages there are pushed again (the user's own room is never left). */
+  @SubscribeMessage('leaveroom')
+  handleRoomLeave(client: Socket, body: { room_id: string }) {
+    const roomId = body?.room_id;
+    if (typeof roomId !== 'string' || !roomId || roomId.startsWith('user_')) return;
+    client.leave(roomId);
+  }
+
   // There is deliberately no client "sendMessage" event: messages are sent through the API, which
   // checks the sender is in the conversation, and the server pushes them out. A socket relay let any
   // connected user deliver a message with a made-up sender to anyone.

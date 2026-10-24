@@ -373,6 +373,25 @@ describe('booking a date the vendor is not free', () => {
   });
 });
 
+describe('booking a suspended or deleted vendor', () => {
+  const setup = (vendor: Record<string, unknown>) => {
+    const prisma: any = {
+      vendorListing: { findFirst: jest.fn().mockResolvedValue({ id: 'l1', vendor_id: 'v1', vendor: { id: 'v1', ...vendor } }) },
+      user: { findUnique: jest.fn() },
+    };
+    const service = new BookingContractsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any);
+    return { prisma, load: () => (service as any).loadBookingContext('c1', { listing_id: 'l1', vendor_id: 'v1' }) };
+  };
+
+  it('refuses the preview and the request with a clear message', async () => {
+    for (const vendor of [{ status: 0, deleted_at: null }, { status: 1, deleted_at: new Date() }]) {
+      const { prisma, load } = setup(vendor);
+      await expect(load()).rejects.toThrow('This vendor isn’t taking bookings right now. Try another vendor.');
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    }
+  });
+});
+
 describe('booking outside the vendor’s working hours', () => {
   // Mon–Fri 9am–5pm, Saturday 10am–2pm, closed Sunday
   const hours = {

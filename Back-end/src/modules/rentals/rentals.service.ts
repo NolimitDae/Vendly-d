@@ -11,6 +11,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateRentalItemDto, RentalBookDto, RentalQuoteDto, RentalReturnDto, UpdateRentalItemDto } from './dto/rentals.dto';
 import { availabilityCalendar, availableQuantity, DAY_MS, parseDay, priceRental, rangeProblem, rentalDays, ReservationLike } from './rental-availability';
 import { track } from 'src/common/analytics';
+import { ACTIVE_VENDOR_WHERE, VENDOR_UNAVAILABLE, vendorIsActive } from 'src/common/helper/active-vendor';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Bookings in these states no longer hold stock. */
@@ -166,6 +167,8 @@ export class RentalsService {
     const where: Prisma.RentalItemWhereInput = {
       status: RentalItemStatus.ACTIVE,
       deleted_at: null,
+      // nothing from suspended or deleted vendors
+      vendor: ACTIVE_VENDOR_WHERE,
       ...(q.category_id ? { category_id: q.category_id } : {}),
       ...(q.vendor_id ? { vendor_id: q.vendor_id } : {}),
       ...(q.search ? { OR: [{ title: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}),
@@ -191,7 +194,7 @@ export class RentalsService {
 
   async getItem(id: string, from?: string) {
     const item = await this.prisma.rentalItem.findFirst({
-      where: { id, deleted_at: null, status: RentalItemStatus.ACTIVE },
+      where: { id, deleted_at: null, status: RentalItemStatus.ACTIVE, vendor: ACTIVE_VENDOR_WHERE },
       include: { vendor: { select: { id: true, name: true, avatar: true } } },
     });
     if (!item) throw new NotFoundException('Rental item not found');
@@ -206,7 +209,7 @@ export class RentalsService {
   private async loadLines(db: Prisma.TransactionClient | PrismaService, dto: RentalQuoteDto) {
     const ids = [...new Set(dto.lines.map((l) => l.item_id))];
     if (ids.length !== dto.lines.length) throw new BadRequestException('Each item can only appear once.');
-    const items = (await db.rentalItem.findMany({ where: { id: { in: ids } } })) as Item[];
+    const items = (await db.rentalItem.findMany({ where: { id: { in: ids } }, include: { vendor: { select: { status: true, deleted_at: true } } } })) as (Item & { vendor: { status: number | null; deleted_at: Date | null } | null })[];
     const byId = new Map(items.map((i) => [i.id, i]));
     const lines = dto.lines.map((l) => {
       const item = byId.get(l.item_id);
@@ -214,6 +217,8 @@ export class RentalsService {
       return { item, quantity: l.quantity };
     });
     if (new Set(lines.map((l) => l.item.vendor_id)).size > 1) throw new BadRequestException('Rent items from one vendor per booking.');
+    // a suspended vendor can't sign in to answer the request (quotes are refused too, before checkout)
+    if (!vendorIsActive(lines[0]?.item.vendor)) throw new BadRequestException(VENDOR_UNAVAILABLE);
     return lines;
   }
 

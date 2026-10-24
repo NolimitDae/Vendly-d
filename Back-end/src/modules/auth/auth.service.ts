@@ -78,6 +78,8 @@ export function sessionKeys(userId: string, sid?: string | null) {
 /** The user's session ids, so deleting the account can end every one. */
 const sessionsKey = (userId: string) => `refresh_sessions:${userId}`;
 const newSessionId = () => randomBytes(12).toString('hex');
+/** Added to the answer after a password reset or change, which end the other sessions. */
+export const SIGNED_OUT_ELSEWHERE = 'You’ve been signed out on your other devices.';
 
 @Injectable()
 export class AuthService {
@@ -726,10 +728,12 @@ export class AuthService {
             email: email,
             token: token,
           });
+          // whoever else holds a session (a stolen one included) has to sign in with the new password
+          await this.revokeAllSessions(user.id).catch(() => null);
 
           return {
             success: true,
-            message: 'Password updated successfully',
+            message: `Password updated successfully. ${SIGNED_OUT_ELSEWHERE}`,
           };
         } else {
           return {
@@ -751,7 +755,8 @@ export class AuthService {
     }
   }
 
-  async changePassword({ user_id, oldPassword, newPassword }) {
+  /** `sid`: the session making the change, which stays signed in; every other one ends. */
+  async changePassword({ user_id, oldPassword, newPassword, sid }: { user_id: string; oldPassword: string; newPassword: string; sid?: string }) {
     try {
       const user = await this.userRepository.getUserDetails(user_id);
 
@@ -765,10 +770,11 @@ export class AuthService {
             email: user.email,
             password: newPassword,
           });
+          await this.revokeAllSessions(user_id, { sid }).catch(() => null);
 
           return {
             success: true,
-            message: 'Password updated successfully',
+            message: `Password updated successfully. ${SIGNED_OUT_ELSEWHERE}`,
           };
         } else {
           return {
@@ -1215,10 +1221,17 @@ export class AuthService {
   // --------- end 2FA ---------
 
   async savePushToken(userId: string, token: string) {
+    // one phone, one account: someone else signing in on a shared phone takes its pushes over
+    if (token) await this.prisma.user.updateMany({ where: { push_token: token, id: { not: userId } }, data: { push_token: null } });
     await this.prisma.user.update({
       where: { id: userId },
       data: { push_token: token },
     });
+  }
+
+  /** After signing out on a phone: stop pushing to it, unless another phone has registered since. */
+  async forgetPushToken(userId: string, token: string) {
+    await this.prisma.user.updateMany({ where: { id: userId, push_token: token }, data: { push_token: null } });
   }
 
   /** Which optional pushes and emails this user gets; every switch is on until they change it. */
@@ -1308,10 +1321,20 @@ export class AuthService {
     return result;
   }
 
-  /** Signs the user out everywhere: every session, and the old single slot. */
-  private async revokeAllSessions(userId: string) {
+  /**
+   * Signs the user out everywhere: every session, and the old single slot. With `except`, the
+   * caller's own session stays (no `sid` means they're on the old single slot, so that one stays).
+   */
+  private async revokeAllSessions(userId: string, except?: { sid?: string }) {
     const sids: string[] = (await this.redis.smembers(sessionsKey(userId))) ?? [];
-    const keys = [undefined, ...sids].flatMap((sid) => Object.values(sessionKeys(userId, sid)));
-    await this.redis.del(...keys, sessionsKey(userId));
+    if (!except) {
+      const keys = [undefined, ...sids].flatMap((sid) => Object.values(sessionKeys(userId, sid)));
+      await this.redis.del(...keys, sessionsKey(userId));
+      return;
+    }
+    const ending = [undefined, ...sids].filter((sid) => sid !== except.sid);
+    await this.redis.del(...ending.flatMap((sid) => Object.values(sessionKeys(userId, sid))));
+    const ended = ending.filter((sid): sid is string => !!sid);
+    if (ended.length) await this.redis.srem(sessionsKey(userId), ...ended);
   }
 }

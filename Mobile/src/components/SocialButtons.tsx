@@ -17,8 +17,11 @@ const googleConfigured = Platform.select({
   default: !!GOOGLE_IDS.webClientId,
 });
 
-/** "Continue with Google / Apple". New accounts are sent to pick a role (onNeedsRole). */
-export default function SocialButtons({ onNeedsRole }: { onNeedsRole: (pending: SocialPending) => void }) {
+/**
+ * "Continue with Google / Apple". New accounts are sent to pick a role (onNeedsRole); accounts with
+ * two-step sign-in are asked for their authenticator code (onNeedsCode).
+ */
+export default function SocialButtons({ onNeedsRole, onNeedsCode }: { onNeedsRole: (pending: SocialPending) => void; onNeedsCode: (pending: SocialPending) => void }) {
   const { login } = useAuth();
   const [busy, setBusy] = useState<'google' | 'apple' | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
@@ -31,6 +34,7 @@ export default function SocialButtons({ onNeedsRole }: { onNeedsRole: (pending: 
     try {
       const result = await socialSignIn(pending, login);
       if (result === 'needs_role') onNeedsRole(pending);
+      else if (result === 'needs_code') onNeedsCode(pending);
     } catch (err) {
       Alert.alert('Sign-in failed', apiMessage(err, 'Try again, or use your email.'));
     } finally {

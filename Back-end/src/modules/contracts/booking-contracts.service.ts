@@ -1,4 +1,5 @@
 import { eventDays } from 'src/modules/calendar-sync/busy-days';
+import { VENDOR_UNAVAILABLE, vendorIsActive } from 'src/common/helper/active-vendor';
 import { hoursZone, outsideWorkingHours, readWorkingHours } from 'src/modules/vendor/working-hours';
 import { tooSoonMessage } from 'src/modules/vendor/listing/package-details';
 import { assertNotCancelled, CANCELLED_NO_BOOKINGS } from 'src/modules/events/event-rules';
@@ -193,10 +194,12 @@ export class BookingContractsService {
   private async loadBookingContext(userId: string, dto: BookingContractFieldsDto) {
     const listing = await this.prisma.vendorListing.findFirst({
       where: { id: dto.listing_id, status: ListingStatus.ACTIVE, deleted_at: null },
-      include: { vendor: { select: vendorSelect } },
+      include: { vendor: { select: { ...vendorSelect, status: true, deleted_at: true } } },
     });
     if (!listing) throw new NotFoundException('Listing not found or not active');
     if (listing.vendor_id !== dto.vendor_id) throw new BadRequestException('Vendor ID does not match listing');
+    // a suspended vendor can't sign in to answer, so the request would only wait and expire
+    if (!vendorIsActive(listing.vendor)) throw new BadRequestException(VENDOR_UNAVAILABLE);
     if (listing.vendor_id === userId) throw new BadRequestException('You cannot book your own listing');
 
     const customer = await this.prisma.user.findUnique({

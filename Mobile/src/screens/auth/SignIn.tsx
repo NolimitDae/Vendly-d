@@ -6,6 +6,7 @@ import { api } from '../../services/api';
 import { useAuth, type AuthContextValue } from '../../context/AuthContext';
 import { Field, GradientButton, ui } from '../../components/brand';
 import SocialButtons from '../../components/SocialButtons';
+import { socialSignIn, type SocialPending } from '../../services/socialAuth';
 import { DARK, FONTS } from '../../constants/colors';
 import type { AuthStackParams } from '../../navigation/types';
 
@@ -40,16 +41,29 @@ export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackP
   // two-factor sign-in: after the password, the API asks for the code from the authenticator app
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState('');
+  // the same code step after Google / Apple, which is checked again with the code
+  const [social, setSocial] = useState<SocialPending | null>(null);
+
+  const backToSignIn = () => {
+    setNeedsCode(false);
+    setCode('');
+    setSocial(null);
+  };
 
   const submit = async () => {
-    if (!email.trim() || !password) return Alert.alert('Missing details', 'Enter your email and password.');
+    if (!social && (!email.trim() || !password)) return Alert.alert('Missing details', 'Enter your email and password.');
     if (needsCode && code.length !== 6) return Alert.alert('Verification code', 'Enter the 6-digit code from your authenticator app.');
     setLoading(true);
     try {
-      await signIn(email, password, login, needsCode ? code : undefined);
+      if (social) await socialSignIn(social, login, undefined, undefined, code);
+      else await signIn(email, password, login, needsCode ? code : undefined);
     } catch (err) {
       const msg = apiMessage(err, 'Login failed');
-      if (msg === 'Token is required') {
+      if (social && msg !== 'Invalid token') {
+        // most likely the Google / Apple sign-in expired while the code was typed: start that again
+        backToSignIn();
+        Alert.alert('Sign-in failed', msg);
+      } else if (msg === 'Token is required') {
         setNeedsCode(true);
       } else if (needsCode && msg === 'Invalid token') {
         setCode('');
@@ -92,7 +106,7 @@ export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackP
                 onSubmitEditing={submit}
               />
               <GradientButton title="Verify & sign in" onPress={submit} loading={loading} disabled={code.length !== 6} style={{ marginTop: 12 }} />
-              <Pressable onPress={() => { setNeedsCode(false); setCode(''); }} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'center', marginTop: 8 }}>
+              <Pressable onPress={backToSignIn} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'center', marginTop: 8 }}>
                 <Text style={ui.link}>Back to sign in</Text>
               </Pressable>
             </View>
@@ -132,7 +146,14 @@ export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackP
               <View style={s.line} />
             </View>
 
-            <SocialButtons onNeedsRole={(social) => navigation.navigate('RoleSelect', { social })} />
+            <SocialButtons
+              onNeedsRole={(pending) => navigation.navigate('RoleSelect', { social: pending })}
+              onNeedsCode={(pending) => {
+                setSocial(pending);
+                setCode('');
+                setNeedsCode(true);
+              }}
+            />
 
             <View style={s.footer}>
               <Text style={ui.muted}>Don’t have an account? </Text>

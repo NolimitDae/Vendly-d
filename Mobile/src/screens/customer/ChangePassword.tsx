@@ -26,7 +26,7 @@ export default function ChangePassword({ navigation }: { navigation: NativeStack
     try {
       const res = await api.post('/auth/change-password', { old_password: current, new_password: next });
       if (res.data?.success === false) throw new Error(res.data?.message);
-      Alert.alert('Password changed', 'Use your new password next time you sign in.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      Alert.alert('Password changed', 'Use your new password next time you sign in. You’ve been signed out on your other devices.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
     } catch (err) {
       Alert.alert('Could not change password', apiMessage(err, 'Check your current password and try again.'));
     } finally {

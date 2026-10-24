@@ -42,7 +42,8 @@ const ChangePassForm = () => {
     try {
       const res = await AuthService.resetPassword({ email, token, password });
       if (res.data?.success) {
-        toast.success("Password updated successfully!");
+        // the server adds that every other device was signed out
+        toast.success(res.data.message || "Password updated successfully!");
         router.push("/confirmationPass");
       } else {
         toast.error(res.data?.message || "Failed to reset password");

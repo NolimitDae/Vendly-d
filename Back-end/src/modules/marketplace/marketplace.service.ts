@@ -10,17 +10,26 @@ import appConfig from 'src/config/app.config';
 import { shopImageUrl } from 'src/common/helper/handle';
 import { mergeDayRanges, todayUtc } from 'src/modules/calendar-sync/busy-days';
 import { readWorkingHours, summariseWorkingHours } from 'src/modules/vendor/working-hours';
+import { ACTIVE_VENDOR_WHERE } from 'src/common/helper/active-vendor';
 import { SearchListingsDto } from './dto/search-listings.dto';
 
 /** How far "near me" looks by default (miles). */
 export const DEFAULT_RADIUS_MILES = 25;
 
-/** Listing filter: packages bookable on a day (yyyy-MM-dd): not blocked by the vendor, and the vendor's own calendar isn't busy. */
+/** Listing filter: packages customers can see and book: ACTIVE, not deleted, and the vendor isn't suspended or deleted. */
+export function liveListingWhere() {
+  return { status: ListingStatus.ACTIVE, deleted_at: null, vendor: { ...ACTIVE_VENDOR_WHERE } };
+}
+
+/**
+ * Listing filter: packages bookable on a day (yyyy-MM-dd): not blocked by the vendor, and the vendor's own calendar isn't busy.
+ * It replaces the `vendor` filter of liveListingWhere, so it keeps the active-vendor rule too.
+ */
 export function availableOnDayWhere(date: string) {
   const day = new Date(date + 'T00:00:00.000Z');
   return {
     blockedDates: { none: { start_date: { lte: day }, end_date: { gte: day } } },
-    vendor: { calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } },
+    vendor: { ...ACTIVE_VENDOR_WHERE, calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } },
   };
 }
 
@@ -44,7 +53,7 @@ export class MarketplaceService {
     const limit = query.limit ?? 12;
     const skip = (page - 1) * limit;
 
-    const where: any = { status: ListingStatus.ACTIVE, deleted_at: null };
+    const where: any = liveListingWhere();
 
     if (query.q) {
       where.OR = [
@@ -134,7 +143,7 @@ export class MarketplaceService {
 
   async getListing(id: string) {
     const listing = await this.prisma.vendorListing.findFirst({
-      where: { id, status: ListingStatus.ACTIVE, deleted_at: null },
+      where: { id, ...liveListingWhere() },
       include: {
         category: { select: { id: true, name: true, default_payment_plan: true } },
         sub_category: { select: { id: true, name: true } },
@@ -211,8 +220,8 @@ export class MarketplaceService {
   async getVendorProfile(idOrHandle: string) {
     const vendor = await this.prisma.user.findFirst({
       where: {
-        deleted_at: null,
-        OR: [{ id: idOrHandle }, { vendorProfile: { handle: idOrHandle.toLowerCase() } }],
+        // a suspended or deleted vendor's shop isn't shown
+        AND: [ACTIVE_VENDOR_WHERE, { OR: [{ id: idOrHandle }, { vendorProfile: { handle: idOrHandle.toLowerCase() } }] }],
       },
       select: {
         id: true,
@@ -279,7 +288,7 @@ export class MarketplaceService {
     const categories = await this.prisma.serviceCategory.findMany({
       include: {
         sub_categories: { select: { id: true, name: true } },
-        _count: { select: { vendor_listings: { where: { status: ListingStatus.ACTIVE } } } },
+        _count: { select: { vendor_listings: { where: liveListingWhere() } } },
       },
       orderBy: { name: 'asc' },
     });
@@ -327,7 +336,7 @@ export class MarketplaceService {
 
   async getFeaturedListings() {
     const listings = await this.prisma.vendorListing.findMany({
-      where: { status: ListingStatus.ACTIVE, deleted_at: null },
+      where: liveListingWhere(),
       take: 8,
       orderBy: { created_at: 'desc' },
       include: {

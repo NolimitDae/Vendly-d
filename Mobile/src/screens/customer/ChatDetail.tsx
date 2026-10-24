@@ -75,6 +75,34 @@ export default function ChatDetail() {
     }, [markRead]),
   );
 
+  // The phone is in the chat's room only while the chat is on screen: elsewhere (another screen, the
+  // app in the background) its new messages come as pushes, and coming back reloads them.
+  const away = useRef(false);
+  const goAway = useCallback(() => {
+    if (away.current) return;
+    away.current = true;
+    SocketService.leaveRoom(conversationId);
+  }, [conversationId]);
+  const comeBack = useCallback(() => {
+    if (!away.current) return;
+    away.current = false;
+    SocketService.joinRoom(conversationId);
+    fetchMessages().then(markRead);
+  }, [conversationId, fetchMessages, markRead]);
+  useFocusEffect(
+    useCallback(() => {
+      comeBack();
+      return goAway;
+    }, [comeBack, goAway]),
+  );
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') goAway();
+      else if (state === 'active' && navigation.isFocused()) comeBack();
+    });
+    return () => sub.remove();
+  }, [comeBack, goAway, navigation]);
+
   // Typing indicator: who else is typing, and throttled typing / stopTyping events from me
   const typers = useTypingUsers(conversationId, user?.id);
   const typing = useMemo(
@@ -107,7 +135,9 @@ export default function ChatDetail() {
       setMessages((prev) => prev.map((m) => (m.quote?.id === e.quote_id ? { ...m, quote: { ...m.quote, status: e.status } } : m)));
     };
     // rooms don't survive a reconnect, so join again each time the socket (re)connects
-    const join = () => SocketService.joinRoom(conversationId);
+    const join = async () => {
+      if (!away.current) await SocketService.joinRoom(conversationId);
+    };
     (async () => {
       await join();
       await SocketService.on('connect', join);

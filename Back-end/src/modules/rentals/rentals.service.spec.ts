@@ -1,3 +1,4 @@
+import { ACTIVE_VENDOR_WHERE } from 'src/common/helper/active-vendor';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { BookingStatus, RentalItemStatus } from 'prisma/generated/enums';
 import { __setFeeCache } from 'src/modules/platform/platform-settings.service';
@@ -13,8 +14,8 @@ const day = (n: number) => {
 };
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-const chairs = { id: 'chairs', vendor_id: 'v1', title: 'Chiavari chair', quantity: 10, turnaround_hours: 0, daily_rate: 5, deposit_amount: 2, category_id: null, status: RentalItemStatus.ACTIVE, deleted_at: null };
-const arch = { id: 'arch', vendor_id: 'v1', title: 'Flower arch', quantity: 1, turnaround_hours: 24, daily_rate: 120, deposit_amount: 50, category_id: null, status: RentalItemStatus.ACTIVE, deleted_at: null };
+const chairs = { id: 'chairs', vendor_id: 'v1', title: 'Chiavari chair', quantity: 10, turnaround_hours: 0, daily_rate: 5, deposit_amount: 2, category_id: null, status: RentalItemStatus.ACTIVE, deleted_at: null, vendor: { status: 1, deleted_at: null } };
+const arch = { id: 'arch', vendor_id: 'v1', title: 'Flower arch', quantity: 1, turnaround_hours: 24, daily_rate: 120, deposit_amount: 50, category_id: null, status: RentalItemStatus.ACTIVE, deleted_at: null, vendor: { status: 1, deleted_at: null } };
 
 const prisma: any = {
   rentalItem: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), count: jest.fn() },
@@ -87,6 +88,23 @@ describe('RentalsService', () => {
 
   it('stops vendors renting their own items', async () => {
     await expect(service.book('v1', order())).rejects.toThrow(/your own items/);
+  });
+
+  it('hides and refuses suspended or deleted vendors', async () => {
+    prisma.rentalItem.findMany.mockResolvedValue([{ ...chairs, vendor: { status: 0, deleted_at: null } }, { ...arch, vendor: { status: 0, deleted_at: null } }]);
+    await expect(service.quote(order())).rejects.toThrow('This vendor isn’t taking bookings right now. Try another vendor.');
+    await expect(service.book('c1', order())).rejects.toThrow(/isn’t taking bookings/);
+    expect(prisma.booking.create).not.toHaveBeenCalled();
+    prisma.rentalItem.findMany.mockResolvedValue([{ ...chairs, vendor: { status: 1, deleted_at: new Date() } }]);
+    await expect(service.quote(order({ lines: [{ item_id: 'chairs', quantity: 1 }] }))).rejects.toThrow(/isn’t taking bookings/);
+
+    prisma.rentalItem.findMany.mockResolvedValue([]);
+    prisma.rentalItem.count.mockResolvedValue(0);
+    await service.browse({});
+    expect(prisma.rentalItem.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ vendor: ACTIVE_VENDOR_WHERE }) }));
+    prisma.rentalItem.findFirst.mockResolvedValue(null);
+    await expect(service.getItem('chairs')).rejects.toThrow(/not found/);
+    expect(prisma.rentalItem.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ vendor: ACTIVE_VENDOR_WHERE }) }));
   });
 
   it('rejects paused items and past dates', async () => {

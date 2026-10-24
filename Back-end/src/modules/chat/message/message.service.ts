@@ -1,8 +1,13 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
+import { PushService } from 'src/modules/push/push.service';
+import { CHAT_PUSH_WINDOW_SECONDS, chatPush, chatPushKey } from './message-push';
 import appConfig from "../../../config/app.config";
 import { CreateMessageDto } from "./dto/create-message.dto";
 import { PrismaService } from "../../../prisma/prisma.service";
@@ -26,9 +31,13 @@ enum MessageStatus {
 
 @Injectable()
 export class MessageService {
+  private readonly logger = new Logger(MessageService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly messageGateway: MessageGateway,
+    private readonly push: PushService,
+    @InjectRedis() private readonly redis: Redis,
   ) { }
 
   // *Send message (with Prisma transaction)
@@ -122,6 +131,11 @@ export class MessageService {
     });
     */
 
+    // everyone not looking at the chat gets a push and an inbox item (never holds up the send)
+    void this.notifyAway(conversation, sender, message).catch((err) =>
+      this.logger.warn(`Message notifications for ${conversationId} failed: ${(err as Error).message}`),
+    );
+
     return {
       message: "Message sent successfully",
       success: true,
@@ -129,6 +143,47 @@ export class MessageService {
       // non-blocking: the apps show this as a reminder under the message
       warning: reasons.length ? { reasons, text: CONTACT_WARNING } : null,
     };
+  }
+
+  /**
+   * Push (Messages switch) and inbox item for participants who aren't in the conversation's room
+   * right now, leaving out anyone who has blocked the sender. One per conversation per recipient
+   * every couple of minutes, so a run of messages doesn't buzz the phone each time.
+   */
+  private async notifyAway(
+    conversation: { id: string; is_group?: boolean | null; title?: string | null; participants: { userId: string }[] },
+    senderId: string,
+    message: { text?: string | null; attachments?: string[] | null; sender?: { name?: string | null } | null },
+  ) {
+    const others = [...new Set(conversation.participants.map((p) => p.userId).filter((id) => id !== senderId))];
+    if (!others.length) return;
+    let present = new Set<string>();
+    try {
+      const sockets = await this.messageGateway.server.in(conversation.id).fetchSockets();
+      present = new Set(sockets.map((s) => s.data?.userId).filter(Boolean));
+    } catch (err) {
+      // can't tell who is in the chat: notify everyone (the time limit below still applies)
+      this.logger.warn(`Chat room lookup for ${conversation.id} failed: ${(err as Error).message}`);
+    }
+    const away = others.filter((id) => !present.has(id));
+    if (!away.length) return;
+    const blocks = await this.prisma.userBlock.findMany({
+      where: { blocker_id: { in: away }, blocked_id: senderId },
+      select: { blocker_id: true },
+    });
+    const blockedBy = new Set(blocks.map((b) => b.blocker_id));
+    const { title, body } = chatPush({
+      senderName: message.sender?.name,
+      text: message.text,
+      attachments: message.attachments,
+      groupTitle: conversation.is_group ? conversation.title : null,
+    });
+    for (const userId of away) {
+      if (blockedBy.has(userId)) continue;
+      const first = await this.redis.set(chatPushKey(conversation.id, userId), '1', 'EX', CHAT_PUSH_WINDOW_SECONDS, 'NX');
+      if (first !== 'OK') continue;
+      await this.push.sendToUser(userId, { title, body, data: { type: 'chat', conversationId: conversation.id } }, 'messages');
+    }
   }
 
   // *get all messages for a conversation

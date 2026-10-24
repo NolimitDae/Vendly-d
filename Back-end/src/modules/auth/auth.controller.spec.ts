@@ -149,6 +149,14 @@ describe('AuthController', () => {
     expect(res.clearCookie).not.toHaveBeenCalled();
   });
 
+  it('stops pushes to the phone that signs out', async () => {
+    (mockAuthService as any).sessionFromTokens = jest.fn().mockReturnValue({ userId: 'u1', sid: 's1' });
+    (mockAuthService as any).forgetPushToken = jest.fn().mockResolvedValue(undefined);
+    await controller.logout({ headers: { authorization: 'Bearer app-token' }, method: 'POST' } as any, resMock() as any, { refresh_token: 'r', push_token: 'ExponentPushToken[abc]' });
+    expect((mockAuthService as any).forgetPushToken).toHaveBeenCalledWith('u1', 'ExponentPushToken[abc]');
+    expect(mockAuthService.revokeRefreshToken).toHaveBeenLastCalledWith('u1', 's1');
+  });
+
   it('clears the website cookies on logout, even when the session already expired', async () => {
     (mockAuthService as any).sessionFromTokens = jest.fn().mockReturnValue(null);
     const res = resMock();
@@ -202,12 +210,20 @@ describe('AuthController', () => {
     expect(result).toMatchObject({ success: false, message: expect.stringMatching(/8 characters/) });
   });
 
-  it('should change password', async () => {
+  it('should change password, keeping this device signed in', async () => {
     const result = await controller.changePassword(
-      { user: { userId: 1 } } as any,
-      { email: 'john@example.com', old_password: 'oldpass', new_password: 'newpass' },
+      { user: { userId: 1, sid: 's1' } } as any,
+      { email: 'john@example.com', old_password: 'oldpass', new_password: 'newpass1' },
     );
     expect(result.success).toBe(true);
+    expect(mockAuthService.changePassword).toHaveBeenLastCalledWith({ user_id: 1, oldPassword: 'oldpass', newPassword: 'newpass1', sid: 's1' });
+  });
+
+  it('refuses a new password shorter than 8 characters, like sign-up and reset', async () => {
+    mockAuthService.changePassword.mockClear();
+    const result = await controller.changePassword({ user: { userId: 1 } } as any, { old_password: 'oldpass', new_password: 'short' });
+    expect(result).toMatchObject({ success: false, message: expect.stringMatching(/8 characters/) });
+    expect(mockAuthService.changePassword).not.toHaveBeenCalled();
   });
 
   it('should request email change', async () => {

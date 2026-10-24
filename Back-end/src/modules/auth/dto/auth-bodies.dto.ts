@@ -32,6 +32,11 @@ export class RefreshBodyDto {
   @IsOptional() @IsString() @MaxLength(4096) refresh_token?: string;
 }
 
+/** Sign-out: the app also sends this phone's push token, so the account stops pushing to it. */
+export class LogoutBodyDto extends RefreshBodyDto {
+  @IsOptional() @IsString() @MaxLength(255) push_token?: string;
+}
+
 export class DeleteAccountBodyDto {
   @IsOptional() @IsString() @MaxLength(20) confirm?: string;
 }

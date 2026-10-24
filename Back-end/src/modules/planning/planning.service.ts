@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { EventType, ListingStatus } from 'prisma/generated/client';
+import { EventType } from 'prisma/generated/client';
 import { geocode, milesBetween } from 'src/modules/geo/geo';
-import { DEFAULT_RADIUS_MILES, availableOnDayWhere, nearBoxWhere, withinReach } from 'src/modules/marketplace/marketplace.service';
+import { DEFAULT_RADIUS_MILES, availableOnDayWhere, liveListingWhere, nearBoxWhere, withinReach } from 'src/modules/marketplace/marketplace.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PlanChecklistDto } from './dto/checklist.dto';
 import { buildChecklist, coveredBy, type ChecklistInput } from './planning-rules';
@@ -131,8 +131,8 @@ export class PlanningService {
   async availableCounts(categoryIds: string[], date: string | null, near: Near | null): Promise<Record<string, number>> {
     if (!categoryIds.length) return {};
     const where: any = {
-      status: ListingStatus.ACTIVE,
-      deleted_at: null,
+      // the same live packages as the search: suspended or deleted vendors aren't counted
+      ...liveListingWhere(),
       category_id: { in: categoryIds },
       ...(date ? availableOnDayWhere(date) : {}),
     };

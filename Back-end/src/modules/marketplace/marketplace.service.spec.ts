@@ -1,3 +1,4 @@
+import { ACTIVE_VENDOR_WHERE } from 'src/common/helper/active-vendor';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { MarketplaceService } from './marketplace.service';
@@ -125,9 +126,19 @@ describe('MarketplaceService', () => {
       const day = new Date('2026-11-14T00:00:00.000Z');
       expect(mockPrisma.vendorListing.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ vendor: { calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } } }),
+          where: expect.objectContaining({ vendor: { ...ACTIVE_VENDOR_WHERE, calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } } }),
         }),
       );
+    });
+
+    it('leaves out suspended and deleted vendors', async () => {
+      mockPrisma.vendorListing.count.mockResolvedValue(0);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      await service.searchListings({ page: 1 });
+      const where = { status: 'ACTIVE', deleted_at: null, vendor: { deleted_at: null, OR: [{ status: null }, { status: { not: 0 } }] } };
+      expect(mockPrisma.vendorListing.count).toHaveBeenCalledWith({ where });
+      expect(mockPrisma.vendorListing.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
     });
 
     it('finds packages near a point, nearest first, with their distance', async () => {
@@ -185,6 +196,23 @@ describe('MarketplaceService', () => {
       const listing = await service.getListing('listing-1');
       expect(JSON.stringify(mockPrisma.vendorListing.findFirst.mock.calls[0][0])).not.toContain('license_photo');
       expect(JSON.stringify(listing)).not.toMatch(/license_photo|licence-files/);
+    });
+  });
+
+  describe('suspended or deleted vendors', () => {
+    it('their package page, shop and featured packages are not shown', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(null);
+      await expect(service.getListing('listing-1')).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.vendorListing.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'listing-1', vendor: ACTIVE_VENDOR_WHERE }) }));
+
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      await expect(service.getVendorProfile('v1')).rejects.toThrow('Vendor not found');
+      expect(mockPrisma.user.findFirst.mock.calls.at(-1)[0].where.AND[0]).toEqual(ACTIVE_VENDOR_WHERE);
+
+      mockPrisma.vendorListing.findMany.mockResolvedValue([]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      await service.getFeaturedListings();
+      expect(mockPrisma.vendorListing.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ vendor: ACTIVE_VENDOR_WHERE }) }));
     });
   });
 

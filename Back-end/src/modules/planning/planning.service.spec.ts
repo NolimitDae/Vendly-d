@@ -1,3 +1,4 @@
+import { ACTIVE_VENDOR_WHERE } from 'src/common/helper/active-vendor';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ListingStatus } from 'prisma/generated/client';
 import { PlanningService } from './planning.service';
@@ -61,14 +62,14 @@ describe('PlanningService', () => {
       expect(where.category_id.in).toEqual(expect.arrayContaining(['venue', 'food', 'photo']));
       const day = new Date('2027-06-12T00:00:00.000Z');
       expect(where.blockedDates).toEqual({ none: { start_date: { lte: day }, end_date: { gte: day } } });
-      expect(where.vendor).toEqual({ calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } });
+      expect(where.vendor).toEqual({ ...ACTIVE_VENDOR_WHERE, calendarBusyBlocks: { none: { start_date: { lte: day }, end_date: { gte: day } } } });
     });
 
-    it('skips the date filter without a date', async () => {
+    it('skips the date filter without a date, but still leaves out suspended and deleted vendors', async () => {
       await service.checklist({ event_type: 'WEDDING' }, today);
       const where = prisma.vendorListing.groupBy.mock.calls[0][0].where;
       expect(where.blockedDates).toBeUndefined();
-      expect(where.vendor).toBeUndefined();
+      expect(where.vendor).toEqual(ACTIVE_VENDOR_WHERE);
     });
 
     it('near a point: counts listings within 25 miles or that travel that far', async () => {

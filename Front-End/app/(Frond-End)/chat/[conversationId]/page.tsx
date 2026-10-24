@@ -133,6 +133,8 @@ export default function ConversationPage() {
     socket.on("pinned", handlePinned);
     socket.on("quoteUpdated", handleQuote);
     return () => {
+      // left the chat: new messages here are pushed and added to the inbox again
+      socket.emit("leaveroom", { room_id: conversationId });
       socket.off("connect", join);
       socket.off("message", handleMessage);
       socket.off("conversationRead", handleRead);

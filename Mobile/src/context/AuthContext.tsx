@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api, TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } from '../services/api';
+import { api, TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, PUSH_TOKEN_KEY } from '../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,7 +138,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     // end this device's session on the server too (other devices stay signed in); never blocks sign-out
     const refreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY).catch(() => null);
-    if (refreshToken) await api.post('/auth/logout', { refresh_token: refreshToken }, { timeout: 5000, _skipAuthRefresh: true } as object).catch(() => undefined);
+    // and stop this phone getting the account's pushes
+    const pushToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY).catch(() => null);
+    if (refreshToken) await api.post('/auth/logout', { refresh_token: refreshToken, ...(pushToken ? { push_token: pushToken } : {}) }, { timeout: 5000, _skipAuthRefresh: true } as object).catch(() => undefined);
     await clearStorage();
     dispatch({ type: 'LOGOUT' });
   }, []);

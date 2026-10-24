@@ -41,7 +41,7 @@ const SELF_SIGNUP_TYPES: string[] = [UserType.CLIENT, UserType.CUSTOMER, UserTyp
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
-import { ChangePasswordBodyDto, DeleteAccountBodyDto, EmailBodyDto, EmailTokenBodyDto, PushTokenBodyDto, RefreshBodyDto, ResetPasswordBodyDto, TokenBodyDto } from './dto/auth-bodies.dto';
+import { ChangePasswordBodyDto, DeleteAccountBodyDto, EmailBodyDto, EmailTokenBodyDto, LogoutBodyDto, PushTokenBodyDto, RefreshBodyDto, ResetPasswordBodyDto, TokenBodyDto } from './dto/auth-bodies.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
   CSRF_MESSAGE,
@@ -645,11 +645,17 @@ export class AuthController {
           HttpStatus.UNAUTHORIZED,
         );
       }
+      // same rule as sign-up and reset
+      if (String(newPassword).length < 8) {
+        return { success: false, message: 'Password must be at least 8 characters long' };
+      }
       return await this.authService.changePassword({
         // email: email,
         user_id: user_id,
         oldPassword: oldPassword,
         newPassword: newPassword,
+        // this device stays signed in; every other session ends
+        sid: req.user.sid,
       });
     } catch (error) {
       return {
@@ -723,7 +729,7 @@ export class AuthController {
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-    @Body() body: RefreshBodyDto = {},
+    @Body() body: LogoutBodyDto = {},
   ) {
     if (csrfBlocked(req)) throw new ForbiddenException(CSRF_MESSAGE);
     const web = isWebClient(req);
@@ -739,6 +745,8 @@ export class AuthController {
         if (web) return { success: true, message: 'Logged out' };
         throw new UnauthorizedException();
       }
+      // this phone stops getting the account's pushes (only if it's still the one on file)
+      if (body?.push_token) await this.authService.forgetPushToken(session.userId, body.push_token).catch(() => null);
       const response = await this.authService.revokeRefreshToken(session.userId, session.sid);
       return response;
     } catch (error) {

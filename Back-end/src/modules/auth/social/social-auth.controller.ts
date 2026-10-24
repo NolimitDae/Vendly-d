@@ -22,6 +22,11 @@ export class SocialSignInDto {
   @IsString()
   @MaxLength(120)
   name?: string;
+  @ApiPropertyOptional({ description: 'The 6-digit authenticator code, for accounts with two-step sign-in (after a "Token is required" answer)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  token?: string;
 }
 
 @ApiTags('auth')
@@ -29,7 +34,7 @@ export class SocialSignInDto {
 export class SocialAuthController {
   constructor(private readonly social: SocialAuthService) {}
 
-  @ApiOperation({ summary: 'Sign in or sign up with Google or Apple (native apps)', description: 'Returns the same authorization payload as /auth/login, or { needs_role: true } for a brand-new account without a role.' })
+  @ApiOperation({ summary: 'Sign in or sign up with Google or Apple (native apps)', description: 'Returns the same authorization payload as /auth/login, or { needs_role: true } for a brand-new account without a role. Accounts with two-step sign-in get 401 "Token is required" until the call includes `token`.' })
   @Throttle({ short: { limit: 10, ttl: 60000 } })
   @HttpCode(200)
   @Post('social')

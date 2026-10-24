@@ -87,7 +87,7 @@ function memoryRedis() {
   mockRedis.del.mockImplementation(async (...keys: string[]) => keys.filter((k) => store.delete(k)).length);
   const sets = new Map<string, Set<string>>();
   mockRedis.sadd.mockImplementation(async (k: string, v: string) => void (sets.get(k) ?? sets.set(k, new Set()).get(k)!).add(v));
-  mockRedis.srem.mockImplementation(async (k: string, v: string) => void sets.get(k)?.delete(v));
+  mockRedis.srem.mockImplementation(async (k: string, ...vs: string[]) => void vs.forEach((v) => sets.get(k)?.delete(v)));
   mockRedis.smembers.mockImplementation(async (k: string) => [...(sets.get(k) ?? [])]);
   mockRedis.eval.mockImplementation(async (_script: string, _n: number, current: string, previous: string, presented: string, next: string, ttl: number, grace: number) => {
     if (store.get(current)?.value !== presented) return 0;
@@ -230,6 +230,59 @@ describe('AuthService', () => {
         expect((mockUserRepo as any).deleteUser).not.toHaveBeenCalled();
         expect(purge).not.toHaveBeenCalled();
         expect([...store.keys()].length).toBeGreaterThan(0);
+      });
+
+      describe('password reset and change', () => {
+        beforeEach(() => {
+          (mockUserRepo as any).changePassword = jest.fn().mockResolvedValue(undefined);
+          (mockUcodeRepo as any).verifycheckToken = jest.fn().mockResolvedValue(true);
+          (mockUcodeRepo as any).deleteToken = jest.fn().mockResolvedValue(undefined);
+        });
+
+        it('a reset signs every device out, and says so', async () => {
+          const store = memoryRedis();
+          const phone = await signIn(1);
+          const laptop = await signIn(2);
+          store.set('refresh_token:user-1', { value: 'legacy' });
+          mockUserRepo.exist.mockResolvedValue(mockUser);
+          const result: any = await service.resetPassword({ email: 'jane@test.com', token: '123456', password: 'new-password' });
+          expect(result).toEqual({ success: true, message: 'Password updated successfully. You’ve been signed out on your other devices.' });
+          expect([...store.keys()]).toEqual([]);
+          expect((await refreshWith(phone)).success).toBe(false);
+          expect((await refreshWith(laptop)).success).toBe(false);
+        });
+
+        it('a change keeps the device that made it and signs the others out', async () => {
+          const store = memoryRedis();
+          const phone = await signIn(1);
+          const laptop = await signIn(2);
+          store.set('refresh_token:user-1', { value: 'legacy' });
+          mockUserRepo.validatePassword.mockResolvedValue(true);
+          const result: any = await service.changePassword({ user_id: 'user-1', oldPassword: 'old-password', newPassword: 'new-password', sid: laptop.sid });
+          expect(result.message).toMatch(/signed out on your other devices/);
+          expect(store.has('refresh_token:user-1')).toBe(false);
+          mockJwt.sign.mockImplementation((p: any) => (p.typ === 'refresh' ? 'rotated' : 'a'));
+          expect((await refreshWith(phone)).success).toBe(false);
+          expect((await refreshWith(laptop)).success).toBe(true);
+        });
+
+        it('a change from a token older than sessions keeps that old slot only', async () => {
+          const store = memoryRedis();
+          const phone = await signIn(1);
+          store.set('refresh_token:user-1', { value: 'legacy' });
+          mockUserRepo.validatePassword.mockResolvedValue(true);
+          await service.changePassword({ user_id: 'user-1', oldPassword: 'old-password', newPassword: 'new-password' });
+          expect(store.get('refresh_token:user-1')?.value).toBe('legacy');
+          expect(store.has(`refresh_token:user-1:${phone.sid}`)).toBe(false);
+        });
+
+        it('a wrong current password changes nothing', async () => {
+          const store = memoryRedis();
+          await signIn(1);
+          mockUserRepo.validatePassword.mockResolvedValue(false);
+          expect(await service.changePassword({ user_id: 'user-1', oldPassword: 'nope', newPassword: 'new-password', sid: 'x' })).toEqual({ success: false, message: 'Invalid password' });
+          expect([...store.keys()].length).toBeGreaterThan(0);
+        });
       });
 
       it('reads the session from either token for sign-out', () => {
@@ -463,6 +516,21 @@ describe('AuthService', () => {
       expect(wrong).toBe(unknown);
     });
   });
+  describe('push token', () => {
+    beforeEach(() => ((mockPrisma.user as any).updateMany = jest.fn().mockResolvedValue({ count: 1 })));
+
+    it('signing out forgets the phone only if it is still the one on file', async () => {
+      await service.forgetPushToken('user-1', 'ExponentPushToken[a]');
+      expect((mockPrisma.user as any).updateMany).toHaveBeenCalledWith({ where: { id: 'user-1', push_token: 'ExponentPushToken[a]' }, data: { push_token: null } });
+    });
+
+    it('a phone belongs to the account that signed in on it last', async () => {
+      await service.savePushToken('user-2', 'ExponentPushToken[a]');
+      expect((mockPrisma.user as any).updateMany).toHaveBeenCalledWith({ where: { push_token: 'ExponentPushToken[a]', id: { not: 'user-2' } }, data: { push_token: null } });
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'user-2' }, data: { push_token: 'ExponentPushToken[a]' } });
+    });
+  });
+
   describe('notification settings', () => {
     it('reads every switch as on until the user changes it', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ notification_prefs: null });

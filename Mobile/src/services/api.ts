@@ -6,6 +6,8 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
 export const TOKEN_KEY = 'token';
 export const REFRESH_TOKEN_KEY = 'refresh_token';
 export const USER_KEY = 'user';
+/** This phone's push token as last saved to the account, sent with sign-out so the pushes stop. */
+export const PUSH_TOKEN_KEY = 'push_token';
 
 export const api = axios.create({
   baseURL: `${BASE_URL.replace(/\/+$/, '')}/api`,

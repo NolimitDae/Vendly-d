@@ -170,6 +170,18 @@ describe('MessageGateway', () => {
     });
   });
 
+  describe('handleRoomLeave', () => {
+    it('leaves a chat room, but never the user’s own room', () => {
+      const client = makeSocket({ data: { userId: 'user-1' } });
+      (client as any).leave = jest.fn();
+      gateway.handleRoomLeave(client, { room_id: 'room-42' });
+      expect((client as any).leave).toHaveBeenCalledWith('room-42');
+      gateway.handleRoomLeave(client, { room_id: 'user_user-1' });
+      gateway.handleRoomLeave(client, { room_id: { not: '' } } as any);
+      expect((client as any).leave).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('has no client-to-client message relay (messages go through the API)', () => {
     expect((gateway as any).listenForMessages).toBeUndefined();
   });

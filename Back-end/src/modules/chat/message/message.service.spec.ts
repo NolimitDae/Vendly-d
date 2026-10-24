@@ -3,6 +3,8 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MessageGateway } from './message.gateway';
+import { PushService } from 'src/modules/push/push.service';
+import { chatPush } from './message-push';
 
 jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
   TanvirStorage: {
@@ -64,11 +66,18 @@ const mockPrisma = {
   $transaction: jest.fn(),
 };
 
+// who is in a conversation's room right now (the chat is open on their screen)
+const roomSockets = { fetchSockets: jest.fn().mockResolvedValue([]) };
 const mockServer = {
   to: jest.fn().mockReturnThis(),
   except: jest.fn().mockReturnThis(),
   emit: jest.fn(),
+  in: jest.fn(() => roomSockets),
 };
+const mockPush = { sendToUser: jest.fn().mockResolvedValue(undefined) };
+const mockRedis = { set: jest.fn().mockResolvedValue('OK') };
+/** Lets the push that runs after sending finish. */
+const settle = () => new Promise((r) => setImmediate(r));
 
 const mockMessageGateway = {
   clients: new Map<string, string>(),
@@ -85,6 +94,8 @@ describe('MessageService', () => {
         MessageService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MessageGateway, useValue: mockMessageGateway },
+        { provide: PushService, useValue: mockPush },
+        { provide: 'default_IORedisModuleConnectionToken', useValue: mockRedis },
       ],
     }).compile();
 
@@ -134,6 +145,77 @@ describe('MessageService', () => {
       await expect(service.create(dto, 'user-1')).rejects.toThrow(NotFoundException);
     });
 
+    describe('notifying people who are away from the chat', () => {
+      beforeEach(() => {
+        mockPrisma.participant.findFirst.mockResolvedValue({ userId: 'user-1' });
+        mockPrisma.message.create.mockResolvedValue(makeMessage({ text: 'Are you free on the 12th?' }));
+        mockPrisma.userBlock.findMany.mockResolvedValue([]);
+        roomSockets.fetchSockets.mockResolvedValue([]);
+        mockRedis.set.mockResolvedValue('OK');
+      });
+
+      it('pushes the sender name and a preview, under the Messages switch, opening the chat', async () => {
+        mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+        await service.create(dto, 'user-1');
+        await settle();
+        expect(mockPush.sendToUser).toHaveBeenCalledTimes(1);
+        expect(mockPush.sendToUser).toHaveBeenCalledWith(
+          'user-2',
+          { title: 'Alice', body: 'Are you free on the 12th?', data: { type: 'chat', conversationId: 'conv-1' } },
+          'messages',
+        );
+        expect(mockRedis.set).toHaveBeenCalledWith('chat_push:conv-1:user-2', '1', 'EX', 120, 'NX');
+      });
+
+      it('skips whoever has the chat open', async () => {
+        mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+        roomSockets.fetchSockets.mockResolvedValue([{ data: { userId: 'user-2' } }]);
+        await service.create(dto, 'user-1');
+        await settle();
+        expect(mockServer.in).toHaveBeenCalledWith('conv-1');
+        expect(mockPush.sendToUser).not.toHaveBeenCalled();
+      });
+
+      it('sends one push per conversation and person every two minutes', async () => {
+        mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+        mockRedis.set.mockResolvedValue(null);
+        await service.create(dto, 'user-1');
+        await settle();
+        expect(mockPush.sendToUser).not.toHaveBeenCalled();
+      });
+
+      it('in a group chat, leaves out people who blocked the sender and names the chat', async () => {
+        mockPrisma.conversation.findUnique.mockResolvedValue({
+          ...conversation,
+          is_group: true,
+          title: 'Ada’s wedding',
+          participants: [{ userId: 'user-1' }, { userId: 'user-2' }, { userId: 'user-3' }],
+        });
+        mockPrisma.userBlock.findMany.mockResolvedValue([{ blocker_id: 'user-3', blocked_id: 'user-1' }]);
+        await service.create(dto, 'user-1');
+        await settle();
+        expect(mockPrisma.userBlock.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { blocker_id: { in: ['user-2', 'user-3'] }, blocked_id: 'user-1' } }));
+        expect(mockPush.sendToUser).toHaveBeenCalledTimes(1);
+        expect(mockPush.sendToUser).toHaveBeenCalledWith('user-2', expect.objectContaining({ title: 'Alice in Ada’s wedding' }), 'messages');
+      });
+
+      it('never holds up or fails the send', async () => {
+        mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+        mockPush.sendToUser.mockRejectedValueOnce(new Error('expo down'));
+        await expect(service.create(dto, 'user-1')).resolves.toMatchObject({ success: true });
+        await settle();
+      });
+
+      it('previews text, never attachment names or links', () => {
+        expect(chatPush({ senderName: 'Bo', text: '  hi\n there ' })).toEqual({ title: 'Bo', body: 'hi there' });
+        expect(chatPush({ senderName: 'Bo', text: '', attachments: ['a1b2.jpg'] })).toEqual({ title: 'Bo', body: 'Sent an attachment' });
+        expect(chatPush({ senderName: null, attachments: ['a.jpg', 'b.pdf'] })).toEqual({ title: 'Someone', body: 'Sent 2 attachments' });
+        const long = chatPush({ senderName: 'Bo', text: 'x'.repeat(300) }).body;
+        expect(long).toHaveLength(100);
+        expect(long.endsWith('…')).toBe(true);
+      });
+    });
+
     describe('blocking (1:1)', () => {
       beforeEach(() => {
         mockPrisma.participant.findFirst.mockResolvedValue({ userId: 'user-1' });
@@ -170,7 +252,8 @@ describe('MessageService', () => {
         mockPrisma.conversation.findUnique.mockResolvedValue({ ...conversation, is_group: true });
         const result = await service.create(dto, 'user-1');
         expect(result.success).toBe(true);
-        expect(mockPrisma.userBlock.findMany).not.toHaveBeenCalled();
+        // (blocks there only decide who gets a push)
+        expect(mockPrisma.userBlock.findMany).not.toHaveBeenCalledWith(expect.objectContaining({ where: { OR: expect.anything() } }));
       });
     });
   });
