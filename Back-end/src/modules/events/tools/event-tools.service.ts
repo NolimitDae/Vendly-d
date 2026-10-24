@@ -474,7 +474,10 @@ export class EventToolsService {
     let sent = 0;
     // no message to anyone either side has blocked
     const blocks = await blockSets(this.prisma, plannerId);
-    for (const vendorId of team.vendor_ids) {
+    // only vendors still active (one may have been suspended or deleted since the team was saved)
+    const active = await this.prisma.user.findMany({ where: { id: { in: team.vendor_ids }, ...activeVendorWhere() }, select: { id: true } });
+    const activeIds = new Set(active.map((v) => v.id));
+    for (const vendorId of team.vendor_ids.filter((id) => activeIds.has(id))) {
       if (vendorId === plannerId) continue;
       if (blocks.blockedByMe.has(vendorId) || blocks.blockedMe.has(vendorId)) continue;
       let conv = await this.prisma.conversation.findFirst({

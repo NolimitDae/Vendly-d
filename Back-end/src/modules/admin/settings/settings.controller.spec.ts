@@ -14,16 +14,19 @@ describe('SettingsController account status', () => {
   let prisma: ReturnType<typeof makePrisma>;
   let controller: SettingsController;
   const admin = { userId: 'admin-1' };
+  const sockets = { disconnectUser: jest.fn() };
 
   beforeEach(() => {
     prisma = makePrisma();
-    controller = new SettingsController({} as any, {} as any, {} as any, prisma as any);
+    controller = new SettingsController({} as any, {} as any, {} as any, prisma as any, sockets as any);
   });
 
   it('suspends and keeps the reason in the user’s inbox', async () => {
     prisma.user.findUnique.mockResolvedValue({ type: 'EVENT_PLANNER', status: 1 });
     const res = await controller.userStatus(admin, 'p1', { status: 0, reason: 'Fake reviews' });
     expect(res.data.status).toBe(0);
+    // live chat and notifications stop straight away too
+    expect(sockets.disconnectUser).toHaveBeenCalledWith('p1');
     expect(prisma.notificationEvent.create).toHaveBeenCalledWith({
       data: { type: 'account_suspended', text: 'Your account was suspended: Fake reviews' },
     });

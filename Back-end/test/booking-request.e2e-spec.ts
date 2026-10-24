@@ -167,20 +167,23 @@ run('Booking requests (e2e)', () => {
     await prisma.booking.update({ where: { id: firstBooking }, data: { paid_at: new Date() } });
     const c = await check(T.cust);
     expect(c.status).toBe(400);
-    // paid, so it was also a booking that went ahead
-    expect(msg(c)).toBe('This code is for your first booking only.');
+    // paid, so the code was used
+    expect(msg(c)).toBe('You’ve already used this code.');
     await prisma.booking.update({ where: { id: firstBooking }, data: { status: 'REJECTED', paid_at: null } });
   });
 
-  it('a first-booking code is refused once the customer has a confirmed booking', async () => {
-    // a waiting request doesn't count
+  it('a first-booking code is refused once the customer has another request or booking', async () => {
+    // a waiting request counts too, so the code can't go on several requests at once
     const waiting = await prisma.booking.create({ data: { customer_id: U.other, vendor_id: U.vendor, status: 'PENDING' } });
-    expect((await check(T.other)).status).toBe(201);
-    await prisma.booking.update({ where: { id: waiting.id }, data: { status: 'CONFIRMED' } });
     for (const res of [await check(T.other), await preview(T.other, { ...full, promo_code: CODE })]) {
       expect(res.status).toBe(400);
       expect(msg(res)).toBe('This code is for your first booking only.');
     }
+    // declined: it's their first again
+    await prisma.booking.update({ where: { id: waiting.id }, data: { status: 'REJECTED' } });
+    expect((await check(T.other)).status).toBe(201);
+    await prisma.booking.update({ where: { id: waiting.id }, data: { status: 'CONFIRMED' } });
+    expect((await check(T.other)).status).toBe(400);
   });
 
   it('refuses a file that is not a photo without creating the booking or storing anything', async () => {

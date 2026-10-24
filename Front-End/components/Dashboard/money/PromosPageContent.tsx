@@ -102,7 +102,7 @@ export default function PromosPageContent() {
             </label>
           ))}
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400">First booking only: for customers with no confirmed or paid booking yet. Declined, expired and unpaid cancelled requests don’t use up a once-per-customer code.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">First booking only: for customers with no other booking or open request yet. Declined, expired and unpaid cancelled requests don’t use up a once-per-customer code.</p>
         <p className="text-xs text-gray-500 dark:text-gray-400">Discounts come off the vendor’s price; Vendly absorbs nothing, so agree promos with vendors first.</p>
         <button disabled={saving} className="px-5 h-10 rounded-full bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60">Create code</button>
       </form>

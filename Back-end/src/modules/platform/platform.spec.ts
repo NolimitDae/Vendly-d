@@ -104,11 +104,8 @@ describe('promo codes', () => {
       expect(w.NOT).toEqual([{ status: BookingStatus.REJECTED }, { status: BookingStatus.CANCELLED, paid_at: null }]);
     });
 
-    it('counts confirmed, started, completed or paid bookings as earlier bookings', () => {
-      expect(earlierBookingWhere('cust').OR).toEqual([
-        { status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED] } },
-        { paid_at: { not: null } },
-      ]);
+    it('counts every earlier booking or open request, but not declined, expired or unpaid cancelled ones', () => {
+      expect(earlierBookingWhere('cust').NOT).toEqual([{ status: BookingStatus.REJECTED }, { status: BookingStatus.CANCELLED, paid_at: null }]);
       expect(earlierBookingWhere('cust', 'new').id).toEqual({ not: 'new' });
     });
 

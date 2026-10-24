@@ -44,12 +44,16 @@ export function promoUsedWhere(customerId: string, code: string, excludeBookingI
   };
 }
 
-/** Earlier bookings that went ahead (the vendor confirmed, or money was taken); waiting requests don't count. */
+/**
+ * Earlier bookings that make this not the customer's first: any that went ahead or may still go ahead
+ * (waiting requests count, or a first-booking code could be used on several requests at once). Declined,
+ * expired and unpaid cancelled requests don't count.
+ */
 export function earlierBookingWhere(customerId: string, excludeBookingId?: string): Prisma.BookingWhereInput {
   return {
     customer_id: customerId,
     ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
-    OR: [{ status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED] } }, { paid_at: { not: null } }],
+    NOT: [{ status: BookingStatus.REJECTED }, { status: BookingStatus.CANCELLED, paid_at: null }],
   };
 }
 
@@ -73,11 +77,12 @@ export class PromoService {
 
   /** Per-customer limits. The booking being created is left out so it doesn't count against itself. */
   async assertCustomerMayUse(db: Db, promo: { code: string; once_per_customer?: boolean; first_booking_only?: boolean }, customerId: string, excludeBookingId?: string) {
-    if (promo.first_booking_only && (await db.booking.findFirst({ where: earlierBookingWhere(customerId, excludeBookingId), select: { id: true } }))) {
-      throw new BadRequestException(PROMO_FIRST_BOOKING_ONLY);
-    }
+    // "already used" first: it's the more specific answer when both limits apply
     if (promo.once_per_customer && (await db.booking.findFirst({ where: promoUsedWhere(customerId, promo.code, excludeBookingId), select: { id: true } }))) {
       throw new BadRequestException(PROMO_ALREADY_USED);
+    }
+    if (promo.first_booking_only && (await db.booking.findFirst({ where: earlierBookingWhere(customerId, excludeBookingId), select: { id: true } }))) {
+      throw new BadRequestException(PROMO_FIRST_BOOKING_ONLY);
     }
   }
 

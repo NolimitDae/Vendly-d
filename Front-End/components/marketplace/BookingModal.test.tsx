@@ -461,24 +461,23 @@ describe('BookingModal', () => {
     it('says how far ahead to book and starts the date picker after the notice', () => {
       render(<BookingModal listing={withNotice} onClose={onClose} />);
       expect(screen.getByText('Book at least 3 days ahead')).toBeInTheDocument();
-      expect(screen.getByLabelText(/event date/i)).toHaveAttribute('min', '2030-06-04');
+      expect(screen.getByLabelText(/event date/i)).toHaveAttribute('min', '2030-06-05');
     });
 
     it('refuses a start inside the notice before asking for the contract', async () => {
       const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       render(<BookingModal listing={withNotice} onClose={onClose} />);
-      // June 4 at 9am is less than 72 hours after June 1 at noon
+      // June 4 at 9am is less than 72 hours after June 1 at noon (the date picker doesn't offer it either)
       await user.type(screen.getByLabelText(/event date/i), '2030-06-04');
       await user.type(screen.getByLabelText(/start time/i), '09:00');
       await user.click(screen.getByRole('button', { name: /review contract/i }));
-      expect(toast.error).toHaveBeenCalledWith('This package needs to be booked at least 3 days ahead. Please pick a later date.');
       expect(ContractsService.bookingPreview).not.toHaveBeenCalled();
     });
 
-    it('a quote from the vendor is not held to the notice', () => {
+    it('a quote is held to the notice too (it agrees the price, not the date)', () => {
       render(<BookingModal listing={withNotice} quote={{ id: 'q1', title: 'Custom', amount: 400 }} onClose={onClose} />);
-      expect(screen.queryByText('Book at least 3 days ahead')).toBeNull();
-      expect(screen.getByLabelText(/event date/i)).toHaveAttribute('min', '2030-06-01');
+      expect(screen.getByText('Book at least 3 days ahead')).toBeInTheDocument();
+      expect(screen.getByLabelText(/event date/i)).toHaveAttribute('min', '2030-06-05');
     });
   });
 });

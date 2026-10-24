@@ -23,10 +23,16 @@ export function earliestStart(hours?: number | null, now = new Date()) {
   return new Date(now.getTime() + (hours ?? 0) * 3600 * 1000);
 }
 
-/** The first whole local day that can still be booked: days before it are greyed out. */
+/**
+ * The first whole local day that can be booked: days before it are greyed out. A day
+ * whose midnight is before the earliest start is skipped, since a booking without a start time counts
+ * from midnight and would be refused.
+ */
 export function firstBookableDay(hours?: number | null, now = new Date()) {
   const earliest = earliestStart(hours, now);
-  return new Date(earliest.getFullYear(), earliest.getMonth(), earliest.getDate());
+  const day = new Date(earliest.getFullYear(), earliest.getMonth(), earliest.getDate());
+  if (hours && day.getTime() < earliest.getTime()) day.setDate(day.getDate() + 1);
+  return day;
 }
 
 /** A message when the start is sooner than the notice allows, else null (the server checks too). */

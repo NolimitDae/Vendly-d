@@ -152,4 +152,9 @@ export class MessageGateway
   emitBookingEvent(userId: string, event: string, data: any) {
     this.server.to(`user_${userId}`).emit(event, data);
   }
+
+  /** Closes every live connection a user has (after a suspension, so live chat stops at once too). */
+  disconnectUser(userId: string) {
+    this.server?.in(`user_${userId}`).disconnectSockets(true);
+  }
 }

@@ -37,6 +37,7 @@ const mockPrisma = {
     count: jest.fn(),
     update: jest.fn(),
   },
+  user: { findUnique: jest.fn().mockResolvedValue({ deleted_at: null, status: 1 }) },
 };
 
 describe('EventPlannerService', () => {
@@ -122,6 +123,14 @@ describe('EventPlannerService', () => {
 
       const result = await service.getPublicProfile('user-1');
       expect(result.success).toBe(true);
+    });
+
+    it('hides a suspended or deleted planner', async () => {
+      mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.user.findUnique.mockResolvedValueOnce({ deleted_at: null, status: 0 });
+      await expect(service.getPublicProfile('user-1')).rejects.toThrow(NotFoundException);
+      mockPrisma.user.findUnique.mockResolvedValueOnce({ deleted_at: new Date(), status: 1 });
+      await expect(service.getPublicProfile('user-1')).rejects.toThrow(NotFoundException);
     });
 
     it('never shows the licence documents publicly', async () => {

@@ -214,6 +214,7 @@ describe('EventToolsService', () => {
     it('messages every vendor in the team about the event', async () => {
       prisma.vendorTeam.findFirst.mockResolvedValue({ id: 't1', vendor_ids: ['v1', 'v2'] });
       prisma.user.findUnique.mockResolvedValue({ name: 'Amara' });
+      prisma.user.findMany.mockResolvedValueOnce([{ id: 'v1' }, { id: 'v2' }]);
       prisma.conversation.findFirst.mockResolvedValueOnce({ id: 'c1' }).mockResolvedValueOnce(null);
       prisma.conversation.create.mockResolvedValue({ id: 'c2' });
       prisma.message.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'm', createdAt: new Date(), ...data, sender: { id: 'planner', name: 'Amara' } }));
@@ -226,6 +227,7 @@ describe('EventToolsService', () => {
     it('skips vendors either side has blocked', async () => {
       prisma.vendorTeam.findFirst.mockResolvedValue({ id: 't1', vendor_ids: ['v1', 'v2', 'v3'] });
       prisma.user.findUnique.mockResolvedValue({ name: 'Amara' });
+      prisma.user.findMany.mockResolvedValueOnce([{ id: 'v1' }, { id: 'v2' }, { id: 'v3' }]);
       prisma.userBlock.findMany.mockResolvedValueOnce([{ blocker_id: 'planner', blocked_id: 'v1' }, { blocker_id: 'v2', blocked_id: 'planner' }]);
       prisma.conversation.findFirst.mockResolvedValue({ id: 'c3' });
       prisma.message.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'm', createdAt: new Date(), ...data, sender: { id: 'planner', name: 'Amara' } }));
@@ -234,6 +236,17 @@ describe('EventToolsService', () => {
       expect(prisma.message.create).toHaveBeenCalledTimes(1);
       expect(push.sendToUser).toHaveBeenCalledWith('v3', expect.anything(), 'messages');
     });
+  });
+
+  it('skips team members who were suspended or deleted since the team was saved', async () => {
+    prisma.vendorTeam.findFirst.mockResolvedValue({ id: 't1', vendor_ids: ['v1', 'gone'] });
+    prisma.user.findUnique.mockResolvedValue({ name: 'Amara' });
+    prisma.user.findMany.mockResolvedValueOnce([{ id: 'v1' }]);
+    prisma.conversation.findFirst.mockResolvedValue({ id: 'c1' });
+    prisma.message.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'm', createdAt: new Date(), ...data, sender: { id: 'planner', name: 'Amara' } }));
+    const res = await service.inviteTeam('e1', 'planner', 't1');
+    expect(res.data.invited).toBe(1);
+    expect(push.sendToUser).not.toHaveBeenCalledWith('gone', expect.anything(), expect.anything());
   });
 
   describe('saving a team (any active vendor, booked or not)', () => {

@@ -1007,6 +1007,8 @@ export class BookingService {
       // private storage keys stay in the API; getBooking adds signed links
       dispute_photos: undefined,
       dispute_photo_count: booking.dispute_photos?.length ?? 0,
+      request_photos: undefined,
+      request_photo_count: booking.request_photos?.length ?? 0,
     } as Record<string, any>;
   }
 }

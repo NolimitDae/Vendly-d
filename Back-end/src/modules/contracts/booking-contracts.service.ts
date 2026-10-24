@@ -291,8 +291,8 @@ export class BookingContractsService {
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {
     const ctx = await this.loadBookingContext(userId, dto);
     await this.assertDateOpen(ctx.listing.id, ctx.listing.vendor_id, dto);
-    // the package's minimum notice (a quote is the vendor agreeing to the date in chat)
-    const tooSoon = dto.quote_id ? null : tooSoonMessage(ctx.listing.min_notice_hours, dto.event_start_at ?? dto.scheduled_at);
+    // the package's minimum notice (quotes too: a quote agrees the price, not the date)
+    const tooSoon = tooSoonMessage(ctx.listing.min_notice_hours, dto.event_start_at ?? dto.scheduled_at);
     if (tooSoon) throw new BadRequestException({ message: tooSoon, error: 'TOO_SOON' });
     const quote = await this.quoteFor(userId, dto);
     // a quote is the agreed price for the package; otherwise per person / hour / day packages are counted out

@@ -122,8 +122,8 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
     return length >= minMinutes && (!maxQ || length <= maxQ * 60);
   });
   const [dateError, setDateError] = useState<string | null>(null);
-  // minimum notice (a quote is the vendor agreeing to the date, as on the server)
-  const notice = quote ? null : listing.min_notice_hours ?? null;
+  // minimum notice (quotes too: a quote agrees the price, not the date)
+  const notice = listing.min_notice_hours ?? null;
   const firstDay = firstBookableDay(notice);
 
   const pickDate = (value: string) => {

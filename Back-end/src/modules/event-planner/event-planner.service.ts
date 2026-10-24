@@ -78,7 +78,7 @@ export class EventPlannerService {
       where: { user_id: userId },
       include: { user: { select: { id: true, name: true, avatar: true } } },
     });
-    if (!profile || profile.license_status !== ADMIN_APPROVE_STATUS.APPROVED)
+    if (!profile || profile.license_status !== ADMIN_APPROVE_STATUS.APPROVED || !(await this.isActiveAccount(userId)))
       throw new NotFoundException('Event planner not found');
     return { success: true, data: this.formatPublicProfile(profile) };
   }
@@ -91,6 +91,8 @@ export class EventPlannerService {
     const where: any = {
       license_status: ADMIN_APPROVE_STATUS.APPROVED,
       deleted_at: null,
+      // suspended or deleted accounts aren't listed
+      user: { deleted_at: null, OR: [{ status: null }, { status: { not: 0 } }] },
     };
 
     if (query.event_type) {
@@ -159,6 +161,11 @@ export class EventPlannerService {
       data: planners.map((p) => this.formatProfile(p)),
       meta: { total, page, limit, last_page: Math.ceil(total / limit) },
     };
+  }
+
+  private async isActiveAccount(userId: string) {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { deleted_at: true, status: true } });
+    return !!u && !u.deleted_at && u.status !== 0;
   }
 
   /** What anyone may see: the profile without the licence documents (only the planner and admins see those). */

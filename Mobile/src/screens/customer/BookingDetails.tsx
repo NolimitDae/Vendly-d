@@ -107,7 +107,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
 
   const proceed = () => {
     if (!startAt || !endAt) return Alert.alert('Start time', 'Choose when the service should start.');
-    const tooSoon = listing.quoteId ? null : tooSoonMessage(listing.minNoticeHours, startAt);
+    const tooSoon = tooSoonMessage(listing.minNoticeHours, startAt);
     if (tooSoon) return Alert.alert('Too soon', tooSoon);
     if (hours && (closedDay || !durations.some((d) => d.label === duration.label))) {
       return Alert.alert('Working hours', `${hoursMessage(hours, dayKeyOf(date))} Pick a time and length inside those hours.`);

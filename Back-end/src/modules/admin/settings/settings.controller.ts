@@ -11,6 +11,7 @@ import { PromoService, type PromoInput } from 'src/modules/platform/promo.servic
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { recordAccountStatus } from '../user/account-status';
+import { MessageGateway } from '../../chat/message/message.gateway';
 
 class CategoryFeeDto {
   @IsOptional()
@@ -67,6 +68,7 @@ export class SettingsController {
     private readonly promos: PromoService,
     private readonly payments: PaymentsService,
     private readonly prisma: PrismaService,
+    private readonly sockets: MessageGateway,
   ) {}
 
   // ─── Fees and platform settings ────────────────────────────────────────
@@ -161,6 +163,7 @@ export class SettingsController {
     if ((target.status === 0 ? 0 : 1) !== dto.status) {
       await recordAccountStatus(this.prisma, { userId: id, adminId: user.id ?? user.userId, status: dto.status, reason: dto.reason });
     }
+    if (dto.status === 0) this.sockets.disconnectUser(id);
     return { success: true, data: updated };
   }
 }

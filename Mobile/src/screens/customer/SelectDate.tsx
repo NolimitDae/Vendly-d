@@ -20,7 +20,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
   const insets = useSafeAreaInsets();
   const today = startOfDay(new Date());
   // the package's minimum notice: days before this can't be picked (a quote is the vendor agreeing to the date)
-  const notice = listing.quoteId ? null : listing.minNoticeHours ?? null;
+  const notice = listing.minNoticeHours ?? null;
   const firstDay = firstBookableDay(notice);
   const [month, setMonth] = useState(startOfMonth(today));
   const [selected, setSelected] = useState<Date | null>(null);
