@@ -131,6 +131,13 @@ export const CATEGORY_LABELS: Record<ContractCategory, string> = {
 
 const R = '[LAWYER REVIEW]';
 
+/**
+ * The deposit rule of Oct 2026 (docs/PAYMENTS.md), in section 5. Template versions published before
+ * it get it through a new version (VendorContractsService.ensureDefaultTemplates, withDepositClause).
+ */
+export const DEPOSIT_CLAUSE_MARK = `Deposits ${R}:`;
+export const DEPOSIT_CLAUSE = `${DEPOSIT_CLAUSE_MARK} on a booking paid with a deposit, the deposit is non-refundable if the {{customer_role_label}} cancels, or if the booking is cancelled because a deposit or balance payment wasn't made within 12 hours of failing. Anything paid beyond the deposit is refunded under the cancellation policy above. The Vendly Protection fee is not refunded in either case.`;
+
 const GENERAL_SECTIONS = `# Service Agreement
 
 Booking ID: {{booking_id}} · Contract version {{contract_version}}
@@ -159,6 +166,7 @@ The Vendor will provide: {{package_name}}.
 
 ## 5. Cancellation and rescheduling ${R}
 Cancellation policy: {{cancellation_policy_name}}. {{cancellation_policy_text}} Rescheduling requires both parties to sign an amended contract. Refunds are processed by Vendly under the Vendly Terms of Service.
+${DEPOSIT_CLAUSE}
 
 ## 6. Vendor responsibilities ${R}
 The Vendor will arrive on time, provide the services described above with reasonable skill and care, and upload proof-of-service photos through Vendly.
@@ -309,6 +317,7 @@ This addendum attaches to the Vendor's own contract and forms part of it. If any
 - Total: {{total_price}}
 - Payment: {{payment_schedule}}
 - Cancellation policy: {{cancellation_policy_name}}. {{cancellation_policy_text}}
+- ${DEPOSIT_CLAUSE}
 
 ## Booking comments
 {{booking_comments}}
@@ -318,6 +327,17 @@ This addendum attaches to the Vendor's own contract and forms part of it. If any
 `;
 
 export const UPLOADED_REQUIRED_FIELDS = ['event_date', 'vendor_business_name', 'customer_name', 'vendor_price', 'cancellation_policy'];
+
+/**
+ * A template body published before the deposit rule, with DEPOSIT_CLAUSE added to the end of
+ * section 5. Null when it already has it or has no section 5 to add it to.
+ */
+export function withDepositClause(body: string): string | null {
+  if (body.includes(DEPOSIT_CLAUSE_MARK)) return null;
+  const section = /(## 5\. Cancellation and rescheduling[^\n]*\n[^\n]+)/;
+  if (!section.test(body)) return null;
+  return body.replace(section, `$1\n${DEPOSIT_CLAUSE}`);
+}
 
 /**
  * Templates published before the fee was renamed still say "Vendly service fee"; new contracts

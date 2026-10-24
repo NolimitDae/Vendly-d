@@ -1,4 +1,4 @@
-import { cancellationMessage, customerRefundPercent, settleCancellation } from './cancellation';
+import { cancellationMessage, customerRefundPercent, depositPlanVendorOwed, settleCancellation } from './cancellation';
 
 const event = new Date('2026-06-14T15:00:00Z');
 const before = (days: number, hours = 0) => new Date(event.getTime() - (days * 24 + hours) * 3600 * 1000);
@@ -96,5 +96,49 @@ describe('cancellationMessage', () => {
     expect(cancellationMessage({ ...base, refund_total: 0, refund_failed: 225 }, 'VENDOR', true)).toBe(
       "A refund of $225.00 to the customer didn't go through straight away; Vendly is following it up. You keep $225.00 under your flexible cancellation policy.",
     );
+  });
+});
+
+describe('depositPlanVendorOwed (deposit kept, rest by policy)', () => {
+  // $1,000 price on a 50% deposit plan: $500 deposit, $500 balance
+  it('only the deposit paid: the vendor keeps it even when the policy would refund in full', () => {
+    expect(depositPlanVendorOwed({ vendorPaid: 500, depositPaid: 500, feesAgreed: 0, percent: 100 })).toEqual({ owed: 500, depositKept: 500 });
+  });
+
+  it('deposit and balance paid: the deposit is kept, the balance is refunded by the policy tier', () => {
+    expect(depositPlanVendorOwed({ vendorPaid: 1000, depositPaid: 500, feesAgreed: 0, percent: 100 })).toEqual({ owed: 500, depositKept: 500 });
+    expect(depositPlanVendorOwed({ vendorPaid: 1000, depositPaid: 500, feesAgreed: 0, percent: 50 })).toEqual({ owed: 750, depositKept: 500 });
+    expect(depositPlanVendorOwed({ vendorPaid: 1000, depositPaid: 500, feesAgreed: 0, percent: 0 })).toEqual({ owed: 1000, depositKept: 500 });
+  });
+
+  it('fees agreed after booking stay the vendor’s in full, and nothing beyond what was paid is kept', () => {
+    expect(depositPlanVendorOwed({ vendorPaid: 1100, depositPaid: 500, feesAgreed: 100, percent: 100 })).toEqual({ owed: 600, depositKept: 500 });
+    expect(depositPlanVendorOwed({ vendorPaid: 500, depositPaid: 500, feesAgreed: 100, percent: 100 })).toEqual({ owed: 500, depositKept: 500 });
+  });
+
+  it('nothing paid: nothing kept', () => {
+    expect(depositPlanVendorOwed({ vendorPaid: 0, depositPaid: 0, feesAgreed: 0, percent: 0 })).toEqual({ owed: 0, depositKept: 0 });
+  });
+});
+
+describe('cancellationMessage with a non-refundable deposit', () => {
+  const base = { cancelled_by: 'CUSTOMER' as const, refund_total: 250, refund_fee: 0, fee_kept: 50, vendor_keeps: 750, deposit_kept: 500, policy: { key: 'moderate', label: 'Moderate', text: '' }, percent: 50, unpaid_cancelled: 0, holds_released: 0, card: null, paid: true };
+
+  it('tells the customer clearly that the deposit is non-refundable, and what the policy keeps on top', () => {
+    expect(cancellationMessage(base, 'CUSTOMER')).toBe(
+      "You'll get $250.00 back to your card. The $50.00 Vendly Protection fee isn't refunded. Your deposit of $500.00 is non-refundable. The vendor keeps another $250.00 under their moderate cancellation policy. Refunds take 5–10 business days to show.",
+    );
+    expect(cancellationMessage({ ...base, refund_total: 0, vendor_keeps: 500, unpaid_cancelled: 500 }, 'CUSTOMER')).toBe(
+      "You won't get a refund. The $50.00 Vendly Protection fee isn't refunded. Your deposit of $500.00 is non-refundable. The $500.00 still to pay won't be charged.",
+    );
+  });
+
+  it('tells the vendor they keep the deposit', () => {
+    expect(cancellationMessage(base, 'VENDOR', true)).toBe('The customer is getting $250.00 back. You keep the $500.00 deposit, plus $250.00 under your moderate cancellation policy.');
+    expect(cancellationMessage({ ...base, refund_total: 0, vendor_keeps: 500 }, 'VENDOR')).toBe('Nothing is refunded to the customer. You keep the $500.00 deposit.');
+  });
+
+  it('never mentions a deposit on a vendor’s own cancellation', () => {
+    expect(cancellationMessage({ ...base, cancelled_by: 'VENDOR', refund_total: 1050, refund_fee: 50, fee_kept: 0, vendor_keeps: 0 }, 'CUSTOMER')).not.toContain('deposit');
   });
 });

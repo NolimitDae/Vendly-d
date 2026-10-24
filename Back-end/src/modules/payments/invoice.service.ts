@@ -7,6 +7,10 @@ import { buildInvoicePdf, InvoiceData } from './invoice-pdf';
 import { bookingTitle, round2 } from './money-text';
 import { vendorPortion } from './payments.service';
 import { bookingEarnings } from './vendor-earnings';
+import { describeCancelReason } from 'src/modules/booking/cancel-reasons';
+
+/** Who cancelled, as the invoice says it. */
+const CANCELLED_BY_TEXT: Record<string, string> = { CUSTOMER: 'The customer', VENDOR: 'The vendor', SYSTEM: 'Vendly (payment not made in time)', ADMIN: 'Vendly' };
 
 export interface InvoiceViewer {
   id: string;
@@ -50,6 +54,7 @@ export class InvoiceService {
       select: {
         id: true, status: true, customer_id: true, vendor_id: true, amount: true, service_fee: true, discount: true, promo_code: true, currency: true,
         created_at: true, completed_at: true, cancelled_at: true, event_start_at: true, scheduled_at: true,
+        cancelled_by: true, cancel_reason_code: true, cancel_reason: true,
         paid_at: true, released_at: true, payout_credited_at: true, commission_amount: true, released_gross: true, early_released_amount: true,
         listing: { select: { title: true } },
         rental_reservations: { select: { item: { select: { title: true } } } },
@@ -121,6 +126,10 @@ export class InvoiceService {
       currency,
       copy,
       booking: { id: b.id, title, status: b.status, event_date: b.event_start_at ?? b.scheduled_at, created_at: b.created_at, completed_at: b.completed_at, cancelled_at: b.cancelled_at },
+      cancellation:
+        b.status === 'CANCELLED'
+          ? { by: b.cancelled_by ? CANCELLED_BY_TEXT[b.cancelled_by] ?? null : null, reason: describeCancelReason(b) }
+          : null,
       customer: { name: b.customer?.name ?? 'Customer', email: b.customer?.email ?? null },
       vendor: { name: b.vendor?.vendorProfile?.business_name || b.vendor?.name || 'Vendor', email: b.vendor?.email ?? null },
       price_lines: lines,

@@ -3,7 +3,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { PDFDocument } from 'pdf-lib';
 import { ContractCategory } from 'prisma/generated/client';
 import { BookingContractsService } from './booking-contracts.service';
-import { withProtectionFeeWording } from './contract-templates';
+import { DEPOSIT_CLAUSE, withDepositClause, withProtectionFeeWording } from './contract-templates';
 import { VendorContractsService } from './vendor-contracts.service';
 import {
   buildMergeData,
@@ -485,6 +485,41 @@ describe('booking outside the vendor’s working hours', () => {
   });
 });
 
+describe('the deposit clause (Oct 2026) as a new template version', () => {
+  const general = () => defaultTemplates().find((t) => t.category === ContractCategory.GENERAL)!;
+  const oldBody = () => general().body.replace(`\n${DEPOSIT_CLAUSE}`, '');
+
+  it('new templates have it in section 5, marked for the lawyer, and the uploaded-PDF addendum too', () => {
+    expect(general().body).toMatch(/## 5\. Cancellation and rescheduling[^\n]*\n[^\n]+\nDeposits \[LAWYER REVIEW\]: on a booking paid with a deposit, the deposit is non-refundable/);
+    expect(UPLOADED_ADDENDUM_BODY).toContain(DEPOSIT_CLAUSE);
+  });
+
+  it('adds it to an older body once, keeping everything else', () => {
+    const body = withDepositClause(oldBody())!;
+    expect(body).toBe(general().body);
+    expect(withDepositClause(body)).toBeNull();
+    expect(withDepositClause('# A template with no section 5')).toBeNull();
+  });
+
+  it('publishes the next version of the active template once; earlier versions are kept, retired', async () => {
+    const v1 = { id: 't1', category: ContractCategory.GENERAL, title: 'Vendly Service Agreement: General', body: oldBody(), required_fields: ['event_date'], version: 1, status: 'ACTIVE' };
+    const prisma: any = {
+      contractTemplate: {
+        findFirst: jest.fn().mockResolvedValue(v1),
+        findMany: jest.fn().mockImplementation(({ where }: any) => Promise.resolve(where.category === ContractCategory.GENERAL ? [v1] : [{ ...v1, category: where.category, body: general().body }])),
+        update: jest.fn().mockReturnValue('update'),
+        create: jest.fn().mockReturnValue('create'),
+      },
+      $transaction: jest.fn().mockResolvedValue([]),
+    };
+    const service = new VendorContractsService(prisma);
+    await service.ensureDefaultTemplates();
+    expect(prisma.contractTemplate.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { status: 'RETIRED' } });
+    expect(prisma.contractTemplate.create).toHaveBeenCalledWith({ data: expect.objectContaining({ category: ContractCategory.GENERAL, version: 2, status: 'ACTIVE', body: general().body }) });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('vendor contract preview', () => {
   it('reads like a real customer booking: customer label and the Vendly Protection fee in the total', async () => {
     const template = defaultTemplates().find((t) => t.category === ContractCategory.GENERAL)!;
@@ -551,6 +586,30 @@ describe('an executed amendment and the money still to collect', () => {
     const pas = txFor({ payment_plan: 'PAY_AFTER_SERVICE', event_start_at: start, scheduled_at: start, installments: [{ id: 'p', kind: 'charge', status: 'SCHEDULED', amount: 210, sequence: 1 }] });
     await apply(pas, null, true);
     expect(pas.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'p', status: 'SCHEDULED' }, data: { due_at: start } });
+  });
+
+  it('a new date that moves a missed balance later clears "Pending balance" and charges it on the new date', async () => {
+    const tx: any = txFor({
+      payment_plan: 'DEPOSIT_50', event_start_at: start, scheduled_at: start, payment_due_kind: 'balance',
+      installments: [
+        { id: 'd', kind: 'charge', status: 'PAID', amount: 550, sequence: 1 },
+        { id: 'bal', kind: 'charge', status: 'FAILED', amount: 500, sequence: 2 },
+      ],
+    });
+    tx.booking.update = jest.fn().mockResolvedValue({});
+    await apply(tx, null, true);
+    expect(tx.bookingInstallment.updateMany).toHaveBeenCalledWith({
+      where: { id: 'bal', status: { in: ['SCHEDULED', 'FAILED'] } },
+      data: { due_at: new Date(start.getTime() - 7 * DAY), status: 'SCHEDULED', attempts: 0, next_attempt_at: null, last_error: null },
+    });
+    expect(tx.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } });
+
+    // a date so close that the balance is due now stays pending
+    const soon = new Date(Date.now() + 3 * DAY);
+    const tx2: any = txFor({ payment_plan: 'DEPOSIT_50', event_start_at: soon, scheduled_at: soon, payment_due_kind: 'balance', installments: [{ id: 'd', kind: 'charge', status: 'PAID', amount: 550, sequence: 1 }, { id: 'bal', kind: 'charge', status: 'FAILED', amount: 500, sequence: 2 }] });
+    tx2.booking.update = jest.fn();
+    await apply(tx2, null, true);
+    expect(tx2.booking.update).not.toHaveBeenCalled();
   });
 
   it('refuses a price amendment once anything was paid', async () => {

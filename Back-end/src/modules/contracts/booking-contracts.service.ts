@@ -1051,7 +1051,7 @@ export class BookingContractsService {
   private async applyAmendmentToCharges(tx: Tx, bookingId: string, price: { amount: number; service_fee: number } | null, dateChanged: boolean) {
     const b = await tx.booking.findUniqueOrThrow({
       where: { id: bookingId },
-      select: { payment_plan: true, event_start_at: true, scheduled_at: true, installments: { orderBy: { sequence: 'asc' } } },
+      select: { payment_plan: true, event_start_at: true, scheduled_at: true, payment_due_kind: true, installments: { orderBy: { sequence: 'asc' } } },
     });
     const charges = b.installments.filter((i) => i.kind === 'charge');
     if (price && charges.length) {
@@ -1071,6 +1071,12 @@ export class BookingContractsService {
       const now = new Date();
       for (const [k, i] of charges.entries()) {
         const due = eventLinkedDueAt(b.payment_plan, k, start, now);
+        // a missed balance whose due date moves later is no longer pending: it is charged on the new date
+        if (due && k === 1 && b.payment_due_kind === 'balance' && due > now && (i.status === 'SCHEDULED' || i.status === 'FAILED')) {
+          await tx.bookingInstallment.updateMany({ where: { id: i.id, status: { in: ['SCHEDULED', 'FAILED'] } }, data: { due_at: due, status: 'SCHEDULED', attempts: 0, next_attempt_at: null, last_error: null } });
+          await tx.booking.update({ where: { id: bookingId }, data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } });
+          continue;
+        }
         if (due && i.status === 'SCHEDULED') await tx.bookingInstallment.updateMany({ where: { id: i.id, status: 'SCHEDULED' }, data: { due_at: due } });
       }
       for (const i of b.installments.filter((x) => x.kind === 'security_deposit' && x.status === 'SCHEDULED')) {

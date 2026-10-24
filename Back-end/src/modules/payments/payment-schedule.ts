@@ -23,7 +23,7 @@ export const PAYMENT_PLAN_LABELS: Record<PaymentPlan, string> = {
 const round = (n: number) => Math.round(n * 100) / 100;
 
 /** Share of the price taken as a deposit on acceptance (1 = everything). */
-const depositShareOf = (plan: PaymentPlan) => (plan === PaymentPlan.DEPOSIT_50 ? 0.5 : plan === PaymentPlan.DEPOSIT_25 ? 0.25 : 1);
+export const depositShareOf = (plan: PaymentPlan) => (plan === PaymentPlan.DEPOSIT_50 ? 0.5 : plan === PaymentPlan.DEPOSIT_25 ? 0.25 : 1);
 /** Days before the event a deposit plan's balance is due. */
 const balanceLeadDaysOf = (plan: PaymentPlan) => (plan === PaymentPlan.DEPOSIT_50 ? 7 : 14);
 

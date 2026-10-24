@@ -132,9 +132,10 @@ export class BookingController {
   }
 
   /** What cancelling now would do with the money (refund, fee kept, what the vendor keeps), in a plain sentence. */
+  // reason_code: the vendor's "customer_didnt_pay" previews a non-payment cancellation (settled like the customer's)
   @Get(':id/cancel-preview')
-  cancelPreview(@GetUser() user: any, @Param('id') id: string) {
-    return this.service.cancelPreview(id, user.id);
+  cancelPreview(@GetUser() user: any, @Param('id') id: string, @Query('reason_code') reasonCode?: string) {
+    return this.service.cancelPreview(id, user.id, reasonCode);
   }
 
   @Patch(':id/cancel')

@@ -19,6 +19,7 @@ import appConfig from 'src/config/app.config';
 import {
   CANCELLATION_PRESETS,
   CATEGORY_LABELS,
+  DEPOSIT_CLAUSE_MARK,
   CONSENT_TEXT,
   CONSENT_TEXT_VERSION,
   MAX_ADDITIONAL_TERMS,
@@ -26,6 +27,7 @@ import {
   UPLOADED_REQUIRED_FIELDS,
   defaultTemplates,
   vendorFieldsFor,
+  withDepositClause,
   withProtectionFeeWording,
 } from './contract-templates';
 import { buildMergeData, fieldLabel, renderTemplate, sha256 } from './contract-merge';
@@ -52,14 +54,33 @@ export class VendorContractsService implements OnModuleInit {
     }
   }
 
-  /** Creates version 1 of each category template the first time the app starts. */
+  /**
+   * Creates version 1 of each category template the first time the app starts. Once, it also
+   * publishes the next version of each category's active template with the deposit clause of Oct
+   * 2026 (withDepositClause); earlier versions stay as they were, and so do contracts signed on them.
+   */
   async ensureDefaultTemplates() {
     for (const t of defaultTemplates()) {
       const exists = await this.prisma.contractTemplate.findFirst({ where: { category: t.category } });
-      if (exists) continue;
-      await this.prisma.contractTemplate.create({
-        data: { ...t, version: 1, status: ContractTemplateStatus.ACTIVE },
-      });
+      if (!exists) {
+        await this.prisma.contractTemplate.create({
+          data: { ...t, version: 1, status: ContractTemplateStatus.ACTIVE },
+        });
+        continue;
+      }
+      // already published (or an admin wrote it into a version of their own): never again
+      const versions = await this.prisma.contractTemplate.findMany({ where: { category: t.category }, orderBy: { version: 'desc' } });
+      if (versions.some((v) => v.body.includes(DEPOSIT_CLAUSE_MARK))) continue;
+      const active = versions.find((v) => v.status === ContractTemplateStatus.ACTIVE);
+      const body = active ? withDepositClause(active.body) : null;
+      if (!active || !body) continue;
+      await this.prisma.$transaction([
+        this.prisma.contractTemplate.update({ where: { id: active.id }, data: { status: ContractTemplateStatus.RETIRED } }),
+        this.prisma.contractTemplate.create({
+          data: { category: active.category, title: active.title, body, required_fields: active.required_fields, version: versions[0].version + 1, status: ContractTemplateStatus.ACTIVE },
+        }),
+      ]);
+      this.logger.log(`Published ${CATEGORY_LABELS[active.category]} template v${versions[0].version + 1} with the deposit clause`);
     }
   }
 
