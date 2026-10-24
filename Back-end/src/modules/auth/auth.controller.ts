@@ -41,6 +41,7 @@ const SELF_SIGNUP_TYPES: string[] = [UserType.CLIENT, UserType.CUSTOMER, UserTyp
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ChangePasswordBodyDto, DeleteAccountBodyDto, EmailBodyDto, EmailTokenBodyDto, PushTokenBodyDto, RefreshBodyDto, ResetPasswordBodyDto, TokenBodyDto } from './dto/auth-bodies.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
   CSRF_MESSAGE,
@@ -330,7 +331,7 @@ export class AuthController {
   })
   @Throttle({ short: { limit: 3, ttl: 60000 } })
   @Post('forgot-password')
-  async forgotPassword(@Body() data: { email: string }) {
+  async forgotPassword(@Body() data: EmailBodyDto) {
     try {
       const email = data.email;
       if (!email) {
@@ -402,7 +403,7 @@ export class AuthController {
   })
   @Throttle({ short: { limit: 3, ttl: 60000 } })
   @Post('resend-verification-email')
-  async resendVerificationEmail(@Body() data: { email: string }) {
+  async resendVerificationEmail(@Body() data: EmailBodyDto) {
     try {
       const email = data.email;
       if (!email) {
@@ -458,7 +459,7 @@ export class AuthController {
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('reset-password')
   async resetPassword(
-    @Body() data: { email: string; token: string; password: string },
+    @Body() data: ResetPasswordBodyDto,
   ) {
     try {
       const email = data.email;
@@ -517,7 +518,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Reset token resent to email.' })
   @Throttle({ short: { limit: 3, ttl: 60000 } })
   @Post('resend-token')
-  async resendToken(@Body() data: { email: string }) {
+  async resendToken(@Body() data: EmailBodyDto) {
     try {
       const email = data.email;
       if (!email) {
@@ -561,7 +562,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Token verified successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token.' })
   @Post('verify-token')
-  async verifyToken(@Body() data: { email: string; token: string }) {
+  async verifyToken(@Body() data: EmailTokenBodyDto) {
     try {
       const email = data.email;
       const token = data.token;
@@ -620,7 +621,7 @@ export class AuthController {
   @Post('change-password')
   async changePassword(
     @Req() req: Request,
-    @Body() data: { email: string; old_password: string; new_password: string },
+    @Body() data: ChangePasswordBodyDto,
   ) {
     try {
       // const email = data.email;
@@ -688,7 +689,7 @@ export class AuthController {
   async refreshToken(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-    @Body() body: { refresh_token?: string } = {},
+    @Body() body: RefreshBodyDto = {},
   ) {
     try {
       const web = isWebClient(req);
@@ -721,7 +722,7 @@ export class AuthController {
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-    @Body() body: { refresh_token?: string } = {},
+    @Body() body: RefreshBodyDto = {},
   ) {
     if (csrfBlocked(req)) throw new ForbiddenException(CSRF_MESSAGE);
     const web = isWebClient(req);
@@ -806,7 +807,7 @@ export class AuthController {
   @Post('request-email-change')
   async requestEmailChange(
     @Req() req: Request,
-    @Body() data: { email: string },
+    @Body() data: EmailBodyDto,
   ) {
     try {
       const user_id = req.user.userId;
@@ -854,7 +855,7 @@ export class AuthController {
   @Post('change-email')
   async changeEmail(
     @Req() req: Request,
-    @Body() data: { email: string; token: string },
+    @Body() data: EmailTokenBodyDto,
   ) {
     try {
       const user_id = req.user.userId;
@@ -940,7 +941,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid 2FA token.' })
   @UseGuards(JwtAuthGuard)
   @Post('verify-2fa')
-  async verify2FA(@Req() req: Request, @Body() data: { token: string }) {
+  async verify2FA(@Req() req: Request, @Body() data: TokenBodyDto) {
     try {
       const user_id = req.user.userId;
       const token = data.token;
@@ -961,7 +962,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: '2FA enabled successfully.' })
   @UseGuards(JwtAuthGuard)
   @Post('enable-2fa')
-  async enable2FA(@Req() req: Request, @Body() data: { token?: string } = {}) {
+  async enable2FA(@Req() req: Request, @Body() data: TokenBodyDto = {}) {
     try {
       const user_id = req.user.userId;
       // a current code is required, so 2FA is never switched on before the app is set up
@@ -982,7 +983,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: '2FA disabled successfully.' })
   @UseGuards(JwtAuthGuard)
   @Post('disable-2fa')
-  async disable2FA(@Req() req: Request, @Body() data: { token?: string } = {}) {
+  async disable2FA(@Req() req: Request, @Body() data: TokenBodyDto = {}) {
     try {
       const user_id = req.user.userId;
       // a current code is required, so a stolen session alone can't switch 2FA off
@@ -1028,7 +1029,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Delete my account (users with bookings or signed contracts are anonymised)' })
   @UseGuards(JwtAuthGuard)
   @Delete('account')
-  async deleteAccount(@Req() req: Request, @Body() body: { confirm?: string }) {
+  async deleteAccount(@Req() req: Request, @Body() body: DeleteAccountBodyDto) {
     if (body?.confirm !== 'DELETE') {
       throw new BadRequestException('Type DELETE to confirm. Signed contracts are kept for 7 years for legal records.');
     }
@@ -1060,7 +1061,7 @@ export class AuthController {
   @Post('push-token')
   async savePushToken(
     @Req() req: Request,
-    @Body() body: { token: string; platform?: string },
+    @Body() body: PushTokenBodyDto,
   ) {
     try {
       const userId = req.user.userId;

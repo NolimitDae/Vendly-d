@@ -11,8 +11,11 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(req: Request, email: string, password: string): Promise<any> {
+    // plain text only: an object here would reach the database as a filter
+    if (typeof email !== 'string' || typeof password !== 'string') throw new UnauthorizedException('Email or password is incorrect');
     try {
-      const token = req.body?.token as string | undefined;
+      const raw = req.body?.token;
+      const token = typeof raw === 'string' ? raw : undefined;
       const user = await this.authService.validateUser(email, password, token);
       return user;
     } catch (error) {

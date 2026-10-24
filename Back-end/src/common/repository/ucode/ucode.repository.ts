@@ -5,6 +5,9 @@ import { UserRepository } from '../user/user.repository';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 
+/** A non-empty string (never an object or array, which Prisma would read as a filter). */
+const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+
 @Injectable()
 export class UcodeRepository {
   constructor(
@@ -82,6 +85,8 @@ export class UcodeRepository {
     token: string;
     forEmailChange?: boolean;
   }) {
+    // codes and emails are only ever plain text (an object would act as a query filter)
+    if (!isText(email) || !isText(token)) return false;
     if (!forEmailChange) {
       const userDetails = await this.userRepository.exist({
         field: 'email',
@@ -130,6 +135,7 @@ export class UcodeRepository {
    * @returns { success: boolean, message: string }
    */
   async verifyToken({ email, token }: { email: string; token: string }) {
+    if (!isText(email) || !isText(token)) return { success: false, message: 'Invalid token' };
     const updatedToken = await this.prisma.ucode.updateMany({
       where: {
         token: token,
@@ -207,7 +213,7 @@ export class UcodeRepository {
    * @returns boolean - true if verified, false otherwise
    */
   async verifycheckToken({ email, token }: { email: string; token: string }) {
-    
+    if (!isText(email) || !isText(token)) return false;
     const existToken = await this.prisma.ucode.findFirst({
       where: {
         token: token,
@@ -231,6 +237,7 @@ export class UcodeRepository {
    * @returns
    */
   async deleteToken({ email, token }) {
+    if (!isText(email) || !isText(token)) return;
     await this.prisma.ucode.deleteMany({
       where: {
         AND: [{ email: email }, { token: token }],
