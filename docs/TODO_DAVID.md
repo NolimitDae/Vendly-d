@@ -128,6 +128,11 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
       location stamping on proof photos, and the client read-only sharing of events.
 - [ ] Have a lawyer read **Schedule A** (added to contracts when a package is priced per person/hour/day or has add-ons or fees):
       it lists the fees a vendor may request after the job and says each is approved by the customer first, or reviewed by Vendly.
+- [ ] Lawyer: review the non-refundable deposit clause (contract templates section 5 "Deposits [LAWYER REVIEW]", the booking
+      addendum and Terms section 6 "Deposits" / "Missed payments": 12 hours to pay a missed deposit or balance, then cancelled).
+      Vendors already on an older default template version keep it until they update their contract; the Terms cover them.
+      Note: Terms section 6 says the Vendly Protection fee comes back when the vendor's policy gives a full refund, but the
+      app has always kept it on customer cancellations; decide which is right.
 
 ## 7. Set up the business side in the admin dashboard
 

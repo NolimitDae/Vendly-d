@@ -10,6 +10,7 @@ import { BookingService, type Booking, type BookingStatus } from '../../services
 import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
 import { disputeCategoryText } from '../../components/DisputeDetails';
+import { cancellationLine, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
 
 type Tab = 'pending' | 'upcoming' | 'completed' | 'refunds' | 'complaints';
 const TABS: { key: Tab; label: string; statuses?: BookingStatus[]; filter?: 'refunds' | 'complaints' }[] = [
@@ -129,9 +130,11 @@ export default function VendorBookings() {
                   <Text style={s.name} numberOfLines={1}>{item.customer?.name ?? 'Customer'}</Text>
                   <Text style={s.service} numberOfLines={1}>{item.listing?.title ?? 'Service'}</Text>
                   {!!item.venue_address && <Text style={s.service} numberOfLines={1}>{item.venue_address}</Text>}
+                  {item.status === 'CANCELLED' && !!cancellationLine(item, 'VENDOR') && <Text style={s.service} numberOfLines={2}>{cancellationLine(item, 'VENDOR')}</Text>}
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  <Text style={s.priceLabel}>{item.status === 'COMPLETED' ? 'Earned' : item.status === 'CANCELLED' || item.status === 'REJECTED' ? item.status === 'REJECTED' ? 'Declined' : 'Cancelled' : item.paid_at ? 'Paid' : 'Price'}</Text>
+                  {/* a missed deposit or balance: the customer has 12 hours to pay */}
+                  <Text style={[s.priceLabel, !!item.payment_state && { color: '#fcd34d' }]}>{item.payment_state ? PAYMENT_STATE_LABELS[item.payment_state] : item.status === 'COMPLETED' ? 'Earned' : item.status === 'CANCELLED' || item.status === 'REJECTED' ? item.status === 'REJECTED' ? 'Declined' : 'Cancelled' : item.paid_at ? 'Paid' : 'Price'}</Text>
                   <Text style={s.price}>${Number(item.amount ?? 0).toFixed(2)}</Text>
                 </View>
               </View>

@@ -33,6 +33,8 @@ export default function VendorDetails({ vendor, onClose }: { vendor: any; onClos
             ["Address", vendor.address],
             ["Packages", vendor.total_listings ?? 0],
             ["Bookings", vendor.total_bookings ?? 0],
+            // their own cancellations (not for non-payment or safety) in the last 90 days; 2 or more ranks them lower in search
+            ["Cancellations (90 days)", `${vendor.cancellations_90d ?? 0}${vendor.ranked_lower ? " · shown lower in search" : ""}`],
           ]}
         />
         <div className="flex flex-wrap gap-3 pt-1">

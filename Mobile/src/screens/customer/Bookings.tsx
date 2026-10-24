@@ -10,8 +10,9 @@ import { BrandGradient } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { BookingService, type Booking, type BookingStatus } from '../../services/booking.service';
 import type { CustomerBookingsStackParams } from '../../navigation/types';
-import { confirmCancelBooking } from '../../components/booking/cancelBooking';
+import CancelBookingSheet from '../../components/booking/CancelBookingSheet';
 import { customerTabOf, type CustomerTab } from '../../utils/bookingTabs';
+import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
 
 // the order in the design; every booking is in exactly one
 const TABS: { key: CustomerTab; label: string }[] = [
@@ -43,6 +44,8 @@ export default function CustomerBookings() {
   const [all, setAll] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // the booking whose cancel sheet (refund preview and reason) is open
+  const [cancelling, setCancelling] = useState<Booking | null>(null);
 
   // One fetch, filtered locally: the API filters by a single status and the tabs group several.
   const load = useCallback(async () => {
@@ -64,19 +67,20 @@ export default function CustomerBookings() {
     .filter((b) => customerTabOf(b, now) === tab)
     .sort((a, b) => (a.event_start_at ?? a.scheduled_at ?? a.created_at).localeCompare(b.event_start_at ?? b.scheduled_at ?? b.created_at) * (tab === 'complete' ? -1 : 1));
 
-  // shows what cancelling does with the money first, then the refund result
-  const cancel = (b: Booking) =>
-    confirmCancelBooking({
-      bookingId: b.id,
-      role: 'CUSTOMER',
-      title: b.status === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?',
-      onCancelled: () => load(),
-      // Report a problem is on the booking's page
-      onReportProblem: () => nav.navigate('BookingDetail', { bookingId: b.id }),
-    });
+  // shows what cancelling does with the money first, asks why, then the refund result
+  const cancel = (b: Booking) => setCancelling(b);
 
   return (
     <View style={s.root}>
+      <CancelBookingSheet
+        bookingId={cancelling?.id ?? null}
+        role="CUSTOMER"
+        title={cancelling?.status === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?'}
+        onClose={() => setCancelling(null)}
+        onCancelled={() => load()}
+        // Report a problem is on the booking's page
+        onReportProblem={() => cancelling && nav.navigate('BookingDetail', { bookingId: cancelling.id })}
+      />
       <FlatList
         data={items}
         keyExtractor={(b) => b.id}
@@ -131,6 +135,12 @@ export default function CustomerBookings() {
                   {item.status === 'PENDING' && !!vendorAnswersWithin(item.request_expires_at) && (
                     <Text style={s.closes} numberOfLines={1}>{vendorAnswersWithin(item.request_expires_at)}</Text>
                   )}
+                  {!!item.payment_state && !!item.payment_due_by && (
+                    <Text style={s.closes} numberOfLines={2}>Pay by {dueByText(item.payment_due_by)} or it's cancelled</Text>
+                  )}
+                  {item.status === 'CANCELLED' && !!cancellationLine(item, 'CUSTOMER') && (
+                    <Text style={s.service} numberOfLines={2}>{cancellationLine(item, 'CUSTOMER')}</Text>
+                  )}
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
                   <StatusPill booking={item} />
@@ -145,7 +155,7 @@ export default function CustomerBookings() {
                 )}
                 <Pressable style={{ flex: 1 }} onPress={() => nav.navigate('BookingDetail', { bookingId: item.id })} accessibilityRole="button">
                   <BrandGradient style={s.primary}>
-                    <Text style={s.primaryText}>{item.status === 'CONFIRMED' && !item.paid_at && !item.payment_plan ? 'Pay now' : item.status === 'COMPLETED' ? 'View & review' : 'View Details'}</Text>
+                    <Text style={s.primaryText}>{(item.status === 'CONFIRMED' && !item.paid_at && !item.payment_plan) || item.payment_state ? 'Pay now' : item.status === 'COMPLETED' ? 'View & review' : 'View Details'}</Text>
                   </BrandGradient>
                 </Pressable>
               </View>
@@ -169,7 +179,8 @@ function StatusPill({ booking }: { booking: Booking }) {
     // a request nobody answered in time closed on its own
     REJECTED: { label: booking.expired_at ? 'Expired' : 'Declined', color: '#fca5a5' },
   };
-  const st = map[booking.status] ?? map.PENDING;
+  // a missed deposit or balance: pay it within 12 hours or the booking is cancelled
+  const st = booking.payment_state ? { label: PAYMENT_STATE_LABELS[booking.payment_state], color: '#fcd34d' } : map[booking.status] ?? map.PENDING;
   return <Text style={[s.pill, { color: st.color }]}>{st.label}</Text>;
 }
 

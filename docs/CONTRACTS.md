@@ -58,6 +58,7 @@ New screen in the vendor dashboard: **Contracts**.
 - Which contract a booking uses: a contract naming the package wins over one for the package's category, which wins over one for all packages. Within the same rule the newest version wins. The same choice decides the cancellation policy shown on the package page (`Back-end/src/modules/contracts/contract-scope.ts`).
 - Saving a contract for packages or categories takes them over from older contracts; an older contract left covering nothing is archived. A contract for all packages stays as the fallback.
 - Editing creates a new version. It applies only to future bookings; existing bookings keep the version that was signed.
+- Vendly default templates change the same way: a new version is published and earlier ones are retired, never edited. The deposit clause of Oct 2026 (`DEPOSIT_CLAUSE` in `contract-templates.ts`, section 5, marked `[LAWYER REVIEW]`) is published by `VendorContractsService.ensureDefaultTemplates` at start-up: once per category, the active version gets a next version with the clause added to section 5 (everything else kept), unless some version already has it. Vendor contracts stay on the template version they were set up with; vendors pick up the new one when they set up or update their default contract. The Terms of Service carry the same rule for every booking. The uploaded-PDF booking addendum lists it too.
 - Vendors must have an active contract before accepting paid bookings, or they can choose "Use Vendly default" with one tap.
 
 ## Default contract template content
@@ -70,7 +71,7 @@ Draft these as templates. Mark every clause `[LAWYER REVIEW]` until a lawyer app
 2. Services: package name, description, inclusions
 3. Event details: date, start and end time, venue address, guest count
 4. Price and payment: vendor price, deposit percentage and amount, balance due date, all paid through Vendly; the service fee is paid to Vendly
-5. Cancellation and rescheduling, matching the vendor's preset
+5. Cancellation and rescheduling, matching the vendor's preset; deposits are non-refundable when the customer cancels or a payment isn't made within 12 hours (from Oct 2026)
 6. Vendor responsibilities: arrive on time, provide the services described, proof-of-service photo
 7. Customer responsibilities: venue access and permissions, accurate details, safe working conditions
 8. Overtime and travel fees

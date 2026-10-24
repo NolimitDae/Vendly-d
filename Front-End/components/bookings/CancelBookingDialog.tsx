@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertCircle, Loader2, RotateCcw, X } from "lucide-react";
 import { BookingService } from "@/service/booking/booking.service";
 import { BookingMoneyService, money, type CancellationSummary } from "@/service/payments/booking-money.service";
+import { CUSTOMER_CANCEL_REASONS, NON_PAYMENT_REASON, VENDOR_CANCEL_REASONS, type CancelReason } from "@/lib/cancel-reasons";
 
 interface Props {
   bookingId: string;
@@ -15,8 +16,6 @@ interface Props {
   onCancelled?: (summary: CancellationSummary | null) => void;
   /** where "View booking" goes after cancelling (lists only) */
   bookingHref?: string;
-  /** sent with the cancellation when the user leaves the reason empty */
-  defaultReason?: string;
   /**
    * The booking page opens its report form; without it the hint links to the booking page
    * (`bookingHref?report=1`). Shown when the start passed and the vendor never started.
@@ -26,33 +25,49 @@ interface Props {
 
 /**
  * Cancel confirmation that shows what cancelling now does with the money before the user confirms
- * (GET /bookings/:id/cancel-preview), and the refund result afterwards.
+ * (GET /bookings/:id/cancel-preview), and the refund result afterwards. The user picks a reason from
+ * their list (with an optional note). A vendor's "Customer didn't pay" is previewed on its own: it
+ * settles like a customer cancellation.
  */
-export default function CancelBookingDialog({ bookingId, role, onClose, onCancelled, bookingHref, defaultReason, onReportProblem }: Props) {
+export default function CancelBookingDialog({ bookingId, role, onClose, onCancelled, bookingHref, onReportProblem }: Props) {
   const [preview, setPreview] = useState<CancellationSummary | null>(null);
+  const [reasons, setReasons] = useState<CancelReason[]>(role === "VENDOR" ? VENDOR_CANCEL_REASONS : CUSTOMER_CANCEL_REASONS);
   const [loading, setLoading] = useState(true);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
+  const [reasonCode, setReasonCode] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<CancellationSummary | null | undefined>(undefined);
 
+  // the money changes only with the vendor's non-payment reason, so only that one asks again
+  const previewFor = reasonCode === NON_PAYMENT_REASON ? NON_PAYMENT_REASON : undefined;
   useEffect(() => {
     let live = true;
-    BookingMoneyService.cancelPreview(bookingId)
-      .then((res) => live && setPreview(res.data?.data ?? null))
+    setLoading(true);
+    BookingMoneyService.cancelPreview(bookingId, previewFor)
+      .then((res) => {
+        if (!live) return;
+        const data: CancellationSummary | null = res.data?.data ?? null;
+        setPreview(data);
+        if (data?.reasons?.length) setReasons(data.reasons);
+      })
       .catch((e) => live && setPreviewError(e?.response?.data?.message ?? "We couldn’t work out the refund right now. You can still cancel."))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [bookingId]);
+  }, [bookingId, previewFor]);
 
   const confirm = async () => {
+    if (!reasonCode) {
+      setError("Pick a reason for cancelling.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const res = await BookingService.cancel(bookingId, reason.trim() || defaultReason);
+      const res = await BookingService.cancel(bookingId, { reason_code: reasonCode, note: note.trim() || undefined });
       if (res.data?.success === false) throw new Error(res.data?.message);
       const summary: CancellationSummary | null = res.data?.data?.refund_summary ?? null;
       setDone(summary);
@@ -139,14 +154,23 @@ export default function CancelBookingDialog({ bookingId, role, onClose, onCancel
               <p className="text-sm text-amber-700 dark:text-amber-300">{previewError ?? "Any payment is refunded under the contract’s cancellation terms."}</p>
             )}
 
+            <fieldset className="space-y-1.5">
+              <legend className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Why are you cancelling?</legend>
+              {reasons.map((r) => (
+                <label key={r.key} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm cursor-pointer ${reasonCode === r.key ? "border-primary bg-primary/5" : "border-gray-200 dark:border-gray-700"}`}>
+                  <input type="radio" name="cancel-reason" value={r.key} checked={reasonCode === r.key} onChange={() => setReasonCode(r.key)} className="accent-primary" />
+                  <span className="text-gray-800 dark:text-gray-200">{r.label}</span>
+                </label>
+              ))}
+            </fieldset>
             <label className="block">
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Reason (optional)</span>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Add a note (optional)</span>
               <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
                 rows={2}
                 maxLength={500}
-                placeholder={role === "VENDOR" ? "Let the customer know why" : "Let the vendor know why"}
+                placeholder={role === "VENDOR" ? "The customer sees this" : "The vendor sees this"}
                 className="mt-1 w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               />
             </label>
@@ -159,7 +183,7 @@ export default function CancelBookingDialog({ bookingId, role, onClose, onCancel
               <button
                 type="button"
                 onClick={confirm}
-                disabled={busy || loading}
+                disabled={busy || loading || !reasonCode}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold disabled:opacity-60"
               >
                 {busy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}

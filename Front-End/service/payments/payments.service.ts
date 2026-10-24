@@ -37,6 +37,9 @@ export interface Installment {
 
 export interface PaymentTimeline {
   plan: PaymentPlan | null;
+  /** deposit plans: a missed deposit or balance to pay by payment_due_by, or the booking is cancelled */
+  payment_state?: "pending_deposit" | "pending_balance" | null;
+  payment_due_by?: string | null;
   currency: string;
   total: number;
   paid: number;
@@ -99,6 +102,11 @@ export const PLAN_LABELS: Record<PaymentPlan, string> = {
   DEPOSIT_25: "25% deposit when the vendor accepts, balance 14 days before the event",
   PAY_AFTER_SERVICE: "Card held at the event, charged after the service",
 };
+
+/** Deposit plans: the deposit isn't refunded when the customer cancels or a payment isn't made in time (docs/PAYMENTS.md). */
+export const isDepositPlan = (plan?: string | null) => plan === "DEPOSIT_50" || plan === "DEPOSIT_25";
+export const DEPOSIT_RULE_TEXT =
+  "The deposit is non-refundable if you cancel, or if a payment isn't made within 12 hours of failing (the booking is then cancelled). Anything paid beyond the deposit is refunded under the cancellation policy.";
 
 export const PaymentsService = {
   setupIntent: () => Fetch.post("/payments/setup-intent", {}, authHeaders()),

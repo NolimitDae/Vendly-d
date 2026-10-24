@@ -25,12 +25,38 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 
 - When the vendor accepts (`confirm`), the plan is snapshotted into `booking_installments` and anything due now is charged off-session (`PaymentsService.chargeInstallment`). Funds stay on the platform balance under `transfer_group: booking_<id>`.
 - A cron every 10 minutes charges installments as they fall due and retries failures.
-- Retry policy: 3 attempts, 24h apart. Each failure emails and pushes the customer. After the third failure (or a bank that insists on 3-D Secure, or a booking with no saved card) the installment is `FAILED` and the customer retries from the app: `POST /bookings/:id/installments/:iid/retry` with an optional new `payment_method_id` (resets the attempt counter). A retry on a cancelled, declined or fully refunded booking is refused.
+- Retry policy (full on accept, pay after service, add-ons, and deposit plans booked before Oct 2026): 3 attempts, 24h apart. Each failure emails and pushes the customer. After the third failure (or a bank that insists on 3-D Secure, or a booking with no saved card) the installment is `FAILED` and the customer retries from the app: `POST /bookings/:id/installments/:iid/retry` with an optional new `payment_method_id` (resets the attempt counter). A retry on a cancelled, declined or fully refunded booking is refused.
 - The sweep charges the oldest due first; every attempt moves its row on (charged, retry later, or waiting for the customer), so nothing can hold up the batch.
 - A pay-after-service charge that falls due once the job is already complete is charged outright (no hold); a hold that lands while the job is being completed is captured straight away.
 - Hosted Checkout (`POST /bookings/:id/checkout`) is only for bookings without installments; a booking on a payment schedule is refused (it would be charged twice).
 - `Booking.paid_at` is set on the first successful charge, so vendors can start work once the deposit is in.
 - Stripe webhooks (`payment_intent.succeeded / payment_failed / canceled / amount_capturable_updated`) reconcile installments by `metadata.installment_id`, so a timed-out API call never leaves a paid installment unrecorded.
+
+## Missed deposit or balance (deposit plans, owner's rules Oct 2026)
+
+`payments/payment-due.ts`, `booking/payment-deadlines.service.ts`. Applies to `DEPOSIT_50` / `DEPOSIT_25` bookings made from this release (`Booking.deposit_rules`; the migration set it to false on older bookings, which keep the 48-hour retries).
+
+- The deposit is the plan's first charge (or, when the event was too close to split it, the full payment that includes it); the balance is the second.
+- Any failure of either (declined, no saved card, the bank needs the customer) starts a **12-hour** deadline (`Booking.payment_due_by`, `payment_due_kind` = deposit | balance), set once by the first failure; later failures don't move it.
+- The booking stays `CONFIRMED` / `IN_PROGRESS`; the API adds `payment_state` (`pending_deposit` | `pending_balance`) and `payment_state_label` to bookings and `payment_state` / `payment_due_by` to the payments timeline. Every booking list and page (web, app, admin) shows **Pending deposit / Pending balance** instead of the status.
+- One automatic retry about 6 hours after the first failure (none when the bank needs the customer, or when it would land within an hour of the deadline). The customer can pay any time before then with the saved card or another card (`POST /bookings/:id/installments/:iid/retry`, as before).
+- The customer is emailed and pushed straight away (amount, the deadline in the time zone the booking was made in, a pay link `…/bookings/:id?pay=1`) and once more with about 2 hours left (`payment_due_reminded_at`). The vendor is told once that the payment is pending and when the deadline is.
+- Paid in time: the pending state clears (`markPaid`). A date amendment that moves a pending balance's due date later clears it too, and the balance is charged on the new date.
+- Still unpaid at the deadline: a job every 10 minutes (job lock `payment-deadlines`) cancels the booking for non-payment: `cancelled_by = SYSTEM`, `cancel_reason_code = non_payment`, claimed only while the deadline has passed, so a rerun or a payment that landed meanwhile never cancels twice. A charge still going through at Stripe waits for the next run; a booking with an open dispute is left for Vendly. It settles like a customer cancellation (below). Both sides are emailed and pushed.
+
+## Cancellation reasons
+
+- `PATCH /bookings/:id/cancel` takes `reason_code` and an optional `note`. Customers: `plans_changed`, `found_another_vendor`, `event_cancelled`, `price`, `other`. Vendors: `customer_didnt_pay`, `safety_concern`, `emergency`, `double_booked`, `other` (`booking/cancel-reasons.ts`). The cancel preview returns the list to show as `reasons`. A reason from the other side's list is refused; apps from before the lists send none and count as `other` (the old free-text `reason` is kept as the note).
+- Stored on the booking: `cancelled_by` (CUSTOMER | VENDOR | SYSTEM | ADMIN), `cancel_reason_code`, `cancel_reason` (the note), `cancelled_at`. Bookings return `cancel_reason_label`. The other side sees it on the booking and in the lists, admins in the booking details; the cancellation emails carry it, and so does the final invoice ("Cancelled by", "Cancellation reason").
+- **Customer didn't pay** (vendors): only while the booking is pending deposit/balance or a charge on it failed. It settles like a customer cancellation, not like the vendor's own. `GET /bookings/:id/cancel-preview?reason_code=customer_didnt_pay` previews that settlement.
+
+## Vendor cancellation tracking
+
+- Counted: a vendor's cancellations in the last 90 days whose reason isn't `customer_didnt_pay`, `safety_concern` or `non_payment` (older bookings without a reason count) (`booking/vendor-cancellations.ts`).
+- At 2: Vendly's admins get one push and one email (`User.cancellations_alerted_at`; told again only once 90 days have passed since).
+- Ranking: while a vendor has 2 or more, their packages come after everyone else's in marketplace search, in the same order otherwise. With database paging the page is filled from the other vendors' packages first and then the demoted ones (`MarketplaceService.searchListings`); for sorts done in memory (rating, distance) a stable sort moves them to the end. The list of demoted vendors is reread at most every 5 minutes.
+- Admin vendor details show the count (`cancellations_90d`, `ranked_lower` on `GET /admin/user/vendors`).
+- After a vendor's own cancellation (any reason but Customer didn't pay) the customer's email, push and booking page offer up to 4 packages in the same category from other active vendors free on the event day (`MarketplaceService.similarAvailable`, the marketplace date filter), with a link to `/marketplace?category_id=…&date=…`. The booking returns them as `similar_vendors`.
 
 ## Holding and releasing
 
@@ -49,6 +75,7 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 
 - Tiers (`booking/cancellation.ts`) decide how much the vendor is owed; `PaymentsService.refundBooking` refunds newest installment first, voids uncaptured holds and cancels unpaid installments.
 - On a payment plan the settlement is made against what was **actually paid** (`settleAgainstPaid`): a vendor cancelling refunds everything paid, Vendly Protection fee included; a customer cancelling leaves the vendor the smaller of what the policy owes them and what the customer paid towards the vendor price, and refunds the rest of that (the fee stays paid, `keepFees`). Unpaid installments are never charged. Add-ons approved after booking count as price under the policy; approved fees are the vendor's in full.
+- **Deposits are non-refundable** (deposit plans booked from Oct 2026, `deposit_rules`) when the customer cancels, when the vendor cancels with Customer didn't pay, and on a non-payment cancellation: the vendor keeps the paid deposit (its vendor part); of what was paid beyond it, the policy tier decides what comes back (`depositPlanVendorOwed`: deposit + the unrefunded part of the rest + fees agreed after booking, never more than was paid towards the vendor's price). Example: $1,000 on a 50% plan, all paid, cancelled in the 50% window: the vendor keeps $500 + $250, the customer gets $250 back. The Vendly Protection fee follows the customer cancellation rule (kept). The vendor's own cancellation still refunds everything. The preview and `refund_summary` carry `deposit_kept`, and the message says "Your deposit of $X is non-refundable."
 - Every cancellation releases card holds (pay-after-service, rental deposits) and cancels add-on/fee requests still waiting (`voidOpenCharges`).
 - Partial dispute refunds come out of the vendor's part (the fee goes back only with a full refund). On a booking paid in one go through Checkout (no plan charges) a dispute refund, full or partial, refunds the Checkout payment intent and records a `booking_refund`; the release afterwards pays the vendor only the price left after refunds. If the payment can't be found the decision is refused and nothing moves.
 - If a cancellation refund fails part-way, only the part that didn't go back is recorded (`booking_refund`, status `refund_failed`) and reported to Sentry; the customer's email, push and `refund_summary` say how much is on its way (`refund_total`) and that Vendly will follow up on the rest (`refund_failed`).

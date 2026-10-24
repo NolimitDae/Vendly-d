@@ -17,6 +17,8 @@ export interface Listing {
   fees?: AddOn[];
   /** from the vendor's contract for this package */
   cancellation_policy?: { key: string; label: string; text: string } | null;
+  /** the payment plan a booking would use (deposit plans keep the deposit when the customer cancels) */
+  effective_payment_plan?: string | null;
   /** "What's included" lines, and how many hours ahead it must be booked */
   included_items?: string[] | null;
   min_notice_hours?: number | null;

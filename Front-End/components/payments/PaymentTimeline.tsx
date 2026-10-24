@@ -7,6 +7,8 @@ import { toast } from "react-toastify";
 import { PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline } from "@/service/payments/payments.service";
 import { BookingService } from "@/service/booking/booking.service";
 import ReportProblemForm from "@/components/disputes/ReportProblemForm";
+import SavedCards from "@/components/payments/SavedCards";
+import { dueByText, paymentStateText } from "@/lib/booking-status";
 import DisputeDetails, { type DisputeDetailFields } from "@/components/disputes/DisputeDetails";
 
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
@@ -29,6 +31,9 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [disputing, setDisputing] = useState(!!startReporting);
+  // the installment being paid with another card, and the card picked
+  const [cardFor, setCardFor] = useState<string | null>(null);
+  const [card, setCard] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,11 +80,19 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
         {t.plan && <p className="text-xs text-gray-500 dark:text-gray-400">{PLAN_LABELS[t.plan]}</p>}
       </div>
 
+      {t.payment_state && t.payment_due_by && (
+        <p className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-300" data-testid="pay-by">
+          {paymentStateText(t.payment_state)}: pay by {dueByText(t.payment_due_by)}, or the booking is cancelled.
+        </p>
+      )}
+
       {hasPlan && (
         <>
           <ul className="space-y-3">
             {t.installments.map((i) => {
               const st = STATUS[i.status];
+              // a failed charge, or a missed deposit or balance waiting for its automatic retry: the customer can pay now
+              const payable = i.status === "FAILED" || (!!t.payment_state && i.status === "SCHEDULED" && i.attempts > 0);
               return (
                 <li key={i.id} className="flex items-start gap-3">
                   <st.Icon className={`w-5 h-5 mt-0.5 ${st.cls}`} />
@@ -93,10 +106,30 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
                       {i.refunded_amount > 0 ? ` · ${money(i.refunded_amount)} refunded` : ""}
                     </p>
                     {i.last_error && i.status !== "PAID" && <p className="text-xs text-red-500">{i.last_error}</p>}
-                    {i.status === "FAILED" && (
-                      <button type="button" disabled={busy} onClick={() => run(() => PaymentsService.retry(bookingId, i.id), "Payment failed again")} className="mt-1 text-xs font-semibold text-primary">
-                        Try again
-                      </button>
+                    {payable && (
+                      <div className="mt-1 space-y-2">
+                        <div className="flex flex-wrap gap-3">
+                          <button type="button" disabled={busy} onClick={() => run(() => PaymentsService.retry(bookingId, i.id), "Payment failed again")} className="text-xs font-semibold text-primary">
+                            {t.payment_state ? `Pay ${money(i.amount)} now` : "Try again"}
+                          </button>
+                          <button type="button" onClick={() => setCardFor(cardFor === i.id ? null : i.id)} className="text-xs font-semibold text-primary">
+                            Use another card
+                          </button>
+                        </div>
+                        {cardFor === i.id && (
+                          <div className="space-y-2">
+                            <SavedCards selected={card} onSelect={setCard} />
+                            <button
+                              type="button"
+                              disabled={!card || busy}
+                              onClick={() => run(() => PaymentsService.retry(bookingId, i.id, card!), "Payment failed again").then(() => setCardFor(null))}
+                              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-60"
+                            >
+                              Pay {money(i.amount)} with this card
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">{money(i.amount)}</span>

@@ -10,6 +10,7 @@ import { PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as
 import { apiMessage } from '../screens/auth/SignIn';
 import ReportProblemForm from './ReportProblemForm';
 import DisputeDetails from './DisputeDetails';
+import { dueByText, PAYMENT_STATE_LABELS } from '../utils/bookingStatus';
 import { BookingService, type Booking } from '../services/booking.service';
 
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
@@ -74,9 +75,17 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
     <Card style={{ gap: 14, borderWidth: 1, borderColor: DARK.field }}>
       <Text style={s.h2}>Payments</Text>
       {t.plan && <Text style={s.muted}>{PLAN_LABELS[t.plan]}</Text>}
+      {!!t.payment_state && !!t.payment_due_by && (
+        <View style={s.note}>
+          <Ionicons name="alarm-outline" size={16} color="#fcd34d" />
+          <Text style={s.noteText}>{PAYMENT_STATE_LABELS[t.payment_state]}: pay by {dueByText(t.payment_due_by)}, or the booking is cancelled.</Text>
+        </View>
+      )}
 
       {hasPlan && t.installments.map((i) => {
         const st = STATUS[i.status];
+        // a failed charge, or a missed deposit or balance waiting for its automatic retry: the customer can pay now
+        const payable = i.status === 'FAILED' || (!!t.payment_state && i.status === 'SCHEDULED' && i.attempts > 0);
         return (
           <View key={i.id} style={s.row}>
             <Ionicons name={st.icon} size={22} color={st.color} />
@@ -90,10 +99,10 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
                 {i.refunded_amount > 0 ? ` · ${money(i.refunded_amount)} refunded` : ''}
               </Text>
               {!!i.last_error && i.status !== 'PAID' && <Text style={s.error}>{i.last_error}</Text>}
-              {i.status === 'FAILED' && (
+              {payable && (
                 <View style={{ flexDirection: 'row', gap: 16, marginTop: 6 }}>
                   <Pressable onPress={() => run(() => PaymentsService.retry(bookingId, i.id), 'Payment failed again')} disabled={busy} hitSlop={8}>
-                    <Text style={s.link}>Try again</Text>
+                    <Text style={s.link}>{t.payment_state ? `Pay ${money(i.amount)} now` : 'Try again'}</Text>
                   </Pressable>
                   <Pressable onPress={() => setAddingFor(i.id)} disabled={busy} hitSlop={8}>
                     <Text style={s.link}>Use another card</Text>

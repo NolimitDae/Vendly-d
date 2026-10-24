@@ -7,6 +7,8 @@ export interface CancellationSummary {
   refund_fee: number;
   fee_kept: number;
   vendor_keeps: number;
+  /** deposit plans: the paid deposit the vendor keeps (non-refundable when the customer cancels or didn't pay) */
+  deposit_kept?: number;
   policy: { key: string; label: string; text: string } | null;
   percent: number;
   unpaid_cancelled: number;
@@ -18,6 +20,8 @@ export interface CancellationSummary {
   message: string;
   /** preview only: the start time passed and the vendor never started, so Report a problem fits better */
   report_problem_hint?: string;
+  /** preview only: the reasons this person can pick ("Customer didn't pay" only while a payment is overdue) */
+  reasons?: { key: string; label: string }[];
 }
 
 export type TransactionType = 'payment' | 'refund' | 'payout' | 'fee';
@@ -46,11 +50,13 @@ export interface TransactionsPage {
 
 /** Cancel previews, final invoices and the transaction history. */
 export const BookingMoneyService = {
-  cancelPreview: (bookingId: string) => api.get<{ success: boolean; data: CancellationSummary }>(`/bookings/${bookingId}/cancel-preview`),
+  /** `reasonCode`: the vendor's "customer_didnt_pay" previews a non-payment cancellation (settled like the customer's). */
+  cancelPreview: (bookingId: string, reasonCode?: string) =>
+    api.get<{ success: boolean; data: CancellationSummary }>(`/bookings/${bookingId}/cancel-preview`, { params: reasonCode ? { reason_code: reasonCode } : undefined }),
 
-  /** Cancels with an optional reason; the response carries `refund_summary`. */
-  cancel: (bookingId: string, reason?: string) =>
-    api.patch<{ success: boolean; data: { refund_summary?: CancellationSummary | null } }>(`/bookings/${bookingId}/cancel`, reason ? { reason } : {}),
+  /** Cancels with the reason picked (and an optional note); the response carries `refund_summary`. */
+  cancel: (bookingId: string, body: { reason_code: string; note?: string }) =>
+    api.patch<{ success: boolean; data: { refund_summary?: CancellationSummary | null } }>(`/bookings/${bookingId}/cancel`, body),
 
   /** A five-minute link to the final invoice PDF that opens without the login header (use openSignedLink). */
   invoiceLink: (bookingId: string) => api.get<{ success: boolean; data: { url: string } }>(`/bookings/${bookingId}/invoice/link`),

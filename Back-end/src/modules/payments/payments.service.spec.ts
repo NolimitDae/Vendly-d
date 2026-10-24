@@ -953,7 +953,7 @@ describe('PaymentsService', () => {
       await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'No-show confirmed' });
       expect(prisma.booking.updateMany).toHaveBeenCalledWith({
         where: { id: 'b1', status: BookingStatus.CONFIRMED },
-        data: { status: BookingStatus.CANCELLED, cancelled_at: expect.any(Date), cancel_reason: expect.stringContaining('Refunded in full') },
+        data: { status: BookingStatus.CANCELLED, cancelled_at: expect.any(Date), cancel_reason: expect.stringContaining('Refunded in full'), cancelled_by: 'ADMIN', payment_due_by: null, payment_due_kind: null },
       });
     });
 

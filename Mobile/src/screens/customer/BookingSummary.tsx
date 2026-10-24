@@ -17,6 +17,7 @@ import { BookingService } from '../../services/booking.service';
 import { ContractsService, apiError, deviceTimezone, type BookingFields, type SignaturePayload } from '../../services/contracts.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import type { AddOn } from '../../services/addons.service';
+import { DEPOSIT_RULE_TEXT, isDepositPlan } from '../../utils/bookingStatus';
 
 interface Preview {
   title: string;
@@ -235,6 +236,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
                   <Text style={s.rowValue}>{money(i.amount)}</Text>
                 </View>
               ))}
+              {isDepositPlan(price.plan) && <Text style={[s.rowLabel, { color: '#fcd34d' }]}>{DEPOSIT_RULE_TEXT}</Text>}
             </View>
           )}
           {!!price?.fees?.length && (

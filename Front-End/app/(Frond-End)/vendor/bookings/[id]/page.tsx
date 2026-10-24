@@ -31,15 +31,7 @@ import { InspirationPhotos } from "@/components/bookings/InspirationPhotos";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { closesIn } from "@/lib/requests";
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  CONFIRMED: "bg-blue-100 text-blue-700",
-  IN_PROGRESS: "bg-blush-100 text-plum-700",
-  COMPLETED: "bg-green-100 text-green-700",
-  CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-  REJECTED: "bg-red-100 text-red-600",
-};
+import { bookingStatusColor, bookingStatusLabel, cancellationLine, dueByText, paymentStateText } from "@/lib/booking-status";
 
 interface Proof {
   id: string;
@@ -80,6 +72,13 @@ interface Booking extends DisputeFields {
   event_bookings?: { event: { id: string; name: string; date?: string | null } }[];
   /** on a request: the vendor's confirmed bookings on the same day */
   same_day_bookings?: { id: string; title: string; status: string; start_at: string | null; end_at: string | null }[];
+  expired_at?: string | null;
+  /** the customer's deposit or balance didn't go through and is due by payment_due_by */
+  payment_state?: "pending_deposit" | "pending_balance" | null;
+  payment_due_by?: string | null;
+  cancelled_by?: string | null;
+  cancel_reason_label?: string | null;
+  cancel_reason?: string | null;
 }
 
 export default function VendorBookingDetailPage() {
@@ -202,15 +201,21 @@ export default function VendorBookingDetailPage() {
               {booking.customer?.name} &middot; {booking.customer?.email}
             </p>
           </div>
-          <span
-            className={cn(
-              "text-xs font-semibold px-2.5 py-1 rounded-full",
-              STATUS_COLORS[booking.status] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-            )}
-          >
-            {booking.status}
+          <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", bookingStatusColor(booking))}>
+            {bookingStatusLabel(booking)}
           </span>
         </div>
+        {booking.payment_state && booking.payment_due_by && (
+          <p className="rounded-xl bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-300" data-testid="payment-due">
+            {paymentStateText(booking.payment_state)}: the customer’s payment didn’t go through. They have until {dueByText(booking.payment_due_by)} to pay; if they
+            don’t, the booking is cancelled automatically and you keep what the cancellation terms give you. You can also cancel now with “Customer didn’t pay”.
+          </p>
+        )}
+        {booking.status === "CANCELLED" && cancellationLine(booking, "VENDOR") && (
+          <p className="text-sm text-gray-600 dark:text-gray-300" data-testid="cancel-reason">
+            {cancellationLine(booking, "VENDOR")}
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3 text-sm">
           {booking.scheduled_at && (
             <div>

@@ -1224,7 +1224,7 @@ export class PaymentsService {
       if (early > 0) await this.recordRecovery(b.vendor_id, bookingId, -early, b.currency ?? 'usd');
       // a booking the vendor never started (a no-show) is over: it leaves the vendor's upcoming work
       if (b.status === BookingStatus.CONFIRMED) {
-        await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.CANCELLED, cancelled_at: now, cancel_reason: 'Refunded in full by Vendly after a reported problem' } });
+        await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.CANCELLED, cancelled_at: now, cancel_reason: 'Refunded in full by Vendly after a reported problem', cancelled_by: 'ADMIN', payment_due_by: null, payment_due_kind: null } });
       }
     }
 
