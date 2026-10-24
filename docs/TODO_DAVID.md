@@ -43,7 +43,10 @@ Where things live:
      `CORS_ORIGINS=<the old website railway.app URL>` (keeps the old address working while you switch; remove later),
      `S3_PUBLIC_URL=https://media.vendlymarketplace.com`.
   4. Website variables: `NEXT_PUBLIC_API_ENDPOINT=https://api.vendlymarketplace.com`, `NEXT_PUBLIC_APP_URL=https://vendlymarketplace.com`,
-     `NEXT_PUBLIC_MEDIA_URL=https://media.vendlymarketplace.com`. Redeploy the website (these are baked in at build time).
+     `NEXT_PUBLIC_MEDIA_URL=https://media.vendlymarketplace.com`, `API_PROXY_ORIGIN=https://vendly-d-production.up.railway.app`
+     (the API's Railway address: the website's /api path forwards there, because Cloudflare refuses the website server's
+     requests to api.vendlymarketplace.com). Redeploy the website (these are baked in at build time).
+     `VENDLY_PROXY_KEY` (same random value on the API and the website) lets the API see visitors' addresses. Both are set.
   5. Stripe webhook endpoint → `https://api.vendlymarketplace.com/api/payment/stripe/webhook` (new signing secret → `STRIPE_WEBHOOK_SECRET`).
   6. App builds: `EXPO_PUBLIC_API_URL=https://api.vendlymarketplace.com` in the EAS environment.
   7. Later: send email from `@vendlymarketplace.com` (your mail provider will give DNS records to add in Cloudflare).
@@ -102,7 +105,7 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 - [ ] Walk through: sign up → find a vendor → book with Stripe test card `4242 4242 4242 4242` → vendor accepts →
       card charged → chat + quote → rental + return → proof photo with the camera → dispute → admin resolves.
       Note anything odd and send it to me.
-- [ ] After that, small fixes can go out without a new build: `eas update --channel development` (or `preview` / `production`).
+- [ ] After that, small fixes can go out without a new build: `eas update --channel preview --environment development` (the `--environment` loads the API address and Stripe key from EAS; without it the update points at localhost).
 
 ## 5. App Store and Google Play
 
