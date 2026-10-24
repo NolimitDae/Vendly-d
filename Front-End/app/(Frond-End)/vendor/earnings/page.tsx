@@ -71,6 +71,17 @@ interface EarningsSummary {
   bookings: { booking_id: string; earned: number; held: number; commission: number }[];
 }
 
+/** GET /vendor/dashboard/stats: worked out on the server with the same "earned" as above */
+interface DashboardStats {
+  revenue_by_month: { month: string; label: string; earned: number }[];
+  total_earned: number;
+  bookings: { total: number; by_status: Record<string, number>; upcoming: number };
+  rating: { average: number | null; count: number };
+  top_clients: { id: string; name: string | null; avatar_url: string | null; earned: number; bookings: number }[];
+}
+
+const CHART_MONTHS = 6;
+
 interface StripeBalance {
   available: { amount: number; display: string };
   pending: { amount: number; display: string };
@@ -150,6 +161,7 @@ export default function VendorEarningsPage() {
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
   const [stripeBalance, setStripeBalance] = useState<StripeBalance | null>(null);
   const [summary, setSummary] = useState<EarningsSummary | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingBalance, setLoadingBalance] = useState(false);
 
@@ -167,11 +179,12 @@ export default function VendorEarningsPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [bookingsRes, withdrawalsRes, infoRes, summaryRes] = await Promise.allSettled([
+      const [bookingsRes, withdrawalsRes, infoRes, summaryRes, statsRes] = await Promise.allSettled([
         EarningsService.getBookings({ limit: 500 }),
         EarningsService.getWithdrawHistory(),
         EarningsService.getAccountInfo(),
         EarningsService.getSummary(),
+        EarningsService.getDashboardStats(CHART_MONTHS),
       ]);
 
       if (bookingsRes.status === "fulfilled" && bookingsRes.value.data?.success) {
@@ -185,6 +198,9 @@ export default function VendorEarningsPage() {
       }
       if (summaryRes.status === "fulfilled" && summaryRes.value.data?.success) {
         setSummary(summaryRes.value.data.data);
+      }
+      if (statsRes.status === "fulfilled" && statsRes.value.data?.success) {
+        setStats(statsRes.value.data.data);
       }
       if (infoRes.status === "fulfilled" && infoRes.value.data?.success) {
         const info: AccountInfo = infoRes.value.data.data;
@@ -217,17 +233,13 @@ export default function VendorEarningsPage() {
     () => bookings.filter((b) => b.status === "COMPLETED"),
     [bookings],
   );
-  const cancelled = useMemo(
-    () => bookings.filter((b) => b.status === "CANCELLED"),
-    [bookings],
-  );
-  const pending = useMemo(
-    () =>
-      bookings.filter(
-        (b) => b.status === "PENDING" || b.status === "CONFIRMED" || b.status === "IN_PROGRESS",
-      ),
-    [bookings],
-  );
+  // booking counts from the server (all bookings, not just the ones loaded for the table)
+  const byStatus = stats?.bookings.by_status ?? {};
+  const count = (...s: string[]) => s.reduce((n, k) => n + (byStatus[k] ?? 0), 0);
+  const completedCount = count("COMPLETED");
+  const cancelledCount = count("CANCELLED");
+  const inProgressCount = count("PENDING", "CONFIRMED", "IN_PROGRESS");
+  const totalCount = stats?.bookings.total ?? 0;
 
   // gross value of completed bookings (average booking value)
   const totalEarned = useMemo(
@@ -235,15 +247,8 @@ export default function VendorEarningsPage() {
     [completed],
   );
 
-  const thisMonthEarned = useMemo(() => {
-    const now = dayjs();
-    return completed
-      .filter((b) => {
-        const d = dayjs(b.completed_at ?? b.created_at);
-        return d.month() === now.month() && d.year() === now.year();
-      })
-      .reduce((s, b) => s + amt(b.amount), 0);
-  }, [completed]);
+  // released to you this month, after commission and refunds
+  const thisMonthEarned = stats?.revenue_by_month[stats.revenue_by_month.length - 1]?.earned ?? 0;
 
   // real figures from the backend (no guessed fee): released to you, held, commission, balance
   const earned = summary?.earned ?? 0;
@@ -261,34 +266,16 @@ export default function VendorEarningsPage() {
     ? totalEarned / completed.length
     : 0;
 
-  /* ── Monthly chart data (last 6 months) ───────────────────── */
-  const chartData = useMemo(() => {
-    const now = dayjs();
-    const months = Array.from({ length: 6 }, (_, i) => {
-      const d = now.subtract(5 - i, "month");
-      return { name: d.format("MMM"), month: d.month(), year: d.year(), amount: 0 };
-    });
-    completed.forEach((b) => {
-      const d = dayjs(b.completed_at ?? b.created_at);
-      const slot = months.find(
-        (m) => m.month === d.month() && m.year === d.year(),
-      );
-      if (slot) slot.amount += amt(b.amount);
-    });
-    return months.map(({ name, amount }) => ({ name, amount: Math.round(amount * 100) / 100 }));
-  }, [completed]);
+  /* ── Monthly chart data (last 6 months, from the server) ──── */
+  const chartData = (stats?.revenue_by_month ?? []).map((m) => ({ name: m.label, amount: m.earned }));
 
   /* ── Pie data ─────────────────────────────────────────────── */
-  const pieData = useMemo(() => {
-    const other = bookings.length - completed.length - cancelled.length;
-    return [
-      { name: "Completed", value: completed.length, color: "#22c55e" },
-      { name: "Cancelled", value: cancelled.length, color: "#ef4444" },
-      ...(other > 0
-        ? [{ name: "In Progress", value: other, color: "#7A2A82" }]
-        : []),
-    ].filter((d) => d.value > 0);
-  }, [bookings, completed, cancelled]);
+  const other = totalCount - completedCount - cancelledCount;
+  const pieData = [
+    { name: "Completed", value: completedCount, color: "#22c55e" },
+    { name: "Cancelled", value: cancelledCount, color: "#ef4444" },
+    ...(other > 0 ? [{ name: "In Progress", value: other, color: "#7A2A82" }] : []),
+  ].filter((d) => d.value > 0);
 
   /* ── Transaction table data ───────────────────────────────── */
   const tableRows = useMemo(
@@ -473,8 +460,8 @@ export default function VendorEarningsPage() {
             loading={loading}
             icon={<CheckCircle2 className="w-5 h-5 text-white" />}
             label="Completed Bookings"
-            value={String(completed.length)}
-            sub={`${pending.length} in progress`}
+            value={String(completedCount)}
+            sub={`${inProgressCount} in progress`}
           />
         </div>
 
@@ -486,7 +473,7 @@ export default function VendorEarningsPage() {
             <h2 className="font-semibold text-gray-900 dark:text-white mb-1">
               Monthly Earnings
             </h2>
-            <p className="text-xs text-gray-400 mb-5">Last 6 months · gross revenue</p>
+            <p className="text-xs text-gray-400 mb-5">Last {CHART_MONTHS} months · released to you, after commission and refunds</p>
             {loading ? (
               <div className="h-64 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />
             ) : (
@@ -534,7 +521,7 @@ export default function VendorEarningsPage() {
 
             {loading ? (
               <div className="h-48 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />
-            ) : bookings.length === 0 ? (
+            ) : totalCount === 0 ? (
               <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
                 No bookings yet
               </div>
@@ -579,14 +566,45 @@ export default function VendorEarningsPage() {
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">Success Rate</p>
                 <p className="font-bold text-gray-900 dark:text-white text-sm">
-                  {bookings.length
-                    ? Math.round((completed.length / bookings.length) * 100)
-                    : 0}
+                  {totalCount ? Math.round((completedCount / totalCount) * 100) : 0}
                   %
                 </p>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* ── Top clients ─────────────────────────────────────── */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+            <div>
+              <h2 className="font-semibold text-gray-900 dark:text-white">Top Clients</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Last {CHART_MONTHS} months · released to you</p>
+            </div>
+            {stats?.rating.average != null && (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Average rating <span className="font-semibold text-gray-900 dark:text-white">{stats.rating.average.toFixed(1)}</span> from {stats.rating.count} review{stats.rating.count === 1 ? "" : "s"}
+              </p>
+            )}
+          </div>
+          {loading ? (
+            <div className="h-24 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />
+          ) : !stats?.top_clients.length ? (
+            <p className="text-sm text-gray-400">Your top clients show here once bookings are paid out.</p>
+          ) : (
+            <ol className="divide-y divide-gray-100 dark:divide-gray-700">
+              {stats.top_clients.map((c, i) => (
+                <li key={c.id} className="flex items-center gap-3 py-2.5">
+                  <span className="w-5 text-xs text-gray-400">{i + 1}</span>
+                  <span className="flex-1 min-w-0 truncate text-sm font-medium text-gray-900 dark:text-white">{c.name ?? "Customer"}</span>
+                  <span className="text-xs text-gray-400">{c.bookings} booking{c.bookings === 1 ? "" : "s"}</span>
+                  <span className="w-24 text-right text-sm font-semibold text-gray-900 dark:text-white">
+                    ${c.earned.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
 
         {/* ── Transaction history ─────────────────────────────── */}
