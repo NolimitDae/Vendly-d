@@ -8,6 +8,10 @@ const authHeaders = () => ({
   },
 });
 
+/** The account's switches for optional pushes and emails (Back-end notification-prefs.ts). */
+export type NotificationPrefKey = "booking_updates" | "messages" | "payments" | "reminders" | "review_requests" | "email";
+export type NotificationPrefs = Record<NotificationPrefKey, boolean>;
+
 export const NotificationService = {
   getNotifications: async () => Fetch.get("/notifications", authHeaders()),
 
@@ -19,4 +23,10 @@ export const NotificationService = {
 
   deleteNotification: async (id: string) =>
     Fetch.delete(`/notifications/${id}`, authHeaders()),
+
+  getPrefs: async () => Fetch.get("/auth/notification-prefs", authHeaders()),
+
+  /** Only the switches sent change. */
+  updatePrefs: async (changes: Partial<NotificationPrefs>) =>
+    Fetch.patch("/auth/notification-prefs", changes, authHeaders()),
 };

@@ -158,7 +158,7 @@ export class EventToolsService {
       data: { event_id: eventId, starts_at: starts, ends_at: ends ?? null, title: input.title.trim(), notes: input.notes?.trim() || null, location: input.location?.trim() || null, vendor_id: input.vendor_id || null },
       include: { vendor: { select: { id: true, name: true } } },
     });
-    if (item.vendor_id) void this.push.sendToUser(item.vendor_id, { title: 'Run of show updated', body: `${item.title} · ${item.starts_at.toISOString().slice(11, 16)} UTC`, data: { type: 'event', eventId } });
+    if (item.vendor_id) void this.push.sendToUser(item.vendor_id, { title: 'Run of show updated', body: `${item.title} · ${item.starts_at.toISOString().slice(11, 16)} UTC`, data: { type: 'event', eventId } }, 'booking_updates');
     return { success: true, data: item };
   }
 
@@ -419,7 +419,7 @@ export class EventToolsService {
       const msg = await this.prisma.message.create({ data: { conversationId: conv.id, senderId: plannerId, text, status: 'SENT' }, include: messageInclude });
       await this.prisma.conversation.update({ where: { id: conv.id }, data: { updatedAt: new Date() } });
       this.gateway.server?.to(conv.id).emit('message', { from: plannerId, data: formatMessage(msg) });
-      void this.push.sendToUser(vendorId, { title: `${planner?.name ?? 'A planner'} invited you`, body: event.name, data: { type: 'chat', conversationId: conv.id } });
+      void this.push.sendToUser(vendorId, { title: `${planner?.name ?? 'A planner'} invited you`, body: event.name, data: { type: 'chat', conversationId: conv.id } }, 'messages');
       sent++;
     }
     return { success: true, data: { invited: sent } };

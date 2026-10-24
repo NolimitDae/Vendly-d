@@ -34,6 +34,7 @@ import { UserType } from 'prisma/generated/enums';
 import { LocalAuthGuard } from 'src/modules/auth/guards/local-auth.guard';
 import { AuthService } from './auth.service';
 import { SwitchRoleDto } from './dto/switch-role.dto';
+import { UpdateNotificationPrefsDto } from './dto/notification-prefs.dto';
 
 // Admin and internal accounts are never self-service: an open ADMIN type would hand anyone the dashboard.
 const SELF_SIGNUP_TYPES: string[] = [UserType.CLIENT, UserType.CUSTOMER, UserType.VENDOR, UserType.EVENT_PLANNER];
@@ -1035,6 +1036,23 @@ export class AuthController {
     const result = await this.authService.deleteAccount(userId);
     if (!result.success) throw new BadRequestException(result.message);
     return result;
+  }
+
+  @ApiOperation({
+    summary: 'My notification settings',
+    description: 'Which optional pushes and emails I get. Security messages, receipts, refunds, disputes and contracts are always sent.',
+  })
+  @UseGuards(JwtAuthGuard)
+  @Get('notification-prefs')
+  async notificationPrefs(@Req() req: Request) {
+    return this.authService.notificationPrefs(req.user.userId);
+  }
+
+  @ApiOperation({ summary: 'Change some of my notification settings (true or false per switch)' })
+  @UseGuards(JwtAuthGuard)
+  @Patch('notification-prefs')
+  async updateNotificationPrefs(@Req() req: Request, @Body() body: UpdateNotificationPrefsDto) {
+    return this.authService.updateNotificationPrefs(req.user.userId, body);
   }
 
   @ApiOperation({ summary: 'Save Expo push token for mobile notifications' })

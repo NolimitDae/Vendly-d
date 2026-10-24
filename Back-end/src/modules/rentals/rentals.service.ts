@@ -308,10 +308,11 @@ export class RentalsService {
           listingTitle: title,
           amount: Number(created.amount),
           ctaUrl: `${clientUrl}/vendor/bookings/${created.id}`,
+          topic: 'booking_updates',
         })
         .catch(() => null);
     }
-    void this.push.sendToUser(created.vendor_id, { title: 'New rental request', body: `${created.customer.name ?? 'A customer'} requested ${title}`, data: { type: 'booking', bookingId: created.id } });
+    void this.push.sendToUser(created.vendor_id, { title: 'New rental request', body: `${created.customer.name ?? 'A customer'} requested ${title}`, data: { type: 'booking', bookingId: created.id } }, 'booking_updates');
     return { success: true, data: { id: created.id, status: created.status, title } };
   }
 
@@ -365,7 +366,7 @@ export class RentalsService {
         .sendBookingNotification({ to: b.customer.email, recipientName: b.customer.name ?? '', subject: `Rental returned — ${title}`, message: body, status: 'RETURNED', listingTitle: title, amount: fees || undefined, ctaUrl: `${appConfig().app.client_app_url}/bookings/${bookingId}` })
         .catch(() => null);
     }
-    void this.push.sendToUser(b.customer_id, { title: 'Rental returned', body, data: { type: 'booking', bookingId } });
+    void this.push.sendToUser(b.customer_id, { title: 'Rental returned', body, data: { type: 'booking', bookingId } }, 'booking_updates');
     return { success: true, data: { fees, ...settlement } };
   }
 }

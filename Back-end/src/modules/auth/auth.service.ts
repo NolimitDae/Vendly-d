@@ -3,6 +3,7 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import Redis from 'ioredis';
 
 //internal imports
@@ -21,6 +22,7 @@ import { track } from 'src/common/analytics';
 import { normalizeHandle, shopImageUrl } from '../../common/helper/handle';
 import { IdentityService } from '../identity/identity.service';
 import { parseWorkingHours, readWorkingHours, type WorkingHours } from '../vendor/working-hours';
+import { NOTIFICATION_PREF_KEYS, NotificationPrefKey, readPrefs } from '../../common/helper/notification-prefs';
 
 /** Roles a person can hold on one login and switch between (CLIENT is the older name for CUSTOMER). */
 export const SWITCHABLE_ROLES = ['CUSTOMER', 'VENDOR', 'EVENT_PLANNER'] as const;
@@ -36,6 +38,11 @@ export function heldRoles(user: { type?: string | null; roles?: string[] | null 
   }
   return SWITCHABLE_ROLES.filter((r) => held.has(r));
 }
+
+/** Sign-in with an unknown email or a wrong password gets the same answer. */
+export const WRONG_LOGIN = 'Email or password is incorrect';
+/** A bcrypt hash of nothing in particular: compared against for unknown emails so both cases take as long. */
+const DUMMY_HASH = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8.AnjT4M0nOhUvYbRKrYFnAoK9nzMa';
 
 /** How long a refresh token lives in Redis (matches JWT_REFRESH_EXPIRY's default of 7 days). */
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -1077,18 +1084,12 @@ export class AuthService {
         }
         return result;
       } else {
-        throw new UnauthorizedException('Password not matched');
-        // return {
-        //   success: false,
-        //   message: 'Password not matched',
-        // };
+        throw new UnauthorizedException(WRONG_LOGIN);
       }
     } else {
-      throw new UnauthorizedException('Email not found');
-      // return {
-      //   success: false,
-      //   message: 'Email not found',
-      // };
+      // same answer and about the same time as a wrong password, so sign-in can't reveal who has an account
+      await bcrypt.compare(_password ?? '', DUMMY_HASH).catch(() => false);
+      throw new UnauthorizedException(WRONG_LOGIN);
     }
   }
 
@@ -1203,6 +1204,22 @@ export class AuthService {
       where: { id: userId },
       data: { push_token: token },
     });
+  }
+
+  /** Which optional pushes and emails this user gets; every switch is on until they change it. */
+  async notificationPrefs(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { notification_prefs: true } });
+    if (!user) throw new UnauthorizedException('User not found');
+    return { success: true, data: readPrefs(user.notification_prefs) };
+  }
+
+  /** Changes only the switches sent; the rest keep their value. */
+  async updateNotificationPrefs(userId: string, changes: Partial<Record<NotificationPrefKey, boolean>>) {
+    const current = await this.notificationPrefs(userId);
+    const next = { ...current.data };
+    for (const k of NOTIFICATION_PREF_KEYS) if (typeof changes[k] === 'boolean') next[k] = changes[k];
+    await this.prisma.user.update({ where: { id: userId }, data: { notification_prefs: next } });
+    return { success: true, data: next };
   }
 
   /** The roles this login holds, the one in use, and whether it may switch (ID verified). */

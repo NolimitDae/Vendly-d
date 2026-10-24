@@ -115,7 +115,7 @@ describe('PaymentsService', () => {
       expect(data.attempts).toBe(1);
       expect(data.next_attempt_at.getTime()).toBeGreaterThanOrEqual(before + DAY - 1000);
       expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'amara@x.com', status: 'PAYMENT_FAILED' }));
-      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Payment problem' }));
+      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Payment problem' }), 'payments');
     });
 
     it('gives up after the third attempt', async () => {
@@ -484,7 +484,7 @@ describe('PaymentsService', () => {
       expect(res.data).toMatchObject({ amount: 100, lowered: 100, refunded: 0 });
       expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i2', status: InstallmentStatus.SCHEDULED, amount: 750 }, data: { amount: 650 } });
       expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
-      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Money back from your vendor' }));
+      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Money back from your vendor' }), 'payments');
     });
 
     it('refunds the vendor part of what was paid when nothing is left to pay, keeping the fee', async () => {

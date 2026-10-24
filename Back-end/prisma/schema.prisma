@@ -188,6 +188,8 @@ model User {
   balance           Decimal?  @default(0.0) @db.Decimal(10, 2)
   // expo push notifications
   push_token        String?
+  // which optional emails and pushes the user wants ({ "booking_updates": true, ... }); null = all on
+  notification_prefs Json?
   // email verification
   email_verified_at DateTime?
   terms_accepted_at DateTime? // when they ticked Terms of Service + Privacy Policy at sign-up
@@ -789,6 +791,9 @@ model VendorListing {
   // per person / hour / day packages: the fewest and most a customer can book (guests, hours or days)
   min_quantity   Int?
   max_quantity   Int?
+  // what the package includes (shown as a list), and how far ahead it must be booked
+  included_items   String[]
+  min_notice_hours Int?
 
   bookings       Booking[]
   add_ons        ListingAddOn[]
@@ -918,6 +923,8 @@ model Booking {
   commission_amount  Decimal?  @db.Decimal(10, 2)
   promo_code         String?   @db.VarChar(50)
   discount           Decimal?  @db.Decimal(10, 2)
+  // reference photos the customer attached to the request (private storage keys)
+  request_photos     String[]
   installments       BookingInstallment[]
   // rentals: refundable hold authorized before pickup, captured only for damage / late fees
   security_deposit   Decimal?  @db.Decimal(10, 2)
@@ -1654,6 +1661,8 @@ model VendorContract {
 
   applies_to_all Boolean @default(true)
   listings       VendorContractListing[]
+  // also applies to every package in these categories (including ones added later)
+  category_ids   String[]
 
   disabled_reason String?   @db.Text
   disabled_at     DateTime?
@@ -1793,6 +1802,9 @@ model PromoCode {
   uses        Int       @default(0)
   expires_at  DateTime?
   active      Boolean   @default(true)
+  // each customer can use it once; only on a customer's first booking
+  once_per_customer  Boolean @default(false)
+  first_booking_only Boolean @default(false)
 
   @@map("promo_codes")
 }

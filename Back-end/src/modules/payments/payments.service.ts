@@ -343,7 +343,7 @@ export class PaymentsService {
         .sendBookingNotification({ to: b.customer.email, recipientName: b.customer.name ?? '', subject: `Payment problem — ${title}`, message: body, status: 'PAYMENT_FAILED', listingTitle: title, amount: Number(inst.amount), ctaUrl: `${clientUrl}/bookings/${b.id}` })
         .catch(() => null);
     }
-    void this.push.sendToUser(b.customer_id, { title: 'Payment problem', body, data: { type: 'booking', bookingId: b.id } });
+    void this.push.sendToUser(b.customer_id, { title: 'Payment problem', body, data: { type: 'booking', bookingId: b.id } }, 'payments');
     return updated;
   }
 
@@ -831,7 +831,7 @@ export class PaymentsService {
     if (info?.customer?.email) {
       await this.mail.sendBookingNotification({ to: info.customer.email, recipientName: info.customer.name ?? '', subject: `Money back on ${title}`, message: body, status: 'REFUND', listingTitle: title, amount: result.amount, ctaUrl: `${appConfig().app.client_app_url}/bookings/${bookingId}` }).catch(() => null);
     }
-    void this.push.sendToUser(result.customer_id, { title: 'Money back from your vendor', body, data: { type: 'booking', bookingId } });
+    void this.push.sendToUser(result.customer_id, { title: 'Money back from your vendor', body, data: { type: 'booking', bookingId } }, 'payments');
     track('vendor_gave_back', vendorId, { booking_id: bookingId, amount: result.amount, refunded: result.refunded, lowered: result.lowered });
     const { customer_id: _c, ...data } = result;
     return { success: true, data };

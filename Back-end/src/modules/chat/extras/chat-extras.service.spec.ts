@@ -44,7 +44,7 @@ describe('ChatExtrasService', () => {
       expect(prisma.conversation.create).toHaveBeenCalledWith({ data: expect.objectContaining({ is_group: true, event_id: 'e1', title: 'Ada & Tobi Wedding' }) });
       expect(prisma.participant.create).toHaveBeenCalledTimes(2);
       expect(prisma.message.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: 'system', text: 'Nia Glam joined the event chat.' }) }));
-      expect(push.sendToUser).toHaveBeenCalledWith('v2', expect.anything());
+      expect(push.sendToUser).toHaveBeenCalledWith('v2', expect.anything(), 'messages');
     });
 
     it('only adds vendors who are not in it yet', async () => {
@@ -92,7 +92,7 @@ describe('ChatExtrasService', () => {
       expect(data).toMatchObject({ customer_id: 'cust', vendor_id: 'v1', amount: 900 });
       expect(data.expires_at.getTime()).toBeLessThanOrEqual(Date.now() + 30 * 86400000 + 1000); // capped at 30 days
       expect(prisma.message.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: 'quote', quote_id: 'q1' }) }));
-      expect(push.sendToUser).toHaveBeenCalledWith('cust', expect.anything());
+      expect(push.sendToUser).toHaveBeenCalledWith('cust', expect.anything(), 'messages');
     });
 
     it('does not send a quote in a 1:1 chat while either person has blocked the other', async () => {

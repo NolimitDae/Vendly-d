@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import DeleteAccountCard from "@/components/contracts/DeleteAccountCard";
 import AccountRoles from "@/components/settings/AccountRoles";
 import ProfileSection from "@/components/settings/ProfileSection";
+import NotificationPrefsCard from "@/components/settings/NotificationPrefsCard";
 
 type SetupStep = "idle" | "qr" | "verify";
 
@@ -119,7 +120,7 @@ export default function SettingsPage() {
             Account Settings
           </h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">
-            Your profile, payment methods, roles and security
+            Your profile, payment methods, roles, notifications and security
           </p>
 
           <ProfileSection />
@@ -143,6 +144,7 @@ export default function SettingsPage() {
 
           {/* One login, several roles */}
           <AccountRoles />
+          <NotificationPrefsCard />
           <div className="h-6" />
 
           {/* 2FA card */}
