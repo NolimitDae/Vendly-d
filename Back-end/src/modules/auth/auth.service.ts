@@ -40,6 +40,10 @@ export function heldRoles(user: { type?: string | null; roles?: string[] | null 
   return SWITCHABLE_ROLES.filter((r) => held.has(r));
 }
 
+const MAX_CODE_TRIES = 5;
+const CODE_TRIES_WINDOW_SECONDS = 15 * 60;
+export const TOO_MANY_CODE_TRIES = 'Too many wrong codes. Please request a new code.';
+
 /** Sign-in with an unknown email or a wrong password gets the same answer. */
 export const WRONG_LOGIN = 'Email or password is incorrect';
 /** A bcrypt hash of nothing in particular: compared against for unknown emails so both cases take as long. */
@@ -500,6 +504,7 @@ export class AuthService {
       });
 
       if (user) {
+        await this.clearCodeTries(email);
         const token = await this.ucodeRepository.createToken({
           userId: user.id,
           isOtp: true,
@@ -535,6 +540,7 @@ export class AuthService {
       const user = await this.userRepository.getUserByEmail(email);
 
       if (user) {
+        await this.clearCodeTries(email);
         // create otp code
         const token = await this.ucodeRepository.createToken({
           userId: user.id,
@@ -576,6 +582,7 @@ export class AuthService {
       });
 
       if (user) {
+        if (await this.tooManyCodeTries(email)) return { success: false, message: TOO_MANY_CODE_TRIES };
         const result = await this.ucodeRepository.verifyToken({
           email: email,
           token: token,
@@ -583,6 +590,7 @@ export class AuthService {
 
         // Check the actual success property, not just if object exists
         if (result && result.success) {
+          await this.clearCodeTries(email);
           return {
             success: true,
             message: result.message || 'Token verified successfully',
@@ -616,12 +624,14 @@ export class AuthService {
       });
 
       if (user) {
+        if (await this.tooManyCodeTries(email)) return { success: false, message: TOO_MANY_CODE_TRIES };
         const existToken = await this.ucodeRepository.validateToken({
           email: email,
           token: token,
         });
 
         if (existToken) {
+          await this.clearCodeTries(email);
           await this.prisma.user.update({
             where: {
               id: user.id,
@@ -660,6 +670,7 @@ export class AuthService {
       const user = await this.userRepository.getUserByEmail(email);
 
       if (user) {
+        await this.clearCodeTries(email);
         // create otp code
         const token = await this.ucodeRepository.createToken({
           userId: user.id,
@@ -780,6 +791,23 @@ export class AuthService {
   }
 
   // ---------------------------------(end)---------------------------------------
+
+  /**
+   * Wrong 6-digit codes per email: after 5 in 15 minutes the code stops working until a new one is
+   * requested, so codes can't be guessed (the per-IP rate limit alone allows many tries from many IPs).
+   */
+  private async tooManyCodeTries(email: unknown) {
+    if (typeof email !== 'string' || !email) return false;
+    const key = `code_tries:${email.trim().toLowerCase()}`;
+    const tries = await this.redis.incr(key);
+    if (tries === 1) await this.redis.expire(key, CODE_TRIES_WINDOW_SECONDS);
+    return tries > MAX_CODE_TRIES;
+  }
+
+  /** A new code (or the right one) starts the count again. */
+  private async clearCodeTries(email: unknown) {
+    if (typeof email === 'string' && email) await this.redis.del(`code_tries:${email.trim().toLowerCase()}`).catch(() => null);
+  }
 
   /** Signs a refresh token (marked `typ: 'refresh'` so it can't be used as an access token). */
   private signRefreshToken(payload: { email: string; sub: string; type: unknown; sid?: string }) {

@@ -37,6 +37,7 @@ const mockUserRepo = {
 
 const mockUcodeRepo = {
   createToken: jest.fn(),
+  verifyToken: jest.fn(),
 };
 
 const mockJwt = {
@@ -72,6 +73,7 @@ const mockRedis = {
   srem: jest.fn().mockResolvedValue(1),
   smembers: jest.fn().mockResolvedValue([]),
   expire: jest.fn().mockResolvedValue(1),
+  incr: jest.fn(),
 };
 
 /** A tiny Redis (get/set/del, and the rotate script's compare-and-swap) for the refresh tests. */
@@ -222,6 +224,32 @@ describe('AuthService', () => {
         mockJwt.verify.mockReturnValueOnce({ sub: 'user-1' });
         expect(service.sessionFromTokens({ access: 'old' })).toEqual({ userId: 'user-1' });
       });
+    });
+  });
+
+  describe('wrong code limit', () => {
+    beforeEach(() => {
+      const tries = new Map<string, number>();
+      mockRedis.incr.mockImplementation(async (k: string) => tries.set(k, (tries.get(k) ?? 0) + 1).get(k));
+      mockRedis.del.mockImplementation(async (k: string) => Number(tries.delete(k)));
+      mockUserRepo.exist.mockResolvedValue({ id: 'user-1', email: 'jane@test.com' });
+      mockUcodeRepo.verifyToken.mockResolvedValue({ success: false, message: 'Invalid token' });
+    });
+
+    it('stops checking codes after 5 wrong ones for an email, even the right one', async () => {
+      for (let i = 0; i < 5; i++) expect(((await service.verifyToken({ email: 'jane@test.com', token: '000000' })) as any).message).toBe('Invalid token');
+      mockUcodeRepo.verifyToken.mockResolvedValue({ success: true });
+      const sixth: any = await service.verifyToken({ email: 'Jane@Test.com', token: '482913' });
+      expect(sixth).toEqual({ success: false, message: 'Too many wrong codes. Please request a new code.' });
+      expect(mockUcodeRepo.verifyToken).toHaveBeenCalledTimes(5);
+    });
+
+    it('starts again when a new code is sent', async () => {
+      for (let i = 0; i < 6; i++) await service.verifyToken({ email: 'jane@test.com', token: '000000' });
+      mockUcodeRepo.createToken.mockResolvedValue('123456');
+      await service.forgotPassword('jane@test.com');
+      mockUcodeRepo.verifyToken.mockResolvedValue({ success: true });
+      expect(((await service.verifyToken({ email: 'jane@test.com', token: '123456' })) as any).success).toBe(true);
     });
   });
 

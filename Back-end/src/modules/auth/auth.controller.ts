@@ -561,6 +561,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: 'Token verified successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token.' })
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('verify-token')
   async verifyToken(@Body() data: EmailTokenBodyDto) {
     try {
@@ -804,6 +805,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'OTP sent to new email address.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @UseGuards(JwtAuthGuard)
+  @Throttle({ short: { limit: 3, ttl: 60000 } })
   @Post('request-email-change')
   async requestEmailChange(
     @Req() req: Request,
@@ -852,6 +854,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Email changed successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid token.' })
   @UseGuards(JwtAuthGuard)
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('change-email')
   async changeEmail(
     @Req() req: Request,
@@ -940,6 +943,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: '2FA token verified.' })
   @ApiResponse({ status: 401, description: 'Invalid 2FA token.' })
   @UseGuards(JwtAuthGuard)
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('verify-2fa')
   async verify2FA(@Req() req: Request, @Body() data: TokenBodyDto) {
     try {
@@ -961,6 +965,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: '2FA enabled successfully.' })
   @UseGuards(JwtAuthGuard)
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('enable-2fa')
   async enable2FA(@Req() req: Request, @Body() data: TokenBodyDto = {}) {
     try {
@@ -982,6 +987,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: '2FA disabled successfully.' })
   @UseGuards(JwtAuthGuard)
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('disable-2fa')
   async disable2FA(@Req() req: Request, @Body() data: TokenBodyDto = {}) {
     try {

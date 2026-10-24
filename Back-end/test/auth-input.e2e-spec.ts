@@ -49,9 +49,17 @@ run('Auth input (e2e)', () => {
     await app?.close();
   });
 
+  it('verifies the real code (checked first: the attempts below hit the rate limit)', async () => {
+    const v = await http().post('/api/auth/verify-token').send({ email, token: '482913' });
+    expect(v.status).toBeLessThan(300);
+    expect(v.body.success).toBe(true);
+    // un-verify it again for the attack checks
+    await prisma.ucode.updateMany({ where: { email }, data: { verified_at: null } });
+  });
+
   const crafted = [{ not: '' }, { contains: '' }, { startsWith: '4' }, { in: ['482913'] }];
   /** Refused outright, or turned into plain text that matches nothing. */
-  const refused = (res: request.Response) => res.status === 400 || res.body?.success === false;
+  const refused = (res: request.Response) => res.status === 400 || res.status === 429 || res.body?.success === false;
 
   it('refuses a query object instead of the reset code', async () => {
     for (const token of crafted) {
@@ -78,9 +86,4 @@ run('Auth input (e2e)', () => {
     expect(JSON.stringify(login.body)).not.toMatch(/access_token/);
   });
 
-  it('still verifies the real code', async () => {
-    const v = await http().post('/api/auth/verify-token').send({ email, token: '482913' });
-    expect(v.status).toBeLessThan(300);
-    expect(v.body.success).toBe(true);
-  });
 });
