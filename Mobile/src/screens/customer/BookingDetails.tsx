@@ -10,6 +10,7 @@ import type { CustomerHomeStackParams } from '../../navigation/types';
 import { haptic } from '../../utils/haptics';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { countedUnit, estimate, money, plural, rangeText, type AddOn } from '../../services/addons.service';
+import { tooSoonMessage } from '../../utils/packageDetails';
 import { dayKeyOf, fitsHours, hoursMessage, minutesOf, otherZone, startTimesOn, type WorkingHours } from '../../utils/workingHours';
 
 // Half-hour start times from 7am to 9pm, shown as one-tap chips like Figma's time slots.
@@ -106,6 +107,8 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
 
   const proceed = () => {
     if (!startAt || !endAt) return Alert.alert('Start time', 'Choose when the service should start.');
+    const tooSoon = listing.quoteId ? null : tooSoonMessage(listing.minNoticeHours, startAt);
+    if (tooSoon) return Alert.alert('Too soon', tooSoon);
     if (hours && (closedDay || !durations.some((d) => d.label === duration.label))) {
       return Alert.alert('Working hours', `${hoursMessage(hours, dayKeyOf(date))} Pick a time and length inside those hours.`);
     }

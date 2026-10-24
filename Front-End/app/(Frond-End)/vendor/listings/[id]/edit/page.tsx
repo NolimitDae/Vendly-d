@@ -12,6 +12,7 @@ import CategoryCombobox from "@/components/listing/CategoryCombobox";
 import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
 import type { PickerCategory } from "@/lib/categories";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
+import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, packageDetailsFrom, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
 import { apiError } from "@/service/contracts/contracts.service";
 
@@ -61,6 +62,7 @@ export default function EditListingPage() {
   const [radius, setRadius] = useState<number | null>(null);
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
+  const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
 
   const fetchBlockedDates = async () => {
     try {
@@ -94,6 +96,7 @@ export default function EditListingPage() {
         setPlace({ label: l.location ?? "", lat: l.lat ?? undefined, lng: l.lng ?? undefined });
         setRadius(l.service_radius_miles ?? null);
         setLimits({ min: l.min_quantity ? String(l.min_quantity) : "", max: l.max_quantity ? String(l.max_quantity) : "" });
+        setDetails(packageDetailsFrom(l));
       } else {
         toast.error("Listing not found");
         router.push("/vendor/listings");
@@ -138,6 +141,11 @@ export default function EditListingPage() {
       toast.error(limitProblem);
       return;
     }
+    const detailsProblem = packageDetailsError(details);
+    if (detailsProblem) {
+      toast.error(detailsProblem);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -146,6 +154,7 @@ export default function EditListingPage() {
       Object.entries(form).forEach(([k, v]) => { if (v || k === "category_id" || k === "sub_category_id") fd.append(k, v); });
       appendPlace(fd, place, radius, true);
       appendLimits(fd, form.price_unit, limits, true);
+      appendPackageDetails(fd, details, true);
 
       // Only send images if the user picked new ones (replaces all old images on backend)
       if (newImages.length > 0) {
@@ -397,6 +406,8 @@ export default function EditListingPage() {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Vendly holds the money until the job is done, then pays you.</p>
             </div>
           </div>
+
+          <PackageDetailsFields value={details} onChange={setDetails} />
 
           <PackageAddOns listingId={id} value={addOns} onChange={setAddOns} />
 

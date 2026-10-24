@@ -227,6 +227,14 @@ export class VendorDefaultContractDto {
   @ArrayMaxSize(200)
   @IsString({ each: true })
   listing_ids?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Also applies to every listing in these categories, including ones added later' })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  category_ids?: string[];
 }
 
 export class VendorUploadContractDto {
@@ -253,6 +261,14 @@ export class VendorUploadContractDto {
   @ArrayMaxSize(200)
   @IsString({ each: true })
   listing_ids?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Also applies to every listing in these categories, including ones added later' })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  category_ids?: string[];
 }
 
 export class AmendmentChangesDto {

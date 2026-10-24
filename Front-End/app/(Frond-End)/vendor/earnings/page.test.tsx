@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EarningsPage from './page';
 
@@ -23,6 +23,7 @@ jest.mock('@/service/earnings/earnings.service', () => ({
   EarningsService: {
     getBookings: jest.fn(),
     getSummary: jest.fn(),
+    getDashboardStats: jest.fn(),
     getTransactions: jest.fn(),
     getWithdrawHistory: jest.fn(),
     getAccountInfo: jest.fn(),
@@ -90,7 +91,25 @@ const summary: any = {
   ],
 };
 
-function setupMocks(overrides: { bookings?: any[]; account?: any; summary?: any } = {}) {
+const stats: any = {
+  revenue_by_month: [
+    { month: '2026-05', label: 'May', earned: 0 },
+    { month: '2026-06', label: 'Jun', earned: 0 },
+    { month: '2026-07', label: 'Jul', earned: 0 },
+    { month: '2026-08', label: 'Aug', earned: 120 },
+    { month: '2026-09', label: 'Sep', earned: 0 },
+    { month: '2026-10', label: 'Oct', earned: 70 },
+  ],
+  total_earned: 190,
+  bookings: { total: 2, by_status: { PENDING: 1, CONFIRMED: 0, IN_PROGRESS: 0, COMPLETED: 1, CANCELLED: 0, REJECTED: 0 }, upcoming: 0 },
+  rating: { average: 4.5, count: 2 },
+  top_clients: [{ id: 'c-1', name: 'Jane Doe', avatar_url: null, earned: 190, bookings: 1 }],
+};
+
+function setupMocks(overrides: { bookings?: any[]; account?: any; summary?: any; stats?: any } = {}) {
+  (EarningsService.getDashboardStats as jest.Mock).mockResolvedValue({
+    data: { success: true, data: overrides.stats ?? stats },
+  });
   (EarningsService.getSummary as jest.Mock).mockResolvedValue({
     data: { success: true, data: overrides.summary ?? summary },
   });
@@ -176,9 +195,9 @@ describe('EarningsPage', () => {
     it('renders completed bookings count', async () => {
       setupMocks();
       render(<EarningsPage />);
-      await waitFor(() => {
-        expect(screen.getByText('1')).toBeInTheDocument();
-      });
+      // the tile's value (the top clients list numbers its rows too)
+      const tile = (await screen.findByText('Completed Bookings')).parentElement!;
+      expect(within(tile).getByText('1')).toBeInTheDocument();
     });
 
     it('renders listing name in bookings table', async () => {
@@ -193,7 +212,7 @@ describe('EarningsPage', () => {
       setupMocks();
       render(<EarningsPage />);
       await waitFor(() => {
-        expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+        expect(within(screen.getByRole('table')).getByText('Jane Doe')).toBeInTheDocument();
       });
     });
 
@@ -214,6 +233,41 @@ describe('EarningsPage', () => {
         const matches = screen.getAllByText(/no bookings yet/i);
         expect(matches.length).toBeGreaterThan(0);
       });
+    });
+  });
+
+  describe('dashboard stats from the server', () => {
+    it('asks for six months and shows this month’s earnings from them', async () => {
+      setupMocks();
+      render(<EarningsPage />);
+      expect(await screen.findByText('$70.00')).toBeInTheDocument();
+      expect(EarningsService.getDashboardStats).toHaveBeenCalledWith(6);
+      expect(screen.getByText('Last 6 months · released to you, after commission and refunds')).toBeInTheDocument();
+    });
+
+    it('counts bookings from the server, not just the loaded page', async () => {
+      setupMocks({ stats: { ...stats, bookings: { total: 40, by_status: { COMPLETED: 31, PENDING: 2, CONFIRMED: 5, IN_PROGRESS: 1, CANCELLED: 1, REJECTED: 0 }, upcoming: 6 } } });
+      render(<EarningsPage />);
+      expect(await screen.findByText('31')).toBeInTheDocument();
+      expect(screen.getByText('8 in progress')).toBeInTheDocument();
+      expect(screen.getByText('78%')).toBeInTheDocument();
+    });
+
+    it('lists the top clients and the average rating', async () => {
+      setupMocks();
+      render(<EarningsPage />);
+      expect(await screen.findByRole('heading', { name: 'Top Clients' })).toBeInTheDocument();
+      const list = screen.getByRole('list');
+      expect(list).toHaveTextContent('Jane Doe');
+      expect(list).toHaveTextContent('1 booking');
+      expect(list).toHaveTextContent('$190.00');
+      expect(screen.getByText(/from 2 reviews/)).toHaveTextContent('Average rating 4.5 from 2 reviews');
+    });
+
+    it('explains an empty top clients list', async () => {
+      setupMocks({ stats: { ...stats, top_clients: [] } });
+      render(<EarningsPage />);
+      expect(await screen.findByText('Your top clients show here once bookings are paid out.')).toBeInTheDocument();
     });
   });
 });

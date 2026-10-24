@@ -13,6 +13,7 @@ import LocationField, { appendPlace, type PickedPlace } from "@/components/listi
 import type { PickerCategory } from "@/lib/categories";
 import { SubscriptionService } from "@/service/subscription/subscription.service";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
+import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
 import { apiError } from "@/service/contracts/contracts.service";
 
@@ -42,6 +43,7 @@ export default function NewListingPage() {
   const [radius, setRadius] = useState<number | null>(null);
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
+  const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
 
   useEffect(() => {
     // vendor plans aren't required until subscriptions launch
@@ -107,6 +109,11 @@ export default function NewListingPage() {
       toast.error(limitProblem);
       return;
     }
+    const detailsProblem = packageDetailsError(details);
+    if (detailsProblem) {
+      toast.error(detailsProblem);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -114,6 +121,7 @@ export default function NewListingPage() {
       Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, v); });
       appendPlace(fd, place, radius, false);
       appendLimits(fd, form.price_unit, limits, false);
+      appendPackageDetails(fd, details, false);
       images.forEach((img) => fd.append("images", img));
 
       const res = await VendorListingService.create(fd);
@@ -301,6 +309,8 @@ export default function NewListingPage() {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Vendly holds the money until the job is done, then pays you.</p>
             </div>
           </div>
+
+          <PackageDetailsFields value={details} onChange={setDetails} />
 
           <PackageAddOns value={addOns} onChange={setAddOns} />
 

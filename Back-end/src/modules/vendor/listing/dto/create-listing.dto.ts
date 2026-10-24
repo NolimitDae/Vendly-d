@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsInt,
@@ -13,7 +14,8 @@ import {
 } from 'class-validator';
 import { PaymentPlan } from 'prisma/generated/enums';
 import { ListingStatus } from 'prisma/generated/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readIncludedItems, readNoticeHours } from '../package-details';
 
 export class CreateVendorListingDto {
   @ApiProperty()
@@ -118,4 +120,22 @@ export class CreateVendorListingDto {
   @IsOptional()
   @IsEnum(PaymentPlan)
   payment_plan?: PaymentPlan;
+
+  @ApiPropertyOptional({ type: [String], description: "What's included, one short line each (a JSON array in multipart forms)" })
+  @IsOptional()
+  // the raw value: implicit conversion would mangle a JSON string
+  @Transform(({ obj, key }) => readIncludedItems(obj[key]))
+  @IsArray()
+  @ArrayMaxSize(MAX_INCLUDED_ITEMS, { message: `Add up to ${MAX_INCLUDED_ITEMS} included items.` })
+  @IsString({ each: true })
+  @MaxLength(MAX_INCLUDED_ITEM_LENGTH, { each: true, message: `Each included item can be up to ${MAX_INCLUDED_ITEM_LENGTH} characters.` })
+  included_items?: string[];
+
+  @ApiPropertyOptional({ description: 'How many hours ahead the package must be booked (0 or empty = no minimum)' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readNoticeHours(obj[key]))
+  @IsInt()
+  @Min(0)
+  @Max(MAX_MIN_NOTICE_HOURS, { message: 'Minimum notice can be up to 90 days.' })
+  min_notice_hours?: number | null;
 }

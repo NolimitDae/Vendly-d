@@ -16,6 +16,7 @@ import AddOnSheet, { type AddOnDraft } from '../../components/AddOnSheet';
 import { CheckRow } from '../../components/Sheet';
 import { AddOnsService, countedUnit, priceText, quantityWord, type AddOn, type AddOnKind } from '../../services/addons.service';
 import type { VendorDashboardStackParams } from '../../navigation/types';
+import { MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, noticeHours } from '../../utils/packageDetails';
 
 interface PickedImage { uri: string; type: string; name: string }
 /** A custom add-on or fee made in this form, created once the package is saved. */
@@ -57,6 +58,10 @@ export default function ListingForm() {
   const [plan, setPlan] = useState<PaymentPlan>('FULL_ON_ACCEPT');
   const [minQ, setMinQ] = useState('');
   const [maxQ, setMaxQ] = useState('');
+  // "What's included" lines and the minimum notice (a number of days or hours)
+  const [included, setIncluded] = useState<string[]>([]);
+  const [notice, setNotice] = useState('');
+  const [noticeUnit, setNoticeUnit] = useState<'days' | 'hours'>('days');
   // add-ons and fees: everything the vendor can pick from, what this package offers, and new ones made here
   const [library, setLibrary] = useState<AddOn[]>([]);
   const [chosen, setChosen] = useState<string[]>([]);
@@ -95,6 +100,11 @@ export default function ListingForm() {
             setExisting(l.images ?? []);
             setMinQ(l.min_quantity ? String(l.min_quantity) : '');
             setMaxQ(l.max_quantity ? String(l.max_quantity) : '');
+            setIncluded(l.included_items ?? []);
+            const h: number = l.min_notice_hours ?? 0;
+            const days = h >= 24 && h % 24 === 0;
+            setNotice(h ? String(days ? h / 24 : h) : '');
+            setNoticeUnit(days || !h ? 'days' : 'hours');
           }
         }
       } catch {
@@ -122,6 +132,11 @@ export default function ListingForm() {
     const lo = Number(minQ || 0);
     const hi = Number(maxQ || 0);
     if (counted && lo > 0 && hi > 0 && lo > hi) return Alert.alert('Limits', `The minimum ${quantityWord(counted)} can’t be more than the maximum.`);
+    const items = included.map((i) => i.trim()).filter(Boolean);
+    if (items.length > MAX_INCLUDED_ITEMS) return Alert.alert('What’s included', `Add up to ${MAX_INCLUDED_ITEMS} items.`);
+    const noticeH = noticeHours(notice, noticeUnit);
+    if (Number.isNaN(noticeH)) return Alert.alert('Minimum notice', 'Enter a whole number.');
+    if (noticeH > MAX_MIN_NOTICE_HOURS) return Alert.alert('Minimum notice', 'Minimum notice can be up to 90 days.');
     setSaving(true);
     try {
       const fd = new FormData();
@@ -145,6 +160,9 @@ export default function ListingForm() {
         fd.append('min_quantity', String(lo));
         fd.append('max_quantity', String(hi));
       }
+      // when editing, an empty list or notice clears what was there
+      if (items.length || isEdit) fd.append('included_items', JSON.stringify(items));
+      if (noticeH || isEdit) fd.append('min_notice_hours', noticeH ? String(noticeH) : '');
       images.forEach((img) => fd.append('images', img as unknown as Blob));
       const config = { headers: { 'Content-Type': 'multipart/form-data' } };
       const res = isEdit ? await api.patch(`/vendor/listings/${listingId}`, fd, config) : await api.post('/vendor/listings', fd, config);
@@ -316,6 +334,49 @@ export default function ListingForm() {
                 </Text>
               </>
             )}
+          </View>
+
+          <View style={{ gap: 8 }}>
+            <Text style={ui.label}>What’s included</Text>
+            <Text style={s.hint}>One short line each, for example “8 hours of coverage”. Shown as a list on your package.</Text>
+            {included.map((item, i) => (
+              <View key={i} style={[ui.field, { gap: 8 }]}>
+                <TextInput
+                  style={ui.input}
+                  value={item}
+                  maxLength={MAX_INCLUDED_ITEM_LENGTH}
+                  placeholder="Included item"
+                  placeholderTextColor={DARK.muted}
+                  onChangeText={(t) => setIncluded((prev) => prev.map((x, idx) => (idx === i ? t : x)))}
+                  accessibilityLabel={`Included item ${i + 1}`}
+                />
+                <Pressable onPress={() => setIncluded((prev) => prev.filter((_, idx) => idx !== i))} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove included item ${i + 1}`}>
+                  <Ionicons name="close-circle" size={22} color={DARK.muted} />
+                </Pressable>
+              </View>
+            ))}
+            {included.length < MAX_INCLUDED_ITEMS && (
+              <Pressable onPress={() => setIncluded((prev) => [...prev, ''])} style={s.addRow} accessibilityRole="button">
+                <Ionicons name="add-circle-outline" size={22} color={DARK.accent} />
+                <Text style={s.addRowText}>Add an item</Text>
+              </Pressable>
+            )}
+          </View>
+
+          <View style={{ gap: 8 }}>
+            <Field
+              label="Minimum notice (optional)"
+              placeholder="Any date"
+              value={notice}
+              onChangeText={(t) => setNotice(t.replace(/\D/g, ''))}
+              keyboardType="number-pad"
+              accessibilityLabel={`How many ${noticeUnit} ahead customers must book`}
+            />
+            <View style={s.chips}>
+              <Chip label="Days" active={noticeUnit === 'days'} onPress={() => setNoticeUnit('days')} />
+              <Chip label="Hours" active={noticeUnit === 'hours'} onPress={() => setNoticeUnit('hours')} />
+            </View>
+            <Text style={s.hint}>Customers can’t request dates sooner than this.</Text>
           </View>
 
           <View style={{ gap: 8 }}>

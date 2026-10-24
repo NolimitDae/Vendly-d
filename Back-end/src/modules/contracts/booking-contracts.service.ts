@@ -1,5 +1,6 @@
 import { eventDays } from 'src/modules/calendar-sync/busy-days';
 import { hoursZone, outsideWorkingHours, readWorkingHours } from 'src/modules/vendor/working-hours';
+import { tooSoonMessage } from 'src/modules/vendor/listing/package-details';
 import { assertNotCancelled, CANCELLED_NO_BOOKINGS } from 'src/modules/events/event-rules';
 import {
   BadRequestException,
@@ -290,6 +291,9 @@ export class BookingContractsService {
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {
     const ctx = await this.loadBookingContext(userId, dto);
     await this.assertDateOpen(ctx.listing.id, ctx.listing.vendor_id, dto);
+    // the package's minimum notice (a quote is the vendor agreeing to the date in chat)
+    const tooSoon = dto.quote_id ? null : tooSoonMessage(ctx.listing.min_notice_hours, dto.event_start_at ?? dto.scheduled_at);
+    if (tooSoon) throw new BadRequestException({ message: tooSoon, error: 'TOO_SOON' });
     const quote = await this.quoteFor(userId, dto);
     // a quote is the agreed price for the package; otherwise per person / hour / day packages are counted out
     let pkg: PackageLine;
@@ -1334,10 +1338,11 @@ export class BookingContractsService {
       });
       await this.audit(tx, { vendor_contract_id: id, actor_id: adminId, actor_role: 'ADMIN', action: ContractAuditAction.VENDOR_CONTRACT_DISABLED, meta, details: { reason } });
     });
-    // move the vendor to the Vendly default for the same listings
+    // move the vendor to the Vendly default for the same listings and categories
     await this.vendorContracts.createDefaultFromProfile(
       vc.vendor_id,
       vc.applies_to_all ? [] : vc.listings.map((l) => l.listing_id),
+      vc.applies_to_all ? [] : vc.category_ids ?? [],
     );
     void this.notify(vc.vendor.id, vc.vendor.email, vc.vendor.name, {
       subject: 'Your uploaded contract was disabled',

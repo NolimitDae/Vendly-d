@@ -26,6 +26,17 @@ export const EarningsService = {
   /** Real earnings: released, held, Vendly commission taken, given back, Vendly balance */
   getSummary: async () => Fetch.get("/payments/earnings", authHeaders()),
 
+  /** Business dashboard: earned by month (after commission and refunds), bookings by status, rating, top clients */
+  getDashboardStats: async (months = 12) => {
+    let tz = "UTC";
+    try {
+      tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch {
+      /* UTC months */
+    }
+    return Fetch.get(`/vendor/dashboard/stats?months=${months}&tz=${encodeURIComponent(tz)}`, authHeaders());
+  },
+
   /** Withdrawal transaction history */
   getWithdrawHistory: async () => Fetch.get("/withdraw/history", authHeaders()),
 

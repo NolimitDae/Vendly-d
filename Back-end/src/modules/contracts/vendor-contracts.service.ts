@@ -31,6 +31,7 @@ import {
 import { buildMergeData, fieldLabel, renderTemplate, sha256 } from './contract-merge';
 import { PdfValidationError, validateUploadedPdf } from './contract-pdf';
 import { PrivateStorage, SignedUrl } from './private-storage';
+import { pickContractForListing } from './contract-scope';
 import { AdminTemplateDto, VendorDefaultContractDto, VendorUploadContractDto } from './dto/contracts.dto';
 
 const UPLOAD_FIELDS = ['business_legal_name', 'business_address', 'cancellation_policy', 'governing_law'];
@@ -138,6 +139,7 @@ export class VendorContractsService implements OnModuleInit {
       file_sha256: c.file_sha256,
       applies_to_all: c.applies_to_all,
       listing_ids: (c.listings ?? []).map((l: any) => l.listing_id),
+      category_ids: c.category_ids ?? [],
       disabled_reason: c.disabled_reason,
       disabled_at: c.disabled_at,
       created_at: c.created_at,
@@ -167,19 +169,28 @@ export class VendorContractsService implements OnModuleInit {
     return clean;
   }
 
-  private async validateListings(vendorId: string, appliesToAll: boolean, listingIds: string[]) {
-    if (appliesToAll) return [];
-    if (!listingIds.length) throw new BadRequestException('Choose at least one listing or apply to all listings.');
-    const owned = await this.prisma.vendorListing.count({
-      where: { id: { in: listingIds }, vendor_id: vendorId, deleted_at: null },
-    });
-    if (owned !== new Set(listingIds).size) throw new ForbiddenException('One or more listings are not yours.');
-    return [...new Set(listingIds)];
+  /** Chosen listings and/or whole categories; nothing when the contract applies to all listings. */
+  private async validateScope(vendorId: string, appliesToAll: boolean, listingIds: string[], categoryIds: string[] = []) {
+    if (appliesToAll) return { listingIds: [], categoryIds: [] };
+    if (!listingIds.length && !categoryIds.length) {
+      throw new BadRequestException('Choose at least one listing or category, or apply to all listings.');
+    }
+    if (listingIds.length) {
+      const owned = await this.prisma.vendorListing.count({
+        where: { id: { in: listingIds }, vendor_id: vendorId, deleted_at: null },
+      });
+      if (owned !== new Set(listingIds).size) throw new ForbiddenException('One or more listings are not yours.');
+    }
+    if (categoryIds.length) {
+      const found = await this.prisma.serviceCategory.count({ where: { id: { in: categoryIds } } });
+      if (found !== new Set(categoryIds).size) throw new BadRequestException('One or more categories no longer exist.');
+    }
+    return { listingIds: [...new Set(listingIds)], categoryIds: [...new Set(categoryIds)] };
   }
 
   /**
    * New versions apply to future bookings only. Older active contracts that covered the
-   * same listings are archived; signed booking contracts keep their frozen snapshot.
+   * same listings or categories are archived; signed booking contracts keep their frozen snapshot.
    */
   private async createVersion(
     vendorId: string,
@@ -207,20 +218,29 @@ export class VendorContractsService implements OnModuleInit {
         where: { vendor_id: vendorId, status: VendorContractStatus.ACTIVE, id: { not: created.id } },
         include: { listings: true },
       });
+      const categoryIds = (data.category_ids as string[] | undefined) ?? [];
       for (const o of others) {
         const replaced = o.id === replaceId || (data.applies_to_all && o.applies_to_all);
         if (replaced) {
           await tx.vendorContract.update({ where: { id: o.id }, data: { status: VendorContractStatus.ARCHIVED } });
           continue;
         }
-        if (!o.applies_to_all && listingIds.length) {
+        if (o.applies_to_all) continue;
+        // the new version takes over these listings and categories from older contracts
+        const takenCategories = (o.category_ids ?? []).filter((id) => categoryIds.includes(id));
+        if (!listingIds.length && !takenCategories.length) continue;
+        if (listingIds.length) {
           await tx.vendorContractListing.deleteMany({
             where: { vendor_contract_id: o.id, listing_id: { in: listingIds } },
           });
-          const left = await tx.vendorContractListing.count({ where: { vendor_contract_id: o.id } });
-          if (!left) {
-            await tx.vendorContract.update({ where: { id: o.id }, data: { status: VendorContractStatus.ARCHIVED } });
-          }
+        }
+        const keptCategories = (o.category_ids ?? []).filter((id) => !categoryIds.includes(id));
+        if (takenCategories.length) {
+          await tx.vendorContract.update({ where: { id: o.id }, data: { category_ids: keptCategories } });
+        }
+        const left = await tx.vendorContractListing.count({ where: { vendor_contract_id: o.id } });
+        if (!left && !keptCategories.length) {
+          await tx.vendorContract.update({ where: { id: o.id }, data: { status: VendorContractStatus.ARCHIVED } });
         }
       }
       return created;
@@ -231,7 +251,7 @@ export class VendorContractsService implements OnModuleInit {
     const template = await this.activeTemplate(dto.category);
     const fieldValues = this.validateFieldValues(dto.category, dto.field_values);
     const appliesToAll = dto.applies_to_all ?? true;
-    const listingIds = await this.validateListings(vendorId, appliesToAll, dto.listing_ids ?? []);
+    const { listingIds, categoryIds } = await this.validateScope(vendorId, appliesToAll, dto.listing_ids ?? [], dto.category_ids ?? []);
     if (replaceId) await this.ownedContract(vendorId, replaceId);
 
     const created = await this.createVersion(
@@ -242,6 +262,7 @@ export class VendorContractsService implements OnModuleInit {
         field_values: fieldValues,
         additional_terms: dto.additional_terms?.trim() || null,
         applies_to_all: appliesToAll,
+        category_ids: categoryIds,
       },
       listingIds,
       replaceId,
@@ -258,7 +279,7 @@ export class VendorContractsService implements OnModuleInit {
     }
     const fieldValues = this.validateFieldValues(ContractCategory.GENERAL, dto.field_values, UPLOAD_FIELDS);
     const appliesToAll = dto.applies_to_all ?? true;
-    const listingIds = await this.validateListings(vendorId, appliesToAll, dto.listing_ids ?? []);
+    const { listingIds, categoryIds } = await this.validateScope(vendorId, appliesToAll, dto.listing_ids ?? [], dto.category_ids ?? []);
     if (replaceId) await this.ownedContract(vendorId, replaceId);
 
     const key = PrivateStorage.newKey(`vendor-contracts/${vendorId}`, 'pdf');
@@ -274,6 +295,7 @@ export class VendorContractsService implements OnModuleInit {
         file_name: (file!.originalname || 'contract.pdf').slice(0, 255),
         ownership_confirmed_at: new Date(),
         applies_to_all: appliesToAll,
+        category_ids: categoryIds,
       },
       listingIds,
       replaceId,
@@ -287,7 +309,7 @@ export class VendorContractsService implements OnModuleInit {
     return { success: true, data: this.present(created) };
   }
 
-  async createDefaultFromProfile(vendorId: string, listingIds: string[] = []) {
+  async createDefaultFromProfile(vendorId: string, listingIds: string[] = [], categoryIds: string[] = []) {
     const vendor = await this.prisma.user.findUnique({
       where: { id: vendorId },
       select: { name: true, address: true, state: true, country: true, vendorProfile: { select: { business_name: true, address: true } } },
@@ -306,7 +328,8 @@ export class VendorContractsService implements OnModuleInit {
           cancellation_policy: 'moderate',
           governing_law: law || "the state or country of the Vendor's principal place of business",
         },
-        applies_to_all: listingIds.length === 0,
+        applies_to_all: listingIds.length === 0 && categoryIds.length === 0,
+        category_ids: categoryIds,
       },
       listingIds,
     );
@@ -382,26 +405,25 @@ export class VendorContractsService implements OnModuleInit {
 
   // ─── Resolution for bookings ────────────────────────────────────────────
 
-  /** Active contract for a listing: a listing-specific one wins over "all listings". */
+  /**
+   * Active contract for a listing: one naming the listing wins over one naming its category,
+   * which wins over "all listings" (see contract-scope.ts).
+   */
   async resolveForListing(vendorId: string, listingId?: string | null): Promise<ResolvedVendorContract | null> {
-    if (listingId) {
-      const specific = await this.prisma.vendorContract.findFirst({
-        where: {
-          vendor_id: vendorId,
-          status: VendorContractStatus.ACTIVE,
-          applies_to_all: false,
-          listings: { some: { listing_id: listingId } },
+    const [listing, contracts] = await Promise.all([
+      listingId ? this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { category_id: true } }) : null,
+      this.prisma.vendorContract.findMany({
+        where: { vendor_id: vendorId, status: VendorContractStatus.ACTIVE },
+        include: {
+          template: true,
+          listings: listingId ? { where: { listing_id: listingId }, select: { listing_id: true } } : { take: 0, select: { listing_id: true } },
         },
-        include: { template: true },
-        orderBy: { version: 'desc' },
-      });
-      if (specific) return specific;
-    }
-    return this.prisma.vendorContract.findFirst({
-      where: { vendor_id: vendorId, status: VendorContractStatus.ACTIVE, applies_to_all: true },
-      include: { template: true },
-      orderBy: { version: 'desc' },
-    });
+      }),
+    ]);
+    const picked = pickContractForListing(contracts, listingId, listing?.category_id);
+    if (!picked) return null;
+    const { listings: _listings, ...vc } = picked;
+    return vc;
   }
 
   /** Body + required fields for a vendor contract (default template or uploaded addendum). */

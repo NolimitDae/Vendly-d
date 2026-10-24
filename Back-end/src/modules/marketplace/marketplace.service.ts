@@ -3,6 +3,7 @@ import { MAX_SERVICE_RADIUS, boundingBox, milesBetween, withoutPosition } from '
 import { ListingStatus, VendorContractStatus } from 'prisma/generated/client';
 import { formatAddOn } from 'src/modules/add-ons/add-ons.service';
 import { CANCELLATION_PRESETS } from 'src/modules/contracts/contract-templates';
+import { pickContractForListing } from 'src/modules/contracts/contract-scope';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
@@ -170,7 +171,7 @@ export class MarketplaceService {
 
     const [avgRatings, cancellationPolicy] = await Promise.all([
       this.getAverageRatings([listing.id]),
-      this.cancellationPolicyFor(listing.vendor_id, listing.id).catch(() => null),
+      this.cancellationPolicyFor(listing.vendor_id, listing.id, listing.category_id).catch(() => null),
     ]);
 
     const workingHours = readWorkingHours(listing.vendor?.vendorProfile?.working_hours);
@@ -188,12 +189,19 @@ export class MarketplaceService {
     };
   }
 
-  /** Cancellation policy from the vendor's active contract for this package (a package-specific one wins). */
-  private async cancellationPolicyFor(vendorId: string, listingId: string) {
-    const active = { vendor_id: vendorId, status: VendorContractStatus.ACTIVE };
-    const vc =
-      (await this.prisma.vendorContract.findFirst({ where: { ...active, applies_to_all: false, listings: { some: { listing_id: listingId } } }, orderBy: { version: 'desc' }, select: { field_values: true } })) ??
-      (await this.prisma.vendorContract.findFirst({ where: { ...active, applies_to_all: true }, orderBy: { version: 'desc' }, select: { field_values: true } }));
+  /** Cancellation policy from the vendor's active contract for this package (same choice as bookings). */
+  private async cancellationPolicyFor(vendorId: string, listingId: string, categoryId?: string | null) {
+    const contracts = await this.prisma.vendorContract.findMany({
+      where: { vendor_id: vendorId, status: VendorContractStatus.ACTIVE },
+      select: {
+        version: true,
+        applies_to_all: true,
+        category_ids: true,
+        field_values: true,
+        listings: { where: { listing_id: listingId }, select: { listing_id: true } },
+      },
+    });
+    const vc = pickContractForListing(contracts, listingId, categoryId);
     const key = (vc?.field_values as Record<string, unknown> | null)?.cancellation_policy as string | undefined;
     const preset = key ? CANCELLATION_PRESETS[key] : undefined;
     return preset && key ? { key, label: preset.label, text: preset.text } : null;

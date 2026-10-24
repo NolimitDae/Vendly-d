@@ -39,6 +39,8 @@ export type ListingSummary = {
   /** Booking a vendor's custom quote from chat: price is the quoted amount. */
   quoteId?: string;
   quoteTitle?: string;
+  /** hours ahead the package must be booked: earlier days are greyed out */
+  minNoticeHours?: number | null;
 };
 
 export type BookingDraft = {

@@ -73,6 +73,8 @@ export class VendorListingService {
         images: imageNames,
         payment_plan: dto.payment_plan,
         ...limits,
+        included_items: dto.included_items ?? [],
+        min_notice_hours: dto.min_notice_hours || null,
       },
       include: {
         category: { select: { id: true, name: true } },
@@ -175,6 +177,8 @@ export class VendorListingService {
         ),
       );
     }
+    // 0 or empty clears the minimum notice
+    if (dto.min_notice_hours !== undefined) updateData.min_notice_hours = dto.min_notice_hours || null;
     // forms send an empty value to clear a category or sub-category
     if (dto.category_id === '') updateData.category_id = null;
     if (dto.sub_category_id === '') updateData.sub_category_id = null;

@@ -10,6 +10,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { MarketplaceService } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { isOpenDay, summariseHours, withZone, type WorkingHours } from '../../utils/workingHours';
+import { firstBookableDay, noticeLabel } from '../../utils/packageDetails';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const BOOKED = '#F7B1B8';
@@ -18,6 +19,9 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
   const { listing } = route.params;
   const insets = useSafeAreaInsets();
   const today = startOfDay(new Date());
+  // the package's minimum notice: days before this can't be picked (a quote is the vendor agreeing to the date)
+  const notice = listing.quoteId ? null : listing.minNoticeHours ?? null;
+  const firstDay = firstBookableDay(notice);
   const [month, setMonth] = useState(startOfMonth(today));
   const [selected, setSelected] = useState<Date | null>(null);
   const [blocked, setBlocked] = useState<{ start: Date; end: Date; reason?: string | null }[]>([]);
@@ -51,6 +55,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
         <View style={s.note}>
           <Ionicons name="information-circle-outline" size={16} color={DARK.accent} />
           <Text style={s.noteText}>
+            {notice ? `Book at least ${noticeLabel(notice)} ahead. ` : ''}
             {hours ? `${listing.vendorName} works ${withZone(summariseHours(hours) ?? '', hours)}. ` : ''}
             {blockedThisMonth > 0
               ? `${listing.vendorName} has ${blockedThisMonth} unavailable period${blockedThisMonth === 1 ? '' : 's'} this month`
@@ -88,7 +93,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
               <View key={row} style={s.gridRow}>
             {days.slice(row * 7, row * 7 + 7).map((d) => {
               const inMonth = isSameMonth(d, month);
-              const past = isBefore(d, today);
+              const past = isBefore(d, today) || isBefore(d, firstDay);
               const booked = inMonth && !past && isBlocked(d);
               const on = !!selected && isSameDay(d, selected);
               // a weekday the vendor doesn't work

@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { perUnit, quantityRangeText } from "@/lib/addons";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { summariseHours, withZone, type WorkingHours } from "@/lib/working-hours";
+import { noticeLine } from "@/lib/package-details";
 
 interface Listing {
   id: string;
@@ -44,6 +45,9 @@ interface Listing {
   fees?: AddOn[];
   /** from the vendor's contract for this package */
   cancellation_policy?: { key: string; label: string; text: string } | null;
+  /** "What's included" lines, and how many hours ahead it must be booked */
+  included_items?: string[] | null;
+  min_notice_hours?: number | null;
   images: string[];
   tags: string[];
   location?: string;
@@ -336,6 +340,27 @@ export default function ListingDetailPage() {
               <p className="mt-4 text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
                 {listing.description}
               </p>
+
+              {!!listing.included_items?.length && (
+                <div className="mt-4">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">What&apos;s included</h3>
+                  <ul className="space-y-1.5">
+                    {listing.included_items.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <CheckCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {noticeLine(listing.min_notice_hours) && (
+                <p className="mt-4 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                  <Calendar className="w-4 h-4 text-primary" />
+                  {noticeLine(listing.min_notice_hours)}
+                </p>
+              )}
 
               {listing.tags?.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-4">

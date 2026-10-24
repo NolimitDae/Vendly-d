@@ -17,6 +17,9 @@ export interface Listing {
   fees?: AddOn[];
   /** from the vendor's contract for this package */
   cancellation_policy?: { key: string; label: string; text: string } | null;
+  /** "What's included" lines, and how many hours ahead it must be booked */
+  included_items?: string[] | null;
+  min_notice_hours?: number | null;
   /** the vendor's weekly hours (null = any day, any time) and a short line like "Mon–Fri 9am–5pm" */
   working_hours?: WorkingHours | null;
   working_hours_summary?: string | null;

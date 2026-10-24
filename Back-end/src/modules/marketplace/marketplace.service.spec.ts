@@ -23,7 +23,7 @@ const mockListing = {
 };
 
 const mockPrisma = {
-  vendorContract: { findFirst: jest.fn().mockResolvedValue(null) },
+  vendorContract: { findMany: jest.fn().mockResolvedValue([]) },
   vendorListing: {
     count: jest.fn(),
     findMany: jest.fn(),
@@ -204,18 +204,22 @@ describe('MarketplaceService', () => {
     it('shows the cancellation policy from the contract this package would use (a package-specific one wins)', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
       mockPrisma.review.groupBy.mockResolvedValue([]);
-      mockPrisma.vendorContract.findFirst.mockResolvedValueOnce({ field_values: { cancellation_policy: 'strict' } });
+      mockPrisma.vendorContract.findMany.mockResolvedValueOnce([
+        { version: 2, applies_to_all: true, category_ids: [], listings: [], field_values: { cancellation_policy: 'flexible' } },
+        { version: 1, applies_to_all: false, category_ids: [], listings: [{ listing_id: 'listing-1' }], field_values: { cancellation_policy: 'strict' } },
+      ]);
       const result = await service.getListing('listing-1');
       expect(result.data.cancellation_policy).toMatchObject({ key: 'strict', label: 'Strict' });
-      expect(mockPrisma.vendorContract.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ applies_to_all: false }) }));
     });
 
     it('falls back to the vendor’s contract for all packages, and to nothing without one', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
       mockPrisma.review.groupBy.mockResolvedValue([]);
-      mockPrisma.vendorContract.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ field_values: { cancellation_policy: 'flexible' } });
+      mockPrisma.vendorContract.findMany.mockResolvedValueOnce([
+        { version: 1, applies_to_all: true, category_ids: [], listings: [], field_values: { cancellation_policy: 'flexible' } },
+      ]);
       expect((await service.getListing('listing-1')).data.cancellation_policy).toMatchObject({ key: 'flexible' });
-      mockPrisma.vendorContract.findFirst.mockResolvedValue(null);
+      mockPrisma.vendorContract.findMany.mockResolvedValue([]);
       expect((await service.getListing('listing-1')).data.cancellation_policy).toBeNull();
     });
   });
