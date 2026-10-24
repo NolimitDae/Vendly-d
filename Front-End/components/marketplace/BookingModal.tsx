@@ -17,6 +17,7 @@ import { PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/paym
 import { toast } from "react-toastify";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { packagePriceText, perUnit, quantityRangeText } from "@/lib/addons";
+import { firstBookableDay, noticeLine, tooSoonMessage } from "@/lib/package-details";
 import { dayKeyOf, endTimesOn, formatTime, hoursMessage, isOpenDay, otherZone, startTimesOn, summariseHours, withZone, type WorkingHours } from "@/lib/working-hours";
 
 interface Props {
@@ -33,6 +34,8 @@ interface Props {
     vendor?: { id: string; name: string };
     /** the vendor's weekly hours: closed days can't be picked and times stay inside the day's hours */
     working_hours?: WorkingHours | null;
+    /** how many hours ahead it must be booked: earlier days can't be picked */
+    min_notice_hours?: number | null;
   };
   /** Planner bookings: attach to this event (pre-fills venue and guest count). */
   eventId?: string;
@@ -117,6 +120,9 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
     return length >= minMinutes && (!maxQ || length <= maxQ * 60);
   });
   const [dateError, setDateError] = useState<string | null>(null);
+  // minimum notice (a quote is the vendor agreeing to the date, as on the server)
+  const notice = quote ? null : listing.min_notice_hours ?? null;
+  const firstDay = firstBookableDay(notice);
 
   const pickDate = (value: string) => {
     if (value && hours && !isOpenDay(hours, value)) {
@@ -199,6 +205,8 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
     if (!date) return toast.error("Choose the event date");
     // with working hours, the request has to say when it starts so it can fit the vendor's day
     if (hours && !startTime) return toast.error("Choose a start time within the vendor's hours");
+    const tooSoon = tooSoonMessage(notice, new Date(toIso(date, startTime)!));
+    if (tooSoon) return toast.error(tooSoon);
     const missing = missingForPrice();
     if (missing) return toast.error(missing);
     if (!card) return toast.error("Add a card first. It is only charged once the vendor accepts.");
@@ -319,7 +327,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                   onChange={(d: Date | null) => pickDate(d ? ymd(d) : "")}
                   // the vendor's closed days can't be picked
                   filterDate={(d: Date) => isOpenDay(hours, d)}
-                  minDate={new Date()}
+                  minDate={firstDay}
                   dateFormat="yyyy-MM-dd"
                   placeholderText="Pick a day the vendor works"
                   required
@@ -335,7 +343,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                   required
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  min={new Date().toISOString().slice(0, 10)}
+                  min={ymd(firstDay)}
                   className={inputCls}
                 />
               )}
@@ -344,6 +352,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                   Works {hoursText}
                 </p>
               )}
+              {noticeLine(notice) && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{noticeLine(notice)}</p>}
               {dateError && (
                 <p role="alert" className="text-xs text-red-600 mt-1">
                   {dateError}

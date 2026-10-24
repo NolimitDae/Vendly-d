@@ -12,6 +12,7 @@ import type { CustomerHomeStackParams, ListingSummary } from '../../navigation/t
 import { useAuth } from '../../context/AuthContext';
 import { rangeText, unitSuffix, type AddOn } from '../../services/addons.service';
 import { summariseHours, withZone } from '../../utils/workingHours';
+import { noticeLine } from '../../utils/packageDetails';
 
 export const toSummary = (l: Listing): ListingSummary => ({
   id: l.id,
@@ -23,6 +24,7 @@ export const toSummary = (l: Listing): ListingSummary => ({
   vendorName: vendorName(l.vendor),
   rating: l.avg_rating ?? null,
   reviewCount: l._count?.reviews ?? l.reviews?.length ?? 0,
+  minNoticeHours: l.min_notice_hours ?? null,
 });
 
 export default function ListingDetail({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'ListingDetail'>) {
@@ -127,6 +129,25 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
               <Text style={s.cardTitle}>Description</Text>
               <Text style={s.body}>{listing.description}</Text>
             </Card>
+          )}
+
+          {!!listing.included_items?.length && (
+            <Card style={{ gap: 10 }}>
+              <Text style={s.cardTitle}>What’s included</Text>
+              {listing.included_items.map((item, i) => (
+                <View key={i} style={s.included}>
+                  <Ionicons name="checkmark-circle" size={18} color={DARK.accent} />
+                  <Text style={[s.body, { flex: 1 }]}>{item}</Text>
+                </View>
+              ))}
+            </Card>
+          )}
+
+          {!!noticeLine(listing.min_notice_hours) && (
+            <View style={s.included}>
+              <Ionicons name="calendar-outline" size={18} color={DARK.accent} />
+              <Text style={s.muted}>{noticeLine(listing.min_notice_hours)}</Text>
+            </View>
           )}
 
           {addOns.length > 0 && (
@@ -250,6 +271,7 @@ const s = StyleSheet.create({
   muted: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium },
   body: { color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.regular },
   cardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
+  included: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   addOn: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: DARK.field },
   addOnName: { color: '#fff', fontSize: 14, fontFamily: FONTS.semibold },
   addOnPrice: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold, textAlign: 'right' },
