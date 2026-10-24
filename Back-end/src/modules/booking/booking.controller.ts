@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -10,6 +11,7 @@ import {
   UploadedFiles,
   UseGuards,
   UseInterceptors,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -26,6 +28,11 @@ import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 import { DisputeBookingDto, DisputeReplyDto, RetryInstallmentDto } from './dto/payments.dto';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { DISPUTE_MAX_PHOTOS, DISPUTE_PHOTO_MAX_BYTES } from 'src/modules/payments/dispute-files';
+import { REQUEST_MAX_PHOTOS, REQUEST_PHOTO_MAX_BYTES } from './request-photos';
+import { CUSTOMER_BOOKING_TABS, CustomerBookingTab } from './customer-tabs';
+
+// as the global pipe in main.ts
+const bodyPipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true, transformOptions: { enableImplicitConversion: true } });
 
 @ApiTags('bookings')
 @ApiBearerAuth('customer-token')
@@ -43,14 +50,37 @@ export class BookingController {
     return this.service.create(user.id, dto, requestMeta(req));
   }
 
+  /**
+   * The same request with up to 10 inspiration photos: multipart, with the request as JSON in `request`
+   * (it has nested fields a form can't carry) and the files in `photos`.
+   */
+  @Post('with-photos')
+  @Throttle({ short: { limit: 2, ttl: 1000 }, medium: { limit: 30, ttl: 60_000 } })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('photos', REQUEST_MAX_PHOTOS, { storage: memoryStorage(), limits: { fileSize: REQUEST_PHOTO_MAX_BYTES, files: REQUEST_MAX_PHOTOS, fieldSize: 2 * 1024 * 1024 } }))
+  async createWithPhotos(@GetUser() user: any, @Body('request') raw: string, @Req() req: Request, @UploadedFiles() photos?: Express.Multer.File[]) {
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      throw new BadRequestException('The booking request is missing.');
+    }
+    // checked by the same rules as the JSON endpoint
+    const dto: SignedBookingRequestDto = await bodyPipe.transform(body, { type: 'body', metatype: SignedBookingRequestDto });
+    return this.service.create(user.id, dto, requestMeta(req), photos ?? []);
+  }
+
   @Get('my/customer')
   getMyAsCustomer(
     @GetUser() user: any,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('status') status?: BookingStatus,
+    @Query('tab') tab?: string,
   ) {
-    return this.service.getMyBookingsAsCustomer(user.id, { page, limit, status });
+    // pending | upcoming | active | complete (see customer-tabs.ts); unknown ones are ignored
+    const t = (CUSTOMER_BOOKING_TABS as readonly string[]).includes(tab ?? '') ? (tab as CustomerBookingTab) : undefined;
+    return this.service.getMyBookingsAsCustomer(user.id, { page, limit, status, tab: t });
   }
 
   @Get('my/vendor')

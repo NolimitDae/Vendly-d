@@ -106,7 +106,7 @@ describe('CustomerBookingsPageContent', () => {
       });
       render(<CustomerBookingsPageContent />);
       await waitFor(() => {
-        expect(screen.getByText(/no bookings yet/i)).toBeInTheDocument();
+        expect(screen.getByText(/nothing coming up yet/i)).toBeInTheDocument();
       });
     });
   });
@@ -188,7 +188,8 @@ describe('CustomerBookingsPageContent', () => {
     });
 
     it('does not show Pay Now or Cancel for COMPLETED bookings', async () => {
-      setupSuccess([makeBooking({ status: 'COMPLETED', review: null })]);
+      // paid: an unpaid one (pay after service) still offers Pay Now
+      setupSuccess([makeBooking({ status: 'COMPLETED', review: null, paid_at: '2030-01-01T00:00:00Z' })]);
       render(<CustomerBookingsPageContent />);
       await waitFor(() => screen.getByText('COMPLETED'));
       expect(screen.queryByRole('button', { name: /pay now/i })).not.toBeInTheDocument();
@@ -267,31 +268,40 @@ describe('CustomerBookingsPageContent', () => {
     });
   });
 
-  describe('status filter tabs', () => {
-    it('renders filter buttons for all statuses', async () => {
+  describe('tabs', () => {
+    it('shows Active, Upcoming, Pending and Complete, starting on Upcoming', async () => {
       setupSuccess([]);
       render(<CustomerBookingsPageContent />);
-      await waitFor(() => screen.getByText(/no bookings yet/i));
+      await waitFor(() => screen.getByText(/nothing coming up yet/i));
 
-      expect(screen.getByRole('button', { name: /^all$/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /^pending$/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /^confirmed$/i })).toBeInTheDocument();
+      expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Active', 'Upcoming', 'Pending', 'Complete']);
+      expect(screen.getByRole('tab', { name: 'Upcoming' })).toHaveAttribute('aria-selected', 'true');
+      expect(BookingService.getMyAsCustomer).toHaveBeenCalledWith(expect.objectContaining({ tab: 'upcoming', page: 1 }));
     });
 
-    it('calls API with correct status when filter tab is clicked', async () => {
+    it('asks the API for the tab that is clicked', async () => {
       setupSuccess([]);
       const user = userEvent.setup();
       render(<CustomerBookingsPageContent />);
+      await waitFor(() => screen.getByText(/nothing coming up yet/i));
 
-      await waitFor(() => screen.getByText(/no bookings yet/i));
-
-      await user.click(screen.getByRole('button', { name: /^completed$/i }));
-
+      await user.click(screen.getByRole('tab', { name: 'Complete' }));
       await waitFor(() => {
-        expect(BookingService.getMyAsCustomer).toHaveBeenCalledWith(
-          expect.objectContaining({ status: 'COMPLETED' }),
-        );
+        expect(BookingService.getMyAsCustomer).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'complete' }));
       });
+      expect(await screen.findByText(/no past bookings yet/i)).toBeInTheDocument();
+    });
+
+    it('says what happened to bookings that did not go ahead', async () => {
+      setupSuccess([
+        makeBooking({ id: 'b1', status: 'REJECTED', expired_at: '2030-01-01T00:00:00Z' }),
+        makeBooking({ id: 'b2', status: 'REJECTED', expired_at: null }),
+        makeBooking({ id: 'b3', status: 'CANCELLED' }),
+      ]);
+      render(<CustomerBookingsPageContent />);
+      expect(await screen.findByText('EXPIRED')).toBeInTheDocument();
+      expect(screen.getByText('DECLINED')).toBeInTheDocument();
+      expect(screen.getByText('CANCELLED')).toBeInTheDocument();
     });
   });
 

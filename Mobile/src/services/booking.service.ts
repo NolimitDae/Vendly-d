@@ -23,6 +23,8 @@ export interface Booking {
   amount?: number;
   service_fee?: number | string | null;
   paid_at?: string | null;
+  /** set when the vendor didn't answer the request in time */
+  expired_at?: string | null;
   payment_plan?: string | null;
   early_released_amount?: number | string | null;
   /** on a request, for the vendor: their confirmed bookings on the same day */
@@ -41,6 +43,8 @@ export interface Booking {
   dispute_requested_amount?: number | string | null;
   /** short-lived signed links to the customer's photos (on the booking itself, not in lists) */
   dispute_photo_urls?: string[];
+  /** inspiration photos sent with the request, as short-lived signed links (on the booking itself) */
+  request_photo_urls?: string[];
   /** Refunds tab: refunded to the customer's card, and how much of that the vendor gave back */
   refunded_total?: number;
   given_back?: number;
@@ -92,8 +96,14 @@ export interface CheckoutResponse {
 }
 
 export const BookingService = {
-  createBooking: (data: CreateBookingData) =>
-    api.post<{ success: boolean; data: Booking }>('/bookings', data),
+  /** With inspiration photos the request goes as multipart: the JSON in `request`, the files in `photos`. */
+  createBooking: (data: CreateBookingData, photos: { uri: string; name: string; type: string }[] = []) => {
+    if (!photos.length) return api.post<{ success: boolean; data: Booking }>('/bookings', data);
+    const form = new FormData();
+    form.append('request', JSON.stringify(data));
+    photos.forEach((p) => form.append('photos', p as any));
+    return api.post<{ success: boolean; data: Booking }>('/bookings/with-photos', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 
   getMyBookingsAsCustomer: (params?: BookingListParams) =>
     api.get<{ success: boolean; data: Booking[]; meta?: any }>('/bookings/my/customer', { params }),
