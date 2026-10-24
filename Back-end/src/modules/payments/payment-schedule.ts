@@ -22,6 +22,14 @@ export const PAYMENT_PLAN_LABELS: Record<PaymentPlan, string> = {
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
+/** Share of the price taken as a deposit on acceptance (1 = everything). */
+const depositShareOf = (plan: PaymentPlan) => (plan === PaymentPlan.DEPOSIT_50 ? 0.5 : plan === PaymentPlan.DEPOSIT_25 ? 0.25 : 1);
+/** Days before the event a deposit plan's balance is due. */
+const balanceLeadDaysOf = (plan: PaymentPlan) => (plan === PaymentPlan.DEPOSIT_50 ? 7 : 14);
+
+/** Rental security deposit holds are placed this many days before pickup. */
+export const SECURITY_HOLD_LEAD_DAYS = 1;
+
 /**
  * Builds the installments for a booking from its payment plan.
  *
@@ -63,8 +71,8 @@ export function buildSchedule(opts: {
     ];
   }
 
-  const depositShare = plan === PaymentPlan.DEPOSIT_50 ? 0.5 : plan === PaymentPlan.DEPOSIT_25 ? 0.25 : 1;
-  const leadDays = plan === PaymentPlan.DEPOSIT_50 ? 7 : 14;
+  const depositShare = depositShareOf(plan);
+  const leadDays = balanceLeadDaysOf(plan);
   if (depositShare >= 1 || !eventStart) return full();
 
   const balanceDue = new Date(eventStart.getTime() - leadDays * DAY);
@@ -76,6 +84,43 @@ export function buildSchedule(opts: {
     { sequence: 1, label: `${Math.round(depositShare * 100)}% deposit`, amount: round(deposit + fee), fee_amount: fee, due_at: now, capture_manually: false },
     { sequence: 2, label: 'Balance', amount: balance, fee_amount: 0, due_at: balanceDue, capture_manually: false },
   ];
+}
+
+/**
+ * New amounts for a booking's charges when its price changes before anything was paid, keeping the
+ * schedule it already has (same rows, same due dates): one charge takes the price plus the fee; a
+ * deposit plan's deposit and balance split it the way buildSchedule does. Null when the rows don't
+ * have a shape this can rebase.
+ */
+export function rebasedAmounts(opts: { plan: PaymentPlan | null | undefined; count: number; price: number; serviceFee: number }): { amount: number; fee_amount: number }[] | null {
+  const price = round(opts.price);
+  const fee = round(opts.serviceFee);
+  if (opts.count === 1) return [{ amount: round(price + fee), fee_amount: fee }];
+  const share = depositShareOf(opts.plan ?? PaymentPlan.FULL_ON_ACCEPT);
+  if (opts.count !== 2 || share >= 1) return null;
+  const deposit = round(price * share);
+  return [
+    { amount: round(deposit + fee), fee_amount: fee },
+    { amount: round(price - deposit), fee_amount: 0 },
+  ];
+}
+
+/**
+ * When a charge that follows the event date falls due once the event moves (same rules as
+ * buildSchedule): a deposit plan's balance (the second charge) its lead time before the event, the
+ * pay-after-service charge at the event. Never in the past. Null for charges that don't follow the date.
+ */
+export function eventLinkedDueAt(plan: PaymentPlan | null | undefined, chargeIndex: number, eventStart: Date, now = new Date()): Date | null {
+  let due: Date | null = null;
+  if (plan === PaymentPlan.PAY_AFTER_SERVICE && chargeIndex === 0) due = eventStart;
+  else if ((plan === PaymentPlan.DEPOSIT_50 || plan === PaymentPlan.DEPOSIT_25) && chargeIndex === 1) due = new Date(eventStart.getTime() - balanceLeadDaysOf(plan) * DAY);
+  if (!due) return null;
+  return due > now ? due : now;
+}
+
+/** When a rental's security deposit hold is placed: shortly before pickup, never in the past. */
+export function securityHoldAt(start: Date | null | undefined, now = new Date()): Date {
+  return start ? new Date(Math.max(now.getTime(), start.getTime() - SECURITY_HOLD_LEAD_DAYS * DAY)) : now;
 }
 
 /** Retry policy: three attempts spread over 48 hours (0h, 24h, 48h). */

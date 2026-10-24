@@ -480,6 +480,34 @@ export class UserRepository {
     ]);
   }
 
+  /**
+   * Why this user's account can't be deleted yet, or null: bookings (as customer or vendor) whose
+   * money isn't settled. Deleting now would leave the other party, a refund or a payout hanging.
+   */
+  async deletionBlocker(user_id: string): Promise<string | null> {
+    const mine = { OR: [{ customer_id: user_id }, { vendor_id: user_id }], deleted_at: null };
+    const [active, unreleased, disputes] = await Promise.all([
+      this.prisma.booking.count({ where: { ...mine, status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] } } }),
+      // done but the vendor isn't paid yet: money was taken, or a payment is still due
+      this.prisma.booking.count({
+        where: {
+          ...mine,
+          status: 'COMPLETED',
+          released_at: null,
+          AND: [{ OR: [{ paid_at: { not: null } }, { installments: { some: { kind: 'charge', status: { in: ['SCHEDULED', 'FAILED', 'PROCESSING'] } } } }] }],
+        },
+      }),
+      this.prisma.booking.count({ where: { ...mine, dispute_opened_at: { not: null }, dispute_resolved_at: null } }),
+    ]);
+    if (!active && !unreleased && !disputes) return null;
+    const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+    const todo: string[] = [];
+    if (active) todo.push(`${plural(active, 'booking is', 'bookings are')} still open: finish or cancel ${active === 1 ? 'it' : 'them'} first`);
+    if (unreleased) todo.push(`${plural(unreleased, 'completed booking hasn’t', 'completed bookings haven’t')} been settled yet: the vendor is paid a few days after completion, once any payment due is made`);
+    if (disputes) todo.push(`${plural(disputes, 'booking has', 'bookings have')} an open dispute: Vendly will resolve ${disputes === 1 ? 'it' : 'them'} first`);
+    return `You can’t delete your account yet. ${todo.join('. ')}. Then try again.`;
+  }
+
   async deleteUser(user_id: string) {
     try {
       // check if user exist
@@ -494,6 +522,8 @@ export class UserRepository {
           message: 'User not found',
         };
       }
+      const blocker = await this.deletionBlocker(user_id);
+      if (blocker) return { success: false, message: blocker };
 
       // Signed contracts are legal records kept for 7 years, and bookings belong to the
       // other party too, so users with either are anonymised instead of deleted.

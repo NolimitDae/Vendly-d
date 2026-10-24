@@ -22,7 +22,8 @@ export default function DeleteAccountButton() {
               await api.delete('/auth/account', { data: { confirm: 'DELETE' } });
               await logout();
             } catch (err) {
-              Alert.alert('Error', apiError(err, "Couldn't delete your account"));
+              // says why when bookings, payouts or disputes are still open
+              Alert.alert('Can’t delete your account', apiError(err, "Couldn't delete your account"));
             }
           },
         },

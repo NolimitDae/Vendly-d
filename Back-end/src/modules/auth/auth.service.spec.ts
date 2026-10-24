@@ -211,11 +211,25 @@ describe('AuthService', () => {
         const phone = await signIn(1);
         const laptop = await signIn(2);
         store.set('refresh_token:user-1', { value: 'legacy' });
+        (mockUserRepo as any).deletionBlocker = jest.fn().mockResolvedValue(null);
         (mockUserRepo as any).deleteUser = jest.fn().mockResolvedValue({ success: true });
         await service.deleteAccount('user-1');
         expect([...store.keys()]).toEqual([]);
         expect((await refreshWith(phone)).success).toBe(false);
         expect((await refreshWith(laptop)).success).toBe(false);
+      });
+
+      it('keeps the account, its sessions and its ID check while bookings are unsettled', async () => {
+        const store = memoryRedis();
+        await signIn(1);
+        const reason = 'You can’t delete your account yet. 1 booking is still open: finish or cancel it first. Then try again.';
+        (mockUserRepo as any).deletionBlocker = jest.fn().mockResolvedValue(reason);
+        (mockUserRepo as any).deleteUser = jest.fn();
+        const purge = jest.spyOn((service as any).identity, 'purgeForUser');
+        expect(await service.deleteAccount('user-1')).toEqual({ success: false, message: reason });
+        expect((mockUserRepo as any).deleteUser).not.toHaveBeenCalled();
+        expect(purge).not.toHaveBeenCalled();
+        expect([...store.keys()].length).toBeGreaterThan(0);
       });
 
       it('reads the session from either token for sign-out', () => {

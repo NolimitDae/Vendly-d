@@ -9,6 +9,17 @@ import { CreateWithdrawDto, WithdrawResponse } from './dto/create-withdraw.dto';
 import { UpdateWithdrawDto } from './dto/update-withdraw.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
+import * as Sentry from '@sentry/nestjs';
+
+/** Smallest withdrawal in dollars (the website says the same). */
+export const MIN_WITHDRAW = 20;
+
+/** True when Stripe answered and turned the transfer down, so nothing was sent; false when the outcome is unknown. */
+const stripeRefused = (err: any) => {
+  const code = Number(err?.statusCode ?? err?.raw?.statusCode ?? 0);
+  // 409: the same key is still being processed by Stripe, so the outcome is not known yet
+  return code >= 400 && code < 500 && code !== 409;
+};
 
 @Injectable()
 export class WithdrawService {
@@ -96,11 +107,13 @@ export class WithdrawService {
   async processWithdraw(
     userId: string,
     withdrawDto: CreateWithdrawDto,
-  ) : 
+  ) :
   Promise<WithdrawResponse> {
 
-    const { amount, currency = 'usd' } = withdrawDto;
-   
+    const { currency = 'usd' } = withdrawDto;
+    // whole cents: what is taken off the balance is exactly what is sent
+    const amount = Math.round(Number(withdrawDto.amount) * 100) / 100;
+
     // Find the user
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -114,94 +127,107 @@ export class WithdrawService {
     if (!user.stripe_connect_id) {
       throw new BadRequestException('Please set up a payout account first');
     }
+    const accountId = user.stripe_connect_id;
 
     // Check if user has available balance
-    if (!user.balance|| user.balance.toNumber() <= 0) {
+    if (!user.balance || Number(user.balance) <= 0) {
       throw new BadRequestException('Insufficient balance to withdraw');
     }
 
-    // Check minimum withdraw amount (minimum $20)
-    if (amount < 2) {
-      throw new BadRequestException('Minimum withdraw amount is $20');
+    // Check minimum withdraw amount (the website asks for the same)
+    if (!(amount >= MIN_WITHDRAW)) {
+      throw new BadRequestException(`Minimum withdraw amount is $${MIN_WITHDRAW}`);
     }
 
     // Check if withdraw amount exceeds available balance
-    if (
-      amount > user.balance.toNumber?.() ||
-      amount > Number(user.balance)
-    ) {
+    if (amount > Number(user.balance)) {
       throw new BadRequestException(
         'Withdraw amount exceeds available balance',
       );
     }
 
-    try {
-      // Create Stripe Transfer (from platform to connected account)
-      const transfer = await StripePayment.createTransfer(
-        user.stripe_connect_id,
-        amount,
-        currency,
+    // Take the money off the balance first, and only if it is still there, so two requests at once
+    // can't both send it. The pending row's id keys the transfer: a repeated call never sends twice.
+    const pending = await this.prisma.$transaction(async (tx) => {
+      const taken = await tx.user.updateMany({
+        where: { id: userId, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
+      });
+      if (taken.count !== 1) return null;
+      return tx.paymentTransaction.create({
+        data: {
+          user_id: userId,
+          type: 'withdraw',
+          withdraw_via: 'stripe',
+          provider: 'stripe',
+          status: 'pending',
+          amount: amount,
+          currency: currency,
+        },
+      });
+    });
+    if (!pending) {
+      throw new BadRequestException(
+        'Withdraw amount exceeds available balance',
       );
+    }
 
-      // Update user's available balance
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: {
-         balance: {
-            decrement: amount,
-          },
-        },
-      });
-
-      // Save transaction record
-      await this.prisma.paymentTransaction.create({
-        data: {
-          user_id: userId,
-          type: 'withdraw',
-          withdraw_via: 'stripe',
-          provider: 'stripe',
-          reference_number: transfer.id,
-          status: 'completed',
-          amount: amount,
-          currency: currency,
-          paid_amount: amount,
-          paid_currency: currency,
-        },
-      });
-
-      return {
-        success: true,
-        message: 'Withdraw processed successfully',
-        data: {
-          transfer_id: transfer.id,
-          amount: amount,
-          currency: currency,
-          status: 'completed',
-        },
-      };
+    const send = () => StripePayment.createTransfer(accountId, amount, currency, `withdraw-${pending.id}`);
+    let transfer: Awaited<ReturnType<typeof send>>;
+    try {
+      try {
+        transfer = await send();
+      } catch (error) {
+        // no answer from Stripe: the same key either finds the transfer already made or makes it once
+        if (stripeRefused(error)) throw error;
+        transfer = await send();
+      }
     } catch (error) {
-      
       console.error('Withdraw processing error:', error);
-     
-      await this.prisma.paymentTransaction.create({
-        data: {
-          user_id: userId,
-          type: 'withdraw',
-          withdraw_via: 'stripe',
-          provider: 'stripe',
-          status: 'failed',
-          amount: amount,
-          currency: currency,
-        },
-      });
+      if (!stripeRefused(error)) {
+        // still unknown whether the money left: it stays off the balance until Vendly has checked
+        await this.prisma.paymentTransaction.update({ where: { id: pending.id }, data: { status: 'needs_review' } });
+        Sentry.captureException(error, { tags: { job: 'withdraw' }, extra: { transaction_id: pending.id, user_id: userId, amount } });
+        throw new HttpException(
+          'We could not confirm this withdrawal with the bank yet. Vendly is checking it and will put the money back in your balance if it did not go through.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+      // Stripe turned it down: the money goes back into the balance
+      await this.prisma.$transaction([
+        this.prisma.user.update({ where: { id: userId }, data: { balance: { increment: amount } } }),
+        this.prisma.paymentTransaction.update({ where: { id: pending.id }, data: { status: 'failed' } }),
+      ]);
 
       let errorMessage = 'Failed to process withdraw. Please try again later.';
-      if (error?.code === 'balance_insufficient') {
+      if ((error as any)?.code === 'balance_insufficient') {
         errorMessage =
           'Stripe account have not enough balance. Please try again later.';
       }
       throw new HttpException(errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
+    // Save transaction record
+    await this.prisma.paymentTransaction.update({
+      where: { id: pending.id },
+      data: {
+        reference_number: transfer.id,
+        status: 'completed',
+        paid_amount: amount,
+        paid_currency: currency,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Withdraw processed successfully',
+      data: {
+        transfer_id: transfer.id,
+        amount: amount,
+        currency: currency,
+        status: 'completed',
+      },
+    };
   }
 
   //Check Connected Account Balance

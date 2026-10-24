@@ -148,12 +148,17 @@ export class StripePayment {
     account_id: string,
     amount: number,
     currency: string,
+    idempotencyKey?: string,
   ) {
-    const transfer = await getStripe().transfers.create({
-      amount: amount * 100,
-      currency: currency,
-      destination: account_id,
-    });
+    // whole cents: Stripe rejects fractions (19.99 * 100 is 1998.9999...)
+    const transfer = await getStripe().transfers.create(
+      {
+        amount: Math.round(amount * 100),
+        currency: currency,
+        destination: account_id,
+      },
+      idempotencyKey ? { idempotencyKey } : undefined,
+    );
     return transfer;
   }
 

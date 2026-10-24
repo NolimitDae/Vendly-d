@@ -132,11 +132,16 @@ run('Money history, cancel preview and invoices (e2e)', () => {
     expect(cancelled.status).toBe(200);
     const { message: _a, ...previewNumbers } = preview.body.data;
     const { message: _b, ...doneNumbers } = cancelled.body.data.refund_summary;
-    expect(doneNumbers).toEqual(previewNumbers);
+    // the test Stripe key can't refund: the result says so (Vendly follows up) instead of promising the money
+    expect(doneNumbers).toEqual({ ...previewNumbers, refund_total: 0, refund_failed: 300, refund_timing: null });
+    expect(cancelled.body.data.refund_summary.message).toContain("A refund of $300.00 to the customer didn't go through straight away");
     const b = await prisma.booking.findUnique({ where: { id: B.plan }, include: { installments: { orderBy: { sequence: 'asc' } } } });
     expect(b.status).toBe('CANCELLED');
     expect(b.installments[1].status).toBe('CANCELLED');
-    // the money is settled (the test Stripe key can't refund, which is recorded for follow-up): the invoice email is claimed once
+    // what didn't go back is recorded for follow-up
+    const failed = await prisma.paymentTransaction.findFirst({ where: { order_id: B.plan, type: 'booking_refund', status: 'refund_failed' } });
+    expect(Number(failed.amount)).toBe(300);
+    // the money is settled: the invoice email is claimed once
     expect(b.invoice_sent_at).not.toBeNull();
   });
 

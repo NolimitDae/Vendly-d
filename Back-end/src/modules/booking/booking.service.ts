@@ -25,6 +25,7 @@ import { PaymentsService } from 'src/modules/payments/payments.service';
 import { track } from 'src/common/analytics';
 import { requestExpiresAt } from './booking-requests';
 import { withBookingLock } from 'src/common/helper/job-lock';
+import * as Sentry from '@sentry/nestjs';
 import { eventDays } from 'src/modules/calendar-sync/busy-days';
 import { disputePhotoUrls } from 'src/modules/payments/dispute-files';
 import { requestPhotoUrls } from './request-photos';
@@ -35,6 +36,9 @@ export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
 export type VendorBookingFilter = (typeof VENDOR_BOOKING_FILTERS)[number];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Why a booking with an open dispute can't be cancelled. */
+const OPEN_DISPUTE = 'This booking has an open dispute. Vendly will settle the money when it is resolved, so it can’t be cancelled now.';
 
 /** Bookings that can still be cancelled. */
 const CANCELLABLE: BookingStatus[] = [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS];
@@ -53,6 +57,8 @@ interface CancellationTerms {
   feeKept: number;
   unpaidCancelled: number;
   holdsReleased: number;
+  /** part of the refund that didn't go through (recorded as refund_failed and reported) */
+  refundFailed?: number;
 }
 
 /** What the booking is for: the package title, or the rented items. */
@@ -206,11 +212,10 @@ export class BookingService {
     if (booking.status !== BookingStatus.CONFIRMED)
       throw new BadRequestException(`Cannot start work on a booking in ${booking.status} status`);
 
-    const updated = await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: { status: BookingStatus.IN_PROGRESS },
-      include: this.bookingIncludes(),
-    });
+    // only from CONFIRMED: a cancellation that landed since it was loaded must not be overwritten
+    const moved = await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.IN_PROGRESS } });
+    if (moved.count !== 1) throw new BadRequestException('This booking changed in the meantime. Refresh and try again.');
+    const updated = await this.getBookingOrFail(bookingId);
     this.pushBooking(booking.customer_id, bookingId, 'Work started', `The vendor has started on ${titleOf(booking) ?? 'your booking'}`);
 
     return { success: true, data: this.formatBooking(updated) };
@@ -223,13 +228,21 @@ export class BookingService {
       throw new ForbiddenException('Access denied');
     if (booking.status !== BookingStatus.IN_PROGRESS)
       throw new BadRequestException(`Cannot complete a booking in ${booking.status} status`);
+    // the job can't be done before it starts (setting up early is fine: Start work stays open);
+    // completing starts the payout clock and captures pay-after-service holds
+    const start = booking.event_start_at ?? booking.scheduled_at;
+    if (start && start > new Date())
+      throw new BadRequestException('You can mark this booking complete once the event has started.');
 
-    const updated = await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: { status: BookingStatus.COMPLETED, completed_at: new Date() },
-      include: this.bookingIncludes(),
+    // only from IN_PROGRESS: a cancellation that landed since it was loaded must not be overwritten
+    const completedAt = new Date();
+    const moved = await this.prisma.booking.updateMany({
+      where: { id: bookingId, status: BookingStatus.IN_PROGRESS },
+      data: { status: BookingStatus.COMPLETED, completed_at: completedAt },
     });
-    await this.payments.onBookingCompleted(bookingId, updated.completed_at ?? new Date()).catch((err) => console.error(`Completion payments for ${bookingId} failed:`, err));
+    if (moved.count !== 1) throw new BadRequestException('This booking changed in the meantime. Refresh and try again.');
+    const updated = await this.getBookingOrFail(bookingId);
+    await this.payments.onBookingCompleted(bookingId, completedAt).catch((err) => console.error(`Completion payments for ${bookingId} failed:`, err));
 
     const clientUrl = appConfig().app.client_app_url;
     await this.mailService.sendBookingNotification({
@@ -258,6 +271,8 @@ export class BookingService {
 
     const outcome = await this.prisma.$transaction(async (tx) => {
       const seen = await tx.paymentTransaction.findFirst({ where: { reference_number: session.id } });
+      // a refund that didn't go through last time is tried again (same key: never refunded twice)
+      if (seen?.status === 'refund_pending') return seen.type === 'booking_payment_after_cancel' ? ('late' as const) : ('duplicate' as const);
       if (seen) return 'retry' as const;
       const booking = await tx.booking.findUnique({ where: { id: bookingId }, select: { customer_id: true, currency: true, status: true } });
       if (!booking) return 'unknown' as const;
@@ -281,6 +296,7 @@ export class BookingService {
       if (claimed.count === 0) {
         // re-check after the lock: the same session may have just been recorded by a concurrent delivery
         const recorded = await tx.paymentTransaction.findFirst({ where: { reference_number: session.id } });
+        if (recorded?.status === 'refund_pending') return recorded.type === 'booking_payment_after_cancel' ? ('late' as const) : ('duplicate' as const);
         if (recorded) return 'retry' as const;
       }
       await tx.paymentTransaction.create({
@@ -365,11 +381,14 @@ export class BookingService {
 
     if (!CANCELLABLE.includes(booking.status))
       throw new BadRequestException(`Cannot cancel a booking in ${booking.status} status`);
+    // Vendly settles the money of a disputed booking when it decides
+    if (booking.dispute_opened_at && !booking.dispute_resolved_at) throw new BadRequestException(OPEN_DISPUTE);
 
     // Claim the cancellation atomically so two simultaneous cancels can't both refund.
     const cancelledAt = new Date();
     const claimed = await this.prisma.booking.updateMany({
-      where: { id: bookingId, status: { in: CANCELLABLE } },
+      // and no dispute opened since it was loaded
+      where: { id: bookingId, status: { in: CANCELLABLE }, OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }] },
       data: { status: BookingStatus.CANCELLED, cancelled_at: cancelledAt, cancel_reason: dto.reason },
     });
     if (claimed.count !== 1) throw new BadRequestException('This booking has already been cancelled or completed');
@@ -417,7 +436,7 @@ export class BookingService {
       booking.customer_id,
       bookingId,
       'Booking cancelled',
-      forCustomer.refund_total > 0
+      forCustomer.refund_total > 0 && !forCustomer.refund_failed
         ? `${title}: $${forCustomer.refund_total.toFixed(2)} is being refunded to your card (${REFUND_TIMING}).`
         : `${title} was cancelled. ${forCustomer.message}`,
     );
@@ -451,6 +470,7 @@ export class BookingService {
     const isCustomer = booking.customer_id === userId;
     if (!isCustomer && booking.vendor_id !== userId) throw new ForbiddenException('Access denied');
     if (!CANCELLABLE.includes(booking.status)) throw new BadRequestException(`Cannot cancel a booking in ${booking.status} status`);
+    if (booking.dispute_opened_at && !booking.dispute_resolved_at) throw new BadRequestException(OPEN_DISPUTE);
     const by = isCustomer ? 'CUSTOMER' : 'VENDOR';
     const terms = await this.cancellationTerms(booking, by, new Date());
     const card = isCustomer ? await this.payments.cardLabel(booking.payment_method_id).catch(() => null) : null;
@@ -517,9 +537,11 @@ export class BookingService {
   /** The API/app shape of cancellation terms, with the plain sentence for `viewer`. */
   private describeCancellation(t: CancellationTerms, viewer: 'CUSTOMER' | 'VENDOR', card: string | null, done: boolean): CancellationSummary {
     const preset = t.policyKey ? CANCELLATION_PRESETS[t.policyKey] : undefined;
+    const failed = round2(t.refundFailed ?? 0);
     const summary = {
       cancelled_by: t.cancelledBy,
-      refund_total: round2(t.settlement.refundTotal),
+      // what is actually on its way to the card
+      refund_total: round2(t.settlement.refundTotal - failed),
       refund_fee: round2(t.settlement.refundFee),
       fee_kept: t.feeKept,
       vendor_keeps: round2(t.settlement.vendorKeeps),
@@ -528,6 +550,7 @@ export class BookingService {
       unpaid_cancelled: t.unpaidCancelled,
       holds_released: t.holdsReleased,
       card,
+      ...(failed > 0 ? { refund_failed: failed } : {}),
     };
     return {
       ...summary,
@@ -553,14 +576,25 @@ export class BookingService {
     // nothing more is charged, and card holds are let go
     await this.payments.voidOpenCharges(booking.id).catch((err) => console.error(`Voiding charges for cancelled booking ${booking.id} failed:`, err));
     if (settlement.refundTotal > 0 && installments.length > 0) {
+      let refunded = 0;
+      let error: unknown = null;
       try {
         // a customer's cancellation keeps the Vendly Protection fee (refunds come from the vendor's part)
-        const refunded = await this.payments.refundBooking(booking.id, settlement.refundTotal, `cancel-${booking.id}`, { keepFees: cancelledBy === 'CUSTOMER' });
-        if (refunded < settlement.refundTotal) console.error(`Refund for cancelled booking ${booking.id}: only ${refunded} of ${settlement.refundTotal} could be refunded`);
+        refunded = await this.payments.refundBooking(booking.id, settlement.refundTotal, `cancel-${booking.id}`, { keepFees: cancelledBy === 'CUSTOMER' });
       } catch (err) {
-        console.error(`Refund for cancelled booking ${booking.id} failed:`, err);
+        error = err;
+        // it can stop part-way through the installments: count what did go back
+        const before = round2(installments.reduce((s, i) => s + Number(i.refunded_amount), 0));
+        const after = await this.prisma.bookingInstallment.aggregate({ where: { booking_id: booking.id }, _sum: { refunded_amount: true } }).catch(() => null);
+        refunded = after ? round2(Number(after._sum?.refunded_amount ?? 0) - before) : 0;
+      }
+      const left = round2(settlement.refundTotal - refunded);
+      if (left > 0) {
+        terms.refundFailed = left;
+        console.error(`Refund for cancelled booking ${booking.id}: ${left} of ${settlement.refundTotal} could not be refunded`, error ?? '');
+        Sentry.captureException(error ?? new Error('Cancellation refund fell short'), { tags: { job: 'cancel-refund' }, extra: { booking_id: booking.id, owed: settlement.refundTotal, unrefunded: left } });
         await this.prisma.paymentTransaction.create({
-          data: { user_id: booking.customer_id, type: 'booking_refund', provider: 'stripe', reference_number: `cancel-${booking.id}`, order_id: booking.id, status: 'refund_failed', amount: settlement.refundTotal, currency },
+          data: { user_id: booking.customer_id, type: 'booking_refund', provider: 'stripe', reference_number: `cancel-${booking.id}`, order_id: booking.id, status: 'refund_failed', amount: left, currency },
         });
       }
     } else if (settlement.refundTotal > 0) {
@@ -577,7 +611,9 @@ export class BookingService {
         reference = refund.id;
       } catch (err) {
         status = 'refund_failed';
+        terms.refundFailed = settlement.refundTotal;
         console.error(`Refund for cancelled booking ${booking.id} failed:`, err);
+        Sentry.captureException(err, { tags: { job: 'cancel-refund' }, extra: { booking_id: booking.id, owed: settlement.refundTotal, unrefunded: settlement.refundTotal } });
       }
       await this.prisma.paymentTransaction.create({
         data: {
@@ -750,6 +786,9 @@ export class BookingService {
     if (!payable.includes(booking.status))
       throw new BadRequestException('You can pay once the vendor accepts and signs your booking.');
     if (booking.paid_at) throw new BadRequestException('This booking is already paid.');
+    // a booking on a payment plan is charged by its installments; a checkout on top would charge it twice
+    const installments = await this.prisma.bookingInstallment.count({ where: { booking_id: bookingId } });
+    if (installments > 0) throw new BadRequestException('This booking is paid through its payment schedule. Pay any due payment from the booking.');
 
     // reuse a checkout that's still open, so two tabs can't create two charges
     if (booking.payment_transaction_id?.startsWith('cs_')) {

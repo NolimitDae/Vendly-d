@@ -133,6 +133,8 @@ export interface CancellationSummary {
   holds_released: number;
   /** "Visa •••• 4242", when known (customers only) */
   card: string | null;
+  /** part of the refund Stripe didn't take when the booking was cancelled; Vendly follows it up */
+  refund_failed?: number;
   /** refunds show on the card within this window */
   refund_timing: string | null;
   message: string;
@@ -152,14 +154,19 @@ export function cancellationMessage(
   done = false,
 ): string {
   const out: string[] = [];
+  // refund_total is what is on its way; a part Stripe didn't take is followed up by Vendly
+  const failed = s.refund_failed ?? 0;
   const policy = s.policy ? `${s.policy.label.toLowerCase()} ` : '';
   const feeIncluded = s.cancelled_by === 'VENDOR' && s.refund_fee > 0 ? ', Vendly Protection fee included' : '';
   if (viewer === 'CUSTOMER') {
     if (s.refund_total > 0) {
       const to = `to your card${s.card ? ` (${s.card})` : ''}`;
       out.push(done ? `${usd(s.refund_total)} is being refunded ${to}${feeIncluded}.` : `You'll get ${usd(s.refund_total)} back ${to}${feeIncluded}.`);
+    } else if (failed > 0) {
+      // nothing went through: the next sentence says what happens
     } else if (s.paid) out.push(done ? 'Nothing was refunded.' : "You won't get a refund.");
     else out.push(done ? "You weren't charged, so there's nothing to refund." : "You haven't been charged, so there's nothing to refund.");
+    if (failed > 0) out.push(`We couldn't refund ${usd(failed)} to your card straight away. Vendly will follow up with you about it.`);
     if (s.cancelled_by === 'CUSTOMER' && s.fee_kept > 0) out.push(`The ${usd(s.fee_kept)} Vendly Protection fee isn't refunded.`);
     if (s.vendor_keeps > 0) out.push(`The vendor keeps ${usd(s.vendor_keeps)} under their ${policy}cancellation policy.`);
     if (s.unpaid_cancelled > 0) out.push(`The ${usd(s.unpaid_cancelled)} still to pay won't be charged.`);
@@ -167,8 +174,11 @@ export function cancellationMessage(
     if (s.refund_total > 0) out.push(`Refunds take ${REFUND_TIMING} to show.`);
   } else {
     if (s.refund_total > 0) out.push(`The customer ${done ? 'is getting' : 'gets'} ${usd(s.refund_total)} back${feeIncluded}.`);
-    else if (s.paid) out.push('Nothing is refunded to the customer.');
+    else if (failed > 0) {
+      // nothing went through: the next sentence says what happens
+    } else if (s.paid) out.push('Nothing is refunded to the customer.');
     else out.push(`The customer ${done ? "wasn't" : "hasn't been"} charged, so nothing is refunded.`);
+    if (failed > 0) out.push(`A refund of ${usd(failed)} to the customer didn't go through straight away; Vendly is following it up.`);
     if (s.vendor_keeps > 0) out.push(`You keep ${usd(s.vendor_keeps)}${policy ? ` under your ${policy}cancellation policy` : ''}.`);
     else if (s.paid) out.push('You keep nothing from this booking.');
     if (s.unpaid_cancelled > 0) out.push(`The ${usd(s.unpaid_cancelled)} still due won't be charged.`);

@@ -13,7 +13,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { withJobLock } from 'src/common/helper/job-lock';
 import { PaymentPlan, QuoteStatus } from 'prisma/generated/enums';
-import { buildSchedule } from 'src/modules/payments/payment-schedule';
+import { buildSchedule, eventLinkedDueAt, rebasedAmounts, securityHoldAt } from 'src/modules/payments/payment-schedule';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { PromoService } from 'src/modules/platform/promo.service';
 import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
@@ -79,6 +79,10 @@ export interface AuthUser {
 }
 
 type Tx = Prisma.TransactionClient;
+
+/** Why the price can't be amended once money has moved on the booking. */
+export const PRICE_LOCKED =
+  'Part of this booking has already been paid, so its price can’t be changed with an amendment. To lower it, use Give money back on the booking; to charge more, add an add-on.';
 
 const PENDING_STATUSES: BookingContractStatus[] = [
   BookingContractStatus.DRAFT,
@@ -1025,6 +1029,53 @@ export class BookingContractsService {
 
   // ─── Amendments ─────────────────────────────────────────────────────────
 
+  /**
+   * A price amendment re-prices the booking's charges, so it is only possible while none of them has
+   * been taken (or started). After that the money is changed with Give money back or an add-on.
+   */
+  private async assertPriceChangeable(db: Tx | PrismaService, bookingId: string) {
+    const b = await db.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { paid_at: true, installments: { where: { kind: 'charge' }, select: { status: true } } } });
+    const started = b.installments.some((i) => i.status !== 'SCHEDULED' && i.status !== 'FAILED');
+    // no installments but paid: a booking paid in one go through Checkout
+    if (started || (!b.installments.length && b.paid_at)) throw new BadRequestException(PRICE_LOCKED);
+  }
+
+  /**
+   * Brings the unpaid charges in line with an executed amendment, inside its transaction: a new
+   * price is spread over the existing charges (nothing was paid, assertPriceChangeable), and a new
+   * event date moves the charges that follow it (balance, pay-after-service charge, rental deposit hold).
+   */
+  private async applyAmendmentToCharges(tx: Tx, bookingId: string, price: { amount: number; service_fee: number } | null, dateChanged: boolean) {
+    const b = await tx.booking.findUniqueOrThrow({
+      where: { id: bookingId },
+      select: { payment_plan: true, event_start_at: true, scheduled_at: true, installments: { orderBy: { sequence: 'asc' } } },
+    });
+    const charges = b.installments.filter((i) => i.kind === 'charge');
+    if (price && charges.length) {
+      const amounts = rebasedAmounts({ plan: b.payment_plan, count: charges.length, price: price.amount, serviceFee: price.service_fee });
+      if (!amounts) throw new BadRequestException(PRICE_LOCKED);
+      for (const [k, i] of charges.entries()) {
+        // only while still unpaid: a charge that started meanwhile keeps the amendment from executing
+        const done = await tx.bookingInstallment.updateMany({
+          where: { id: i.id, status: { in: ['SCHEDULED', 'FAILED'] }, amount: i.amount },
+          data: { amount: amounts[k].amount, fee_amount: amounts[k].fee_amount },
+        });
+        if (done.count !== 1) throw new ConflictException('A payment on this booking just started. Please try again in a minute.');
+      }
+    }
+    const start = b.event_start_at ?? b.scheduled_at;
+    if (dateChanged && start) {
+      const now = new Date();
+      for (const [k, i] of charges.entries()) {
+        const due = eventLinkedDueAt(b.payment_plan, k, start, now);
+        if (due && i.status === 'SCHEDULED') await tx.bookingInstallment.updateMany({ where: { id: i.id, status: 'SCHEDULED' }, data: { due_at: due } });
+      }
+      for (const i of b.installments.filter((x) => x.kind === 'security_deposit' && x.status === 'SCHEDULED')) {
+        await tx.bookingInstallment.updateMany({ where: { id: i.id, status: 'SCHEDULED' }, data: { due_at: securityHoldAt(start, now) } });
+      }
+    }
+  }
+
   private async amendmentContext(bookingId: string, user: AuthUser, dto: AmendmentPreviewDto) {
     const { booking, role } = await this.assertBookingAccess(bookingId, user);
     // the planner's client co-signs the original contract but doesn't amend it; changes go through the planner
@@ -1050,6 +1101,7 @@ export class BookingContractsService {
       throw new ForbiddenException('Only the vendor can change the price or cancellation terms.');
     }
     if (!Object.keys(changes).length) throw new BadRequestException('Nothing to change.');
+    if (changes.amount !== undefined) await this.assertPriceChangeable(this.prisma, bookingId);
 
     const full = await this.prisma.booking.findUniqueOrThrow({
       where: { id: bookingId },
@@ -1070,7 +1122,7 @@ export class BookingContractsService {
       guest_count: changes.guest_count ?? full.guest_count,
       message: full.message,
       amount: changes.amount ?? full.amount,
-      service_fee: changes.amount !== undefined ? this.serviceFee(changes.amount) : full.service_fee,
+      service_fee: changes.amount !== undefined ? this.serviceFee(changes.amount, full.listing?.category_id) : full.service_fee,
       currency: full.currency,
     };
     const vc = current.vendor_contract as ResolvedVendorContract;
@@ -1188,6 +1240,11 @@ export class BookingContractsService {
       ? await this.resolveVendorSignatureImage(user.userId, dto)
       : await this.storeSignatureImage(dto.signature_image, `signatures/${user.userId}`);
     const changes = ((contract as any).merge_data?.amendment_changes ?? {}) as Record<string, any>;
+    // a payment may have been taken since the amendment was proposed
+    if (changes.amount !== undefined) await this.assertPriceChangeable(this.prisma, contract.booking_id);
+    const listing = changes.amount !== undefined
+      ? await this.prisma.booking.findUnique({ where: { id: contract.booking_id }, select: { listing: { select: { category_id: true } } } })
+      : null;
 
     const executed = await this.execute(contract.id, user.userId, signerRole, dto, imageKey, meta, async (tx) => {
       await tx.bookingContract.update({
@@ -1204,14 +1261,18 @@ export class BookingContractsService {
       if (changes.event_end_at) bookingUpdate.event_end_at = new Date(changes.event_end_at);
       if (changes.venue_address) bookingUpdate.venue_address = changes.venue_address;
       if (changes.guest_count) bookingUpdate.guest_count = Number(changes.guest_count);
-      // price differences are settled under the payment rules, not here
+      // a new price re-prices the unpaid charges (and the fee, at the package's category rate)
+      let price: { amount: number; service_fee: number } | null = null;
       if (changes.amount !== undefined) {
-        bookingUpdate.amount = Number(changes.amount);
-        bookingUpdate.service_fee = this.serviceFee(changes.amount);
+        price = { amount: Number(changes.amount), service_fee: this.serviceFee(changes.amount, listing?.listing?.category_id) };
+        bookingUpdate.amount = price.amount;
+        bookingUpdate.service_fee = price.service_fee;
       }
       if (Object.keys(bookingUpdate).length) {
         await tx.booking.update({ where: { id: contract.booking_id }, data: bookingUpdate });
       }
+      if (price) await this.assertPriceChangeable(tx, contract.booking_id);
+      await this.applyAmendmentToCharges(tx, contract.booking_id, price, !!(changes.event_start_at || changes.scheduled_at));
     });
     return { success: true, data: this.summary({ ...executed, signatures: [] }, role) };
   }

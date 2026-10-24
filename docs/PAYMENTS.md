@@ -25,7 +25,10 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 
 - When the vendor accepts (`confirm`), the plan is snapshotted into `booking_installments` and anything due now is charged off-session (`PaymentsService.chargeInstallment`). Funds stay on the platform balance under `transfer_group: booking_<id>`.
 - A cron every 10 minutes charges installments as they fall due and retries failures.
-- Retry policy: 3 attempts, 24h apart. Each failure emails and pushes the customer. After the third failure (or a bank that insists on 3-D Secure) the installment is `FAILED` and the customer retries from the app: `POST /bookings/:id/installments/:iid/retry` with an optional new `payment_method_id` (resets the attempt counter).
+- Retry policy: 3 attempts, 24h apart. Each failure emails and pushes the customer. After the third failure (or a bank that insists on 3-D Secure, or a booking with no saved card) the installment is `FAILED` and the customer retries from the app: `POST /bookings/:id/installments/:iid/retry` with an optional new `payment_method_id` (resets the attempt counter). A retry on a cancelled, declined or fully refunded booking is refused.
+- The sweep charges the oldest due first; every attempt moves its row on (charged, retry later, or waiting for the customer), so nothing can hold up the batch.
+- A pay-after-service charge that falls due once the job is already complete is charged outright (no hold); a hold that lands while the job is being completed is captured straight away.
+- Hosted Checkout (`POST /bookings/:id/checkout`) is only for bookings without installments; a booking on a payment schedule is refused (it would be charged twice).
 - `Booking.paid_at` is set on the first successful charge, so vendors can start work once the deposit is in.
 - Stripe webhooks (`payment_intent.succeeded / payment_failed / canceled / amount_capturable_updated`) reconcile installments by `metadata.installment_id`, so a timed-out API call never leaves a paid installment unrecorded.
 
@@ -34,7 +37,11 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 - On completion the vendor is **not** paid immediately. `release_at` = completion + 3 days, or 48h after the last proof upload if sooner.
 - `POST /bookings/:id/approve` (customer) releases immediately.
 - `POST /bookings/:id/dispute` (customer, before release) freezes the money until an admin resolves it (`dispute_resolved_at`; resolved from Admin → Disputes, below).
-- An hourly cron releases due bookings: vendor share = paid installments − fee − refunds, sent as a Stripe Transfer to the vendor's Connect account; vendors without Connect get a Vendly balance credit instead (withdrawn through the existing `/withdraw` routes).
+- An hourly cron releases due bookings: vendor share = paid installments − fee − refunds, sent as a Stripe Transfer to the vendor's Connect account; vendors without Connect get a Vendly balance credit instead (withdrawn through the existing `/withdraw` routes). Only installments actually paid and not yet paid out count. A booking with nothing paid (`paid_at` empty) isn't released or marked released: it waits, and is released by the sweep once the customer pays. The price is paid in one go only for Checkout-era bookings (no plan charges) whose checkout payment is on record. The sweep only picks paid bookings with no rented item still out, oldest release time first.
+- Installments paid after the release (a failed balance paid later, add-ons) are paid out once by the late-payout sweep (`paid_out_at`).
+- Customers can't cancel, and vendors can't give money back or release a deposit, while a dispute is open.
+- Vendors can start work before the event (setting up), but can only mark it complete once the event (`event_start_at`, else `scheduled_at`) has started. Start and complete only move from the status they expect, so a cancellation that lands meanwhile is never overwritten.
+- **Money check (hourly, report only):** released bookings that owed the vendor something but have no payout, earning or recovery record, and paid cancellations with neither a refund record nor the vendor's share settled, from one to two hours ago, are reported to Sentry and to admins (email and notification). Nothing is moved automatically.
 - `GET /bookings/:id/payments` returns the timeline: plan, installments with status/attempts/errors, paid/outstanding, release and dispute state.
 
 ## Cancellations and refunds
@@ -43,6 +50,8 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 - On a payment plan the settlement is made against what was **actually paid** (`settleAgainstPaid`): a vendor cancelling refunds everything paid, Vendly Protection fee included; a customer cancelling leaves the vendor the smaller of what the policy owes them and what the customer paid towards the vendor price, and refunds the rest of that (the fee stays paid, `keepFees`). Unpaid installments are never charged. Add-ons approved after booking count as price under the policy; approved fees are the vendor's in full.
 - Every cancellation releases card holds (pay-after-service, rental deposits) and cancels add-on/fee requests still waiting (`voidOpenCharges`).
 - Partial dispute refunds come out of the vendor's part (the fee goes back only with a full refund).
+- If a cancellation refund fails part-way, only the part that didn't go back is recorded (`booking_refund`, status `refund_failed`) and reported to Sentry; the customer's email, push and `refund_summary` say how much is on its way (`refund_total`) and that Vendly will follow up on the rest (`refund_failed`).
+- A duplicate or late Checkout payment is refunded; if that refund fails, Stripe's webhook retry tries it again (same idempotency key) while the row is still `refund_pending`.
 - Payout maths: vendor share = Σ max(0, amount − fee − refunded) over paid installments, so an installment refunded past the vendor part (fee included) never reduces another one.
 - Charges, captures, refunds and payouts on one booking take a Postgres advisory lock (`withBookingLock`), so they never act on the same installments at once. A charge is only claimed at the amount it read, so a lowered balance is never charged at its old price.
 
@@ -60,11 +69,13 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 - **Fees live in the database** (`platform_settings`), edited at Admin → Settings: Vendly Protection fee %, minimum fee, vendor commission %, currency/limits. Per-category fee overrides (`ServiceCategory.fee_percent`). Cached in memory (`currentFees()`) and refreshed on every change; env values are the fallback. The old JSON-file settings store (wiped on each Railway deploy) is gone.
 - **Vendor commission** is taken from the vendor share at release and recorded as `vendly_commission` (default 0%).
 - **Disputes:** Admin → Disputes lists open disputes with the customer's report and what is held; decide release / partial refund / full refund with a note. Both sides are emailed. A full refund claws back any early-released deposit.
-- **Early deposit release:** `POST /bookings/:id/release-deposit` (vendor, deposit plans, contract executed, Stripe Connect set up). Subtracted from the final payout; if the booking is later refunded or cancelled, the vendor's Vendly balance goes negative and is recovered from the next payouts first.
+- **Early deposit release:** `POST /bookings/:id/release-deposit` (vendor, `DEPOSIT_50`/`DEPOSIT_25` bookings whose first plan charge is paid and whose balance is still to come, contract executed, Stripe Connect set up). Subtracted from the final payout; if the booking is later refunded or cancelled, the vendor's Vendly balance goes negative and is recovered from the next payouts first.
 - **Promo codes:** Admin → Promo codes. Percent or fixed amount off the vendor price, optional minimum, max uses and expiry. Customers enter a code on the booking request (web modal and mobile summary); the preview shows the discount and the code is redeemed atomically when the booking is created. `POST /promo/check` validates a code.
 - **Feature flags:** Admin → Settings. `GET /flags` (public) returns enabled keys.
 - **Revenue report:** Admin → Revenue: collected, Vendly fees, commission, refunds and payouts by day, with CSV export.
 - **Suspend / restore:** Admin → Vendors, `PATCH /admin/users/:id/status`. Suspended users are rejected on their next request.
+- **Withdrawals** (`POST /withdraw/request`, minimum $20): the amount is taken off the Vendly balance first, only if it is still there, then sent as a transfer in whole cents keyed on the pending `withdraw` record. A transfer Stripe refuses puts the money back (`failed`); one Stripe didn't answer is tried once more with the same key, and if still unknown stays off the balance as `needs_review` (Sentry) until Vendly checks it.
+- **Subscriptions:** the webhooks find the vendor's plan by `stripe_subscription_id`. Cancelling changes nothing (and returns an error) if Stripe couldn't cancel the subscription.
 
 ## Rentals (Phase D)
 
@@ -73,6 +84,15 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 - **Return** (`POST /rentals/bookings/:id/return`, vendor): no fees voids the hold; damage / late fees are captured from the hold (partial capture) and anything above it is charged as a `kind = extra` installment. Fees need photos or a note; the customer gets 48h to dispute before payout.
 - Payouts wait until every reservation on the booking is returned.
 - Card holds lapse after about 7 days, so a deposit on a rental longer than ~6 days may expire before the return. If capture fails the fees are charged to the saved card instead (and can fail like any charge).
+
+## Contract amendments and money
+
+- A price amendment re-prices the booking's unpaid charges, keeping their rows and due dates (`rebasedAmounts`): one charge takes price + fee; a deposit plan splits it like at accept. The fee uses the package's category rate. It is only possible while no plan charge has been taken or started; after that it is refused ("use Give money back to lower it; add an add-on to charge more"). Checked at preview, request and signing.
+- A date amendment moves the unpaid charges that follow the event (`eventLinkedDueAt`): a deposit plan's balance (7 or 14 days before), the pay-after-service charge (at the event), and a rental deposit hold (the day before). Never into the past.
+
+## Account deletion
+
+- Refused while the user (as customer or vendor) has bookings that are pending, confirmed or in progress, completed but not settled (money taken or still due and the vendor not paid out), or with an open dispute. The message lists what is open and what to do; ID check photos are only removed once deletion goes ahead.
 
 ## What people see about their money
 
@@ -88,4 +108,3 @@ Rules in `payment-schedule.ts` (unit-tested): the fee always rides on the first 
 - A customer cancelling a pay-after-service booking whose card is only held (not captured) owes nothing: the hold is released rather than captured for the vendor's policy share.
 
 - Legacy bookings paid through hosted Checkout before this engine keep the old path: no installments, vendor credited to balance (less commission) on completion.
-- Amendments that change the price use the platform fee rate, not the category override.
