@@ -16,6 +16,7 @@ import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { CalendarSyncModule } from './modules/calendar-sync/calendar-sync.module';
 import { AddOnsModule } from './modules/add-ons/add-ons.module';
 import { PlanningModule } from './modules/planning/planning.module';
+import { LicenceFilesModule } from './modules/licence-files/licence-files.module';
 
 // internal imports
 import appConfig from './config/app.config';
@@ -114,6 +115,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     CalendarSyncModule,
     AddOnsModule,
     PlanningModule,
+    LicenceFilesModule,
   ],
   controllers: [AppController],
   providers: [

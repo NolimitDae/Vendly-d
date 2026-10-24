@@ -4,6 +4,7 @@ import { EventPlannerService } from './event-planner.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ADMIN_APPROVE_STATUS } from 'prisma/generated/client';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+import { PrivateStorage, SignedUrl } from 'src/modules/contracts/private-storage';
 
 jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
   TanvirStorage: {
@@ -12,6 +13,13 @@ jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
     delete: jest.fn().mockResolvedValue(undefined),
   },
 }));
+
+jest.mock('src/modules/contracts/private-storage', () => {
+  const actual = jest.requireActual('src/modules/contracts/private-storage');
+  return { ...actual, PrivateStorage: { ...actual.PrivateStorage, put: jest.fn(), remove: jest.fn().mockResolvedValue(undefined) } };
+});
+
+const tokenOf = (url: string) => SignedUrl.verify(url.split('/').pop()!);
 
 const mockProfile = {
   id: 'ep-1',
@@ -65,12 +73,34 @@ describe('EventPlannerService', () => {
     const pdf = { originalname: 'licence <script>.pdf', buffer: Buffer.from('%PDF-1.4\n') } as Express.Multer.File;
     const html = { originalname: 'licence.pdf', buffer: Buffer.from('<html></html>') } as Express.Multer.File;
 
-    it('takes photos or PDFs as licences, stored under random names', async () => {
-      mockPrisma.eventPlannerProfile.upsert.mockResolvedValue(mockProfile);
-      await service.upsertProfile('user-1', dto, [jpg], [jpg, pdf]);
+    it('takes photos or PDFs as licences, kept in private storage under random per-planner keys', async () => {
+      mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue(null);
+      mockPrisma.eventPlannerProfile.upsert.mockImplementation(({ create }: any) => Promise.resolve({ ...mockProfile, ...create }));
+      const res: any = await service.upsertProfile('user-1', dto, [jpg], [jpg, pdf]);
       const { create } = mockPrisma.eventPlannerProfile.upsert.mock.calls[0][0];
       expect(create.portfolio).toEqual([expect.stringMatching(/^[0-9a-f]{24}\.jpg$/)]);
-      expect(create.license_photo).toEqual([expect.stringMatching(/^[0-9a-f]{24}\.jpg$/), expect.stringMatching(/^[0-9a-f]{24}\.pdf$/)]);
+      expect(create.license_photo).toEqual([
+        expect.stringMatching(/^licences\/planner\/user-1\/\d+-[0-9a-f]{24}\.jpg$/),
+        expect.stringMatching(/^licences\/planner\/user-1\/\d+-[0-9a-f]{24}\.pdf$/),
+      ]);
+      expect(PrivateStorage.put).toHaveBeenCalledTimes(2);
+      expect(TanvirStorage.put).not.toHaveBeenCalledWith(expect.stringContaining('license'), expect.anything());
+      // the planner gets signed links to their own files
+      expect(tokenOf(res.data.license_photo[0])).toMatchObject({ key: create.license_photo[0], uid: 'user-1', cid: 'user-1' });
+    });
+
+    it('removes the licences it replaces once the profile is saved, and keeps them if saving fails', async () => {
+      mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue({ license_photo: ['old.pdf', 'licences/planner/user-1/1-a.pdf'] });
+      mockPrisma.eventPlannerProfile.upsert.mockRejectedValueOnce(new Error('db down'));
+      await expect(service.upsertProfile('user-1', dto, undefined, [pdf])).rejects.toThrow('db down');
+      expect(TanvirStorage.delete).not.toHaveBeenCalled();
+      expect(PrivateStorage.remove).toHaveBeenCalledWith((PrivateStorage.put as jest.Mock).mock.calls[0][0]);
+      expect(PrivateStorage.remove).not.toHaveBeenCalledWith('licences/planner/user-1/1-a.pdf');
+
+      mockPrisma.eventPlannerProfile.upsert.mockResolvedValue(mockProfile);
+      await service.upsertProfile('user-1', dto, undefined, [pdf]);
+      expect(TanvirStorage.delete).toHaveBeenCalledWith('event-planner/license/old.pdf');
+      expect(PrivateStorage.remove).toHaveBeenCalledWith('licences/planner/user-1/1-a.pdf');
     });
 
     it('refuses a PDF in the portfolio or a web page as a licence, before removing anything', async () => {
@@ -110,6 +140,13 @@ describe('EventPlannerService', () => {
       expect(result.success).toBe(true);
     });
 
+    it('gives the planner signed links to their own licences, old public ones included', async () => {
+      mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue({ ...mockProfile, license_photo: ['old.pdf', 'licences/planner/user-1/1-a.pdf'] });
+      const { data } = await service.getMyProfile('user-1');
+      expect(data.license_photo.map((u: string) => tokenOf(u)?.key)).toEqual(['licences/legacy/planner/old.pdf', 'licences/planner/user-1/1-a.pdf']);
+      expect(JSON.stringify(data)).not.toContain('storage.test/event-planner/license');
+    });
+
     it('should throw NotFoundException when profile does not exist', async () => {
       mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue(null);
 
@@ -137,10 +174,19 @@ describe('EventPlannerService', () => {
       mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue({ ...mockProfile, license_photo: ['licence.pdf'] });
       const one: any = await service.getPublicProfile('user-1');
       expect(one.data).not.toHaveProperty('license_photo');
+      expect(JSON.stringify(one)).not.toMatch(/licence\.pdf|licence-files/);
       mockPrisma.eventPlannerProfile.findMany.mockResolvedValue([{ ...mockProfile, license_photo: ['licence.pdf'] }]);
       mockPrisma.eventPlannerProfile.count.mockResolvedValue(1);
       const list: any = await service.listApprovedPlanners({});
       expect(list.data[0]).not.toHaveProperty('license_photo');
+      expect(JSON.stringify(list)).not.toMatch(/licence\.pdf|licence-files/);
+    });
+
+    it('gives admins signed links in the pending queue', async () => {
+      mockPrisma.eventPlannerProfile.findMany.mockResolvedValue([{ ...mockProfile, license_photo: ['licences/planner/user-1/1-a.pdf'] }]);
+      mockPrisma.eventPlannerProfile.count.mockResolvedValue(1);
+      const res: any = await service.getPendingPlanners({}, 'admin-1');
+      expect(tokenOf(res.data[0].license_photo[0])).toMatchObject({ key: 'licences/planner/user-1/1-a.pdf', uid: 'admin-1', cid: 'user-1' });
     });
 
     it('should throw NotFoundException when profile not approved', async () => {

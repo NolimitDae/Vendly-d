@@ -11,7 +11,7 @@ interface Props {
   type: "vendor" | "event_planner";
 }
 
-// the backend returns public storage URLs for licence files (public/storage/license, event-planner/license)
+// licence files come as short-lived signed links (/api/licence-files/...) that open the photo or PDF in a new tab
 function toDocs(photos: unknown) {
   const urls = Array.isArray(photos) ? photos.filter((u): u is string => typeof u === "string" && !!u) : [];
   return urls.length > 0

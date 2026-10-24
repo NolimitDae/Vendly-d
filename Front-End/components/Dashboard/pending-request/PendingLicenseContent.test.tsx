@@ -21,7 +21,7 @@ const vendor = {
   type: 'VENDOR',
   name: 'Val Vendor',
   business_name: 'Val Catering',
-  license_photo: ['https://api.example/public/storage/license/a.pdf'],
+  license_photo: ['https://api.example/api/licence-files/v1.sig'],
   created_at: '2026-10-20T10:00:00Z',
 };
 
@@ -29,7 +29,7 @@ const planner = {
   id: 'profile-1',
   user_id: 'u-planner',
   business_name: 'Pat Plans',
-  license_photo: ['https://api.example/public/storage/event-planner/license/p.pdf', 'https://api.example/public/storage/event-planner/license/q.jpg'],
+  license_photo: ['https://api.example/api/licence-files/p1.sig', 'https://api.example/api/licence-files/p2.sig'],
   created_at: '2026-10-21T10:00:00Z',
   user: { id: 'u-planner', name: 'Pat Planner', email: 'p@x.com' },
 };

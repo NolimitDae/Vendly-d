@@ -1,13 +1,14 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdminPlannersService, plannerStatus, plannerStatusWhere } from './admin-planners.service';
 import { accountStatusReason, accountStatusText, recordAccountStatus } from './account-status';
+import { SignedUrl } from 'src/modules/contracts/private-storage';
 
 jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
   TanvirStorage: { url: jest.fn((path: string) => `https://cdn.test/${path}`) },
 }));
 
 jest.mock('src/config/app.config', () => ({
-  default: jest.fn(() => ({ storageUrl: { avatar: 'avatars' } })),
+  default: jest.fn(() => ({ app: { url: 'https://api.test' }, storageUrl: { avatar: 'avatars' } })),
 }));
 
 const planner = {
@@ -91,7 +92,7 @@ describe('AdminPlannersService', () => {
   describe('detail', () => {
     it('is not found for someone who is not a planner', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
-      await expect(service.detail('x')).rejects.toThrow(NotFoundException);
+      await expect(service.detail('x', 'admin-1')).rejects.toThrow(NotFoundException);
     });
 
     it('returns profile, documents, events, bookings and history', async () => {
@@ -124,9 +125,12 @@ describe('AdminPlannersService', () => {
         { created_at: new Date('2026-03-01'), sender: { name: 'Admin' }, notification_event: { type: 'account_suspended', text: accountStatusText(0, 'Fake reviews') } },
       ]);
 
-      const { data } = await service.detail('p1');
+      const { data } = await service.detail('p1', 'admin-1');
       expect(data.planner_status).toBe('suspended');
-      expect(data.profile?.documents).toEqual(['https://cdn.test/event-planner/license/lic.pdf']);
+      // signed links for this admin, never public storage addresses
+      expect(data.profile?.documents).toHaveLength(1);
+      expect(data.profile?.documents[0]).toMatch(/\/api\/licence-files\//);
+      expect(SignedUrl.verify(data.profile!.documents[0].split('/').pop()!)).toMatchObject({ key: 'licences/legacy/planner/lic.pdf', uid: 'admin-1', cid: 'p1' });
       expect(data.events).toEqual({ total: 4, by_status: { PLANNING: 2 } });
       expect(data.bookings.recent[0]).toMatchObject({ id: 'b1', amount: 120.5, title: 'DJ set', vendor: 'Dee Sounds' });
       expect(data.history.map((h) => h.event)).toEqual(['suspended', 'approved', 'applied', 'joined']);

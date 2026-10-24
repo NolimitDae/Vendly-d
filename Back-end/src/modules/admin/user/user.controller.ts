@@ -24,6 +24,7 @@ import { RolesGuard } from '../../../common/guard/role/roles.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ApproveLicenseDto } from './dto/approve-license.dto';
 import { AdminPlannersService } from './admin-planners.service';
+import { GetUser } from '../../auth/decorators/get-user.decorator';
 
 @ApiExcludeController()
 @ApiTags('User')
@@ -57,8 +58,8 @@ export class UserController {
   }
 
   @Get('planners/:userId')
-  async getPlanner(@Param('userId') userId: string) {
-    return this.planners.detail(userId);
+  async getPlanner(@Param('userId') userId: string, @GetUser('userId') adminId: string) {
+    return this.planners.detail(userId, adminId);
   }
 
 /*------------------------------------------------------
@@ -67,14 +68,14 @@ export class UserController {
 
   // pending list document vendor and event planner
   @Get('pending-license')
-  async getPendingLicense() {
-    return this.userService.getPendingLicense();
+  async getPendingLicense(@GetUser('userId') adminId: string) {
+    return this.userService.getPendingLicense(adminId);
   }
 
   // approve list
   @Get('approved-license')
-  async getApprovedLicense() {
-    return this.userService.getApprovedLicense();
+  async getApprovedLicense(@GetUser('userId') adminId: string) {
+    return this.userService.getApprovedLicense(adminId);
   }
 
   // approval or reject license

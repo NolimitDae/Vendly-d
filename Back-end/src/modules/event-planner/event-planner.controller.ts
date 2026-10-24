@@ -78,8 +78,8 @@ export class EventPlannerController {
   @ApiBearerAuth('admin-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  getPending(@Query('page') page?: number, @Query('limit') limit?: number) {
-    return this.service.getPendingPlanners({ page, limit });
+  getPending(@GetUser() user: any, @Query('page') page?: number, @Query('limit') limit?: number) {
+    return this.service.getPendingPlanners({ page, limit }, user.userId);
   }
 
   @Patch('admin/:userId/status')

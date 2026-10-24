@@ -7,6 +7,7 @@ import appConfig from '../../../config/app.config';
 import { TanvirStorage } from '../../../common/lib/Disk/TanvirStorage';
 import { DateHelper } from '../../../common/helper/date.helper';
 import { ApproveLicenseDto } from './dto/approve-license.dto';
+import { licenceFileUrls } from '../../licence-files/licence-files';
 
 @Injectable()
 export class UserService {
@@ -16,7 +17,7 @@ export class UserService {
   ) {}
 
   // pending list document vendor and event planner
-  async getPendingLicense() {
+  async getPendingLicense(adminId: string) {
     const pendingUsers = await this.prisma.user.findMany({
       where: {
         type: {
@@ -60,13 +61,8 @@ export class UserService {
       name:
         user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
       business_name: user.vendorProfile?.business_name,
-      license_photo: user.vendorProfile?.license_photo
-        ? user.vendorProfile.license_photo.map((photo) =>
-            TanvirStorage.url(
-              appConfig().storageUrl.license + '/' + photo,
-            ),
-          )
-        : [],
+      // short-lived signed links for this admin
+      license_photo: licenceFileUrls('vendor', user.id, user.vendorProfile?.license_photo, adminId),
       license_status: user.vendorProfile?.license_status,
       about_me: user.vendorProfile?.about_me,
       address: user.vendorProfile?.address,
@@ -75,7 +71,7 @@ export class UserService {
   }
 
   // approve list
-  async getApprovedLicense() {
+  async getApprovedLicense(adminId: string) {
     const approvedUsers = await this.prisma.user.findMany({
       where: {
         type: {
@@ -110,13 +106,8 @@ export class UserService {
       email: user.email,
       name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
       business_name: user.vendorProfile?.business_name,
-      license_photo: user.vendorProfile?.license_photo
-        ? user.vendorProfile.license_photo.map((photo) =>
-            TanvirStorage.url(
-              appConfig().storageUrl.license + '/' + photo,
-            ),
-          )
-        : [],
+      // short-lived signed links for this admin
+      license_photo: licenceFileUrls('vendor', user.id, user.vendorProfile?.license_photo, adminId),
       license_status: user.vendorProfile?.license_status,
       about_me: user.vendorProfile?.about_me,
       address: user.vendorProfile?.address,
