@@ -45,6 +45,21 @@ describe('PushService', () => {
     );
   });
 
+  it('does not push a topic the user turned off, but keeps it in the inbox', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ push_token: 'ExponentPushToken[abc]', notification_prefs: { review_requests: false } });
+    await service.sendToUser('u1', { title: 'How was it?', body: 'Rate it', data: { type: 'booking', bookingId: 'b1' } }, 'review_requests');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockPrisma.notification.create).toHaveBeenCalled();
+  });
+
+  it('always pushes a message without a topic, even with everything off', async () => {
+    const allOff = { booking_updates: false, messages: false, payments: false, reminders: false, review_requests: false, email: false };
+    mockPrisma.user.findUnique.mockResolvedValue({ push_token: 'ExponentPushToken[abc]', notification_prefs: allOff });
+    fetchMock.mockResolvedValue({ json: () => Promise.resolve({ data: { status: 'ok' } }) });
+    await service.sendToUser('u1', { title: 'A customer reported a problem', body: 'b', data: { type: 'booking', bookingId: 'b1' } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('clears the token when Expo reports DeviceNotRegistered', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({ push_token: 'ExponentPushToken[old]' });
     fetchMock.mockResolvedValue({

@@ -75,8 +75,8 @@ describe('BookingRemindersService', () => {
       data: { status: BookingStatus.REJECTED, reject_reason: EXPIRED_REASON, expired_at: now },
     });
     expect(contracts.voidPendingForBooking).toHaveBeenCalledWith('b1', expect.stringContaining('expired'), null);
-    expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Request closed', body: expect.stringContaining('haven’t been charged') }));
-    expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ title: 'Request closed' }));
+    expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Request closed', body: expect.stringContaining('haven’t been charged') }), 'booking_updates');
+    expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ title: 'Request closed' }), 'booking_updates');
     expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'ada@x.test', status: 'REJECTED' }));
   });
 
@@ -107,7 +107,7 @@ describe('BookingRemindersService', () => {
     prisma.booking.findMany.mockResolvedValueOnce([booking({ created_at: ago(50) })]).mockResolvedValueOnce([]);
     expect(await service.remindVendors(now)).toBe(1);
     expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', expiry_reminded_at: null, status: BookingStatus.PENDING }, data: { expiry_reminded_at: now } });
-    expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ body: expect.stringContaining('closes in 22 hours') }));
+    expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ body: expect.stringContaining('closes in 22 hours') }), 'reminders');
     expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'bloom@x.test', ctaUrl: 'https://vendly.test/vendor/bookings/b1' }));
   });
 
@@ -117,7 +117,7 @@ describe('BookingRemindersService', () => {
     expect(await service.askForReviews(now)).toBe(1);
     const where = prisma.booking.findMany.mock.calls[0][0].where;
     expect(where).toMatchObject({ status: BookingStatus.COMPLETED, review: null, review_reminded_at: null, review_prompt_dismissed_at: null, dispute_opened_at: null });
-    expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'How was Bloom Florals?', data: { type: 'booking', bookingId: 'b1' } }));
+    expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'How was Bloom Florals?', data: { type: 'booking', bookingId: 'b1' } }), 'review_requests');
     expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ ctaUrl: 'https://vendly.test/bookings/b1' }));
   });
 

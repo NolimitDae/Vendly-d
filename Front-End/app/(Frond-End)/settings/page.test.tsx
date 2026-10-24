@@ -13,6 +13,10 @@ jest.mock('@/service/twofa/twofa.service', () => ({
   },
 }));
 
+jest.mock('@/service/notification/notification.service', () => ({
+  NotificationService: { getPrefs: jest.fn().mockResolvedValue({ data: { success: false } }), updatePrefs: jest.fn() },
+}));
+
 jest.mock('next/image', () => ({
   __esModule: true,
   default: ({ alt, src }: { alt: string; src: string }) => <img alt={alt} src={src} />,

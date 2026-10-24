@@ -75,7 +75,7 @@ export class BookingService {
       title,
       body,
       data: { type: 'booking', bookingId },
-    });
+    }, 'booking_updates');
   }
 
   async create(customerId: string, dto: SignedBookingRequestDto, meta: RequestMeta = {}) {
@@ -103,6 +103,7 @@ export class BookingService {
       scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
       amount: Number(booking.amount),
       ctaUrl: `${clientUrl}/vendor/bookings/${booking.id}`,
+      topic: 'booking_updates',
     }).catch(() => null);
     this.pushBooking(booking.vendor_id, booking.id, 'New signed booking request', `${customer.name} requested ${listing.title}`);
     if (created.awaiting_client) await this.contracts.notifyClientToSign(booking.id).catch(() => null);
@@ -154,6 +155,7 @@ export class BookingService {
       scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
       amount: Number(booking.amount),
       ctaUrl: `${clientUrl}/bookings`,
+      topic: 'booking_updates',
     }).catch(() => null);
     this.pushBooking(booking.customer_id, bookingId, 'Booking confirmed', `${titleOf(booking) ?? 'Your booking'} was confirmed`);
 
@@ -187,6 +189,7 @@ export class BookingService {
       listingTitle: titleOf(booking) ?? 'Service',
       reason: dto.reason,
       ctaUrl: `${clientUrl}/marketplace`,
+      topic: 'booking_updates',
     }).catch(() => null);
     this.pushBooking(booking.customer_id, bookingId, 'Booking declined', `${titleOf(booking) ?? 'Your booking'} was declined`);
 
@@ -235,6 +238,7 @@ export class BookingService {
       status: 'COMPLETED',
       listingTitle: titleOf(booking) ?? 'Service',
       ctaUrl: `${clientUrl}/bookings`,
+      topic: 'booking_updates',
     }).catch(() => null);
     this.pushBooking(booking.customer_id, bookingId, 'Service completed', `${titleOf(booking) ?? 'Your booking'} is complete — leave a review`);
 
@@ -428,6 +432,7 @@ export class BookingService {
         listingTitle: title,
         reason: dto.reason,
         ctaUrl: `${clientUrl}/vendor/bookings/${bookingId}`,
+        topic: 'booking_updates',
       }).catch(() => null);
       this.pushBooking(booking.vendor_id, bookingId, 'Booking cancelled', `${title} was cancelled by the customer`);
     }

@@ -72,7 +72,7 @@ export class BookingRemindersService {
         title: 'Request waiting for you',
         body: `${b.customer?.name ?? 'A customer'}’s request for ${titleOf(b)} closes in ${hours} hour${hours === 1 ? '' : 's'}. Accept or decline it.`,
         data: { type: 'booking', bookingId: b.id },
-      });
+      }, 'reminders');
       if (b.vendor?.email) {
         await this.mail
           .sendBookingNotification({
@@ -83,6 +83,7 @@ export class BookingRemindersService {
             status: 'PENDING',
             listingTitle: titleOf(b),
             ctaUrl: `${appConfig().app.client_app_url}/vendor/bookings/${b.id}`,
+            topic: 'reminders',
           })
           .catch(() => null);
       }
@@ -133,12 +134,12 @@ export class BookingRemindersService {
         title: 'Request closed',
         body: `${b.vendor?.name ?? 'The vendor'} didn’t respond to your request for ${title} in time. You haven’t been charged.`,
         data: { type: 'booking', bookingId: b.id },
-      });
+      }, 'booking_updates');
       void this.push.sendToUser(b.vendor_id, {
         title: 'Request closed',
         body: `You didn’t respond to ${b.customer?.name ?? 'a customer'}’s request for ${title} in time, so it was closed.`,
         data: { type: 'booking', bookingId: b.id },
-      });
+      }, 'booking_updates');
       if (b.customer?.email) {
         await this.mail
           .sendBookingNotification({
@@ -149,6 +150,7 @@ export class BookingRemindersService {
             status: 'REJECTED',
             listingTitle: title,
             ctaUrl: `${appConfig().app.client_app_url}/marketplace`,
+            topic: 'booking_updates',
           })
           .catch(() => null);
       }
@@ -181,7 +183,7 @@ export class BookingRemindersService {
         title: `How was ${vendor}?`,
         body: `Rate ${titleOf(b)}. It takes a few seconds and helps others choose.`,
         data: { type: 'booking', bookingId: b.id },
-      });
+      }, 'review_requests');
       if (b.customer?.email) {
         await this.mail
           .sendBookingNotification({
@@ -192,6 +194,7 @@ export class BookingRemindersService {
             status: 'COMPLETED',
             listingTitle: titleOf(b),
             ctaUrl: `${appConfig().app.client_app_url}/bookings/${b.id}`,
+            topic: 'review_requests',
           })
           .catch(() => null);
       }

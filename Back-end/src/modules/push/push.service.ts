@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { NotificationTopic, wants } from 'src/common/helper/notification-prefs';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -23,17 +24,23 @@ export class PushService {
     }
   }
 
+  /**
+   * `topic` marks an optional push the user can turn off in their notification settings (it still
+   * goes to their inbox). Leave it out for anything they must get (security, disputes, contracts).
+   */
   async sendToUser(
     userId: string,
     payload: { title: string; body: string; data?: Record<string, unknown> },
+    topic?: NotificationTopic,
   ) {
     await this.record(userId, payload);
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { push_token: true },
+        select: { push_token: true, notification_prefs: true },
       });
       if (!user?.push_token) return;
+      if (!wants(user.notification_prefs, topic, 'push')) return;
 
       const res = await fetch(EXPO_PUSH_URL, {
         method: 'POST',

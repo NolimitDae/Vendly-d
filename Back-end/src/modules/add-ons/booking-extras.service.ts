@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AddOnKind, AddOnPriceUnit, BookingExtraStatus, BookingStatus, InstallmentStatus, Prisma } from 'prisma/generated/client';
 import { withJobLock } from 'src/common/helper/job-lock';
+import { NotificationTopic } from 'src/common/helper/notification-prefs';
 import { track } from 'src/common/analytics';
 import appConfig from 'src/config/app.config';
 import { MailService } from 'src/mail/mail.service';
@@ -93,11 +94,12 @@ export class BookingExtrasService {
     return b.vendor.vendorProfile?.business_name || b.vendor.name || 'Your vendor';
   }
 
-  private notify(user: { id: string; email: string | null; name: string | null }, bookingId: string, title: string, subject: string, body: string, listingTitle: string, amount?: number) {
-    void this.push.sendToUser(user.id, { title, body, data: { type: 'booking', bookingId } });
+  /** No `topic` for fee reviews: those are always sent (see notification-prefs). */
+  private notify(user: { id: string; email: string | null; name: string | null }, bookingId: string, title: string, subject: string, body: string, listingTitle: string, amount?: number, topic?: NotificationTopic) {
+    void this.push.sendToUser(user.id, { title, body, data: { type: 'booking', bookingId } }, topic);
     if (user.email) {
       void this.mail
-        .sendBookingNotification({ to: user.email, recipientName: user.name ?? '', subject, message: body, status: 'EXTRA', listingTitle, amount, ctaUrl: `${appConfig().app.client_app_url}/bookings/${bookingId}` })
+        .sendBookingNotification({ to: user.email, recipientName: user.name ?? '', subject, message: body, status: 'EXTRA', listingTitle, amount, ctaUrl: `${appConfig().app.client_app_url}/bookings/${bookingId}`, topic })
         .catch(() => null);
     }
   }
@@ -213,6 +215,7 @@ export class BookingExtrasService {
       `${this.vendorName(b)} sent ${dto.kind === AddOnKind.FEE ? 'a fee' : 'an add-on'} for ${title}: ${what}, $${total.toFixed(2)}${extra.note ? ` (${extra.note})` : ''}.${extendsMinutes ? ` It adds ${durationText(extendsMinutes)} to the booking once paid.` : ''} Nothing is charged until you approve it.`,
       title,
       total,
+      'booking_updates',
     );
     track('booking_extra_requested', vendorId, { booking_id: bookingId, kind: dto.kind, amount });
     return { success: true, data: formatExtra(extra) };
@@ -229,7 +232,7 @@ export class BookingExtrasService {
     });
     if (done.count !== 1) throw new BadRequestException('Only a request that hasn’t been paid can be withdrawn.');
     if (e.status === BookingExtraStatus.PENDING) {
-      void this.push.sendToUser(e.booking.customer_id, { title: 'Request withdrawn', body: `The vendor withdrew “${e.name}”. You won’t be charged for it.`, data: { type: 'booking', bookingId: e.booking_id } });
+      void this.push.sendToUser(e.booking.customer_id, { title: 'Request withdrawn', body: `The vendor withdrew “${e.name}”. You won’t be charged for it.`, data: { type: 'booking', bookingId: e.booking_id } }, 'booking_updates');
     }
     return { success: true };
   }
@@ -292,6 +295,7 @@ export class BookingExtrasService {
       `${b.customer.name ?? 'The customer'} approved ${e.name} ($${Number(e.amount).toFixed(2)}) on ${title}.${e.kind === AddOnKind.ADD_ON && e.extends_minutes ? (result.paid ? ` The booking now runs ${durationText(e.extends_minutes)} longer.` : ` The booking will run ${durationText(e.extends_minutes)} longer once it’s paid.`) : ''}${result.paid ? ' It has been paid and will reach you with your payout.' : ' We’re taking the payment now.'}`,
       title,
       Number(e.amount),
+      'booking_updates',
     );
     track('booking_extra_approved', customerId, { booking_id: e.booking_id, kind: e.kind, paid: result.paid });
     return { success: true, data: result };
@@ -310,7 +314,7 @@ export class BookingExtrasService {
     const title = b.listing?.title ?? 'the booking';
     const why = reason?.trim() ? ` Their reason: ${reason.trim()}.` : '';
     const next = e.kind === AddOnKind.FEE ? ' If the fee is owed under your contract, you can ask Vendly to review it from the booking.' : '';
-    this.notify(b.vendor, e.booking_id, `${e.kind === AddOnKind.FEE ? 'Fee' : 'Add-on'} declined`, `${e.name} declined — ${title}`, `${b.customer.name ?? 'The customer'} declined ${e.name} ($${Number(e.amount).toFixed(2)}) on ${title}.${why}${next}`, title);
+    this.notify(b.vendor, e.booking_id, `${e.kind === AddOnKind.FEE ? 'Fee' : 'Add-on'} declined`, `${e.name} declined — ${title}`, `${b.customer.name ?? 'The customer'} declined ${e.name} ($${Number(e.amount).toFixed(2)}) on ${title}.${why}${next}`, title, undefined, 'booking_updates');
     track('booking_extra_declined', customerId, { booking_id: e.booking_id, kind: e.kind });
     return { success: true };
   }
@@ -436,6 +440,7 @@ export class BookingExtrasService {
         `${this.vendorName(b)} is waiting for your answer on ${e.name} ($${total.toFixed(2)}) for ${title}. Approve or decline it from the booking.${e.kind === AddOnKind.FEE ? ` Fees left unanswered for ${ESCALATE_AFTER_HOURS} hours can be sent to Vendly to review.` : ''}`,
         title,
         total,
+        'reminders',
       );
     }
     return due.length;

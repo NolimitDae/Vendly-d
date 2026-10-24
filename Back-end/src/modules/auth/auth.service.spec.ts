@@ -404,4 +404,19 @@ describe('AuthService', () => {
       await expect(service.validateUser('nobody@test.com', 'any')).rejects.toThrow(UnauthorizedException);
     });
   });
+  describe('notification settings', () => {
+    it('reads every switch as on until the user changes it', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ notification_prefs: null });
+      const res = await service.notificationPrefs('user-1');
+      expect(res.data).toEqual({ booking_updates: true, messages: true, payments: true, reminders: true, review_requests: true, email: true });
+    });
+
+    it('changes only the switches sent and saves the full set', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ notification_prefs: { messages: false } });
+      const res = await service.updateNotificationPrefs('user-1', { review_requests: false });
+      const saved = { booking_updates: true, messages: false, payments: true, reminders: true, review_requests: false, email: true };
+      expect(res.data).toEqual(saved);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'user-1' }, data: { notification_prefs: saved } });
+    });
+  });
 });

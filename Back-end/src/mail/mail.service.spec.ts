@@ -2,9 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MailService } from './mail.service';
 import { getQueueToken } from '@nestjs/bullmq';
 import { MailerService } from '@nestjs-modules/mailer';
+import { PrismaService } from '../prisma/prisma.service';
 
 const mockQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
 const mockMailer = { sendMail: jest.fn().mockResolvedValue(undefined) };
+const mockPrisma = { user: { findUnique: jest.fn().mockResolvedValue(null) } };
 
 describe('MailService', () => {
   let service: MailService;
@@ -16,6 +18,7 @@ describe('MailService', () => {
         MailService,
         { provide: getQueueToken('mail-queue'), useValue: mockQueue },
         { provide: MailerService, useValue: mockMailer },
+        { provide: PrismaService, useValue: mockPrisma },
       ],
     }).compile();
 
@@ -34,6 +37,29 @@ describe('MailService', () => {
       mockQueue.add.mockRejectedValueOnce(new Error('redis down'));
       jest.spyOn(console, 'log').mockImplementationOnce(() => undefined);
       expect(await service.sendBookingNotification(params)).toBe(false);
+    });
+
+    it('skips an optional email the user turned off, but always sends a receipt', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ notification_prefs: { review_requests: false, payments: false, email: false } });
+      expect(await service.sendBookingNotification({ ...params, subject: 'How was it?', topic: 'review_requests' })).toBe(true);
+      expect(mockQueue.add).not.toHaveBeenCalled();
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@x.com' }, select: { notification_prefs: true } });
+
+      await service.sendBookingNotification(params);
+      expect(mockQueue.add).toHaveBeenCalledTimes(1);
+      expect(mockQueue.add).toHaveBeenCalledWith('sendBookingNotification', expect.objectContaining({ to: 'a@x.com', subject: 'Receipt' }));
+    });
+
+    it('sends an optional email when the user wants it, without the topic in the template', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ notification_prefs: null });
+      await service.sendBookingNotification({ ...params, topic: 'booking_updates' });
+      expect(mockQueue.add.mock.calls[0][1].context).not.toHaveProperty('topic');
+    });
+
+    it('still sends when the settings cannot be read', async () => {
+      mockPrisma.user.findUnique.mockRejectedValueOnce(new Error('db down'));
+      expect(await service.sendBookingNotification({ ...params, topic: 'reminders' })).toBe(true);
+      expect(mockQueue.add).toHaveBeenCalledTimes(1);
     });
   });
 

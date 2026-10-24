@@ -67,15 +67,20 @@ export default function NotificationsPage() {
               </span>
             )}
           </div>
-          {unread > 0 && (
-            <button
-              onClick={() => markAllAsRead()}
-              className="flex items-center gap-1.5 text-sm font-medium text-primary hover:opacity-80 transition"
-            >
-              <Check className="w-4 h-4" />
-              Mark all as read
-            </button>
-          )}
+          <div className="flex items-center gap-4">
+            {unread > 0 && (
+              <button
+                onClick={() => markAllAsRead()}
+                className="flex items-center gap-1.5 text-sm font-medium text-primary hover:opacity-80 transition"
+              >
+                <Check className="w-4 h-4" />
+                Mark all as read
+              </button>
+            )}
+            <Link href="/settings#notifications" className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white transition">
+              Settings
+            </Link>
+          </div>
         </div>
 
         {checklist && <OnboardingChecklist data={checklist} />}
