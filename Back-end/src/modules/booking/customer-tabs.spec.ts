@@ -9,7 +9,7 @@ const now = new Date('2030-06-01T12:00:00Z');
 function setup() {
   const prisma: any = { booking: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) } };
   const none: any = {};
-  return { service: new BookingService(prisma, none, none, none, none, none, none), prisma };
+  return { service: new BookingService(prisma, none, none, none, none, none, none, none), prisma };
 }
 
 describe('Customer bookings tabs', () => {

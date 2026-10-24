@@ -165,6 +165,76 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('deposit plans: 12 hours to pay a missed deposit or balance', () => {
+    const HOUR = 3600 * 1000;
+    const depositBooking = { ...bookingRef, vendor_id: 'v1', payment_plan: PaymentPlan.DEPOSIT_50, deposit_rules: true, payment_due_by: null as Date | null, vendor: { email: 'glam@x.com', name: 'Glam Co' } };
+    const dueClaim = () => prisma.booking.updateMany.mock.calls.map((c: any) => c[0]).find((a: any) => a.data?.payment_due_kind);
+
+    it('a declined deposit starts the 12-hour clock, retries once 6 hours in, and tells both sides', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ booking: depositBooking }));
+      (StripePayment.chargeSavedCard as jest.Mock).mockRejectedValue({ code: 'card_declined', raw: { message: 'Your card was declined.' } });
+      const before = Date.now();
+
+      await service.chargeInstallment('i1');
+
+      const claim = dueClaim();
+      expect(claim.where).toEqual({ id: 'b1', payment_due_by: null });
+      expect(claim.data.payment_due_kind).toBe('deposit');
+      expect(claim.data.payment_due_by.getTime()).toBeGreaterThanOrEqual(before + 12 * HOUR);
+      expect(claim.data.payment_due_by.getTime()).toBeLessThan(before + 12 * HOUR + 60_000);
+      const data = prisma.bookingInstallment.update.mock.calls[0][0].data;
+      expect(data.status).toBe(InstallmentStatus.SCHEDULED);
+      expect(data.next_attempt_at.getTime()).toBeGreaterThanOrEqual(before + 6 * HOUR);
+      expect(data.next_attempt_at.getTime()).toBeLessThan(before + 6 * HOUR + 60_000);
+      const toCustomer = mail.sendBookingNotification.mock.calls.find((c: any) => c[0].to === 'amara@x.com')[0];
+      expect(toCustomer.subject).toMatch(/^Payment needed by /);
+      expect(toCustomer.message).toContain("We couldn't take the $247.50 deposit for Bridal Glam");
+      expect(toCustomer.message).toContain('the booking is cancelled');
+      expect(toCustomer.ctaUrl).toBe('https://app.test/bookings/b1?pay=1');
+      expect(toCustomer.lines).toEqual([{ label: 'Pay by', value: expect.stringMatching(/^\d{1,2}:\d{2} [AP]M /) }]);
+      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Pending deposit' }), 'payments');
+      expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ title: 'Pending deposit', body: expect.stringContaining('(12 hours) to pay') }), 'booking_updates');
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'glam@x.com', subject: 'Payment pending — Bridal Glam' }));
+    });
+
+    it('a second failure waits for the customer, and the deadline and the vendor notice are not repeated', async () => {
+      const dueBy = new Date(Date.now() + 6 * HOUR);
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ attempts: 1, label: 'Balance', sequence: 2, booking: { ...depositBooking, payment_due_by: dueBy } }));
+      (StripePayment.chargeSavedCard as jest.Mock).mockRejectedValue({ code: 'card_declined', raw: { message: 'Declined' } });
+
+      await service.chargeInstallment('i1');
+
+      expect(prisma.bookingInstallment.update.mock.calls[0][0].data).toMatchObject({ status: InstallmentStatus.FAILED, attempts: 2, next_attempt_at: null });
+      expect(dueClaim()).toBeUndefined();
+      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Pending balance' }), 'payments');
+      expect(push.sendToUser).not.toHaveBeenCalledWith('v1', expect.anything(), expect.anything());
+    });
+
+    it('no automatic retry when the bank needs the customer', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ booking: depositBooking }));
+      (StripePayment.chargeSavedCard as jest.Mock).mockRejectedValue({ code: 'authentication_required', raw: { message: 'Authentication required' } });
+      await service.chargeInstallment('i1');
+      expect(prisma.bookingInstallment.update.mock.calls[0][0].data).toMatchObject({ status: InstallmentStatus.FAILED, next_attempt_at: null });
+      expect(dueClaim()).toBeDefined();
+    });
+
+    it('a booking made before the rules keeps the 24-hour retries', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ booking: { ...depositBooking, deposit_rules: false } }));
+      (StripePayment.chargeSavedCard as jest.Mock).mockRejectedValue({ code: 'card_declined', raw: { message: 'Declined' } });
+      const before = Date.now();
+      await service.chargeInstallment('i1');
+      expect(dueClaim()).toBeUndefined();
+      expect(prisma.bookingInstallment.update.mock.calls[0][0].data.next_attempt_at.getTime()).toBeGreaterThanOrEqual(before + DAY - 1000);
+    });
+
+    it('paying the missed deposit clears the pending state', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ booking: { ...depositBooking, payment_due_by: new Date() } }));
+      (StripePayment.chargeSavedCard as jest.Mock).mockResolvedValue({ id: 'pi_1', status: 'succeeded' });
+      await service.chargeInstallment('i1');
+      expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', payment_due_kind: 'deposit' }, data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } });
+    });
+  });
+
   describe('scheduleForBooking', () => {
     it('snapshots the plan into installments and charges the deposit immediately', async () => {
       prisma.booking.findUnique.mockResolvedValueOnce({ id: 'b1', amount: 450, service_fee: 22.5, currency: 'usd', event_start_at: new Date(Date.now() + 30 * DAY), scheduled_at: null, payment_plan: null, listing_id: 'l1', paid_at: null, installments: [] });
@@ -883,7 +953,7 @@ describe('PaymentsService', () => {
       await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'No-show confirmed' });
       expect(prisma.booking.updateMany).toHaveBeenCalledWith({
         where: { id: 'b1', status: BookingStatus.CONFIRMED },
-        data: { status: BookingStatus.CANCELLED, cancelled_at: expect.any(Date), cancel_reason: expect.stringContaining('Refunded in full') },
+        data: { status: BookingStatus.CANCELLED, cancelled_at: expect.any(Date), cancel_reason: expect.stringContaining('Refunded in full'), cancelled_by: 'ADMIN', payment_due_by: null, payment_due_kind: null },
       });
     });
 

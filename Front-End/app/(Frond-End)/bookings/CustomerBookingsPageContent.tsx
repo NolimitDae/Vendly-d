@@ -21,15 +21,7 @@ import {
   Eye,
 } from "lucide-react";
 import { toast } from "react-toastify";
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  CONFIRMED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  IN_PROGRESS: "bg-blush-100 text-plum-700 dark:bg-plum-900/30 dark:text-orchid-300",
-  COMPLETED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400",
-  REJECTED: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
-};
+import { bookingStatusColor, bookingStatusLabel, cancellationLine, dueByText, paymentStateText } from "@/lib/booking-status";
 
 // the order in the design; every booking is in exactly one (the API sorts each)
 const TABS: { key: CustomerBookingTab; label: string; empty: string }[] = [
@@ -38,10 +30,6 @@ const TABS: { key: CustomerBookingTab; label: string; empty: string }[] = [
   { key: "pending", label: "Pending", empty: "No requests waiting for a vendor" },
   { key: "complete", label: "Complete", empty: "No past bookings yet" },
 ];
-
-/** The badge: cancelled, declined and expired bookings sit in Complete, so each says what happened. */
-const statusLabel = (b: { status: string; expired_at?: string | null }) =>
-  b.status === "REJECTED" ? (b.expired_at ? "EXPIRED" : "DECLINED") : b.status.replace("_", " ");
 
 interface Booking {
   /** an open request closes on its own at this time */
@@ -62,6 +50,12 @@ interface Booking {
   payment_plan?: string | null;
   /** set when the vendor didn't answer the request in time */
   expired_at?: string | null;
+  /** a missed deposit or balance waiting to be paid by payment_due_by */
+  payment_state?: "pending_deposit" | "pending_balance" | null;
+  payment_due_by?: string | null;
+  cancelled_by?: string | null;
+  cancel_reason_label?: string | null;
+  cancel_reason?: string | null;
 }
 
 export default function CustomerBookingsPageContent() {
@@ -187,8 +181,9 @@ export default function CustomerBookingsPageContent() {
                           by {booking.vendor?.name}
                         </p>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${STATUS_COLORS[booking.status] ?? ""}`}>
-                        {statusLabel(booking)}
+                      {/* cancelled, declined and expired bookings sit in Complete, so each says what happened */}
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${bookingStatusColor(booking)}`}>
+                        {bookingStatusLabel(booking)}
                       </span>
                     </div>
 
@@ -212,6 +207,19 @@ export default function CustomerBookingsPageContent() {
                         </span>
                       )}
                     </div>
+
+                    {booking.status === "CANCELLED" && cancellationLine(booking, "CUSTOMER") && (
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{cancellationLine(booking, "CUSTOMER")}</p>
+                    )}
+
+                    {booking.payment_state && booking.payment_due_by && (
+                      <p className="mt-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+                        {paymentStateText(booking.payment_state)}: pay by {dueByText(booking.payment_due_by)} or the booking is cancelled.{" "}
+                        <Link href={`/bookings/${booking.id}?pay=1`} className="font-semibold underline">
+                          Pay now
+                        </Link>
+                      </p>
+                    )}
 
                     {/* Actions */}
                     <div className="flex gap-2 mt-4 flex-wrap">
@@ -308,7 +316,6 @@ export default function CustomerBookingsPageContent() {
         <CancelBookingDialog
           bookingId={cancellingId}
           role="CUSTOMER"
-          defaultReason="Customer cancelled"
           bookingHref={`/bookings/${cancellingId}`}
           onClose={() => setCancellingId(null)}
           onCancelled={() => {

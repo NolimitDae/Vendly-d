@@ -4,6 +4,10 @@
  * - Vendor cancels: the customer gets everything back, Vendly Protection fee included.
  * - Customer cancels: the vendor price is refunded per the cancellation policy in the booking's signed
  *   contract; the fee is not refunded; the vendor keeps the part of their price that isn't refunded.
+ * - Deposit plans (bookings made from Oct 2026, `deposit_rules`): when the customer cancels, or the
+ *   booking is cancelled because a deposit or balance wasn't paid in time (by Vendly, or by the vendor
+ *   with "Customer didn't pay"), the vendor keeps the paid deposit; anything paid beyond it is refunded
+ *   per the policy tiers (depositPlanVendorOwed). The fee rules are the customer cancellation ones.
  *
  * Tiers mirror the policy text customers sign (contracts/contract-templates.ts CANCELLATION_PRESETS):
  *   flexible  100% at 7+ days before the event, 50% from 48 hours, none under 48 hours
@@ -113,6 +117,21 @@ export function settleAgainstPaid(
   return { refundTotal: refund, refundVendorPrice: refund, refundFee: 0, vendorKeeps, percent: owed.percent };
 }
 
+/**
+ * Deposit plans: what the vendor is owed when the customer cancels or didn't pay. The paid deposit is
+ * non-refundable; of what was paid beyond it (fees agreed after booking aside, those are the vendor's
+ * in full) the vendor keeps the part the policy doesn't refund. Never more than was paid towards the
+ * vendor's price. `percent` is the policy's refund percent at the time of cancelling.
+ */
+export function depositPlanVendorOwed(input: { vendorPaid: number; depositPaid: number; feesAgreed: number; percent: number }): { owed: number; depositKept: number } {
+  const vendorPaid = cents(Math.max(0, input.vendorPaid));
+  const depositKept = cents(Math.min(vendorPaid, Math.max(0, input.depositPaid)));
+  const fees = cents(Math.max(0, input.feesAgreed));
+  const rest = cents(Math.max(0, vendorPaid - depositKept - fees));
+  const keptOfRest = cents((rest * (100 - input.percent)) / 100);
+  return { owed: cents(Math.min(vendorPaid, depositKept + keptOfRest + fees)), depositKept };
+}
+
 /** What cancelling does with the money, as the apps show it before and after (see BookingService.cancellationTerms). */
 export interface CancellationSummary {
   cancelled_by: 'CUSTOMER' | 'VENDOR';
@@ -124,6 +143,8 @@ export interface CancellationSummary {
   fee_kept: number;
   /** what the vendor keeps of what was paid */
   vendor_keeps: number;
+  /** deposit plans: the paid deposit, part of vendor_keeps, that isn't refunded */
+  deposit_kept?: number;
   policy: { key: string; label: string; text: string } | null;
   /** percent of the vendor price the policy refunds */
   percent: number;
@@ -160,6 +181,9 @@ export function cancellationMessage(
   const failed = s.refund_failed ?? 0;
   const policy = s.policy ? `${s.policy.label.toLowerCase()} ` : '';
   const feeIncluded = s.cancelled_by === 'VENDOR' && s.refund_fee > 0 ? ', Vendly Protection fee included' : '';
+  // deposit plans: the non-refundable deposit, and what the policy keeps on top of it
+  const deposit = s.cancelled_by === 'CUSTOMER' ? Math.min(s.deposit_kept ?? 0, s.vendor_keeps) : 0;
+  const beyond = cents(s.vendor_keeps - deposit);
   if (viewer === 'CUSTOMER') {
     if (s.refund_total > 0) {
       const to = `to your card${s.card ? ` (${s.card})` : ''}`;
@@ -170,7 +194,10 @@ export function cancellationMessage(
     else out.push(done ? "You weren't charged, so there's nothing to refund." : "You haven't been charged, so there's nothing to refund.");
     if (failed > 0) out.push(`We couldn't refund ${usd(failed)} to your card straight away. Vendly will follow up with you about it.`);
     if (s.cancelled_by === 'CUSTOMER' && s.fee_kept > 0) out.push(`The ${usd(s.fee_kept)} Vendly Protection fee isn't refunded.`);
-    if (s.vendor_keeps > 0) out.push(`The vendor keeps ${usd(s.vendor_keeps)} under their ${policy}cancellation policy.`);
+    if (deposit > 0) {
+      out.push(`Your deposit of ${usd(deposit)} is non-refundable.`);
+      if (beyond > 0) out.push(`The vendor keeps another ${usd(beyond)} under their ${policy}cancellation policy.`);
+    } else if (s.vendor_keeps > 0) out.push(`The vendor keeps ${usd(s.vendor_keeps)} under their ${policy}cancellation policy.`);
     if (s.unpaid_cancelled > 0) out.push(`The ${usd(s.unpaid_cancelled)} still to pay won't be charged.`);
     if (s.holds_released > 0) out.push(`The ${usd(s.holds_released)} hold on your card ${done ? 'is' : 'will be'} released.`);
     if (s.refund_total > 0) out.push(`Refunds take ${REFUND_TIMING} to show.`);
@@ -181,7 +208,8 @@ export function cancellationMessage(
     } else if (s.paid) out.push('Nothing is refunded to the customer.');
     else out.push(`The customer ${done ? "wasn't" : "hasn't been"} charged, so nothing is refunded.`);
     if (failed > 0) out.push(`A refund of ${usd(failed)} to the customer didn't go through straight away; Vendly is following it up.`);
-    if (s.vendor_keeps > 0) out.push(`You keep ${usd(s.vendor_keeps)}${policy ? ` under your ${policy}cancellation policy` : ''}.`);
+    if (deposit > 0) out.push(`You keep the ${usd(deposit)} deposit${beyond > 0 ? `, plus ${usd(beyond)}${policy ? ` under your ${policy}cancellation policy` : ''}` : ''}.`);
+    else if (s.vendor_keeps > 0) out.push(`You keep ${usd(s.vendor_keeps)}${policy ? ` under your ${policy}cancellation policy` : ''}.`);
     else if (s.paid) out.push('You keep nothing from this booking.');
     if (s.unpaid_cancelled > 0) out.push(`The ${usd(s.unpaid_cancelled)} still due won't be charged.`);
     if (s.holds_released > 0) out.push(`The ${usd(s.holds_released)} card hold ${done ? 'is' : 'will be'} released.`);

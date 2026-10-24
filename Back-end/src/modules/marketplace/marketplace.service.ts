@@ -12,6 +12,10 @@ import { mergeDayRanges, todayUtc } from 'src/modules/calendar-sync/busy-days';
 import { readWorkingHours, summariseWorkingHours } from 'src/modules/vendor/working-hours';
 import { ACTIVE_VENDOR_WHERE } from 'src/common/helper/active-vendor';
 import { SearchListingsDto } from './dto/search-listings.dto';
+import { penalisedVendorIds } from 'src/modules/booking/vendor-cancellations';
+
+/** How long the list of vendors shown last in search is reused before it is read again. */
+const PENALISED_TTL_MS = 5 * 60 * 1000;
 
 /** How far "near me" looks by default (miles). */
 export const DEFAULT_RADIUS_MILES = 25;
@@ -47,6 +51,22 @@ export function withinReach(distanceMiles: number | null | undefined, radius: nu
 @Injectable()
 export class MarketplaceService {
   constructor(private prisma: PrismaService) {}
+
+  private penalised: { ids: Set<string>; at: number } | null = null;
+
+  /**
+   * Vendors with 2 or more cancellations of their own in the last 90 days (booking/vendor-cancellations.ts).
+   * Read at most every few minutes; search never fails because of it.
+   */
+  private async penalisedVendors(): Promise<Set<string>> {
+    if (this.penalised && Date.now() - this.penalised.at < PENALISED_TTL_MS) return this.penalised.ids;
+    try {
+      this.penalised = { ids: new Set(await penalisedVendorIds(this.prisma)), at: Date.now() };
+    } catch {
+      this.penalised = { ids: new Set(), at: Date.now() };
+    }
+    return this.penalised.ids;
+  }
 
   async searchListings(query: SearchListingsDto) {
     const page = query.page ?? 1;
@@ -94,12 +114,11 @@ export class MarketplaceService {
     else if (query.sort === 'price_desc') orderBy = { price: 'desc' };
     else if (query.sort === 'newest') orderBy = { created_at: 'desc' };
 
-    const [total, listings] = await Promise.all([
-      this.prisma.vendorListing.count({ where }),
+    const load = (w: any, from?: number, take?: number) =>
       this.prisma.vendorListing.findMany({
-        where,
-        skip: inMemory ? 0 : skip,
-        take: inMemory ? undefined : limit,
+        where: w,
+        skip: from,
+        take,
         orderBy,
         include: {
           category: { select: { id: true, name: true, default_payment_plan: true } },
@@ -114,8 +133,25 @@ export class MarketplaceService {
           },
           _count: { select: { reviews: true } },
         },
-      }),
-    ]);
+      });
+
+    // Vendors who cancelled too often (2+ of their own cancellations in 90 days) are shown after
+    // everyone else, in the same order otherwise: the page is filled from the others first.
+    const penalised = await this.penalisedVendors();
+    let total: number;
+    let listings: Awaited<ReturnType<typeof load>>;
+    if (inMemory || !penalised.size) {
+      [total, listings] = await Promise.all([this.prisma.vendorListing.count({ where }), load(where, inMemory ? 0 : skip, inMemory ? undefined : limit)]);
+    } else {
+      const ids = [...penalised];
+      const first = { AND: [where, { vendor_id: { notIn: ids } }] };
+      const last = { AND: [where, { vendor_id: { in: ids } }] };
+      const [all, firstCount] = await Promise.all([this.prisma.vendorListing.count({ where }), this.prisma.vendorListing.count({ where: first })]);
+      total = all;
+      const head = firstCount > skip ? await load(first, skip, limit) : [];
+      const tail = head.length < limit ? await load(last, Math.max(0, skip - firstCount), limit - head.length) : [];
+      listings = [...head, ...tail];
+    }
 
     const avgRatings = await this.getAverageRatings(listings.map((l) => l.id));
 
@@ -132,6 +168,8 @@ export class MarketplaceService {
     if (inMemory) matched = formattedListings.length;
     if (sortByRating) formattedListings.sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
     else if (near && (query.sort === 'distance' || !query.sort)) formattedListings.sort((a, b) => (a.distance_miles ?? 1e9) - (b.distance_miles ?? 1e9));
+    // vendors who cancelled too often go last, keeping the order above (sort is stable)
+    if (inMemory && penalised.size) formattedListings.sort((a, b) => Number(penalised.has(a.vendor_id)) - Number(penalised.has(b.vendor_id)));
     if (inMemory) formattedListings = formattedListings.slice(skip, skip + limit);
 
     return {
@@ -139,6 +177,25 @@ export class MarketplaceService {
       data: formattedListings,
       meta: { total: matched, page, limit, last_page: Math.ceil(matched / limit) },
     };
+  }
+
+  /**
+   * Up to `take` packages in the same category, from other active vendors free on `date` (yyyy-MM-dd),
+   * for a customer whose vendor cancelled. Search's own order and filters (including the ranking above).
+   */
+  async similarAvailable(input: { categoryId: string; date: string; excludeVendorId: string; take?: number }) {
+    const take = input.take ?? 4;
+    const res = await this.searchListings({ category_id: input.categoryId, date: input.date, limit: take * 3 } as SearchListingsDto);
+    const seen = new Set<string>([input.excludeVendorId]);
+    const picks: { id: string; title: string; price: number; image: string | null; vendor_id: string; vendor_name: string | null; avg_rating: number | null }[] = [];
+    // one package per vendor
+    for (const l of res.data as any[]) {
+      if (seen.has(l.vendor_id)) continue;
+      seen.add(l.vendor_id);
+      picks.push({ id: l.id, title: l.title, price: Number(l.price ?? 0), image: l.images?.[0] ?? null, vendor_id: l.vendor_id, vendor_name: l.vendor?.vendorProfile?.business_name || l.vendor?.name || null, avg_rating: l.avg_rating ?? null });
+      if (picks.length >= take) break;
+    }
+    return picks;
   }
 
   async getListing(id: string) {

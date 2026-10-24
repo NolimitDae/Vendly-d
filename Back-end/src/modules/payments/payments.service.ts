@@ -14,6 +14,7 @@ import { AUTO_RELEASE_DAYS, buildSchedule, MAX_ATTEMPTS, PROOF_RELEASE_HOURS, RE
 import { track } from 'src/common/analytics';
 import { vendorEarnings } from './vendor-earnings';
 import { bookingTitle, cardText, money, shortDate } from './money-text';
+import { autoRetryAt, deadlineText, dueKindFor, PAYMENT_DUE_REMINDER_HOURS, PAYMENT_DUE_HOURS, paymentDueBy, PaymentDueKind, paymentState } from './payment-due';
 import { checkDisputePhotos, describeDisputeAsk, disputePhotoUrls, removeDisputePhotos, storeDisputePhotos } from './dispute-files';
 import { requestPhotoUrls } from 'src/modules/booking/request-photos';
 import { NOT_STARTED_FLAG_HOURS, notStartedWindow, pastStartNotStarted } from 'src/modules/booking/no-show';
@@ -48,6 +49,19 @@ export interface RefundPart {
 
 /** Stripe statuses a saved-card charge can land in that still need the customer. */
 const NEEDS_CUSTOMER = new Set(['requires_action', 'requires_payment_method', 'requires_confirmation']);
+
+/** What recordFailure reads from the booking of a failed charge. */
+interface FailureBooking {
+  id: string;
+  customer_id: string;
+  vendor_id?: string;
+  payment_plan?: PaymentPlan | null;
+  deposit_rules?: boolean | null;
+  payment_due_by?: Date | null;
+  listing: { title: string } | null;
+  customer: { email: string | null; name: string | null };
+  vendor?: { email: string | null; name: string | null } | null;
+}
 
 /** What paidSoFar and checkoutPart read from a booking. */
 interface CheckoutBooking {
@@ -188,7 +202,14 @@ export class PaymentsService {
   async chargeInstallment(installmentId: string, paymentMethodOverride?: string) {
     const inst = await this.prisma.bookingInstallment.findUnique({
       where: { id: installmentId },
-      include: { booking: { select: { id: true, customer_id: true, payment_method_id: true, status: true, listing: { select: { title: true } }, customer: { select: { email: true, name: true, billing_id: true } } } } },
+      include: {
+        booking: {
+          select: {
+            id: true, customer_id: true, vendor_id: true, payment_method_id: true, status: true, payment_plan: true, deposit_rules: true, payment_due_by: true,
+            listing: { select: { title: true } }, customer: { select: { email: true, name: true, billing_id: true } }, vendor: { select: { email: true, name: true } },
+          },
+        },
+      },
     });
     if (!inst) return null;
     if (inst.status !== InstallmentStatus.SCHEDULED) return inst;
@@ -332,6 +353,11 @@ export class PaymentsService {
         },
       });
       if (!authorizedOnly) await tx.booking.updateMany({ where: { id: inst.booking_id, paid_at: null }, data: { paid_at: new Date() } });
+      // a missed deposit or balance paid in time: the booking is no longer waiting for it
+      const paidKind = inst.kind === 'charge' ? (inst.sequence === 1 ? 'deposit' : inst.sequence === 2 ? 'balance' : null) : null;
+      if (!authorizedOnly && paidKind) {
+        await tx.booking.updateMany({ where: { id: inst.booking_id, payment_due_kind: paidKind }, data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } });
+      }
       return inst;
     });
     // the customer's receipt; never lets an email problem touch the payment (the hourly sweep catches misses)
@@ -354,11 +380,14 @@ export class PaymentsService {
     installmentId: string,
     attempt: number,
     message: string,
-    b: { id: string; customer_id: string; listing: { title: string } | null; customer: { email: string | null; name: string | null } },
-    inst: { label: string; amount: unknown },
+    b: FailureBooking,
+    inst: { label: string; amount: unknown; kind?: string; sequence?: number },
     paymentIntentId?: string,
     needsCustomer = false,
   ) {
+    // deposit plans: 12 hours to pay, then the booking is cancelled (payment-due.ts)
+    const dueKind = inst.kind && inst.sequence ? dueKindFor(b, { kind: inst.kind, sequence: inst.sequence }) : null;
+    if (dueKind) return this.recordMissedDeposit(installmentId, attempt, message, b, inst, dueKind, paymentIntentId, needsCustomer);
     const exhausted = attempt >= MAX_ATTEMPTS || needsCustomer;
     track('payment_failed', b.customer_id, { booking_id: b.id, attempt, final: exhausted, needs_customer: needsCustomer });
     const updated = await this.prisma.bookingInstallment.update({
@@ -383,6 +412,95 @@ export class PaymentsService {
     }
     void this.push.sendToUser(b.customer_id, { title: 'Payment problem', body, data: { type: 'booking', bookingId: b.id } }, 'payments');
     return updated;
+  }
+
+  /**
+   * A deposit plan's deposit or balance didn't go through: the customer has 12 hours from the first
+   * failure to pay it (the deadline doesn't move on later failures). One automatic retry about 6 hours
+   * in, unless the bank needs the customer. The customer hears it with the amount, the deadline in
+   * their time zone and a pay link; the vendor hears the payment is pending (once).
+   */
+  private async recordMissedDeposit(
+    installmentId: string,
+    attempt: number,
+    message: string,
+    b: FailureBooking,
+    inst: { label: string; amount: unknown },
+    kind: PaymentDueKind,
+    paymentIntentId: string | undefined,
+    needsCustomer: boolean,
+  ) {
+    const now = new Date();
+    // only the first failure starts the clock
+    const started = !b.payment_due_by;
+    const dueBy = b.payment_due_by ?? paymentDueBy(now);
+    if (started) {
+      await this.prisma.booking.updateMany({ where: { id: b.id, payment_due_by: null }, data: { payment_due_by: dueBy, payment_due_kind: kind, payment_due_reminded_at: null } });
+    }
+    const retryAt = attempt === 1 && !needsCustomer ? autoRetryAt(now, dueBy) : null;
+    track('payment_failed', b.customer_id, { booking_id: b.id, attempt, final: !retryAt, needs_customer: needsCustomer, due: kind });
+    const updated = await this.prisma.bookingInstallment.update({
+      where: { id: installmentId },
+      data: {
+        status: retryAt ? InstallmentStatus.SCHEDULED : InstallmentStatus.FAILED,
+        attempts: attempt,
+        next_attempt_at: retryAt,
+        last_error: message,
+        payment_intent_id: paymentIntentId ?? undefined,
+      },
+    });
+    await this.notifyPaymentDue(b, { kind, amount: Number(inst.amount), label: inst.label, dueBy, reason: message, retryAt, tellVendor: started });
+    return updated;
+  }
+
+  /**
+   * Tells the customer a deposit or balance is waiting (amount, deadline in their time zone, pay link),
+   * and with `tellVendor` the vendor that the payment is pending. Also the ~2-hours-left reminder.
+   */
+  async notifyPaymentDue(
+    b: { id: string; customer_id: string; vendor_id?: string; listing: { title: string } | null; customer: { email: string | null; name: string | null }; vendor?: { email: string | null; name: string | null } | null },
+    p: { kind: PaymentDueKind; amount: number; label?: string; dueBy: Date; reason?: string; retryAt?: Date | null; tellVendor?: boolean; reminder?: boolean },
+  ) {
+    const title = b.listing?.title ?? 'your booking';
+    const clientUrl = appConfig().app.client_app_url;
+    // the time zone the booking was made in (the customer's, and the event's)
+    const contract = await Promise.resolve()
+      .then(() => this.prisma.bookingContract.findFirst({ where: { booking_id: b.id }, orderBy: { version: 'desc' }, select: { merge_data: true } }))
+      .catch(() => null);
+    const tz = (contract?.merge_data as Record<string, unknown> | null)?.timezone as string | undefined;
+    const when = deadlineText(p.dueBy, tz);
+    const what = p.kind === 'deposit' ? 'deposit' : 'balance';
+    const amount = money(p.amount);
+    const body = p.reminder
+      ? `About ${PAYMENT_DUE_REMINDER_HOURS} hours left: pay the ${amount} ${what} for ${title} by ${when}, or the booking will be cancelled.`
+      : `We couldn't take the ${amount} ${what} for ${title}${p.reason ? ` (${p.reason})` : ''}. Pay it by ${when} with your card or another card to keep your booking. If it isn't paid by then, the booking is cancelled.${p.retryAt ? ' We will also try your card again once in a few hours.' : ''}`;
+    const payUrl = `${clientUrl}/bookings/${b.id}?pay=1`;
+    if (b.customer.email) {
+      await this.mail
+        .sendBookingNotification({
+          to: b.customer.email,
+          recipientName: b.customer.name ?? '',
+          subject: p.reminder ? `${PAYMENT_DUE_REMINDER_HOURS} hours left to pay — ${title}` : `Payment needed by ${when} — ${title}`,
+          message: body,
+          status: 'PAYMENT_FAILED',
+          listingTitle: title,
+          amount: p.amount,
+          lines: [{ label: 'Pay by', value: when }],
+          ctaUrl: payUrl,
+          ctaLabel: `Pay ${amount}`,
+        })
+        .catch(() => null);
+    }
+    void this.push.sendToUser(b.customer_id, { title: p.reminder ? 'Payment due soon' : `Pending ${what}`, body, data: { type: 'booking', bookingId: b.id } }, 'payments');
+    if (p.tellVendor && b.vendor_id) {
+      const vendorBody = `${b.customer.name ?? 'The customer'}'s ${what} of ${amount} for ${title} didn't go through. They have until ${when} (${PAYMENT_DUE_HOURS} hours) to pay. If they don't, the booking is cancelled automatically and you keep what the cancellation terms give you.`;
+      void this.push.sendToUser(b.vendor_id, { title: `Pending ${what}`, body: vendorBody, data: { type: 'booking', bookingId: b.id } }, 'booking_updates');
+      if (b.vendor?.email) {
+        await this.mail
+          .sendBookingNotification({ to: b.vendor.email, recipientName: b.vendor.name ?? '', subject: `Payment pending — ${title}`, message: vendorBody, status: 'PENDING', listingTitle: title, ctaUrl: `${clientUrl}/vendor/bookings/${b.id}`, topic: 'booking_updates' })
+          .catch(() => null);
+      }
+    }
   }
 
   /** Customer retries a failed installment, optionally with a different saved card. */
@@ -1106,7 +1224,7 @@ export class PaymentsService {
       if (early > 0) await this.recordRecovery(b.vendor_id, bookingId, -early, b.currency ?? 'usd');
       // a booking the vendor never started (a no-show) is over: it leaves the vendor's upcoming work
       if (b.status === BookingStatus.CONFIRMED) {
-        await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.CANCELLED, cancelled_at: now, cancel_reason: 'Refunded in full by Vendly after a reported problem' } });
+        await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.CANCELLED, cancelled_at: now, cancel_reason: 'Refunded in full by Vendly after a reported problem', cancelled_by: 'ADMIN', payment_due_by: null, payment_due_kind: null } });
       }
     }
 
@@ -1530,6 +1648,7 @@ export class PaymentsService {
       select: {
         customer_id: true, vendor_id: true, status: true, amount: true, service_fee: true, security_deposit: true, currency: true, payment_plan: true, payment_method_id: true, payment_transaction_id: true,
         paid_at: true, release_at: true, released_at: true, customer_approved_at: true, dispute_opened_at: true, dispute_resolved_at: true, event_start_at: true, scheduled_at: true,
+        payment_due_by: true, payment_due_kind: true,
         installments: { orderBy: { sequence: 'asc' } },
       },
     });
@@ -1562,6 +1681,9 @@ export class PaymentsService {
       success: true,
       data: {
         plan: b.payment_plan,
+        // a missed deposit or balance waiting to be paid by payment_due_by (payment-due.ts)
+        payment_state: paymentState(b),
+        payment_due_by: paymentState(b) ? b.payment_due_by : null,
         currency: b.currency ?? 'usd',
         total: round2(total),
         paid: Math.round(paid * 100) / 100,

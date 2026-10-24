@@ -26,15 +26,8 @@ import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceBu
 import { InspirationPhotos } from "@/components/bookings/InspirationPhotos";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  CONFIRMED: "bg-blue-100 text-blue-700",
-  IN_PROGRESS: "bg-blush-100 text-plum-700",
-  COMPLETED: "bg-green-100 text-green-700",
-  CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-  REJECTED: "bg-red-100 text-red-600",
-};
+import { bookingStatusColor, bookingStatusLabel, cancellationLine, dueByText, paymentStateText } from "@/lib/booking-status";
+import SimilarVendors, { type SimilarVendorsData } from "@/components/bookings/SimilarVendors";
 
 interface Proof {
   id: string;
@@ -74,6 +67,15 @@ interface Booking {
   security_deposit?: number | string | null;
   rental_reservations?: RentalBookingFields["rental_reservations"];
   rental_return?: RentalBookingFields["rental_return"];
+  expired_at?: string | null;
+  /** a missed deposit or balance waiting to be paid by payment_due_by */
+  payment_state?: "pending_deposit" | "pending_balance" | null;
+  payment_due_by?: string | null;
+  cancelled_by?: string | null;
+  cancel_reason_label?: string | null;
+  cancel_reason?: string | null;
+  /** the vendor cancelled: other vendors free on the date */
+  similar_vendors?: SimilarVendorsData | null;
 }
 
 export default function CustomerBookingDetailPage() {
@@ -93,6 +95,12 @@ export default function CustomerBookingDetailPage() {
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("report") === "1") setReporting(true);
   }, []);
+  // ?pay=1 (from the "payment needed" email and push): straight to the payments
+  useEffect(() => {
+    if (!loading && new URLSearchParams(window.location.search).get("pay") === "1") {
+      setTimeout(() => document.getElementById("booking-payments")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+    }
+  }, [loading]);
   const reportProblem = () => {
     setCancelling(false);
     setReporting(true);
@@ -162,15 +170,31 @@ export default function CustomerBookingDetailPage() {
             </p>
             <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">by {booking.vendor?.name}</p>
           </div>
-          <span
-            className={cn(
-              "text-xs font-semibold px-2.5 py-1 rounded-full",
-              STATUS_COLORS[booking.status] ?? "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-            )}
-          >
-            {booking.status}
+          <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", bookingStatusColor(booking))}>
+            {bookingStatusLabel(booking)}
           </span>
         </div>
+        {booking.payment_state && booking.payment_due_by && (
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-300 space-y-1" data-testid="payment-due">
+            <p className="font-semibold">{paymentStateText(booking.payment_state)}</p>
+            <p>
+              Your payment didn’t go through. Pay by {dueByText(booking.payment_due_by)} with your card or another card, or the booking is cancelled
+              {booking.payment_state === "pending_balance" ? " and your deposit isn’t refunded" : ""}.
+            </p>
+            <button
+              type="button"
+              onClick={() => document.getElementById("booking-payments")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="font-semibold underline"
+            >
+              Pay now
+            </button>
+          </div>
+        )}
+        {booking.status === "CANCELLED" && cancellationLine(booking, "CUSTOMER") && (
+          <p className="text-sm text-gray-600 dark:text-gray-300" data-testid="cancel-reason">
+            {cancellationLine(booking, "CUSTOMER")}
+          </p>
+        )}
         {booking.status === "PENDING" && vendorAnswersWithin(booking.request_expires_at) && (
           <p className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
             <Clock className="w-4 h-4 flex-shrink-0" aria-hidden />
@@ -228,12 +252,12 @@ export default function CustomerBookingDetailPage() {
       </div>
 
       {booking.status === "CANCELLED" && <RefundCard bookingId={booking.id} role="CUSTOMER" cancelledAt={booking.cancelled_at} />}
+      {booking.status === "CANCELLED" && booking.similar_vendors && <SimilarVendors data={booking.similar_vendors} />}
 
       {cancelling && (
         <CancelBookingDialog
           bookingId={booking.id}
           role="CUSTOMER"
-          defaultReason="Customer cancelled"
           onReportProblem={reportProblem}
           onClose={() => setCancelling(false)}
           onCancelled={() => {

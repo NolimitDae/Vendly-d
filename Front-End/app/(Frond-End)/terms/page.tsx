@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "The terms that govern your use of Vendly, including bookings, contracts, payments, refunds and disputes.",
 };
 
-const LAST_UPDATED = "October 9, 2026";
+const LAST_UPDATED = "October 24, 2026";
 const COMPANY = "ADEJORO HOLDINGS LLC";
 
 // Draft written to match how the platform works today; have it reviewed by a lawyer before relying on it.
@@ -149,9 +149,25 @@ const sections: { id: string; title: string; body: React.ReactNode }[] = [
           signed contract (Flexible, Moderate or Strict). The Vendly Protection fee is not refunded when a customer
           cancels, unless the vendor&apos;s policy gives a full refund.
         </li>
+        {/* [LAWYER REVIEW] deposits and missed payments (owner's rules, Oct 2026) */}
+        <li>
+          <strong>Deposits.</strong> On a booking paid with a deposit (the 50% and 25% deposit plans), the deposit is
+          non-refundable if the customer cancels, or if the booking is cancelled because a payment wasn&apos;t made.
+          Anything paid beyond the deposit is refunded under the cancellation policy in the signed contract.
+        </li>
+        <li>
+          <strong>Missed payments.</strong> If a deposit or balance payment on a deposit plan doesn&apos;t go through,
+          the customer has 12 hours to pay it, with the same card or another one. If it still isn&apos;t paid, Vendly
+          cancels the booking and it is settled as a customer cancellation. While a payment is overdue, the vendor may
+          also cancel for non-payment, settled the same way.
+        </li>
         <li>
           <strong>Vendor cancels or doesn&apos;t show up.</strong> The customer receives a full refund, including the
-          Vendly Protection fee. Vendors who cancel confirmed bookings may have their account restricted.
+          Vendly Protection fee. Vendors who cancel confirmed bookings may have their account restricted, and vendors
+          who cancel often may be shown lower in search results.
+        </li>
+        <li>
+          <strong>Reasons.</strong> Whoever cancels picks a reason, which the other party and Vendly can see.
         </li>
         <li>
           <strong>Events outside anyone&apos;s control.</strong> If an event can&apos;t go ahead because of severe

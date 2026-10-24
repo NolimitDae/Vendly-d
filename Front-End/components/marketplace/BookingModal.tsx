@@ -14,7 +14,7 @@ import {
 import SignContractPanel from "@/components/contracts/SignContractPanel";
 import SavedCards from "@/components/payments/SavedCards";
 import { InspirationPhotosPicker } from "@/components/bookings/InspirationPhotos";
-import { PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
+import { DEPOSIT_RULE_TEXT, isDepositPlan, PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
 import { toast } from "react-toastify";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { packagePriceText, perUnit, quantityRangeText } from "@/lib/addons";
@@ -328,6 +328,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
               </div>
             ))}
             <p className="text-xs text-gray-500 pt-1 dark:text-gray-400">You pay after the vendor accepts and signs. Vendly holds the money until the service is done.</p>
+            {isDepositPlan(preview.pricing.plan) && <p className="text-xs text-amber-700 dark:text-amber-300" data-testid="deposit-rule">{DEPOSIT_RULE_TEXT}</p>}
           </div>
         )}
 

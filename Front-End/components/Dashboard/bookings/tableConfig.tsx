@@ -4,7 +4,9 @@ import Image from "next/image";
 const paymentStatus: Record<string, string> = {
     Paid: "bg-greenBg border-greenBorder text-greenText py-1 px-4 rounded-full",
     Pending: "border-warningBorder bg-pendingBg text-pendingText py-1 px-4 rounded-full",
-    Refunded: "border-refundBorder bg-refundBg text-refundText py-1 px-3 rounded-full"
+    Refunded: "border-refundBorder bg-refundBg text-refundText py-1 px-3 rounded-full",
+    "Pending deposit": "border-warningBorder bg-pendingBg text-pendingText py-1 px-3 rounded-full",
+    "Pending balance": "border-warningBorder bg-pendingBg text-pendingText py-1 px-3 rounded-full",
 }
 
 const progressStatus: Record<string, string> = {

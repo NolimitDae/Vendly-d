@@ -8,6 +8,7 @@ import { TanvirStorage } from '../../../common/lib/Disk/TanvirStorage';
 import { DateHelper } from '../../../common/helper/date.helper';
 import { ApproveLicenseDto } from './dto/approve-license.dto';
 import { licenceFileUrls } from '../../licence-files/licence-files';
+import { TRACK_THRESHOLD, vendorCancellationCounts } from 'src/modules/booking/vendor-cancellations';
 
 @Injectable()
 export class UserService {
@@ -157,6 +158,8 @@ export class UserService {
       }),
     ]);
 
+    // cancellations of their own in the last 90 days (2 or more: shown after others in search)
+    const cancellations = await vendorCancellationCounts(this.prisma, users.map((u) => u.id)).catch(() => ({}) as Record<string, number>);
     const data = users.map((u) => ({
       id: u.id,
       name: u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim(),
@@ -171,6 +174,8 @@ export class UserService {
       license_status: u.vendorProfile?.license_status ?? null,
       total_listings: u._count.vendorListings,
       total_bookings: u._count.vendorBookings,
+      cancellations_90d: cancellations[u.id] ?? 0,
+      ranked_lower: (cancellations[u.id] ?? 0) >= TRACK_THRESHOLD,
     }));
 
     return {

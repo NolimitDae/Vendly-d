@@ -15,6 +15,8 @@ export interface CancellationSummary {
   refund_fee: number;
   fee_kept: number;
   vendor_keeps: number;
+  /** deposit plans: the paid deposit the vendor keeps (non-refundable when the customer cancels or didn't pay) */
+  deposit_kept?: number;
   policy: { key: string; label: string; text: string } | null;
   percent: number;
   unpaid_cancelled: number;
@@ -26,6 +28,8 @@ export interface CancellationSummary {
   message: string;
   /** preview only: the start time passed and the vendor never started, so Report a problem fits better */
   report_problem_hint?: string;
+  /** preview only: the reasons this person can pick ("Customer didn't pay" only while a payment is overdue) */
+  reasons?: { key: string; label: string }[];
 }
 
 export type TransactionType = "payment" | "refund" | "payout" | "fee";
@@ -63,7 +67,9 @@ export interface TransactionsQuery {
 
 /** Cancel previews, final invoices and the transaction history. */
 export const BookingMoneyService = {
-  cancelPreview: (bookingId: string) => Fetch.get(`/bookings/${bookingId}/cancel-preview`, authHeaders()),
+  /** `reasonCode`: the vendor's "customer_didnt_pay" previews a non-payment cancellation (settled like the customer's). */
+  cancelPreview: (bookingId: string, reasonCode?: string) =>
+    Fetch.get(`/bookings/${bookingId}/cancel-preview${reasonCode ? `?reason_code=${encodeURIComponent(reasonCode)}` : ""}`, authHeaders()),
 
   /** The final invoice PDF as a Blob (customer, vendor or admin). */
   invoice: async (bookingId: string): Promise<Blob> => {

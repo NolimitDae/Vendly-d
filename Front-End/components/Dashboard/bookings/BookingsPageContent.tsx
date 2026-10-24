@@ -36,7 +36,8 @@ function toRow(b: any) {
     totalVendor: b.vendor?.name || "-",
     eventDate: b.scheduled_at ? new Date(b.scheduled_at).toLocaleDateString() : "-",
     amount: b.amount ? `$${Number(b.amount).toFixed(2)}` : "-",
-    payment: PAYMENT_MAP[b.status] ?? "Pending",
+    // a missed deposit or balance on a deposit plan (cancelled automatically 12 hours after it failed)
+    payment: b.payment_state === "pending_deposit" ? "Pending deposit" : b.payment_state === "pending_balance" ? "Pending balance" : PAYMENT_MAP[b.status] ?? "Pending",
     status: STATUS_MAP[b.status] ?? "Pending",
     _raw: b,
   };

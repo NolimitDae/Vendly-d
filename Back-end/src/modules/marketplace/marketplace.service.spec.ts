@@ -60,6 +60,60 @@ describe('MarketplaceService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('vendors who cancel too often are shown last', () => {
+    const listing = (id: string, vendorId: string, extra: Record<string, unknown> = {}) => ({ ...mockListing, id, vendor_id: vendorId, vendor: { ...mockListing.vendor, id: vendorId }, ...extra });
+    beforeEach(() => {
+      (mockPrisma as any).booking = { groupBy: jest.fn().mockResolvedValue([{ vendor_id: 'bad' }]) };
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+    });
+    afterEach(() => delete (mockPrisma as any).booking);
+
+    it('reads vendors with 2 or more of their own cancellations in 90 days', async () => {
+      mockPrisma.vendorListing.count.mockResolvedValue(0);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([]);
+      await service.searchListings({ page: 1, limit: 12 });
+      const args = (mockPrisma as any).booking.groupBy.mock.calls[0][0];
+      expect(args.where).toMatchObject({ status: 'CANCELLED', cancelled_by: 'VENDOR', OR: [{ cancel_reason_code: null }, { cancel_reason_code: { notIn: ['customer_didnt_pay', 'safety_concern', 'non_payment'] } }] });
+      expect(args.having).toEqual({ vendor_id: { _count: { gte: 2 } } });
+    });
+
+    it('fills a page from everyone else first, in the same order, then the demoted vendors', async () => {
+      // 3 others match, then the demoted vendor's packages; page 1 of 2 per page, then page 2
+      mockPrisma.vendorListing.count.mockImplementation(({ where }: any) => Promise.resolve(where.AND ? 3 : 5));
+      mockPrisma.vendorListing.findMany.mockImplementation(({ where, skip, take }: any) => {
+        const others = [listing('a', 'v1'), listing('b', 'v2'), listing('c', 'v3')];
+        const demoted = [listing('x', 'bad'), listing('y', 'bad')];
+        const rows = where.AND[1].vendor_id.notIn ? others : demoted;
+        return Promise.resolve(rows.slice(skip, skip + take));
+      });
+
+      const first = await service.searchListings({ page: 1, limit: 2 });
+      expect(first.data.map((l: any) => l.id)).toEqual(['a', 'b']);
+      expect(first.meta.total).toBe(5);
+      const second = await service.searchListings({ page: 2, limit: 2 });
+      expect(second.data.map((l: any) => l.id)).toEqual(['c', 'x']);
+      const third = await service.searchListings({ page: 3, limit: 2 });
+      expect(third.data.map((l: any) => l.id)).toEqual(['y']);
+    });
+
+    it('sorted by rating (in memory): demoted vendors go after the rest, each group still by rating', async () => {
+      mockPrisma.vendorListing.count.mockResolvedValue(3);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([listing('x', 'bad'), listing('a', 'v1'), listing('b', 'v2')]);
+      mockPrisma.review.groupBy.mockResolvedValue([{ listing_id: 'x', _avg: { rating: 5 } }, { listing_id: 'a', _avg: { rating: 3 } }, { listing_id: 'b', _avg: { rating: 4 } }]);
+      const res = await service.searchListings({ sort: 'rating', page: 1, limit: 12 });
+      expect(res.data.map((l: any) => l.id)).toEqual(['b', 'a', 'x']);
+    });
+
+    it('similar vendors: one package per other vendor free that day, same category', async () => {
+      (mockPrisma as any).booking.groupBy.mockResolvedValue([]);
+      mockPrisma.vendorListing.count.mockResolvedValue(3);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([listing('own', 'me'), listing('a', 'v1'), listing('a2', 'v1'), listing('b', 'v2')]);
+      const picks = await service.similarAvailable({ categoryId: 'cat-1', date: '2026-12-05', excludeVendorId: 'me', take: 4 });
+      expect(picks.map((p) => p.id)).toEqual(['a', 'b']);
+      expect(mockPrisma.vendorListing.findMany.mock.calls[0][0].where).toMatchObject({ category_id: 'cat-1', blockedDates: expect.anything() });
+    });
+  });
+
   describe('searchListings', () => {
     it('should return paginated listings', async () => {
       mockPrisma.vendorListing.count.mockResolvedValue(1);

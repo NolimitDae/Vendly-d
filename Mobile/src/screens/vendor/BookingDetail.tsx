@@ -20,7 +20,8 @@ import VendorDisputeCard from '../../components/VendorDisputeCard';
 import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
 import { closesIn } from '../../utils/requests';
-import { confirmCancelBooking } from '../../components/booking/cancelBooking';
+import CancelBookingSheet from '../../components/booking/CancelBookingSheet';
+import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
 import RefundCard from '../../components/booking/RefundCard';
 import InvoiceButton from '../../components/booking/InvoiceButton';
 import { invoiceAvailable } from '../../services/bookingMoney.service';
@@ -88,15 +89,9 @@ export default function VendorBookingDetail() {
     { text: 'Not yet', style: 'cancel' },
     { text: 'Start', onPress: () => run(() => BookingService.startWork(bookingId), 'Could not start') },
   ]);
-  // shows the vendor what the customer gets back (and what they keep) before cancelling
-  const cancelBooking = async () => {
-    setBusy(true);
-    try {
-      await confirmCancelBooking({ bookingId, role: 'VENDOR', onCancelled: () => load() });
-    } finally {
-      setBusy(false);
-    }
-  };
+  // shows the vendor what the customer gets back (and what they keep) and asks why before cancelling
+  const [cancelling, setCancelling] = useState(false);
+  const cancelBooking = () => setCancelling(true);
   const complete = () => Alert.alert('Mark as completed?', 'Upload proof photos first so the customer can confirm the work.', [
     { text: 'Not yet', style: 'cancel' },
     { text: 'Complete', onPress: () => run(() => BookingService.completeBooking(bookingId), 'Could not complete') },
@@ -161,7 +156,13 @@ export default function VendorBookingDetail() {
   const paid = !!booking.paid_at;
   const customer = booking.customer?.name ?? 'Customer';
   const hero =
-    st === 'PENDING'
+    booking.payment_state && booking.payment_due_by
+      ? {
+          title: PAYMENT_STATE_LABELS[booking.payment_state],
+          body: `${customer}'s payment didn't go through. They have until ${dueByText(booking.payment_due_by)} to pay; if they don't, the booking is cancelled automatically and you keep what the cancellation terms give you. You can also cancel now with "Customer didn't pay".`,
+          icon: 'hourglass-outline' as const,
+        }
+      : st === 'PENDING'
       ? { title: 'New Booking Request', body: `${customer} signed the contract. Review the details, then Accept & Sign or decline.`, icon: 'document-text-outline' as const }
       : st === 'CONFIRMED' && !paid
         ? { title: 'Accepted — awaiting payment', body: `${customer} has been asked to pay. The date is locked in once they do.`, icon: 'hourglass-outline' as const }
@@ -173,12 +174,13 @@ export default function VendorBookingDetail() {
               ? { title: 'Completed', body: paid ? 'Payment is released to your balance under the payout rules.' : 'Completed.', icon: 'checkmark' as const }
               : st === 'REJECTED'
                 ? { title: 'Declined', body: 'You declined this request.', icon: 'close' as const }
-                : { title: 'Cancelled', body: 'This booking was cancelled.', icon: 'close' as const };
+                : { title: 'Cancelled', body: cancellationLine(booking, 'VENDOR') ?? 'This booking was cancelled.', icon: 'close' as const };
   const total = Number(booking.amount ?? 0) + Number(booking.service_fee ?? 0);
   const startAt = booking.event_start_at ?? booking.scheduled_at;
 
   return (
     <View style={s.root}>
+      <CancelBookingSheet bookingId={cancelling ? booking.id : null} role="VENDOR" onClose={() => setCancelling(false)} onCancelled={() => load()} />
       <ScrollView
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}

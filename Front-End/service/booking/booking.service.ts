@@ -53,8 +53,9 @@ export const BookingService = {
   complete: async (id: string) =>
     Fetch.patch(`/bookings/${id}/complete`, {}, authHeaders()),
 
-  cancel: async (id: string, reason?: string) =>
-    Fetch.patch(`/bookings/${id}/cancel`, { reason }, authHeaders()),
+  /** `reason_code`: one of the reasons the cancel preview lists; `note` is optional and the other side sees it. */
+  cancel: async (id: string, body: { reason_code?: string; note?: string } = {}) =>
+    Fetch.patch(`/bookings/${id}/cancel`, body, authHeaders()),
 
   createCheckout: async (id: string) =>
     Fetch.post(`/bookings/${id}/checkout`, {}, authHeaders()),

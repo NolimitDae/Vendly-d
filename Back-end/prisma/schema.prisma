@@ -190,6 +190,8 @@ model User {
   push_token        String?
   // which optional emails and pushes the user wants ({ "booking_updates": true, ... }); null = all on
   notification_prefs Json?
+  // Vendly's admins were told this vendor cancelled too many bookings (see booking/vendor-cancellations.ts)
+  cancellations_alerted_at DateTime?
   // email verification
   email_verified_at DateTime?
   terms_accepted_at DateTime? // when they ticked Terms of Service + Privacy Policy at sign-up
@@ -881,7 +883,11 @@ model Booking {
 
   message        String?  @db.Text
   reject_reason  String?  @db.Text
+  // the note written with a cancellation (older bookings: the only reason there is)
   cancel_reason  String?  @db.Text
+  // who cancelled: CUSTOMER | VENDOR | SYSTEM (not paid in time) | ADMIN; the picked reason (booking/cancel-reasons.ts)
+  cancelled_by       String?  @db.VarChar(20)
+  cancel_reason_code String?  @db.VarChar(40)
 
   amount         Decimal? @db.Decimal(10, 2)
   currency       String?  @default("usd")
@@ -897,6 +903,14 @@ model Booking {
   payment_plan       PaymentPlan?
   // Stripe PaymentMethod the customer chose when requesting; charged off-session on accept
   payment_method_id  String?
+  // deposit plans: a missed deposit or balance must be paid by this time, or the booking is cancelled
+  // (payments/payment-due.ts); deposit | balance; the customer was reminded when ~2 hours were left
+  payment_due_by          DateTime?
+  payment_due_kind        String?   @db.VarChar(20)
+  payment_due_reminded_at DateTime?
+  // booked under the deposit rules of Oct 2026 (12 hours to pay a missed charge, deposit non-refundable
+  // when the customer cancels or doesn't pay); bookings made before keep the old rules
+  deposit_rules           Boolean   @default(true)
   // when held funds may be released to the vendor (set on completion, pulled earlier by approval/proof)
   release_at         DateTime?
   released_at        DateTime?
@@ -960,6 +974,8 @@ model Booking {
 
   @@index([status, created_at])
   @@index([status, completed_at])
+  @@index([payment_due_by])
+  @@index([vendor_id, cancelled_at])
   @@map("bookings")
 }
 

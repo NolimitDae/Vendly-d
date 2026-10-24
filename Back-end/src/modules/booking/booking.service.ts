@@ -18,7 +18,7 @@ import { EventToolsService } from 'src/modules/events/tools/event-tools.service'
 import { BookingContractsService, RequestMeta } from 'src/modules/contracts/booking-contracts.service';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
-import { CancellationSummary, cancellationMessage, REFUND_TIMING, settleAgainstPaid, settleCancellation, Settlement } from './cancellation';
+import { CancellationSummary, cancellationMessage, depositPlanVendorOwed, REFUND_TIMING, settleAgainstPaid, settleCancellation, Settlement } from './cancellation';
 import { CANCELLATION_PRESETS } from 'src/modules/contracts/contract-templates';
 import { currentFees } from 'src/modules/platform/platform-settings.service';
 import { PaymentsService } from 'src/modules/payments/payments.service';
@@ -31,6 +31,11 @@ import { disputePhotoUrls } from 'src/modules/payments/dispute-files';
 import { requestPhotoUrls } from './request-photos';
 import { CustomerBookingTab, customerTabOrder, customerTabWhere } from './customer-tabs';
 import { NO_SHOW_HINT, pastStartNotStarted } from './no-show';
+import { CancelledBy, cancelReasonLabel, cancelReasonsFor, countsAgainstVendor, describeCancelReason, NON_PAYMENT } from './cancel-reasons';
+import { TRACK_THRESHOLD, TRACK_WINDOW_DAYS, trackWindowStart, vendorCancellationCounts } from './vendor-cancellations';
+import { isDepositPlan, paymentState, PAYMENT_STATE_LABELS } from 'src/modules/payments/payment-due';
+import { depositShareOf } from 'src/modules/payments/payment-schedule';
+import { MarketplaceService } from 'src/modules/marketplace/marketplace.service';
 
 /** Extra tabs on the vendor's bookings list. */
 export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
@@ -49,7 +54,10 @@ type BookingRow = Awaited<ReturnType<BookingService['getBookingOrFail']>>;
 
 /** What cancelling a booking does with its money (see BookingService.cancellationTerms). */
 interface CancellationTerms {
+  /** whose rules settle the money: the vendor's own cancellation refunds everything, the rest settle as a customer's */
   cancelledBy: 'CUSTOMER' | 'VENDOR';
+  /** deposit plans: the paid deposit the vendor keeps (non-refundable) */
+  depositKept: number;
   settlement: Settlement;
   installments: { status: string; amount: unknown; fee_amount: unknown; refunded_amount: unknown; kind: string; capture_manually: boolean; payment_intent_id: string | null }[];
   policyKey: string | null;
@@ -60,6 +68,25 @@ interface CancellationTerms {
   holdsReleased: number;
   /** part of the refund that didn't go through (recorded as refund_failed and reported) */
   refundFailed?: number;
+}
+
+/**
+ * Whose rules settle a cancellation's money: a vendor cancelling for their own reasons refunds
+ * everything; a vendor cancelling because the customer didn't pay, and Vendly's non-payment
+ * cancellation, settle like the customer's (cancellation.ts).
+ */
+export function settlementSide(by: string, code?: string | null): 'CUSTOMER' | 'VENDOR' {
+  return by === 'VENDOR' && code !== 'customer_didnt_pay' ? 'VENDOR' : 'CUSTOMER';
+}
+
+/** "2026-11-14": the day `at` falls on in a time zone (UTC when unknown), as marketplace search takes it. */
+export function dayInZone(at: Date, timeZone?: string | null) {
+  const fmt = (tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+  try {
+    return fmt(timeZone || 'UTC');
+  } catch {
+    return fmt('UTC');
+  }
 }
 
 /** What the booking is for: the package title, or the rented items. */
@@ -77,6 +104,7 @@ export class BookingService {
     private chatExtras: ChatExtrasService,
     private eventTools: EventToolsService,
     private payments: PaymentsService,
+    private marketplace: MarketplaceService,
   ) {}
 
   private pushBooking(userId: string, bookingId: string, title: string, body: string) {
@@ -379,25 +407,74 @@ export class BookingService {
     const isCustomer = booking.customer_id === userId;
     const isVendor = booking.vendor_id === userId;
     if (!isCustomer && !isVendor) throw new ForbiddenException('Access denied');
+    const by = isCustomer ? 'CUSTOMER' : 'VENDOR';
 
+    // each side picks from its own list; apps from before the lists send none and count as "Other"
+    const code = dto.reason_code ?? 'other';
+    if (!(code in cancelReasonsFor(by))) throw new BadRequestException('Pick one of the reasons offered for cancelling.');
+    if (code === 'customer_didnt_pay' && !(await this.paymentOverdue(booking))) {
+      throw new BadRequestException('You can cancel for non-payment only while a payment on this booking is overdue or has failed.');
+    }
+    const note = (dto.note ?? dto.reason)?.trim() || undefined;
+    return this.cancelAs(booking, by, code, note, userId);
+  }
+
+  /** A deposit or balance waiting to be paid (pending), or a charge on the booking that failed. */
+  private async paymentOverdue(booking: BookingRow) {
+    if (paymentState(booking)) return true;
+    const failed = await this.prisma.bookingInstallment.count({ where: { booking_id: booking.id, status: 'FAILED', kind: { not: 'security_deposit' } } });
+    return failed > 0;
+  }
+
+  /**
+   * The job's side of the 12-hour rule (payments/payment-due.ts): a deposit plan booking whose
+   * deposit or balance still isn't paid at its deadline is cancelled for non-payment and settled like
+   * a customer cancellation (the paid deposit stays with the vendor). Null when there's nothing to do.
+   */
+  async cancelForNonPayment(bookingId: string, now = new Date()) {
+    const booking = await this.getBookingOrFail(bookingId);
+    if (!paymentState(booking) || !booking.payment_due_by || booking.payment_due_by > now) return null;
+    // Vendly settles a disputed booking itself
+    if (booking.dispute_opened_at && !booking.dispute_resolved_at) return null;
+    return this.cancelAs(booking, 'SYSTEM', NON_PAYMENT, undefined, null, now);
+  }
+
+  private async cancelAs(booking: BookingRow, by: Exclude<CancelledBy, 'ADMIN'>, code: string, note: string | undefined, actorId: string | null, cancelledAt = new Date()) {
+    const bookingId = booking.id;
     if (!CANCELLABLE.includes(booking.status))
       throw new BadRequestException(`Cannot cancel a booking in ${booking.status} status`);
     // Vendly settles the money of a disputed booking when it decides
     if (booking.dispute_opened_at && !booking.dispute_resolved_at) throw new BadRequestException(OPEN_DISPUTE);
 
     // Claim the cancellation atomically so two simultaneous cancels can't both refund.
-    const cancelledAt = new Date();
     const claimed = await this.prisma.booking.updateMany({
-      // and no dispute opened since it was loaded
-      where: { id: bookingId, status: { in: CANCELLABLE }, OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }] },
-      data: { status: BookingStatus.CANCELLED, cancelled_at: cancelledAt, cancel_reason: dto.reason },
+      // and no dispute opened since it was loaded; the job only while the payment is still missing
+      where: {
+        id: bookingId,
+        status: { in: CANCELLABLE },
+        OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }],
+        ...(by === 'SYSTEM' ? { payment_due_by: { lte: cancelledAt } } : {}),
+      },
+      data: {
+        status: BookingStatus.CANCELLED,
+        cancelled_at: cancelledAt,
+        cancel_reason: note,
+        cancelled_by: by,
+        cancel_reason_code: code,
+        payment_due_by: null,
+        payment_due_kind: null,
+        payment_due_reminded_at: null,
+      },
     });
     if (claimed.count !== 1) throw new BadRequestException('This booking has already been cancelled or completed');
-    await this.contracts.voidPendingForBooking(bookingId, 'Booking cancelled', userId);
+    await this.contracts.voidPendingForBooking(bookingId, 'Booking cancelled', actorId);
     // requested add-ons and fees die with the booking
     await this.prisma.bookingExtra.updateMany({ where: { booking_id: bookingId, status: { in: [BookingExtraStatus.PENDING, BookingExtraStatus.IN_REVIEW] } }, data: { status: BookingExtraStatus.CANCELLED } });
 
-    const cancelledBy = isCustomer ? 'CUSTOMER' : 'VENDOR';
+    // a vendor's cancellation for their own reasons refunds everything; one because the customer
+    // didn't pay (by the vendor or by Vendly) settles like the customer's
+    const cancelledBy = settlementSide(by, code);
+    const isCustomer = by === 'CUSTOMER';
     // under the booking's money lock, so a refund or payout already under way finishes first
     let terms: CancellationTerms;
     if (booking.paid_at) {
@@ -414,59 +491,129 @@ export class BookingService {
     const title = titleOf(booking) ?? 'Service';
     const card = await this.payments.cardLabel(booking.payment_method_id).catch(() => null);
     const forCustomer = this.describeCancellation(terms, 'CUSTOMER', card, true);
-    const who = isCustomer ? 'You cancelled' : `${booking.vendor?.name ?? 'The vendor'} cancelled`;
+    const reasonText = describeCancelReason({ cancelled_by: by, cancel_reason_code: code, cancel_reason: note });
+    const missed = booking.payment_due_kind === 'balance' ? 'balance' : 'deposit';
+    const vendorName = booking.vendor?.name ?? 'The vendor';
+    const who =
+      by === 'CUSTOMER'
+        ? 'You cancelled this booking.'
+        : by === 'SYSTEM'
+          ? `We cancelled this booking because the ${missed} wasn't paid in time.`
+          : code === 'customer_didnt_pay'
+            ? `${vendorName} cancelled this booking because the payment wasn't made.`
+            : `${vendorName} cancelled this booking.`;
+    // the vendor let the customer down: offer other vendors free on their date
+    const similar = by === 'VENDOR' && code !== 'customer_didnt_pay' ? await this.similarVendorsFor(booking).catch(() => null) : null;
+    const offers = similar?.items ?? [];
 
     // the customer always hears what happens to their money, whoever cancelled
     await this.mailService.sendBookingNotification({
       to: booking.customer.email,
       recipientName: booking.customer.name,
       subject: `Booking cancelled — ${title}`,
-      message: `${who} this booking. ${forCustomer.message}`,
+      message: `${who} ${forCustomer.message}${offers.length ? ` ${offers.length === 1 ? 'A similar vendor is' : `${offers.length} similar vendors are`} free on your date.` : ''}`,
       status: 'CANCELLED',
       listingTitle: title,
-      reason: isVendor ? dto.reason : undefined,
+      reason: isCustomer ? undefined : reasonText ?? undefined,
       lines: [
         { label: 'Refund', value: `$${forCustomer.refund_total.toFixed(2)}` },
         ...(forCustomer.refund_total > 0 && card ? [{ label: 'Refunded to', value: card }] : []),
         ...(forCustomer.refund_total > 0 ? [{ label: 'When', value: `Within ${REFUND_TIMING}` }] : []),
         ...(forCustomer.fee_kept > 0 ? [{ label: 'Vendly Protection fee (not refunded)', value: `$${forCustomer.fee_kept.toFixed(2)}` }] : []),
+        ...(forCustomer.deposit_kept ? [{ label: 'Deposit (non-refundable)', value: `$${forCustomer.deposit_kept.toFixed(2)}` }] : []),
+        ...offers.map((v) => ({ label: 'Free on your date', value: `${v.vendor_name ? `${v.vendor_name}: ` : ''}${v.title}, $${v.price.toFixed(2)}` })),
       ],
-      ctaUrl: `${clientUrl}/bookings/${bookingId}`,
+      ctaUrl: offers.length ? similar!.url : `${clientUrl}/bookings/${bookingId}`,
+      ctaLabel: offers.length ? 'See vendors free on your date' : undefined,
     }).catch(() => null);
+    const refundLine = forCustomer.refund_total > 0 && !forCustomer.refund_failed ? `$${forCustomer.refund_total.toFixed(2)} is being refunded to your card (${REFUND_TIMING}).` : null;
     this.pushBooking(
       booking.customer_id,
       bookingId,
       'Booking cancelled',
-      forCustomer.refund_total > 0 && !forCustomer.refund_failed
-        ? `${title}: $${forCustomer.refund_total.toFixed(2)} is being refunded to your card (${REFUND_TIMING}).`
-        : `${title} was cancelled. ${forCustomer.message}`,
+      offers.length
+        ? `${vendorName} cancelled ${title}.${refundLine ? ` ${refundLine}` : ''} Similar vendors are free on your date.`
+        : refundLine
+          ? `${title}: ${refundLine}`
+          : `${title} was cancelled. ${forCustomer.message}`,
     );
 
-    // and the vendor is told when the customer cancelled
-    if (isCustomer) {
+    // and the vendor is told when the customer cancelled, or Vendly did because the customer didn't pay
+    if (by !== 'VENDOR') {
       const forVendor = this.describeCancellation(terms, 'VENDOR', null, true);
+      const vendorWho = by === 'SYSTEM' ? `The booking was cancelled because the customer didn't pay the ${missed} in time.` : 'The booking has been cancelled by the customer.';
       await this.mailService.sendBookingNotification({
         to: booking.vendor.email,
         recipientName: booking.vendor.name,
         subject: `Booking cancelled — ${title}`,
-        message: `The booking has been cancelled by the customer. ${forVendor.message}`,
+        message: `${vendorWho} ${forVendor.message}`,
         status: 'CANCELLED',
         listingTitle: title,
-        reason: dto.reason,
+        reason: reasonText ?? undefined,
         ctaUrl: `${clientUrl}/vendor/bookings/${bookingId}`,
         topic: 'booking_updates',
       }).catch(() => null);
-      this.pushBooking(booking.vendor_id, bookingId, 'Booking cancelled', `${title} was cancelled by the customer`);
+      this.pushBooking(booking.vendor_id, bookingId, 'Booking cancelled', by === 'SYSTEM' ? `${title} was cancelled: the customer didn't pay the ${missed} in time` : `${title} was cancelled by the customer`);
     }
 
     // money on a paid booking is settled now: the customer gets the final invoice
     if (booking.paid_at) await this.payments.sendFinalInvoice(bookingId).catch((err) => console.error(`Invoice for ${bookingId} failed:`, err));
+    // a vendor's cancellation for their own reasons counts towards Vendly's tracking
+    if (countsAgainstVendor(by, code)) await this.trackVendorCancellations(booking.vendor_id, cancelledAt).catch((err) => console.error(`Cancellation tracking for ${booking.vendor_id} failed:`, err));
 
-    return { success: true, data: { ...this.formatBooking(updated), refund: settlement, refund_summary: this.describeCancellation(terms, cancelledBy, isCustomer ? card : null, true) } };
+    const viewer = by === 'VENDOR' ? 'VENDOR' : 'CUSTOMER';
+    return {
+      success: true,
+      data: {
+        ...this.formatBooking(updated),
+        refund: settlement,
+        refund_summary: this.describeCancellation(terms, viewer, viewer === 'CUSTOMER' ? card : null, true),
+        ...(offers.length ? { similar_vendors: similar } : {}),
+      },
+    };
+  }
+
+  /**
+   * After a vendor's own cancellation: from 2 in 90 days Vendly's admins are told, once per 90 days
+   * (the search ranking follows the count by itself, see MarketplaceService.searchListings).
+   */
+  private async trackVendorCancellations(vendorId: string, now = new Date()) {
+    const count = (await vendorCancellationCounts(this.prisma, [vendorId], now))[vendorId] ?? 0;
+    if (count < TRACK_THRESHOLD) return;
+    const claimed = await this.prisma.user.updateMany({
+      where: { id: vendorId, OR: [{ cancellations_alerted_at: null }, { cancellations_alerted_at: { lt: trackWindowStart(now) } }] },
+      data: { cancellations_alerted_at: now },
+    });
+    if (claimed.count !== 1) return;
+    const vendor = await this.prisma.user.findUnique({ where: { id: vendorId }, select: { name: true, email: true, vendorProfile: { select: { business_name: true } } } });
+    const name = vendor?.vendorProfile?.business_name || vendor?.name || vendor?.email || vendorId;
+    const body = `${name} has cancelled ${count} bookings in the last ${TRACK_WINDOW_DAYS} days (not counting non-payment or safety concerns). Their packages show after others in search while that stays at ${TRACK_THRESHOLD} or more.`;
+    const admins = await this.prisma.user.findMany({ where: { type: 'ADMIN', deleted_at: null }, select: { id: true, email: true, name: true } });
+    for (const a of admins) {
+      void this.pushService.sendToUser(a.id, { title: 'Vendor cancelling bookings', body, data: { type: 'vendor_cancellations', vendorId } });
+      if (a.email) {
+        await this.mailService
+          .sendBookingNotification({ to: a.email, recipientName: a.name ?? '', subject: `Vendor cancelling bookings — ${name}`, message: body, status: 'CANCELLED', listingTitle: 'Vendor cancellations', ctaUrl: `${appConfig().app.client_app_url}/dashboard/vendors` })
+          .catch(() => null);
+      }
+    }
+  }
+
+  /** Other vendors in the same category free on this booking's (future) date, and the marketplace link for more. */
+  private async similarVendorsFor(booking: { id: string; vendor_id: string; event_start_at: Date | null; scheduled_at: Date | null; listing?: { category_id?: string | null } | null }) {
+    const start = booking.event_start_at ?? booking.scheduled_at;
+    const categoryId = booking.listing?.category_id;
+    if (!start || !categoryId || start <= new Date()) return null;
+    const contract = await this.prisma.bookingContract.findFirst({ where: { booking_id: booking.id }, orderBy: { version: 'desc' }, select: { merge_data: true } });
+    const tz = (contract?.merge_data as Record<string, unknown> | null)?.timezone as string | undefined;
+    const date = dayInZone(start, tz);
+    const items = await this.marketplace.similarAvailable({ categoryId, date, excludeVendorId: booking.vendor_id, take: 4 });
+    const url = `${appConfig().app.client_app_url}/marketplace?category_id=${encodeURIComponent(categoryId)}&date=${date}`;
+    return { items, url, category_id: categoryId, date };
   }
 
   /** What cancelling now would do with the money, worded for whoever asks (customer or vendor). Changes nothing. */
-  async cancelPreview(bookingId: string, userId: string) {
+  async cancelPreview(bookingId: string, userId: string, reasonCode?: string) {
     const booking = await this.getBookingOrFail(bookingId);
     const isCustomer = booking.customer_id === userId;
     if (!isCustomer && booking.vendor_id !== userId) throw new ForbiddenException('Access denied');
@@ -474,12 +621,25 @@ export class BookingService {
     if (booking.dispute_opened_at && !booking.dispute_resolved_at) throw new BadRequestException(OPEN_DISPUTE);
     const by = isCustomer ? 'CUSTOMER' : 'VENDOR';
     const now = new Date();
-    const terms = await this.cancellationTerms(booking, by, now);
+    // the vendor's "Customer didn't pay" settles like a customer cancellation (offered only while a payment is overdue)
+    const nonPayment = !isCustomer && (await this.paymentOverdue(booking));
+    const code = reasonCode === 'customer_didnt_pay' && !nonPayment ? undefined : reasonCode;
+    const terms = await this.cancellationTerms(booking, settlementSide(by, code), now);
     const card = isCustomer ? await this.payments.cardLabel(booking.payment_method_id).catch(() => null) : null;
     // past the start and never started (maybe a no-show): the policy would pay the vendor, so the
     // apps point the customer to Report a problem first. Cancelling stays possible.
     const reportInstead = isCustomer && !!booking.paid_at && pastStartNotStarted(booking, now);
-    return { success: true, data: { ...this.describeCancellation(terms, by, card, false), ...(reportInstead && { report_problem_hint: NO_SHOW_HINT }) } };
+    return {
+      success: true,
+      data: {
+        ...this.describeCancellation(terms, by, card, false),
+        ...(reportInstead && { report_problem_hint: NO_SHOW_HINT }),
+        // the reasons this person can pick; "Customer didn't pay" only while a payment is overdue
+        reasons: Object.entries(cancelReasonsFor(by))
+          .filter(([key]) => key !== 'customer_didnt_pay' || nonPayment)
+          .map(([key, label]) => ({ key, label })),
+      },
+    };
   }
 
   /**
@@ -508,15 +668,30 @@ export class BookingService {
       cancelledAt,
     });
     const paid = !!booking.paid_at;
+    const sum = (rows: typeof installments, f: (i: (typeof installments)[number]) => number) => round2(rows.reduce((s, i) => s + f(i), 0));
     // with installments, settle against what was actually paid: the vendor keeps at most what the
     // customer paid towards their price, and everything else paid comes back. Nothing paid: nothing moves.
-    const settlement: Settlement = !paid
+    let settlement: Settlement = !paid
       ? { refundTotal: 0, refundVendorPrice: 0, refundFee: 0, vendorKeeps: 0, percent: owed.percent }
       : installments.length
         ? settleAgainstPaid(owed, installments, cancelledBy, cancelledBy === 'CUSTOMER' ? round2(owed.vendorKeeps + feesAgreed) : 0)
         : owed;
+    // deposit plans (bookings under the Oct 2026 rules): the paid deposit is non-refundable when the
+    // customer cancels or didn't pay; what was paid beyond it follows the policy (cancellation.ts)
+    let depositKept = 0;
+    if (paid && installments.length && cancelledBy === 'CUSTOMER' && booking.deposit_rules && isDepositPlan(booking.payment_plan)) {
+      const vendorPart = (i: (typeof installments)[number]) => Math.max(0, Number(i.amount) - Number(i.fee_amount) - Number(i.refunded_amount));
+      const vendorPaid = sum(installments.filter((i) => i.status === 'PAID'), vendorPart);
+      const first = installments.find((i) => i.kind === 'charge' && i.sequence === 1);
+      const split = installments.some((i) => i.kind === 'charge' && i.sequence === 2);
+      let depositPaid = first?.status === 'PAID' ? round2(vendorPart(first)) : 0;
+      // the event was too close to split the price: the deposit's share of the full payment
+      if (!split) depositPaid = Math.min(depositPaid, round2(Number(booking.amount ?? 0) * depositShareOf(booking.payment_plan!)));
+      const kept = depositPlanVendorOwed({ vendorPaid, depositPaid, feesAgreed, percent: owed.percent });
+      settlement = settleAgainstPaid(owed, installments, 'CUSTOMER', kept.owed);
+      depositKept = kept.depositKept;
+    }
 
-    const sum = (rows: typeof installments, f: (i: (typeof installments)[number]) => number) => round2(rows.reduce((s, i) => s + f(i), 0));
     // charges never taken (rental deposit holds not placed yet aren't charges)
     const unpaid = sum(installments.filter((i) => (i.status === 'SCHEDULED' || i.status === 'FAILED') && i.kind !== 'security_deposit'), (i) => Number(i.amount));
     // card holds let go (voidOpenCharges)
@@ -529,6 +704,7 @@ export class BookingService {
         : round2(Number(booking.service_fee ?? 0));
     return {
       cancelledBy,
+      depositKept,
       settlement,
       installments,
       policyKey: policy ?? null,
@@ -550,6 +726,7 @@ export class BookingService {
       refund_fee: round2(t.settlement.refundFee),
       fee_kept: t.feeKept,
       vendor_keeps: round2(t.settlement.vendorKeeps),
+      ...(t.depositKept > 0 ? { deposit_kept: round2(Math.min(t.depositKept, t.settlement.vendorKeeps)) } : {}),
       policy: preset && t.policyKey ? { key: t.policyKey, label: preset.label, text: preset.text } : null,
       percent: t.settlement.percent,
       unpaid_cancelled: t.unpaidCancelled,
@@ -746,6 +923,10 @@ export class BookingService {
     // the customer and the vendor see the dispute photos through short-lived signed links
     data.dispute_photo_urls = disputePhotoUrls(booking.dispute_photos, userId, booking.id);
     data.request_photo_urls = requestPhotoUrls(booking.request_photos, userId, booking.id);
+    // the vendor cancelled for their own reasons: the customer sees vendors free on their date
+    if (booking.customer_id === userId && booking.status === BookingStatus.CANCELLED && booking.cancelled_by === 'VENDOR' && booking.cancel_reason_code !== 'customer_didnt_pay') {
+      data.similar_vendors = await this.similarVendorsFor(booking).catch(() => null);
+    }
     // a vendor deciding on a request sees what else they've already agreed to that day
     if (booking.vendor_id === userId && booking.status === BookingStatus.PENDING) {
       data.same_day_bookings = await this.sameDayBookings(booking).catch(() => []);
@@ -1006,7 +1187,7 @@ export class BookingService {
     return {
       customer: { select: { id: true, name: true, avatar: true, email: true } },
       vendor: { select: { id: true, name: true, avatar: true, email: true } },
-      listing: { select: { id: true, title: true, price: true, images: true } },
+      listing: { select: { id: true, title: true, price: true, images: true, category_id: true } },
       review: { select: { id: true, rating: true, comment: true } },
       rental_reservations: { select: { id: true, quantity: true, start_date: true, end_date: true, daily_rate: true, status: true, item: { select: { id: true, title: true, images: true } } } },
       rental_return: true,
@@ -1025,6 +1206,12 @@ export class BookingService {
       ...booking,
       // an open request is declined automatically at this time if the vendor hasn't answered
       request_expires_at: booking.status === BookingStatus.PENDING && booking.created_at ? requestExpiresAt(booking) : null,
+      // a missed deposit or balance waiting to be paid by payment_due_by: the apps show this label as the status
+      payment_state: paymentState(booking),
+      payment_state_label: paymentState(booking) ? PAYMENT_STATE_LABELS[paymentState(booking)!] : null,
+      payment_due_by: paymentState(booking) ? booking.payment_due_by : null,
+      // why it was cancelled, as picked from the list ("Double booked"); the note is cancel_reason
+      cancel_reason_label: cancelReasonLabel(booking.cancel_reason_code, booking.cancelled_by),
       customer: booking.customer
         ? { ...booking.customer, avatar_url: avatarUrl(booking.customer.avatar) }
         : null,

@@ -26,6 +26,20 @@ export interface Booking {
   /** set when the vendor didn't answer the request in time */
   expired_at?: string | null;
   payment_plan?: string | null;
+  /** deposit plans: a missed deposit or balance to pay by payment_due_by, or the booking is cancelled */
+  payment_state?: 'pending_deposit' | 'pending_balance' | null;
+  payment_due_by?: string | null;
+  /** who cancelled (CUSTOMER | VENDOR | SYSTEM | ADMIN), the reason picked, and the note (cancel_reason) */
+  cancelled_by?: string | null;
+  cancel_reason_label?: string | null;
+  cancel_reason?: string | null;
+  /** the vendor cancelled: other vendors in the category free on the date (customers, on the booking itself) */
+  similar_vendors?: {
+    items: { id: string; title: string; price: number; image: string | null; vendor_id: string; vendor_name: string | null; avg_rating: number | null }[];
+    url: string;
+    category_id: string;
+    date: string;
+  } | null;
   /** the customer's review, once they left one */
   review?: { id: string; rating: number; comment?: string | null } | null;
   early_released_amount?: number | string | null;

@@ -29,6 +29,9 @@ export interface Installment {
 
 export interface PaymentTimeline {
   plan: PaymentPlan | null;
+  /** deposit plans: a missed deposit or balance to pay by payment_due_by, or the booking is cancelled */
+  payment_state?: 'pending_deposit' | 'pending_balance' | null;
+  payment_due_by?: string | null;
   currency: string;
   total: number;
   paid: number;

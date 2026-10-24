@@ -10,6 +10,8 @@ export interface InvoiceData {
   /** whose copy: the vendor's and Vendly's show the payout and commission */
   copy: 'customer' | 'vendor' | 'admin';
   booking: { id: string; title: string; status: string; event_date: Date | null; created_at: Date; completed_at: Date | null; cancelled_at: Date | null };
+  /** cancelled bookings: who cancelled and why ("Cancelled by the vendor", "Double booked. Note...") */
+  cancellation?: { by: string | null; reason: string | null } | null;
   customer: { name: string; email: string | null };
   vendor: { name: string; email: string | null };
   /** package, add-ons at booking, promo, add-ons and fees added later, Vendly Protection fee */
@@ -134,6 +136,8 @@ export async function buildInvoicePdf(inv: InvoiceData): Promise<Uint8Array> {
   w.row('Booked on', shortDate(inv.booking.created_at));
   const status = inv.booking.status === 'CANCELLED' ? `Cancelled ${shortDate(inv.booking.cancelled_at)}` : inv.booking.status === 'COMPLETED' ? `Completed ${shortDate(inv.booking.completed_at)}` : inv.booking.status.replace('_', ' ').toLowerCase();
   w.row('Status', status);
+  if (inv.cancellation?.by) w.row('Cancelled by', inv.cancellation.by);
+  if (inv.cancellation?.reason) w.row('Cancellation reason', inv.cancellation.reason);
   w.row('Customer', [inv.customer.name, inv.customer.email].filter(Boolean).join(' - '));
   w.row('Vendor', [inv.vendor.name, inv.vendor.email].filter(Boolean).join(' - '));
 

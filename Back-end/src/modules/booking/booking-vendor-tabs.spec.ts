@@ -16,7 +16,7 @@ function setup() {
     bookingInstallment: { groupBy: jest.fn().mockResolvedValue([{ booking_id: 'b1', _sum: { refunded_amount: '60.50' } }]) },
   };
   const none: any = {};
-  return { service: new BookingService(prisma, none, none, none, none, none, none), prisma };
+  return { service: new BookingService(prisma, none, none, none, none, none, none, none), prisma };
 }
 
 describe('Vendor bookings: Refunds and Complaints tabs', () => {

@@ -396,4 +396,23 @@ describe('ListingDetailPage', () => {
       expect(screen.queryByText('Possible fees after the service')).not.toBeInTheDocument();
     });
   });
+
+  describe('cancellation policy', () => {
+    const policy = { key: 'moderate', label: 'Moderate', text: 'Full refund if the Customer cancels at least 30 days before the event date.' };
+
+    it('on a deposit plan, says the deposit is non-refundable', async () => {
+      setupNotLoggedIn();
+      setupListingMock({ cancellation_policy: policy, effective_payment_plan: 'DEPOSIT_25' });
+      render(<ListingDetailPage />);
+      expect(await screen.findByTestId('deposit-rule')).toHaveTextContent(/The deposit is non-refundable if you cancel/);
+    });
+
+    it('says nothing about deposits on other plans', async () => {
+      setupNotLoggedIn();
+      setupListingMock({ cancellation_policy: policy, effective_payment_plan: 'FULL_ON_ACCEPT' });
+      render(<ListingDetailPage />);
+      expect(await screen.findByText(/Cancellation policy: Moderate/)).toBeInTheDocument();
+      expect(screen.queryByTestId('deposit-rule')).not.toBeInTheDocument();
+    });
+  });
 });

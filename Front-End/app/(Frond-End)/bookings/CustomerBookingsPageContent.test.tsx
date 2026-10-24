@@ -235,13 +235,17 @@ describe('CustomerBookingsPageContent', () => {
       // the preview, before anything is cancelled
       expect(await screen.findByText(/You'll get \$75\.00 back to your card/)).toBeInTheDocument();
       expect(screen.getByText(/Flexible cancellation policy/)).toBeInTheDocument();
-      expect(BookingMoneyService.cancelPreview).toHaveBeenCalledWith('b1');
+      expect(BookingMoneyService.cancelPreview).toHaveBeenCalledWith('b1', undefined);
       expect(BookingService.cancel).not.toHaveBeenCalled();
 
+      // a reason has to be picked first
+      expect(screen.getByRole('button', { name: /^cancel booking$/i })).toBeDisabled();
+      await user.click(screen.getByRole('radio', { name: 'Plans changed' }));
+      await user.type(screen.getByRole('textbox'), 'Moved to spring');
       await user.click(screen.getByRole('button', { name: /^cancel booking$/i }));
 
       await waitFor(() => {
-        expect(BookingService.cancel).toHaveBeenCalledWith('b1', 'Customer cancelled');
+        expect(BookingService.cancel).toHaveBeenCalledWith('b1', { reason_code: 'plans_changed', note: 'Moved to spring' });
       });
       expect(toast.success).toHaveBeenCalledWith('Booking cancelled');
       expect(await screen.findByText('$75.00 is being refunded to your card (Visa •••• 4242).')).toBeInTheDocument();
@@ -268,6 +272,7 @@ describe('CustomerBookingsPageContent', () => {
       await waitFor(() => screen.getByRole('button', { name: /^cancel$/i }));
       await user.click(screen.getByRole('button', { name: /^cancel$/i }));
       await screen.findByText(/You'll get/);
+      await user.click(screen.getByRole('radio', { name: 'Price' }));
       await user.click(screen.getByRole('button', { name: /^cancel booking$/i }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('fail');

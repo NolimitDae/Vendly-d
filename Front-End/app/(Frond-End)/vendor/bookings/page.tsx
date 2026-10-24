@@ -7,15 +7,7 @@ import Image from "next/image";
 import { Calendar, Clock, Loader2, CheckCircle2, XCircle, Play, Eye } from "lucide-react";
 import { toast } from "react-toastify";
 import { categoryLabel } from "@/components/disputes/DisputeDetails";
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  CONFIRMED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  IN_PROGRESS: "bg-blush-100 text-plum-700 dark:bg-plum-900/30 dark:text-orchid-300",
-  COMPLETED: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
-  REJECTED: "bg-red-100 text-red-600",
-};
+import { bookingStatusColor, bookingStatusLabel, cancellationLine } from "@/lib/booking-status";
 
 interface Booking {
   id: string;
@@ -32,6 +24,12 @@ interface Booking {
   /** Refunds tab: money refunded to the customer's card, and how much of it the vendor gave back */
   refunded_total?: number;
   given_back?: number;
+  expired_at?: string | null;
+  /** the customer's deposit or balance didn't go through and is due soon */
+  payment_state?: "pending_deposit" | "pending_balance" | null;
+  cancelled_by?: string | null;
+  cancel_reason_label?: string | null;
+  cancel_reason?: string | null;
 }
 
 /** Server-side filters next to the status tabs. */
@@ -152,8 +150,8 @@ export default function VendorBookingsPage() {
                           <span className="text-sm text-gray-500 dark:text-gray-400">{booking.customer?.name}</span>
                         </div>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${STATUS_COLORS[booking.status] ?? ""}`}>
-                        {booking.status.replace("_", " ")}
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${bookingStatusColor(booking)}`}>
+                        {bookingStatusLabel(booking)}
                       </span>
                     </div>
 
@@ -190,6 +188,10 @@ export default function VendorBookingsPage() {
                           <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300">${Number(booking.given_back).toFixed(2)} given back</span>
                         )}
                       </div>
+                    )}
+
+                    {booking.status === "CANCELLED" && cancellationLine(booking, "VENDOR") && (
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{cancellationLine(booking, "VENDOR")}</p>
                     )}
 
                     {booking.message && (

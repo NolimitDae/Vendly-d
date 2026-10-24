@@ -17,8 +17,18 @@ jest.mock('@/service/booking/booking.service', () => ({
 
 jest.mock('@/service/payments/payments.service', () => {
   const actual = jest.requireActual('@/service/payments/payments.service');
-  return { ...actual, PaymentsService: { timeline: jest.fn(), dispute: jest.fn() } };
+  return { ...actual, PaymentsService: { timeline: jest.fn(), dispute: jest.fn(), retry: jest.fn() } };
 });
+
+// the card picker: one saved card to choose
+jest.mock('@/components/payments/SavedCards', () => ({
+  __esModule: true,
+  default: ({ onSelect }: any) => (
+    <button type="button" onClick={() => onSelect('pm_other')}>
+      Mastercard 4444
+    </button>
+  ),
+}));
 
 jest.mock('@/service/payments/booking-money.service', () => ({
   BookingMoneyService: { cancelPreview: jest.fn() },
@@ -46,10 +56,13 @@ describe('CancelBookingDialog (vendor)', () => {
     render(<CancelBookingDialog bookingId="b1" role="VENDOR" onClose={jest.fn()} onCancelled={onCancelled} />);
 
     expect(await screen.findByText(/The customer gets \$472\.50 back/)).toBeInTheDocument();
-    await user.type(screen.getByRole('textbox'), 'Double booked');
+    // the vendor's own list, without "Customer didn't pay" when nothing is overdue
+    expect(screen.getAllByRole('radio').map((r) => (r as HTMLInputElement).value)).toEqual(['safety_concern', 'emergency', 'double_booked', 'other']);
+    await user.click(screen.getByRole('radio', { name: 'Double booked' }));
+    await user.type(screen.getByRole('textbox'), 'Took another wedding by mistake');
     await user.click(screen.getByRole('button', { name: /^cancel booking$/i }));
 
-    await waitFor(() => expect(BookingService.cancel).toHaveBeenCalledWith('b1', 'Double booked'));
+    await waitFor(() => expect(BookingService.cancel).toHaveBeenCalledWith('b1', { reason_code: 'double_booked', note: 'Took another wedding by mistake' }));
     expect(onCancelled).toHaveBeenCalledWith(expect.objectContaining({ refund_total: 472.5 }));
     expect(await screen.findByText('The customer is getting $472.50 back.')).toBeInTheDocument();
     expect(screen.getByText(/Refund \$472\.50/)).toBeInTheDocument();
@@ -65,11 +78,48 @@ describe('CancelBookingDialog (vendor)', () => {
     expect(await screen.findByText(/If they didn’t show up, report a problem instead/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Report a problem' }));
     expect(onReportProblem).toHaveBeenCalled();
+    await user.click(screen.getByRole('radio', { name: 'Other' }));
     expect(screen.getByRole('button', { name: /^cancel booking$/i })).toBeEnabled();
     unmount();
     // from the bookings list: a link to the booking page, which opens the report
     render(<CancelBookingDialog bookingId="b1" role="CUSTOMER" onClose={jest.fn()} bookingHref="/bookings/b1" />);
     expect(await screen.findByRole('link', { name: 'Report a problem' })).toHaveAttribute('href', '/bookings/b1?report=1');
+  });
+
+  it('while a payment is overdue the vendor can cancel for non-payment, and sees that it settles like the customer’s', async () => {
+    const reasons = [
+      { key: 'customer_didnt_pay', label: 'Customer didn’t pay' },
+      { key: 'safety_concern', label: 'Safety concern' },
+      { key: 'other', label: 'Other' },
+    ];
+    (BookingMoneyService.cancelPreview as jest.Mock).mockImplementation((_id: string, code?: string) =>
+      Promise.resolve({
+        data: {
+          data: code
+            ? { cancelled_by: 'CUSTOMER', refund_total: 0, vendor_keeps: 250, deposit_kept: 250, policy: null, reasons, message: 'Nothing is refunded to the customer. You keep the $250.00 deposit.' }
+            : { cancelled_by: 'VENDOR', refund_total: 300, vendor_keeps: 0, policy: null, reasons, message: 'The customer gets $300.00 back, Vendly Protection fee included.' },
+        },
+      }),
+    );
+    (BookingService.cancel as jest.Mock).mockResolvedValue({ data: { success: true, data: { refund_summary: { refund_total: 0, message: 'You keep the $250.00 deposit.' } } } });
+    const user = userEvent.setup();
+    render(<CancelBookingDialog bookingId="b1" role="VENDOR" onClose={jest.fn()} />);
+    expect(await screen.findByText(/The customer gets \$300\.00 back/)).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: 'Customer didn’t pay' }));
+    expect(await screen.findByText(/You keep the \$250\.00 deposit/)).toBeInTheDocument();
+    expect(BookingMoneyService.cancelPreview).toHaveBeenLastCalledWith('b1', 'customer_didnt_pay');
+    await user.click(screen.getByRole('button', { name: /^cancel booking$/i }));
+    await waitFor(() => expect(BookingService.cancel).toHaveBeenCalledWith('b1', { reason_code: 'customer_didnt_pay', note: undefined }));
+  });
+
+  it('tells the customer their deposit is non-refundable', async () => {
+    (BookingMoneyService.cancelPreview as jest.Mock).mockResolvedValue({
+      data: { data: { cancelled_by: 'CUSTOMER', refund_total: 0, vendor_keeps: 250, deposit_kept: 250, policy: null, message: "You won't get a refund. Your deposit of $250.00 is non-refundable." } },
+    });
+    render(<CancelBookingDialog bookingId="b1" role="CUSTOMER" onClose={jest.fn()} />);
+    expect(await screen.findByTestId('cancel-preview')).toHaveTextContent('Your deposit of $250.00 is non-refundable.');
+    // the customer's list when the preview has none
+    expect(screen.getAllByRole('radio').map((r) => (r as HTMLInputElement).value)).toEqual(['plans_changed', 'found_another_vendor', 'event_cancelled', 'price', 'other']);
   });
 
   it('still lets the user cancel when the preview cannot load', async () => {
@@ -100,6 +150,33 @@ describe('PaymentTimeline (possible no-show)', () => {
     const { container } = render(<PaymentTimeline bookingId="b1" bookingStatus="CONFIRMED" startReporting />);
     await waitFor(() => expect(PaymentsService.timeline).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+});
+
+describe('PaymentTimeline (missed deposit on a deposit plan)', () => {
+  const timeline = {
+    plan: 'DEPOSIT_50', currency: 'usd', total: 840, paid: 0, outstanding: 840, dispute: null, can_dispute: false,
+    payment_state: 'pending_deposit', payment_due_by: '2026-11-02T00:00:00Z',
+    installments: [
+      { id: 'i1', sequence: 1, label: '50% deposit', amount: 440, fee_amount: 40, due_at: '2026-11-01T12:00:00Z', status: 'SCHEDULED', attempts: 1, next_attempt_at: '2026-11-01T18:00:00Z', last_error: 'Your card was declined.', refunded_amount: 0 },
+      { id: 'i2', sequence: 2, label: 'Balance', amount: 400, fee_amount: 0, due_at: '2026-12-01T12:00:00Z', status: 'SCHEDULED', attempts: 0, refunded_amount: 0 },
+    ],
+  };
+
+  it('says when it must be paid by, and lets the customer pay now with their card or another one', async () => {
+    (PaymentsService.timeline as jest.Mock).mockResolvedValue({ data: { data: timeline } });
+    (PaymentsService.retry as jest.Mock).mockResolvedValue({ data: { success: true } });
+    const user = userEvent.setup();
+    render(<PaymentTimeline bookingId="b1" bookingStatus="CONFIRMED" />);
+    expect(await screen.findByTestId('pay-by')).toHaveTextContent(/^Pending deposit: pay by .+, or the booking is cancelled\.$/);
+    // only the missed deposit, not the balance that isn't due yet
+    expect(screen.getAllByRole('button', { name: /now$/ })).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Pay $440.00 now' }));
+    await waitFor(() => expect(PaymentsService.retry).toHaveBeenCalledWith('b1', 'i1'));
+    await user.click(screen.getByRole('button', { name: 'Use another card' }));
+    await user.click(screen.getByRole('button', { name: 'Mastercard 4444' }));
+    await user.click(screen.getByRole('button', { name: 'Pay $440.00 with this card' }));
+    await waitFor(() => expect(PaymentsService.retry).toHaveBeenCalledWith('b1', 'i1', 'pm_other'));
   });
 });
 

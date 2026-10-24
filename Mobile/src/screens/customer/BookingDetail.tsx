@@ -19,7 +19,8 @@ import type { CustomerBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from './Bookings';
 import CustomerExtras, { ExtrasBanner } from '../../components/extras/CustomerExtras';
 import { useBookingExtras } from '../../services/addons.service';
-import { confirmCancelBooking } from '../../components/booking/cancelBooking';
+import CancelBookingSheet from '../../components/booking/CancelBookingSheet';
+import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
 import RefundCard from '../../components/booking/RefundCard';
 import InvoiceButton from '../../components/booking/InvoiceButton';
 import { invoiceAvailable } from '../../services/bookingMoney.service';
@@ -73,27 +74,9 @@ export default function BookingDetail() {
   // opens the report form in the payments card (the cancel prompt's no-show hint)
   const [reporting, setReporting] = useState(false);
 
-  // shows what cancelling does with the money first (refund, fee kept), then the refund result
-  const cancel = async () => {
-    setBusy(true);
-    try {
-      await confirmCancelBooking({
-        bookingId,
-        role: 'CUSTOMER',
-        title: booking?.status === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?',
-        onCancelled: () => {
-          load();
-          setPaymentsKey((k) => k + 1);
-        },
-        onReportProblem: () => {
-          setReporting(true);
-          setPaymentsKey((k) => k + 1);
-        },
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+  // shows what cancelling does with the money first (refund, fee kept), asks why, then the refund result
+  const [cancelling, setCancelling] = useState(false);
+  const cancel = () => setCancelling(true);
 
   const payNow = async () => {
     setBusy(true);
@@ -135,7 +118,13 @@ export default function BookingDetail() {
   const paid = !!booking.paid_at;
   const vendor = booking.vendor?.name ?? 'Vendor';
   const hero =
-    st === 'PENDING'
+    booking.payment_state && booking.payment_due_by
+      ? {
+          title: PAYMENT_STATE_LABELS[booking.payment_state],
+          body: `Your payment didn't go through. Pay by ${dueByText(booking.payment_due_by)} with your card or another card (Payments, below), or the booking is cancelled${booking.payment_state === 'pending_balance' ? ' and your deposit isn’t refunded' : ''}.`,
+          icon: 'card-outline' as const,
+        }
+      : st === 'PENDING'
       ? { title: 'Pending Confirmation', body: `We have sent your request to ${vendor}. You'll be told as soon as they accept.`, icon: 'spinner' as const }
       : st === 'CONFIRMED' && !paid
         ? { title: 'Accepted — payment due', body: `${vendor} accepted and signed. Pay now to lock in your date. Vendly holds the money until the service is done.`, icon: 'card-outline' as const }
@@ -147,13 +136,27 @@ export default function BookingDetail() {
               ? { title: 'Booking Completed Successfully', body: 'Thank you for using Vendly!', icon: 'checkmark' as const }
               : st === 'REJECTED'
                 ? { title: 'Request Declined', body: `${vendor} couldn't take this booking. Nothing has been charged.`, icon: 'close' as const }
-                : { title: 'Booking Cancelled', body: paid ? 'Your refund follows the contract’s cancellation terms.' : 'Nothing was charged.', icon: 'close' as const };
+                : { title: 'Booking Cancelled', body: [cancellationLine(booking, 'CUSTOMER'), paid ? 'Your refund follows the contract’s cancellation terms.' : 'Nothing was charged.'].filter(Boolean).join('\n\n'), icon: 'close' as const };
   const headerTitle = st === 'PENDING' ? 'Booking Request' : st === 'COMPLETED' ? 'Completed Booking' : st === 'CANCELLED' || st === 'REJECTED' ? 'Booking' : 'Upcoming Booking';
   const total = Number(booking.amount ?? 0) + Number(booking.service_fee ?? 0);
   const start = booking.event_start_at ?? booking.scheduled_at;
 
   return (
     <View style={s.root}>
+      <CancelBookingSheet
+        bookingId={cancelling ? booking.id : null}
+        role="CUSTOMER"
+        title={st === 'PENDING' ? 'Cancel this request?' : 'Cancel this booking?'}
+        onClose={() => setCancelling(false)}
+        onCancelled={() => {
+          load();
+          setPaymentsKey((k) => k + 1);
+        }}
+        onReportProblem={() => {
+          setReporting(true);
+          setPaymentsKey((k) => k + 1);
+        }}
+      />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20 }}
@@ -249,6 +252,31 @@ export default function BookingDetail() {
           )}
 
           {st === 'CANCELLED' && <RefundCard bookingId={booking.id} role="CUSTOMER" reloadKey={paymentsKey} />}
+          {st === 'CANCELLED' && !!booking.similar_vendors && (
+            <Card style={{ gap: 12 }}>
+              <Text style={s.h2}>Similar vendors free on your date</Text>
+              {booking.similar_vendors.items.length ? (
+                booking.similar_vendors.items.map((v) => (
+                  <Pressable key={v.id} onPress={() => nav.navigate('HomeTab', { screen: 'ListingDetail', params: { listingId: v.id }, initial: false })} style={s.row} accessibilityRole="button">
+                    <View style={s.thumb}>{!!v.image && <Image source={{ uri: v.image }} style={StyleSheet.absoluteFill} />}</View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={s.body} numberOfLines={1}>{v.title}</Text>
+                      <Text style={s.paidNote} numberOfLines={1}>{[v.vendor_name, money(v.price), v.avg_rating ? `${Number(v.avg_rating).toFixed(1)} stars` : null].filter(Boolean).join(' · ')}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={DARK.muted} />
+                  </Pressable>
+                ))
+              ) : (
+                <Text style={s.paidNote}>We couldn’t find another vendor free on that day yet.</Text>
+              )}
+              <Pressable
+                onPress={() => nav.navigate('HomeTab', { screen: 'SearchResults', params: { categoryId: booking.similar_vendors!.category_id, filters: { date: booking.similar_vendors!.date } }, initial: false })}
+                accessibilityRole="button"
+              >
+                <Text style={s.link}>See all vendors free on your date</Text>
+              </Pressable>
+            </Card>
+          )}
           {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
 
           <RentalReturnCard booking={booking} role="CUSTOMER" onDone={load} />

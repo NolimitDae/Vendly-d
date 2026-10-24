@@ -3,6 +3,7 @@
 import Link from "next/link";
 import ModalWrapper from "../common/modal/ModalWrapper";
 import DetailGrid from "../common/DetailGrid";
+import { cancelledByText, dueByText, paymentStateText } from "@/lib/booking-status";
 
 const money = (v: unknown) => (v === null || v === undefined || v === "" ? null : `$${Number(v).toFixed(2)}`);
 const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString() : null);
@@ -23,6 +24,7 @@ export default function BookingDetails({ booking, onClose }: { booking: any; onC
         <DetailGrid
           items={[
             ["Status", words(booking.status)],
+            ["Payment", booking.payment_state ? `${paymentStateText(booking.payment_state)}, due by ${dueByText(booking.payment_due_by)}` : null],
             ["Booked on", day(booking.created_at)],
             ["Event date", day(booking.event_start_at ?? booking.scheduled_at)],
             ["Venue", booking.venue_address],
@@ -36,7 +38,9 @@ export default function BookingDetails({ booking, onClose }: { booking: any; onC
             ["Paid on", day(booking.paid_at)],
             ["Completed on", day(booking.completed_at)],
             ["Cancelled on", day(booking.cancelled_at)],
-            ["Cancel reason", booking.cancel_reason],
+            ["Cancelled by", booking.status === "CANCELLED" ? cancelledByText(booking.cancelled_by, "ADMIN") : null],
+            ["Cancel reason", booking.cancel_reason_label],
+            [booking.cancel_reason_label ? "Cancel note" : "Cancel reason", booking.cancel_reason],
             ["Decline reason", booking.reject_reason],
             ["Dispute", booking.dispute_opened_at ? `${disputed ? "Open" : "Resolved"} since ${day(booking.dispute_opened_at)}` : null],
           ]}
