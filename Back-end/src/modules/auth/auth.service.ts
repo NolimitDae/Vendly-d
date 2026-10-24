@@ -1046,6 +1046,10 @@ export class AuthService {
         password: _password,
       });
       if (_isValidPassword) {
+        // a suspended account gets no tokens at all (they'd stop working on the first request anyway)
+        if (user.status === 0) {
+          throw new UnauthorizedException('This account is suspended. Contact Vendly support.');
+        }
         // Check if email is verified
         if (!user.email_verified_at) {
           throw new UnauthorizedException(

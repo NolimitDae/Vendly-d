@@ -97,5 +97,7 @@ export const MoneyService = {
 
   revenue: (from: string, to: string) => Fetch.get(`/admin/reports/revenue?from=${from}&to=${to}`, json()),
 
-  setUserStatus: (id: string, status: 0 | 1) => Fetch.patch(`/admin/users/${id}/status`, { status }, json()),
+  /** 0 suspends, 1 restores; the reason (optional) is shown to the user and kept in their history. */
+  setUserStatus: (id: string, status: 0 | 1, reason?: string) =>
+    Fetch.patch(`/admin/users/${id}/status`, reason ? { status, reason } : { status }, json()),
 };

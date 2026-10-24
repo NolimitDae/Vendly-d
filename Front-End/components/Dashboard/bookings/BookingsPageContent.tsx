@@ -8,6 +8,7 @@ import { BOOKING_COLUMNS, BOOKING_STATUS_OPTIONS, BOOKING_PAYMENT_OPTIONS } from
 import { usePagination } from "@/hooks";
 import { AdminService } from "@/service/admin/admin.service";
 import { Loader2 } from "lucide-react";
+import BookingDetails from "./BookingDetails";
 
 const PAYMENT_MAP: Record<string, string> = {
   COMPLETED: "Paid",
@@ -37,6 +38,7 @@ function toRow(b: any) {
     amount: b.amount ? `$${Number(b.amount).toFixed(2)}` : "-",
     payment: PAYMENT_MAP[b.status] ?? "Pending",
     status: STATUS_MAP[b.status] ?? "Pending",
+    _raw: b,
   };
 }
 
@@ -45,16 +47,20 @@ const BookingsPageContent = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("");
+  const [viewing, setViewing] = useState<any | null>(null);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const filtered = rows.filter((r) => {
     if (search && !r.customer.toLowerCase().includes(search.toLowerCase()) && !r.bookingId.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter && statusFilter !== "all" && r.status.toLowerCase().replace(" ", "-") !== statusFilter) return false;
+    // the filter options are API statuses (PENDING, COMPLETED, ...), not the labels shown in the table
+    if (statusFilter && statusFilter !== "all" && r._raw.status !== statusFilter) return false;
+    if (paymentFilter && paymentFilter !== "all" && r._raw.status !== paymentFilter) return false;
     return true;
   });
 
   const { paginatedData, currentPage, totalPages, totalItems, goToPage } =
-    usePagination({ data: filtered, itemsPerPage, resetDeps: [filtered] });
+    usePagination({ data: filtered, itemsPerPage, resetDeps: [search, statusFilter, paymentFilter] });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,7 +94,7 @@ const BookingsPageContent = () => {
         searchData={[]}
         onSearch={setSearch}
         onStatusChange={setStatusFilter}
-        onPaymentChange={() => {}}
+        onPaymentChange={setPaymentFilter}
         allStatus
         allPayments
       />
@@ -108,9 +114,10 @@ const BookingsPageContent = () => {
           totalpage={totalPages}
           totalItems={totalItems}
           setItemsPerPage={setItemsPerPage}
-          onView={() => {}}
+          onView={(row) => setViewing(row._raw)}
         />
       </div>
+      {viewing && <BookingDetails booking={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 };

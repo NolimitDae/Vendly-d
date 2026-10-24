@@ -55,6 +55,15 @@ export class MessageGateway
         return;
       }
 
+      // a suspended or deleted account's access token still verifies until it expires: no live updates for it
+      if (this.prisma) {
+        const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { status: true, deleted_at: true } });
+        if (!user || user.deleted_at || user.status === 0) {
+          client.disconnect();
+          return;
+        }
+      }
+
       this.clients.set(userId, client.id);
       client.data.userId = userId;
       client.join(`user_${userId}`);
