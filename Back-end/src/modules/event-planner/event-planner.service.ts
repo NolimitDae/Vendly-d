@@ -80,7 +80,7 @@ export class EventPlannerService {
     });
     if (!profile || profile.license_status !== ADMIN_APPROVE_STATUS.APPROVED)
       throw new NotFoundException('Event planner not found');
-    return { success: true, data: this.formatProfile(profile) };
+    return { success: true, data: this.formatPublicProfile(profile) };
   }
 
   async listApprovedPlanners(query: { page?: number; limit?: number; event_type?: string }) {
@@ -110,7 +110,7 @@ export class EventPlannerService {
 
     return {
       success: true,
-      data: planners.map((p) => this.formatProfile(p)),
+      data: planners.map((p) => this.formatPublicProfile(p)),
       meta: { total, page, limit, last_page: Math.ceil(total / limit) },
     };
   }
@@ -159,6 +159,12 @@ export class EventPlannerService {
       data: planners.map((p) => this.formatProfile(p)),
       meta: { total, page, limit, last_page: Math.ceil(total / limit) },
     };
+  }
+
+  /** What anyone may see: the profile without the licence documents (only the planner and admins see those). */
+  private formatPublicProfile(profile: any) {
+    const { license_photo: _private, ...shown } = this.formatProfile(profile);
+    return shown;
   }
 
   private formatProfile(profile: any) {

@@ -124,6 +124,16 @@ describe('EventPlannerService', () => {
       expect(result.success).toBe(true);
     });
 
+    it('never shows the licence documents publicly', async () => {
+      mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue({ ...mockProfile, license_photo: ['licence.pdf'] });
+      const one: any = await service.getPublicProfile('user-1');
+      expect(one.data).not.toHaveProperty('license_photo');
+      mockPrisma.eventPlannerProfile.findMany.mockResolvedValue([{ ...mockProfile, license_photo: ['licence.pdf'] }]);
+      mockPrisma.eventPlannerProfile.count.mockResolvedValue(1);
+      const list: any = await service.listApprovedPlanners({});
+      expect(list.data[0]).not.toHaveProperty('license_photo');
+    });
+
     it('should throw NotFoundException when profile not approved', async () => {
       mockPrisma.eventPlannerProfile.findUnique.mockResolvedValue({
         ...mockProfile,
