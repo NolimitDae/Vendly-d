@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from 'prisma/generated/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StripePayment } from '../../common/lib/Payment/stripe/StripePayment';
+import { canPublish } from '../../common/helper/publish-licence';
 
 export type OnboardingRole = 'CUSTOMER' | 'VENDOR' | 'EVENT_PLANNER';
 /** todo: theirs to do; pending: sent, waiting on Vendly's review; done: finished */
@@ -45,6 +46,11 @@ const COPY: Record<StepKey, { title: string; description: string }> = {
   shop_branding: { title: 'Brand your shop', description: 'Add a logo or banner to your shop page.' },
   planner_profile: { title: 'Complete your planner profile', description: 'Your business name and a short bio, so vendors know who they’re working with.' },
   first_event: { title: 'Create your first event', description: 'Plan vendors, budget and timeline in one place.' },
+};
+
+/** Vendors need the licence approved before they can publish, so their step says so. */
+const VENDOR_COPY: Partial<Record<StepKey, { title: string; description: string }>> = {
+  business_license: { title: 'Upload your business licence', description: 'You need an approved licence to publish packages. Vendly reviews it once you upload it.' },
 };
 
 const STEPS: Record<OnboardingRole, StepKey[]> = {
@@ -91,7 +97,7 @@ export class OnboardingService {
 
     const keys = STEPS[role];
     const states = await this.states(userId, role, keys, user);
-    const steps: OnboardingStep[] = keys.map((key) => ({ key, ...COPY[key], ...states[key] }));
+    const steps: OnboardingStep[] = keys.map((key) => ({ key, ...COPY[key], ...(role === 'VENDOR' ? VENDOR_COPY[key] : undefined), ...states[key] }));
     const completed = steps.filter((s) => s.state === 'done').length;
     const complete = completed === steps.length;
     const seen = ((user.onboarding_seen ?? {}) as Seen)[role] ?? {};
@@ -201,6 +207,8 @@ export class OnboardingService {
     else if (licence?.license_status === 'SUSPENDED') out.business_license = { state: 'todo', note: 'Your licence needs attention. Please upload it again.' };
     else if (licence?.license_photo?.length) out.business_license = { state: 'pending', note: 'In review' };
     else out.business_license = { state: 'todo' };
+    // nothing can go live until the licence is approved
+    if (role === 'VENDOR' && !published && !canPublish(vendor)) out.first_package = { state: 'todo', note: 'You can publish once your business licence is approved.' };
 
     return out;
   }

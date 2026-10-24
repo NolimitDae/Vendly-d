@@ -1,5 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
+import appConfig from 'src/config/app.config';
 import { UserRepository } from 'src/common/repository/user/user.repository';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthService } from '../auth.service';
@@ -80,16 +82,37 @@ export class SocialAuthService {
     if (!user || user.deleted_at) throw new UnauthorizedException('This account no longer exists');
     if (user.status === 0) throw new ForbiddenException('This account is suspended. Contact Vendly support.');
     if (user.type === 'ADMIN') throw new ForbiddenException('Admins sign in with email and password.');
+    // an existing account whose email was never verified may have been set up by someone else
+    const unverifiedLink = linkExisting && !user.email_verified_at;
     // two-step sign-in applies here too: the same answers as signing in with a password
-    if (user.is_two_factor_enabled) {
+    // (not on an unverified account: that two-step sign-in is dropped below)
+    if (user.is_two_factor_enabled && !unverifiedLink) {
       if (!dto.token) throw new UnauthorizedException('Token is required');
       if (!(await this.users.verify2FA(user.id, dto.token))) throw new UnauthorizedException('Invalid token');
     }
+    if (unverifiedLink) await this.dropUnverifiedSignIn(user.id);
     if (linkExisting) await this.link(user.id, id);
     // Google / Apple have already verified the email
     if (!user.email_verified_at) await this.prisma.user.update({ where: { id: user.id }, data: { email_verified_at: new Date() } });
 
     return this.auth.login({ email: user.email, userId: user.id });
+  }
+
+  /**
+   * Anyone can sign up with someone else's email and a password and never verify it. When the real
+   * owner then signs in with Google / Apple (which proves the email is theirs), that password would
+   * start working too. So before such an account is linked, whatever the sign-up set is dropped:
+   * the password (now a random one nobody knows; "forgot password" sets a new one), two-step
+   * sign-in, any one-time codes and every session. Runs before the email is marked verified, so a
+   * failure here is simply tried again on the next sign-in.
+   */
+  private async dropUnverifiedSignIn(userId: string) {
+    const password = await bcrypt.hash(randomBytes(32).toString('hex'), appConfig().security.salt);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { password, two_factor_secret: null, is_two_factor_enabled: 0 } }),
+      this.prisma.ucode.deleteMany({ where: { user_id: userId } }),
+    ]);
+    await this.auth.revokeAllSessions(userId);
   }
 
   private link(userId: string, id: SocialIdentity) {

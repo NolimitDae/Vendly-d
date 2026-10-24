@@ -55,17 +55,21 @@ jest.mock('./social-tokens', () => {
   return { ...actual, verifyGoogle: jest.fn(actual.verifyGoogle), verifyApple: jest.fn(actual.verifyApple) };
 });
 import * as tokens from './social-tokens';
+import * as bcrypt from 'bcrypt';
 
 describe('SocialAuthService', () => {
   const prisma: any = {
     account: { findUnique: jest.fn(), create: jest.fn() },
-    user: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+    user: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn((args) => ({ op: 'user.update', args })) },
+    ucode: { deleteMany: jest.fn((args) => ({ op: 'ucode.deleteMany', args })) },
+    $transaction: jest.fn((ops) => Promise.all(ops)),
   };
   const users: any = { createUser: jest.fn(), verify2FA: jest.fn() };
-  const auth: any = { login: jest.fn().mockResolvedValue({ success: true, authorization: { access_token: 'jwt' } }) };
+  const auth: any = { login: jest.fn().mockResolvedValue({ success: true, authorization: { access_token: 'jwt' } }), revokeAllSessions: jest.fn().mockResolvedValue(undefined) };
   const service = new SocialAuthService(prisma, users, auth);
   const identity = { provider: 'google' as const, sub: 'g-123', email: 'ada@gmail.com', email_verified: true, name: 'Ada Obi' };
   const active = { id: 'u1', email: 'ada@gmail.com', status: 1, deleted_at: null, email_verified_at: null, type: 'CLIENT' };
+  const verified = { ...active, email_verified_at: new Date('2026-01-01') };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -84,9 +88,57 @@ describe('SocialAuthService', () => {
   it('links an existing email account the first time', async () => {
     prisma.account.findUnique.mockResolvedValue(null);
     prisma.user.findFirst.mockResolvedValue({ id: 'u1' });
+    prisma.user.findUnique.mockResolvedValue(verified);
     await service.signIn({ provider: 'google', id_token: 't' });
     expect(prisma.account.create).toHaveBeenCalledWith({ data: { user_id: 'u1', type: 'oauth', provider: 'google', provider_account_id: 'g-123' } });
     expect(users.createUser).not.toHaveBeenCalled();
+    // a verified account keeps its password and sessions
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(auth.revokeAllSessions).not.toHaveBeenCalled();
+  });
+
+  describe('linking an account whose email was never verified', () => {
+    beforeEach(() => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue({ id: 'u1' });
+    });
+
+    it('drops the password, two-step sign-in, codes and sessions the sign-up left, then verifies and links', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...active, is_two_factor_enabled: 1 });
+      // whoever signed up set up two-step sign-in: the email's owner isn't asked for that code
+      await expect(service.signIn({ provider: 'google', id_token: 't' })).resolves.toMatchObject({ success: true });
+      expect(users.verify2FA).not.toHaveBeenCalled();
+
+      const wipe = prisma.user.update.mock.calls[0][0];
+      expect(wipe).toMatchObject({ where: { id: 'u1' }, data: { two_factor_secret: null, is_two_factor_enabled: 0 } });
+      expect(wipe.data).not.toHaveProperty('email_verified_at');
+      // a new random password, stored hashed like any other
+      expect(wipe.data.password).toMatch(/^\$2[aby]\$/);
+      expect(prisma.ucode.deleteMany).toHaveBeenCalledWith({ where: { user_id: 'u1' } });
+      expect(auth.revokeAllSessions).toHaveBeenCalledWith('u1');
+
+      // then, in this order: verified, linked, signed in
+      expect(prisma.user.update).toHaveBeenLastCalledWith({ where: { id: 'u1' }, data: { email_verified_at: expect.any(Date) } });
+      expect(prisma.account.create).toHaveBeenCalledWith({ data: { user_id: 'u1', type: 'oauth', provider: 'google', provider_account_id: 'g-123' } });
+      const order = (m: jest.Mock) => m.mock.invocationCallOrder[0];
+      expect(order(auth.revokeAllSessions)).toBeLessThan(order(prisma.account.create));
+      expect(order(prisma.account.create)).toBeLessThan(order(auth.login));
+      expect(order(auth.revokeAllSessions)).toBeLessThan(prisma.user.update.mock.invocationCallOrder[1]);
+    });
+
+    it('the old password no longer matches', async () => {
+      await service.signIn({ provider: 'google', id_token: 't' });
+      const hash = prisma.user.update.mock.calls[0][0].data.password;
+      await expect(bcrypt.compare('the-pre-registered-password', hash)).resolves.toBe(false);
+    });
+
+    it('leaves the account unverified and unlinked when the sessions could not be ended', async () => {
+      auth.revokeAllSessions.mockRejectedValueOnce(new Error('Redis is down'));
+      await expect(service.signIn({ provider: 'google', id_token: 't' })).rejects.toThrow('Redis is down');
+      expect(prisma.user.update).toHaveBeenCalledTimes(1);
+      expect(prisma.account.create).not.toHaveBeenCalled();
+      expect(auth.login).not.toHaveBeenCalled();
+    });
   });
 
   it('asks a brand-new user for a role, then creates the account', async () => {
@@ -135,7 +187,8 @@ describe('SocialAuthService', () => {
       expect(auth.login).toHaveBeenCalledTimes(1);
     });
 
-    it('links an existing email account only once the code is right', async () => {
+    it('links an existing (verified) email account only once the code is right', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...verified, is_two_factor_enabled: 1 });
       prisma.account.findUnique.mockResolvedValue(null);
       prisma.user.findFirst.mockResolvedValue({ id: 'u1' });
       await expect(service.signIn({ provider: 'google', id_token: 't' })).rejects.toThrow('Token is required');

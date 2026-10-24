@@ -16,6 +16,7 @@ import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits }
 import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
 import { apiError } from "@/service/contracts/contracts.service";
+import LicenceNotice from "@/components/vendor/LicenceNotice";
 
 export default function NewListingPage() {
   const router = useRouter();
@@ -192,6 +193,8 @@ export default function NewListingPage() {
         </Link>
 
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Create New Listing</h1>
+
+        <LicenceNotice />
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Images */}

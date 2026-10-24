@@ -15,6 +15,7 @@ import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits }
 import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, packageDetailsFrom, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
 import { apiError } from "@/service/contracts/contracts.service";
+import LicenceNotice from "@/components/vendor/LicenceNotice";
 import { dateOnly } from "@/lib/date-only";
 
 interface BlockedDate {
@@ -244,6 +245,8 @@ export default function EditListingPage() {
         </Link>
 
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Edit Listing</h1>
+
+        <LicenceNotice />
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Images */}

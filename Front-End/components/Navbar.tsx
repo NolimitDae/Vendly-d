@@ -13,7 +13,7 @@ import { ClipboardList, FileSignature, Package, LogOut, LayoutDashboard, Shoppin
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
-import { useFeature } from "@/hooks/useFeature";
+import { useFeature, useFeatureOptIn } from "@/hooks/useFeature";
 import { AuthService } from "@/service/auth/auth.service";
 import { useNotifications } from "@/hooks/useNotifications";
 import dayjs from "dayjs";
@@ -58,6 +58,8 @@ export default function Navbar() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const rentalsOn = useFeature("rentals");
+  // vendor plans are hidden until they launch (an admin switches the flag on)
+  const plansOn = useFeatureOptIn("subscriptions") === true;
   const [bellOpen, setBellOpen] = useState(false);
   const { notifications, unread, markAsRead, markAllAsRead } = useNotifications();
 
@@ -350,14 +352,16 @@ export default function Navbar() {
                         <Receipt className="w-4 h-4" />
                         Fees
                       </Link>
-                      <Link
-                        href="/vendor/subscription"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-                      >
-                        <CreditCard className="w-4 h-4" />
-                        Subscription
-                      </Link>
+                      {plansOn && (
+                        <Link
+                          href="/vendor/subscription"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                        >
+                          <CreditCard className="w-4 h-4" />
+                          Subscription
+                        </Link>
+                      )}
                     </>
                   )}
                   {user.type === "EVENT_PLANNER" && (
@@ -609,14 +613,16 @@ export default function Navbar() {
                       <Receipt className="w-4 h-4" />
                       Fees
                     </Link>
-                    <Link
-                      href="/vendor/subscription"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
-                      <CreditCard className="w-4 h-4" />
-                      Subscription
-                    </Link>
+                    {plansOn && (
+                      <Link
+                        href="/vendor/subscription"
+                        onClick={() => setMenuOpen(false)}
+                        className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        Subscription
+                      </Link>
+                    )}
                   </>
                 )}
                 {user.type === "EVENT_PLANNER" && (

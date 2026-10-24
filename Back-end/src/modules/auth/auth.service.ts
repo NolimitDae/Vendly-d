@@ -1325,7 +1325,7 @@ export class AuthService {
    * Signs the user out everywhere: every session, and the old single slot. With `except`, the
    * caller's own session stays (no `sid` means they're on the old single slot, so that one stays).
    */
-  private async revokeAllSessions(userId: string, except?: { sid?: string }) {
+  async revokeAllSessions(userId: string, except?: { sid?: string }) {
     const sids: string[] = (await this.redis.smembers(sessionsKey(userId))) ?? [];
     if (!except) {
       const keys = [undefined, ...sids].flatMap((sid) => Object.values(sessionKeys(userId, sid)));

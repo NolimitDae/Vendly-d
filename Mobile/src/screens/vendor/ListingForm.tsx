@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import LicenceNotice from '../../components/LicenceNotice';
 import CategoryPicker, { type PickerCategory } from '../../components/CategoryPicker';
 import LocationPicker, { type PickedPlace } from '../../components/LocationPicker';
 import { DARK, FONTS } from '../../constants/colors';
@@ -260,6 +261,7 @@ export default function ListingForm() {
         <ScreenHeader title={isEdit ? 'Edit Package' : 'Add A Package'} onBack={() => nav.goBack()} />
 
         <View style={{ paddingHorizontal: 20, gap: 20 }}>
+          <LicenceNotice />
           <View style={{ gap: 10 }}>
             <Pressable style={s.addImage} onPress={pickImages} accessibilityRole="button">
               <Ionicons name="image-outline" size={24} color="#fff" />

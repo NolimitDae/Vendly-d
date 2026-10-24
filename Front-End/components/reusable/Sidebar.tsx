@@ -11,6 +11,7 @@ import { ChevronDown } from "lucide-react";
 import { useActiveNav, useModal } from "@/hooks";
 import { cn } from "@/lib/utils";
 import { navItems, otherItems } from "@/data/sidebar";
+import { useFeatureOptIn } from "@/hooks/useFeature";
 import LogoutModal from "../Dashboard/auth/LogoutModal";
 
 interface SidebarProps {
@@ -27,6 +28,8 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  // vendor plans are hidden until they launch (an admin switches the flag on)
+  const plansOn = useFeatureOptIn("subscriptions") === true;
 
   const handleLogout = () => {
     // Was destroying "accessToken", which never existed, so admin logout left the session active.
@@ -67,7 +70,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         {/* Navigation Section */}
         <div className="flex-1 pb-5">
           <div className="space-y-2 mb-8">
-            {navItems.map((item, idx) => {
+            {navItems.filter((item) => plansOn || item.href !== "/vendor/subscription").map((item, idx) => {
               const active = isActive(item.href, true);
               const isOpenMenu = openMenu === item.label;
               const showChevron = item.children;
