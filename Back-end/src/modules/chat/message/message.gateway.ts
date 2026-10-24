@@ -92,7 +92,8 @@ export class MessageGateway
   async handleRoomJoin(client: Socket, body: { room_id: string }) {
     const userId = client.data?.userId;
     const roomId = body?.room_id;
-    if (!userId || !roomId || !this.prisma) return;
+    // a plain id only (an object would act as a database filter)
+    if (!userId || typeof roomId !== 'string' || !roomId || !this.prisma) return;
     const member = await this.prisma.participant.findFirst({ where: { conversationId: roomId, userId }, select: { id: true } });
     if (!member) {
       client.emit('joinRefused', { room_id: roomId });

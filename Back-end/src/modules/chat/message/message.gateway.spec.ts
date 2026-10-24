@@ -156,6 +156,13 @@ describe('MessageGateway', () => {
       expect(client.emit).toHaveBeenCalledWith('joinRefused', { room_id: 'room-42' });
     });
 
+    it('ignores a room id that is not plain text', async () => {
+      const client = makeSocket({ data: { userId: 'user-1' } });
+      await gateway.handleRoomJoin(client, { room_id: { not: '' } } as any);
+      expect(prisma.participant.findFirst).not.toHaveBeenCalled();
+      expect(client.join).not.toHaveBeenCalled();
+    });
+
     it('ignores sockets that never authenticated', async () => {
       const client = makeSocket({ data: {} });
       await gateway.handleRoomJoin(client, { room_id: 'room-42' });
