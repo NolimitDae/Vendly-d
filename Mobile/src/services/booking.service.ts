@@ -26,6 +26,8 @@ export interface Booking {
   /** set when the vendor didn't answer the request in time */
   expired_at?: string | null;
   payment_plan?: string | null;
+  /** the customer's review, once they left one */
+  review?: { id: string; rating: number; comment?: string | null } | null;
   early_released_amount?: number | string | null;
   /** on a request, for the vendor: their confirmed bookings on the same day */
   same_day_bookings?: { id: string; title: string; status: BookingStatus; start_at: string | null; end_at: string | null }[];

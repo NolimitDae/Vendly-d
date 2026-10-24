@@ -22,6 +22,7 @@ import { useFeature } from '../../hooks/useFeature';
 import { useAuth } from '../../context/AuthContext';
 import { useNearMe } from '../../hooks/useNearMe';
 import { api } from '../../services/api';
+import { SocketService } from '../../services/socket.service';
 import ReviewPrompt from '../../components/ReviewPrompt';
 
 type Nav = NativeStackNavigationProp<any>;
@@ -113,11 +114,19 @@ export default function CustomerHome() {
     }
   }, []);
 
+  // the bell shows a dot for unread notifications, and new ones light it up live
+  const [unread, setUnread] = useState(0);
   useFocusEffect(
     useCallback(() => {
       load();
+      api.get('/notifications').then((r) => setUnread(Number(r.data?.unread ?? 0))).catch(() => {});
     }, [load]),
   );
+  useEffect(() => {
+    const onNew = () => setUnread((n) => n + 1);
+    void SocketService.on('receiveNotification', onNew);
+    return () => SocketService.off('receiveNotification', onNew);
+  }, []);
 
   const firstName = (user?.name ?? '').split(' ')[0];
   const tiles = showAll ? categories : categories.slice(0, MAX_TILES);
@@ -150,9 +159,10 @@ export default function CustomerHome() {
           style={s.bell}
           onPress={() => nav.navigate('Notifications')}
           accessibilityRole="button"
-          accessibilityLabel="Notifications"
+          accessibilityLabel={unread ? `Notifications, ${unread} unread` : 'Notifications'}
         >
           <Ionicons name="notifications-outline" size={22} color="#fff" />
+          {unread > 0 && <View style={s.bellDot} />}
         </Pressable>
       </View>
 
@@ -402,6 +412,7 @@ const s = StyleSheet.create({
   hello: { color: '#fff', fontSize: 20, lineHeight: 26, fontFamily: FONTS.semibold },
   helloSub: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular },
   bell: { width: 44, height: 44, borderRadius: 22, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  bellDot: { position: 'absolute', top: 10, right: 11, width: 9, height: 9, borderRadius: 5, backgroundColor: DARK.accent, borderWidth: 1.5, borderColor: DARK.field },
   search: {
     flexDirection: 'row',
     alignItems: 'center',

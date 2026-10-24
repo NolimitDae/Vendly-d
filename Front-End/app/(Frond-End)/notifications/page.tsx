@@ -13,17 +13,27 @@ import OnboardingChecklist from "@/components/onboarding/OnboardingChecklist";
 
 dayjs.extend(relativeTime);
 
+// the types the API gives inbox items (see PushService and the account status notes)
 const EVENT_TYPE_LABELS: Record<string, string> = {
+  booking: "Booking",
+  // a dispute is about a booking (admins get these)
+  dispute: "Booking",
+  contract: "Contract",
+  cosign: "Contract",
+  chat: "Message",
+  event: "Event",
+  identity: "Account",
+  account_suspended: "Account",
+  account_restored: "Account",
+  // older notifications
   BOOKING_REQUEST: "Booking",
   BOOKING_CONFIRMED: "Booking",
   BOOKING_CANCELLED: "Booking",
   BOOKING_COMPLETED: "Booking",
   NEW_MESSAGE: "Message",
-  REVIEW_RECEIVED: "Review",
-  PAYMENT_RECEIVED: "Payment",
 };
 
-const FILTERS = ["All", "Booking", "Message", "Review", "Payment"] as const;
+const FILTERS = ["All", "Booking", "Contract", "Message", "Event", "Account"] as const;
 type Filter = (typeof FILTERS)[number];
 
 export default function NotificationsPage() {

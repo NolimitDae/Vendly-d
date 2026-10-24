@@ -279,6 +279,64 @@ describe('VendorListingService', () => {
       expect(TanvirStorage.delete).not.toHaveBeenCalledWith('listings/old.jpg');
     });
 
+    describe('keep_images', () => {
+      const track = () => {
+        const order: string[] = [];
+        (TanvirStorage.put as jest.Mock).mockImplementation(async (key: string) => void order.push(`put ${key}`));
+        (TanvirStorage.delete as jest.Mock).mockImplementation(async (key: string) => void order.push(`delete ${key}`));
+        mockPrisma.vendorListing.update.mockImplementation(async ({ data }: any) => {
+          order.push('save');
+          return { ...mockListing, images: data.images ?? [] };
+        });
+        return order;
+      };
+
+      it('keeps the photos the vendor kept, adds the new ones after them, and deletes only the dropped one after saving', async () => {
+        mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['a.jpg', 'b.jpg', 'c.jpg'] });
+        const order = track();
+        // the apps send back the URLs they were shown
+        await service.update('listing-1', 'vendor-1', { keep_images: ['https://cdn.test/listings/c.jpg?v=1', 'a.jpg'] }, [jpg]);
+        const images = mockPrisma.vendorListing.update.mock.calls[0][0].data.images;
+        expect(images).toEqual(['c.jpg', 'a.jpg', expect.stringMatching(/^[0-9a-f]{24}\.jpg$/)]);
+        expect(mockPrisma.vendorListing.update.mock.calls[0][0].data).not.toHaveProperty('keep_images');
+        expect(order).toEqual([`put listings/${images[2]}`, 'save', 'delete listings/b.jpg']);
+      });
+
+      it('removes a photo without adding any', async () => {
+        mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['a.jpg', 'b.jpg'] });
+        const order = track();
+        await service.update('listing-1', 'vendor-1', { keep_images: ['b.jpg'] });
+        expect(mockPrisma.vendorListing.update.mock.calls[0][0].data.images).toEqual(['b.jpg']);
+        expect(order).toEqual(['save', 'delete listings/a.jpg']);
+      });
+
+      it("ignores names that aren't this listing's photos", async () => {
+        mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['a.jpg'] });
+        track();
+        await service.update('listing-1', 'vendor-1', { keep_images: ['a.jpg', '../other/secret.jpg', 'someone-else.jpg'] });
+        expect(mockPrisma.vendorListing.update.mock.calls[0][0].data.images).toEqual(['a.jpg']);
+        expect(TanvirStorage.delete).not.toHaveBeenCalled();
+      });
+
+      it('refuses more than 10 photos in all, and a published package with none', async () => {
+        const ten = Array.from({ length: 10 }, (_, i) => `p${i}.jpg`);
+        mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ten });
+        await expect(service.update('listing-1', 'vendor-1', { keep_images: ten }, [jpg])).rejects.toThrow(BadRequestException);
+        mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, status: ListingStatus.ACTIVE, images: ['a.jpg'] });
+        await expect(service.update('listing-1', 'vendor-1', { keep_images: [] })).rejects.toThrow(BadRequestException);
+        expect(TanvirStorage.put).not.toHaveBeenCalled();
+        expect(mockPrisma.vendorListing.update).not.toHaveBeenCalled();
+      });
+
+      it('without keep_images, new photos still replace all the old ones (older apps)', async () => {
+        mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['a.jpg', 'b.jpg'] });
+        const order = track();
+        await service.update('listing-1', 'vendor-1', {}, [jpg]);
+        const [name] = mockPrisma.vendorListing.update.mock.calls[0][0].data.images;
+        expect(order).toEqual([`put listings/${name}`, 'save', 'delete listings/a.jpg', 'delete listings/b.jpg']);
+      });
+    });
+
     it('drops the photos already stored when storing one of them fails', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['old.jpg'] });
       (TanvirStorage.put as jest.Mock).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('disk full'));

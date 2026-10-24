@@ -59,15 +59,26 @@ export class NotificationGateway
     this.redisPubClient = new Redis(appConfig().redis);
     this.redisSubClient = new Redis(appConfig().redis);
 
-    this.redisSubClient.subscribe('notification', (err, message: string) => {
-      if (err) {
-        this.logger.error('Redis subscription error', err);
-        return;
-      }
-      const data = JSON.parse(message);
-      // to that user's own connections only, never to everyone
-      if (typeof data?.userId === 'string') this.server.to(`user_${data.userId}`).emit('receiveNotification', data);
+    // subscribe's callback only reports the subscription; the published messages arrive as 'message' events
+    this.redisSubClient.subscribe('notification', (err) => {
+      if (err) this.logger.error('Redis subscription error', err);
     });
+    this.redisSubClient.on('message', (channel: string, message: string) => {
+      if (channel !== 'notification') return;
+      this.deliver(message);
+    });
+  }
+
+  /** A message from the 'notification' channel (any API instance) to the user's sockets on this one. */
+  deliver(message: string) {
+    let data: any;
+    try {
+      data = JSON.parse(message);
+    } catch {
+      return;
+    }
+    // to that user's own connections only, never to everyone
+    if (typeof data?.userId === 'string') this.server?.to(`user_${data.userId}`).emit('receiveNotification', data);
   }
 
   afterInit(_server: Server) {

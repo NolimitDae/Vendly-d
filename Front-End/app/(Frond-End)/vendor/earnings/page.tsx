@@ -58,6 +58,9 @@ interface AccountInfo {
   accountId: string | null;
   email: string;
   name: string;
+  /** From Stripe; missing when Stripe couldn't be reached. */
+  payouts_enabled?: boolean;
+  details_submitted?: boolean;
 }
 
 /** GET /payments/earnings: real figures, commission as set in Admin → Settings and taken at payout */
@@ -361,20 +364,28 @@ export default function VendorEarningsPage() {
     }
   };
 
+  /** Sends the vendor to Stripe's payout setup for this account. */
+  const goToOnboarding = async (accountId: string) => {
+    setGettingLink(true);
+    try {
+      const res = await EarningsService.getOnboardingLink(accountId);
+      const url = res.data?.data?.url;
+      if (url) window.location.href = url;
+      else toast.error(res.data?.message ?? "Could not retrieve onboarding link");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Could not retrieve onboarding link");
+    } finally {
+      setGettingLink(false);
+    }
+  };
+
   const handleConnectAccount = async () => {
     setConnectingAccount(true);
     try {
       const res = await EarningsService.createConnectedAccount();
-      if (res.data?.success) {
-        const accountId = res.data.data?.accountId;
-        if (accountId) {
-          setGettingLink(true);
-          const linkRes = await EarningsService.getOnboardingLink(accountId);
-          if (linkRes.data?.success && linkRes.data.data?.url) {
-            window.location.href = linkRes.data.data.url;
-          }
-          setGettingLink(false);
-        }
+      const accountId = res.data?.data?.accountId;
+      if (res.data?.success && accountId) {
+        await goToOnboarding(accountId);
       } else {
         toast.error(res.data?.message ?? "Failed to create account");
       }
@@ -387,16 +398,7 @@ export default function VendorEarningsPage() {
 
   const handleGetOnboardingLink = async () => {
     if (!accountInfo?.accountId) return;
-    setGettingLink(true);
-    try {
-      const res = await EarningsService.getOnboardingLink(accountInfo.accountId);
-      if (res.data?.success && res.data.data?.url)
-        window.location.href = res.data.data.url;
-    } catch {
-      toast.error("Could not retrieve onboarding link");
-    } finally {
-      setGettingLink(false);
-    }
+    await goToOnboarding(accountInfo.accountId);
   };
 
   /* ── Render ───────────────────────────────────────────────── */
@@ -827,12 +829,21 @@ export default function VendorEarningsPage() {
               <div className="grid sm:grid-cols-2 gap-6">
                 {/* Account status */}
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
-                      Stripe account connected
-                    </span>
-                  </div>
+                  {accountInfo.payouts_enabled === false ? (
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        Finish your Stripe setup to receive payouts
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        Stripe account connected
+                      </span>
+                    </div>
+                  )}
                   {stripeBalance && (
                     <div className="p-4 bg-gray-50 dark:bg-gray-700/40 rounded-xl space-y-2">
                       <div className="flex justify-between text-sm">
@@ -855,7 +866,7 @@ export default function VendorEarningsPage() {
                     className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-primary transition"
                   >
                     <ExternalLink className="w-3 h-3" />
-                    Update payout details
+                    {accountInfo.payouts_enabled === false ? "Finish setup" : "Update payout details"}
                   </button>
                 </div>
 

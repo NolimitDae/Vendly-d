@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,12 +14,6 @@ interface Account { accountId?: string | null; payouts_enabled?: boolean; charge
 interface Transaction { id: string; amount: number | string; status?: string; type?: string; created_at: string; currency?: string }
 
 const money = (n: unknown) => `$${Number(n ?? 0).toFixed(2)}`;
-// The payout API wraps responses in different ways; read the few fields we need wherever they are.
-const pick = (res: any, ...keys: string[]) => {
-  const d = res?.data?.data ?? res?.data ?? {};
-  for (const k of keys) if (d?.[k] != null) return d[k];
-  return undefined;
-};
 
 export default function Payouts() {
   const nav = useNavigation<NativeStackNavigationProp<any>>();
@@ -34,7 +28,11 @@ export default function Payouts() {
 
   const load = useCallback(async () => {
     const [b, a, h] = await Promise.allSettled([api.get('/withdraw/balance'), api.get('/withdraw/account-info'), api.get('/withdraw/history')]);
-    if (b.status === 'fulfilled') setBalance(Number(pick(b.value, 'balance', 'available') ?? 0));
+    // GET /withdraw/balance → { data: { available: { amount } } } (dollars).
+    if (b.status === 'fulfilled') {
+      const n = Number(b.value.data?.data?.available?.amount);
+      setBalance(Number.isFinite(n) ? n : 0);
+    }
     if (a.status === 'fulfilled') {
       const d = a.value.data?.data ?? a.value.data ?? {};
       setAccount({ accountId: d.accountId ?? d.account_id ?? d.id ?? null, payouts_enabled: d.payouts_enabled, charges_enabled: d.charges_enabled, details_submitted: d.details_submitted });
@@ -45,6 +43,13 @@ export default function Payouts() {
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // Back from Stripe's setup in the browser: the screen never lost focus, so refresh when the app comes back.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') load(); });
+    return () => sub.remove();
+  }, [load]);
+
+  // Ready only once Stripe says payouts are on. payouts_enabled is missing only when Stripe couldn't be reached.
   const connected = !!account?.accountId && account.payouts_enabled !== false;
 
   const setUp = async () => {

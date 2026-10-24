@@ -163,6 +163,8 @@ export default function ListingForm() {
       // when editing, an empty list or notice clears what was there
       if (items.length || isEdit) fd.append('included_items', JSON.stringify(items));
       if (noticeH || isEdit) fd.append('min_notice_hours', noticeH ? String(noticeH) : '');
+      // the photos already on the package that the vendor kept; new ones are added after them
+      if (isEdit) fd.append('keep_images', JSON.stringify(existing));
       images.forEach((img) => fd.append('images', img as unknown as Blob));
       const config = { headers: { 'Content-Type': 'multipart/form-data' } };
       const res = isEdit ? await api.patch(`/vendor/listings/${listingId}`, fd, config) : await api.post('/vendor/listings', fd, config);

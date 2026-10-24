@@ -168,7 +168,7 @@ describe('BookingModal', () => {
 
   it('reloads the contract when it changed before signing', async () => {
     (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
-    (BookingService.create as jest.Mock).mockRejectedValue({ response: { status: 409, data: { message: 'changed' } } });
+    (BookingService.create as jest.Mock).mockRejectedValue({ response: { status: 409, data: { message: 'changed', error: 'CONTRACT_CHANGED' } } });
     const user = userEvent.setup();
     render(<BookingModal listing={listing} onClose={onClose} />);
     await fillDetails(user);
@@ -179,6 +179,33 @@ describe('BookingModal', () => {
 
     await waitFor(() => expect(toast.info).toHaveBeenCalled());
     expect(ContractsService.bookingPreview).toHaveBeenCalledTimes(2);
+  });
+
+  const signAndFail = async (error: unknown) => {
+    (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
+    (BookingService.create as jest.Mock).mockRejectedValue(error);
+    const user = userEvent.setup();
+    render(<BookingModal listing={listing} onClose={onClose} />);
+    await fillDetails(user);
+    await user.click(screen.getByRole('button', { name: /review contract/i }));
+    await user.click(await screen.findByLabelText(/sign electronically/i));
+    await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+    await user.click(screen.getByRole('button', { name: /sign & send request/i }));
+    await waitFor(() => expect(BookingService.create).toHaveBeenCalled());
+  };
+
+  it('shows the request as sent when a retry finds it already went through (no second request)', async () => {
+    await signAndFail({ response: { status: 409, data: { statusCode: 409, message: 'This booking request was already sent.', error: 'Conflict' } } });
+    expect(await screen.findByText(/contract signed and request sent/i)).toBeInTheDocument();
+    // no fresh contract, so no way to sign and send a duplicate
+    expect(ContractsService.bookingPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('goes back to the details when the date is no longer open', async () => {
+    await signAndFail({ response: { status: 409, data: { message: 'The vendor isn’t available on that date. Please pick another day.', error: 'DATE_UNAVAILABLE' } } });
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('The vendor isn’t available on that date. Please pick another day.'));
+    expect(ContractsService.bookingPreview).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(/event date/i)).toBeInTheDocument();
   });
 
   it('shows the vendor price, service fee and total before signing', async () => {

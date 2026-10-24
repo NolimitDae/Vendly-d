@@ -264,6 +264,24 @@ describe('EarningsPage', () => {
       expect(screen.getByText(/from 2 reviews/)).toHaveTextContent('Average rating 4.5 from 2 reviews');
     });
 
+    it('says when the Stripe link could not be made, instead of doing nothing', async () => {
+      setupMocks({ account: { hasConnectedAccount: false, accountId: null, email: 'vendor@test.com', name: 'Test Vendor' } });
+      (EarningsService.createConnectedAccount as jest.Mock).mockResolvedValue({ data: { success: true, data: { accountId: 'acct_new' } } });
+      (EarningsService.getOnboardingLink as jest.Mock).mockRejectedValue({ response: { data: { message: 'Failed to create onboarding link' } } });
+      const { toast } = jest.requireMock('react-toastify');
+      render(<EarningsPage />);
+      await userEvent.click(await screen.findByRole('button', { name: /connect stripe account/i }));
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to create onboarding link'));
+      expect(EarningsService.getOnboardingLink).toHaveBeenCalledWith('acct_new');
+    });
+
+    it('asks to finish the Stripe setup while payouts are off', async () => {
+      setupMocks({ account: { ...accountInfo, payouts_enabled: false, details_submitted: false } });
+      render(<EarningsPage />);
+      expect(await screen.findByText('Finish your Stripe setup to receive payouts')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /finish setup/i })).toBeInTheDocument();
+    });
+
     it('explains an empty top clients list', async () => {
       setupMocks({ stats: { ...stats, top_clients: [] } });
       render(<EarningsPage />);

@@ -2,7 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
-import { noticeLabel, readIncludedItems, tooSoonMessage } from './package-details';
+import { keptImageNames, noticeLabel, readIncludedItems, tooSoonMessage } from './package-details';
 
 // the same options as the app's global ValidationPipe
 const parse = async (cls: any, body: Record<string, unknown>) => {
@@ -71,5 +71,22 @@ describe('minimum notice', () => {
     expect(tooSoonMessage(null, new Date('2026-10-24T13:00:00Z'), now)).toBeNull();
     expect(tooSoonMessage(0, new Date('2026-10-24T13:00:00Z'), now)).toBeNull();
     expect(tooSoonMessage(48, null, now)).toBeNull();
+  });
+});
+
+describe('photos to keep', () => {
+  it('reads keep_images from a multipart JSON string; not sent stays undefined', async () => {
+    expect((await parse(UpdateVendorListingDto, { keep_images: JSON.stringify(['a.jpg', 'https://cdn.test/listings/b.jpg']) })).dto.keep_images).toEqual([
+      'a.jpg',
+      'https://cdn.test/listings/b.jpg',
+    ]);
+    expect((await parse(UpdateVendorListingDto, { keep_images: '[]' })).dto.keep_images).toEqual([]);
+    expect((await parse(UpdateVendorListingDto, {})).dto.keep_images).toBeUndefined();
+    expect((await parse(UpdateVendorListingDto, { keep_images: JSON.stringify([1]) })).messages.length).toBeGreaterThan(0);
+  });
+
+  it("matches URLs or names to the listing's own photos, in the order sent", () => {
+    expect(keptImageNames(['a.jpg', 'b.jpg', 'c.jpg'], ['https://cdn.test/listings/c.jpg?x=1', 'a.jpg', 'a.jpg', 'zzz.jpg'])).toEqual(['c.jpg', 'a.jpg']);
+    expect(keptImageNames(['a.jpg'], [])).toEqual([]);
   });
 });

@@ -3,13 +3,14 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { addDays, addMonths, format, getDay, isAfter, isBefore, isSameDay, isSameMonth, parseISO, startOfDay, startOfMonth } from 'date-fns';
+import { addDays, addMonths, format, getDay, isAfter, isBefore, isSameDay, isSameMonth, startOfDay, startOfMonth } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import type { VendorDashboardStackParams } from '../../navigation/types';
 import { SEVENTH } from '../../utils/grid';
+import { dateOnly } from '../../utils/dateOnly';
 
 // source 'calendar' = busy time imported from the vendor's own calendar (managed in Calendar sync)
 interface Block { id: string; start_date: string; end_date: string; reason?: string | null; source?: 'manual' | 'calendar' }
@@ -44,7 +45,7 @@ export default function Availability() {
     const first = addDays(month, -getDay(month));
     return Array.from({ length: 42 }, (_, i) => addDays(first, i));
   }, [month]);
-  const blocked = (d: Date) => blocks.some((b) => !isBefore(d, startOfDay(parseISO(b.start_date))) && !isAfter(d, startOfDay(parseISO(b.end_date))));
+  const blocked = (d: Date) => blocks.some((b) => !isBefore(d, dateOnly(b.start_date)) && !isAfter(d, dateOnly(b.end_date)));
   const inRange = (d: Date) => !!range.start && ((range.end && !isBefore(d, range.start) && !isAfter(d, range.end)) || isSameDay(d, range.start));
 
   const pick = (d: Date) => {
@@ -73,7 +74,7 @@ export default function Availability() {
   };
 
   const remove = (b: Block) =>
-    Alert.alert('Open these dates again?', `${format(parseISO(b.start_date), 'dd MMM')} – ${format(parseISO(b.end_date), 'dd MMM')} will become bookable.`, [
+    Alert.alert('Open these dates again?', `${format(dateOnly(b.start_date), 'dd MMM')} – ${format(dateOnly(b.end_date), 'dd MMM')} will become bookable.`, [
       { text: 'Keep blocked', style: 'cancel' },
       {
         text: 'Open dates',
@@ -159,7 +160,7 @@ export default function Availability() {
                 <View key={b.id} style={s.block}>
                   <Ionicons name="close-circle-outline" size={20} color="#F7B1B8" />
                   <View style={{ flex: 1 }}>
-                    <Text style={s.blockText}>{format(parseISO(b.start_date), 'EEE, dd MMM')} – {format(parseISO(b.end_date), 'EEE, dd MMM yyyy')}</Text>
+                    <Text style={s.blockText}>{format(dateOnly(b.start_date), 'EEE, dd MMM')} – {format(dateOnly(b.end_date), 'EEE, dd MMM yyyy')}</Text>
                     {b.source === 'calendar' ? <Text style={s.muted}>Busy in your calendar</Text> : !!b.reason && <Text style={s.muted}>{b.reason}</Text>}
                   </View>
                   {b.source !== 'calendar' && <Pressable onPress={() => remove(b)} hitSlop={8} accessibilityLabel="Open these dates"><Text style={s.link}>Open</Text></Pressable>}

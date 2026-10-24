@@ -186,16 +186,19 @@ export class MessageService {
       };
     }
 
-    const [totalMessages, messages] = await this.prisma.$transaction([
+    // page 1 is the newest messages (page 2 the ones before them...), each page oldest first,
+    // so a long chat always opens on its latest messages
+    const [totalMessages, newestFirst] = await this.prisma.$transaction([
       this.prisma.message.count({ where: whereClause }),
       this.prisma.message.findMany({
         where: whereClause,
         include: messageInclude,
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip,
         take,
       }),
     ]);
+    const messages = [...newestFirst].reverse();
 
     // who has read up to when (read receipts), plus group details and the pinned message
     const pinned = conversation.pinned_message_id
@@ -223,7 +226,7 @@ export class MessageService {
         message: "No messages found",
         success: true,
         conversation: conversationInfo,
-        data: paginateResponse([], page, perPage, totalMessages),
+        data: paginateResponse([], totalMessages, page, perPage),
       };
     }
 
@@ -232,11 +235,12 @@ export class MessageService {
       receiver: formattedReceiver,
     }));
 
+    // (data, total, page, perPage): hasNextPage means older messages are left
     const paginationResult = paginateResponse(
       formattedMessages,
+      totalMessages,
       page,
       perPage,
-      totalMessages,
     );
 
     return {

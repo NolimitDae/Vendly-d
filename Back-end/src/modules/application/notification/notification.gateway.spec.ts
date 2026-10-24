@@ -6,10 +6,14 @@ import { NotificationService } from './notification.service';
 
 // Prevent real Redis connections during tests
 const publish = jest.fn().mockResolvedValue(1);
-let onMessage: ((err: unknown, message: string) => void) | undefined;
+// like ioredis: subscribe's callback only confirms the subscription, messages come as 'message' events
+let onMessage: ((channel: string, message: string) => void) | undefined;
 jest.mock('ioredis', () => {
   const Redis = jest.fn().mockImplementation(() => ({
-    subscribe: jest.fn((_channel: string, cb: any) => (onMessage = cb)),
+    subscribe: jest.fn((_channel: string, cb?: (err: unknown, count: number) => void) => cb?.(null, 1)),
+    on: jest.fn((event: string, cb: any) => {
+      if (event === 'message') onMessage = cb;
+    }),
     publish,
     disconnect: jest.fn(),
   }));
@@ -83,7 +87,7 @@ describe('NotificationGateway', () => {
   describe('delivery', () => {
     it("sends a notification to that user's room only, never to everyone", () => {
       gateway.onModuleInit();
-      onMessage?.(null, JSON.stringify({ userId: 'u1', title: 'Booking confirmed' }));
+      onMessage?.('notification', JSON.stringify({ userId: 'u1', title: 'Booking confirmed' }));
       expect(mockServer.to).toHaveBeenCalledWith('user_u1');
       expect(room.emit).toHaveBeenCalledWith('receiveNotification', expect.objectContaining({ title: 'Booking confirmed' }));
       expect(mockServer.emit).not.toHaveBeenCalled();
@@ -91,9 +95,16 @@ describe('NotificationGateway', () => {
 
     it('drops a message with no user', () => {
       gateway.onModuleInit();
-      onMessage?.(null, JSON.stringify({ title: 'For everyone?' }));
+      onMessage?.('notification', JSON.stringify({ title: 'For everyone?' }));
       expect(mockServer.to).not.toHaveBeenCalled();
       expect(mockServer.emit).not.toHaveBeenCalled();
+    });
+
+    it('ignores other channels and messages that are not JSON', () => {
+      gateway.onModuleInit();
+      onMessage?.('other', JSON.stringify({ userId: 'u1' }));
+      onMessage?.('notification', 'not json');
+      expect(mockServer.to).not.toHaveBeenCalled();
     });
 
     it('lets the server notify one user', async () => {

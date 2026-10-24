@@ -13,6 +13,7 @@ import { PHOTOS, safeStoredNames } from 'src/common/helper/upload-files';
 import appConfig from 'src/config/app.config';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
+import { MAX_LISTING_PHOTOS, keptImageNames } from './package-details';
 
 /** Minimum and maximum guests / hours / days, or nulls for a flat price. Throws if they don't make sense. */
 export function quantityLimits(priceUnit: string, min?: number | null, max?: number | null) {
@@ -165,7 +166,8 @@ export class VendorListingService {
     if (listing.vendor_id !== vendorId)
       throw new ForbiddenException('Access denied');
 
-    const updateData: any = { ...dto };
+    const { keep_images, ...fields } = dto;
+    const updateData: any = { ...fields };
     // limits only mean something for per person / hour / day prices; 0 clears one
     if (dto.min_quantity !== undefined || dto.max_quantity !== undefined || dto.price_unit !== undefined) {
       Object.assign(
@@ -209,6 +211,16 @@ export class VendorListingService {
       updateData.geocoded_at = null;
     }
 
+    // keep_images lists the existing photos the vendor kept; new ones go after them. Older apps don't send
+    // it, and then new photos replace all the old ones (and no new photos means no change).
+    const kept = keep_images !== undefined ? keptImageNames(listing.images, keep_images) : undefined;
+    if (kept && kept.length + (images?.length ?? 0) > MAX_LISTING_PHOTOS) {
+      throw new BadRequestException(`A package can have up to ${MAX_LISTING_PHOTOS} photos.`);
+    }
+    if (kept && !kept.length && !images?.length && listing.images.length && listing.status === ListingStatus.ACTIVE) {
+      throw new BadRequestException('A published package needs at least one photo.');
+    }
+
     // new photos are stored first and the old ones deleted only once the listing points at the new
     // ones, so a failed save never leaves the listing without its photos
     const stored: string[] = [];
@@ -228,15 +240,17 @@ export class VendorListingService {
       }
       updateData.images = imageNames;
     }
+    if (kept) updateData.images = [...kept, ...stored];
 
     const updated = await this.findUpdated(id, updateData).catch(async (err) => {
       // the listing still points at its old photos: drop the new ones instead
       await dropStored();
       throw err;
     });
-    if (stored.length) {
+    // only now that the listing points at its new list, delete the photos it no longer uses
+    if (updateData.images) {
       for (const img of listing.images) {
-        if (!stored.includes(img)) await TanvirStorage.delete(`listings/${img}`).catch(() => null);
+        if (!updateData.images.includes(img)) await TanvirStorage.delete(`listings/${img}`).catch(() => null);
       }
     }
 

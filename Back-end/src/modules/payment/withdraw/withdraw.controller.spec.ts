@@ -97,9 +97,8 @@ describe('WithdrawController', () => {
       const req = { user: { userId: 'user-1', email: 'jane@test.com' } };
       const result = await controller.createConnectedAccount(req);
 
-      expect(result).toEqual(
-        expect.objectContaining({ success: true, message: expect.any(String) }),
-      );
+      // Returned as is, so the apps find the id at data.accountId (it used to be wrapped twice).
+      expect(result).toEqual(mockConnectedAccountResult);
       expect(mockWithdrawService.createConnectedAccount).toHaveBeenCalledWith(
         'user-1',
         'jane@test.com',
@@ -123,18 +122,18 @@ describe('WithdrawController', () => {
   // ─── getOnboardingLink ────────────────────────────────────────────────────
 
   describe('getOnboardingLink (POST /withdraw/onboarding/:accountId)', () => {
-    it('should delegate to service and wrap result in success envelope', async () => {
+    it('should return the service result as is, for the signed-in user', async () => {
       mockWithdrawService.createOnboardingLink.mockResolvedValue(
         mockOnboardingResult,
       );
 
-      const result = await controller.getOnboardingLink('acct_connect_123');
+      const req = { user: { userId: 'user-1' } };
+      const result = await controller.getOnboardingLink(req, 'acct_connect_123');
 
-      expect(result).toEqual(
-        expect.objectContaining({ success: true, message: expect.any(String) }),
-      );
+      expect(result).toEqual(mockOnboardingResult);
       expect(mockWithdrawService.createOnboardingLink).toHaveBeenCalledWith(
         'acct_connect_123',
+        'user-1',
       );
     });
 
@@ -144,7 +143,7 @@ describe('WithdrawController', () => {
       );
 
       await expect(
-        controller.getOnboardingLink('acct_bad'),
+        controller.getOnboardingLink({ user: { userId: 'user-1' } }, 'acct_bad'),
       ).rejects.toThrow('Stripe failed');
     });
   });

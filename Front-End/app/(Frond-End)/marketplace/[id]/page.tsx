@@ -31,6 +31,7 @@ import { perUnit, quantityRangeText } from "@/lib/addons";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { summariseHours, withZone, type WorkingHours } from "@/lib/working-hours";
 import { noticeLine } from "@/lib/package-details";
+import { dateOnly } from "@/lib/date-only";
 
 interface Listing {
   id: string;
@@ -455,7 +456,7 @@ export default function ListingDetailPage() {
                   {blockedDates.map((b) => (
                     <div key={b.id} className="flex items-center justify-between text-sm px-3 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
                       <span className="text-red-700 dark:text-red-300 font-medium">
-                        {new Date(b.start_date).toLocaleDateString()} – {new Date(b.end_date).toLocaleDateString()}
+                        {dateOnly(b.start_date).toLocaleDateString()} – {dateOnly(b.end_date).toLocaleDateString()}
                       </span>
                       {b.reason && <span className="text-red-500 text-xs">{b.reason}</span>}
                     </div>

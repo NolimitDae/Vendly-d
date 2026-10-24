@@ -131,10 +131,12 @@ export class StripePayment {
 
   // Stripe Connect onboarding.
   static async createOnboardingAccountLink(account_id: string) {
+    // Stripe sends the vendor back to the website's earnings page (not the API) when they finish or the link expires.
+    const back = `${appConfig().app.client_app_url}/vendor/earnings`;
     const accountLink = await getStripe().accountLinks.create({
       account: account_id,
-      refresh_url: appConfig().app.url,
-      return_url: appConfig().app.url,
+      refresh_url: back,
+      return_url: back,
       type: 'account_onboarding',
     });
     return accountLink;

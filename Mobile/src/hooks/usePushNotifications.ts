@@ -2,31 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import { NotificationsService } from '../services/notifications.service';
 import { navigationRef } from '../navigation/navigationRef';
+import { notificationTarget } from '../navigation/notificationTarget';
 
 function openFromNotification(data: Record<string, unknown> | undefined, userType?: string) {
   if (!data || !navigationRef.isReady()) return;
-
-  // contract notifications (signed, executed, amendments, reminders) open the booking too
-  const isBooking = data.type === 'booking' || data.type === 'contract';
-  if (isBooking && userType === 'EVENT_PLANNER') {
-    navigationRef.navigate('EventsTab');
-  } else if (isBooking && typeof data.bookingId === 'string') {
-    const screen = userType === 'VENDOR' ? 'VendorBookingDetail' : 'BookingDetail';
-    navigationRef.navigate('BookingsTab', {
-      screen,
-      params: { bookingId: data.bookingId },
-    });
-  } else if (data.type === 'message') {
-    navigationRef.navigate('MessagesTab', { screen: 'ChatList' });
-  } else if (data.type === 'cosign' && typeof data.eventId === 'string') {
-    // the planner's client: the event's Contracts tab (customers keep shared events under Settings, vendors under Bookings)
-    const params = { eventId: data.eventId, section: 'contracts' };
-    if (userType === 'VENDOR') navigationRef.navigate('BookingsTab', { screen: 'EventShared', params });
-    else if (userType === 'CUSTOMER' || userType === 'CLIENT') navigationRef.navigate('ProfileTab', { screen: 'EventShared', params });
-  } else if (data.type === 'identity') {
-    // ID check reviewed: approved opens role switching, rejected opens the upload again
-    navigationRef.navigate('ProfileTab', { screen: data.status === 'REJECTED' ? 'VerifyIdentity' : 'SwitchRole' });
-  }
+  // the push names what it is about the same way the inbox does: booking, then conversation, then event
+  const id = data.bookingId ?? data.conversationId ?? data.eventId;
+  const to = notificationTarget({ type: data.type, id, status: data.status }, userType);
+  if (to) navigationRef.navigate(to.tab, { screen: to.screen, initial: false, params: to.params });
 }
 
 export function usePushNotifications(userType?: string) {

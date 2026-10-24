@@ -15,6 +15,7 @@ import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits }
 import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, packageDetailsFrom, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
 import { apiError } from "@/service/contracts/contracts.service";
+import { dateOnly } from "@/lib/date-only";
 
 interface BlockedDate {
   id: string;
@@ -156,10 +157,9 @@ export default function EditListingPage() {
       appendLimits(fd, form.price_unit, limits, true);
       appendPackageDetails(fd, details, true);
 
-      // Only send images if the user picked new ones (replaces all old images on backend)
-      if (newImages.length > 0) {
-        newImages.forEach((img) => fd.append("images", img));
-      }
+      // the current photos the vendor kept (the rest are deleted); new ones are added after them
+      fd.append("keep_images", JSON.stringify(existingImages));
+      newImages.forEach((img) => fd.append("images", img));
 
       const res = await VendorListingService.update(id, fd);
       if (res.data?.success) {
@@ -174,8 +174,9 @@ export default function EditListingPage() {
       } else {
         toast.error(res.data?.message || "Failed to update listing");
       }
-    } catch {
-      toast.error("Failed to update listing");
+    } catch (err) {
+      // e.g. "A published package needs at least one photo."
+      toast.error(apiError(err, "Failed to update listing"));
     } finally {
       setSaving(false);
     }
@@ -248,14 +249,8 @@ export default function EditListingPage() {
           {/* Images */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm">
             <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Photos</h2>
-            {newImages.length > 0 && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">
-                Uploading new photos will replace all current photos.
-              </p>
-            )}
-
             {/* Existing images */}
-            {existingImages.length > 0 && newImages.length === 0 && (
+            {existingImages.length > 0 && (
               <div className="flex flex-wrap gap-3 mb-4">
                 {existingImages.map((src, i) => (
                   <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden group">
@@ -263,7 +258,8 @@ export default function EditListingPage() {
                     <button
                       type="button"
                       onClick={() => removeExisting(i)}
-                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition"
+                      aria-label="Remove photo"
+                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 flex items-center justify-center transition"
                     >
                       <X className="w-5 h-5 text-white" />
                     </button>
@@ -302,11 +298,7 @@ export default function EditListingPage() {
               >
                 <Upload className="w-7 h-7 mx-auto text-gray-400 mb-2" />
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {newImages.length > 0
-                    ? "Add more photos"
-                    : existingImages.length > 0
-                    ? "Upload new photos to replace current ones"
-                    : "Drop images here or click to upload"}
+                  {totalImages > 0 ? "Add more photos" : "Drop images here or click to upload"}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">
                   {10 - totalImages} slot{10 - totalImages !== 1 ? "s" : ""} remaining
@@ -496,7 +488,7 @@ export default function EditListingPage() {
               {blockedDates.map((b) => (
                 <div key={b.id} className="flex items-center justify-between px-3 py-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-sm">
                   <span className="text-red-700 dark:text-red-300 font-medium">
-                    {new Date(b.start_date).toLocaleDateString()} – {new Date(b.end_date).toLocaleDateString()}
+                    {dateOnly(b.start_date).toLocaleDateString()} – {dateOnly(b.end_date).toLocaleDateString()}
                     {b.reason && <span className="ml-2 text-red-400 font-normal">({b.reason})</span>}
                   </span>
                   <button

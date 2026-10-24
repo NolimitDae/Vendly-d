@@ -32,32 +32,23 @@ export class WithdrawController {
       const userId = req.user.userId;
       const email = req.user.email;
 
-      const result = await this.withdrawService.createConnectedAccount(
+      // The service already returns { success, message, data: { accountId } }.
+      return await this.withdrawService.createConnectedAccount(
         userId,
         email,
       );
-
-      return {
-        success: true,
-        message: 'Connected account created successfully',
-        data: result,
-      };
     } catch (error) {
       throw error;
     }
   }
 
   // Stripe Connect Onboarding Link
+  @UseGuards(JwtAuthGuard)
   @Post('onboarding/:accountId')
-  async getOnboardingLink(@Param('accountId') accountId: string) {
+  async getOnboardingLink(@Req() req: any, @Param('accountId') accountId: string) {
     try {
-      const result = await this.withdrawService.createOnboardingLink(accountId);
-
-      return {
-        success: true,
-        message: 'Onboarding link created successfully',
-        data: result,
-      };
+      // The service already returns { success, message, data: { url } }.
+      return await this.withdrawService.createOnboardingLink(accountId, req.user.userId);
     } catch (error) {
       throw error;
     }

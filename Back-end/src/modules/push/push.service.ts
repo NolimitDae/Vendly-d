@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationTopic, wants } from 'src/common/helper/notification-prefs';
+import { LIVE_NOTIFIER, type LiveNotifier } from 'src/modules/application/notification/live-notifier';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -8,7 +9,11 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 export class PushService {
   private readonly logger = new Logger(PushService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    // the live bell on the website and in the app (missing in tests that don't load it)
+    @Optional() @Inject(LIVE_NOTIFIER) private gateway?: LiveNotifier,
+  ) {}
 
   /** Keeps a copy in the user's notification inbox (app + website), even if they have no push token. */
   private async record(userId: string, payload: { title: string; body: string; data?: Record<string, unknown> }) {
@@ -18,7 +23,13 @@ export class PushService {
       const event = await this.prisma.notificationEvent.create({
         data: { type: typeof d.type === 'string' ? d.type : 'general', text: `${payload.title}: ${payload.body}`.slice(0, 1000) },
       });
-      await this.prisma.notification.create({ data: { receiver_id: userId, notification_event_id: event.id, entity_id: entity } });
+      const saved = await this.prisma.notification.create({ data: { receiver_id: userId, notification_event_id: event.id, entity_id: entity } });
+      // the same shape GET /notifications lists, so open bells add it straight away
+      if (saved && this.gateway) {
+        void this.gateway
+          .notifyUser(userId, { notification: { ...saved, notification_event: event, sender: null } })
+          .catch((err) => this.logger.warn(`Live notification for ${userId} failed: ${(err as Error).message}`));
+      }
     } catch (err) {
       this.logger.warn(`Inbox record for ${userId} failed: ${(err as Error).message}`);
     }
