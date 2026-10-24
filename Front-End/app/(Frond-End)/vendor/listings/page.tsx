@@ -9,6 +9,8 @@ import { toast } from "react-toastify";
 import CalendarSyncSection from "@/components/vendor/CalendarSyncSection";
 import WorkingHoursSection from "@/components/vendor/WorkingHoursSection";
 import { packagePriceText, perUnit } from "@/lib/addons";
+import LicenceNotice from "@/components/vendor/LicenceNotice";
+import { apiError } from "@/service/contracts/contracts.service";
 
 interface Listing {
   id: string;
@@ -81,8 +83,9 @@ export default function VendorListingsPage() {
       } else {
         toast.error(res.data?.message || "Failed to publish");
       }
-    } catch {
-      toast.error("Failed to publish listing");
+    } catch (err) {
+      // e.g. the business licence isn't approved yet
+      toast.error(apiError(err, "Failed to publish listing"));
     } finally {
       setPublishingId(null);
     }
@@ -101,6 +104,8 @@ export default function VendorListingsPage() {
             New Listing
           </Link>
         </div>
+
+        <LicenceNotice />
 
         {/* Quick actions */}
         <nav aria-label="Quick actions" className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">

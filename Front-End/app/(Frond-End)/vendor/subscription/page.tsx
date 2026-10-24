@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SubscriptionService } from "@/service/subscription/subscription.service";
+import { useFeatureOptIn } from "@/hooks/useFeature";
+import Link from "next/link";
 import dayjs from "dayjs";
 
 /* ─── Plan data (static — backend schema lacks price/commission fields) ─── */
@@ -586,13 +588,52 @@ function SubscriptionPageInner() {
   );
 }
 
-export default function VendorSubscriptionPage() {
+/** Shown while vendor plans are switched off: there is nothing to buy yet. */
+function PlansComingLater() {
+  // a plan started before they were switched off still exists; nothing here changes it
+  const [hasPlan, setHasPlan] = useState(false);
+  useEffect(() => {
+    SubscriptionService.getCurrentPlan()
+      .then((res) => setHasPlan(res.data?.subscription_active === true))
+      .catch(() => undefined);
+  }, []);
+
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-16 px-4 flex items-start justify-center">
+      <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-8 text-center space-y-4">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Subscriptions are coming later</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          You don’t need a plan to list your services or take bookings on Vendly. We’ll let you know when plans are available.
+        </p>
+        {hasPlan && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Your account has a plan from before. To change or cancel it, contact Vendly support.
+          </p>
+        )}
+        <Link
+          href="/vendor/listings"
+          className="inline-block w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition"
+        >
+          Back to your listings
+        </Link>
       </div>
-    }>
+    </div>
+  );
+}
+
+const spinner = (
+  <div className="min-h-screen flex items-center justify-center">
+    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+  </div>
+);
+
+export default function VendorSubscriptionPage() {
+  // vendor plans are hidden until they launch (an admin switches the flag on)
+  const plansOn = useFeatureOptIn("subscriptions");
+  if (plansOn === undefined) return spinner;
+  if (!plansOn) return <PlansComingLater />;
+  return (
+    <Suspense fallback={spinner}>
       <SubscriptionPageInner />
     </Suspense>
   );

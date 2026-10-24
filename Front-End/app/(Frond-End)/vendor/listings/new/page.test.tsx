@@ -52,6 +52,10 @@ jest.mock('@/service/geo/geo.service', () => ({
   GeoService: { suggest: jest.fn().mockResolvedValue({ data: { data: [] } }), reverse: jest.fn() },
 }));
 
+jest.mock('@/service/auth/auth.service', () => ({
+  AuthService: { me: jest.fn().mockResolvedValue({ data: { success: true, data: { type: 'VENDOR', license_status: 'APPROVED' } } }) },
+}));
+
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }));
@@ -61,6 +65,7 @@ import { MarketplaceService } from '@/service/marketplace/marketplace.service';
 import { VendorListingService } from '@/service/vendor/vendor-listing.service';
 import { toast } from 'react-toastify';
 import { AddOnsService } from '@/service/add-ons/add-ons.service';
+import { AuthService } from '@/service/auth/auth.service';
 
 const mockCategories = [{ id: 'cat-1', name: 'Photography', sub_categories: [] }];
 
@@ -317,6 +322,22 @@ describe('NewListingPage', () => {
       expect(screen.getByRole('option', { name: 'Day' })).toBeInTheDocument();
       expect(screen.getByRole('option', { name: 'Event' })).toBeInTheDocument();
     });
+  });
+
+  it('tells a vendor without an approved licence that the package is saved as a draft', async () => {
+    setupActivePlan();
+    (AuthService.me as jest.Mock).mockResolvedValueOnce({ data: { success: true, data: { type: 'VENDOR', license_status: 'PENDING', license_uploaded: false } } });
+    render(<NewListingPage />);
+    expect(await screen.findByText(/You need an approved business licence to publish packages/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Upload your licence' })).toHaveAttribute('href', '/vendor/profile#licence');
+  });
+
+  it('shows no licence note to an approved vendor', async () => {
+    setupActivePlan();
+    render(<NewListingPage />);
+    await waitFor(() => screen.getByText('Create New Listing'));
+    await waitFor(() => expect(AuthService.me).toHaveBeenCalled());
+    expect(screen.queryByText(/approved business licence/)).not.toBeInTheDocument();
   });
 
   it('does not require a vendor plan unless NEXT_PUBLIC_REQUIRE_VENDOR_PLAN is set', async () => {

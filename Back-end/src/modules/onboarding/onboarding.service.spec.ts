@@ -105,6 +105,21 @@ describe('OnboardingService.get', () => {
     expect(prisma.vendorListing.count).toHaveBeenCalledWith({ where: { vendor_id: 'u1', status: 'ACTIVE', deleted_at: null } });
   });
 
+  it('tells vendors the licence is needed to publish', async () => {
+    const steps = async (vendor: any, listings = 0) => {
+      const { service } = setup({ type: 'VENDOR' }, { vendor, listings });
+      return Object.fromEntries((await service.get('u1')).data!.steps.map((s) => [s.key, s]));
+    };
+    const pending = await steps({ license_photo: ['l.jpg'], license_status: 'PENDING' });
+    expect(pending.business_license.description).toMatch(/approved licence to publish packages/);
+    expect(pending.first_package).toMatchObject({ state: 'todo', note: 'You can publish once your business licence is approved.' });
+    // approved, or no licence needed: no note
+    expect((await steps({ license_photo: [], license_status: 'APPROVED' })).first_package.note).toBeUndefined();
+    expect((await steps({ license_photo: [], license_status: 'NOT_APPLICABLE' })).first_package.note).toBeUndefined();
+    // a package already live stays done
+    expect((await steps({ license_photo: [], license_status: 'PENDING' }, 1)).first_package).toEqual(expect.objectContaining({ state: 'done' }));
+  });
+
   it('planner steps', async () => {
     const { service } = setup(
       { type: 'EVENT_PLANNER', onboarding_seen: { EVENT_PLANNER: { intro: 'x' } } },

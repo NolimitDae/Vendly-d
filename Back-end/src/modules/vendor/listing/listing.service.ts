@@ -10,6 +10,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { PHOTOS, safeStoredNames } from 'src/common/helper/upload-files';
+import { assertCanPublish } from 'src/common/helper/publish-licence';
 import appConfig from 'src/config/app.config';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
@@ -47,6 +48,8 @@ export class VendorListingService {
     dto: CreateVendorListingDto,
     images?: Express.Multer.File[],
   ) {
+    // going live straight away needs an approved licence; a draft can always be saved
+    if (dto.status === ListingStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
     const imageNames = safeStoredNames(images, PHOTOS);
     for (const [i, file] of (images ?? []).entries()) {
       await TanvirStorage.put(`listings/${imageNames[i]}`, file.buffer);
@@ -165,6 +168,8 @@ export class VendorListingService {
     if (!listing) throw new NotFoundException('Listing not found');
     if (listing.vendor_id !== vendorId)
       throw new ForbiddenException('Access denied');
+    // putting a package live needs an approved licence; one that's already live stays live
+    if (dto.status === ListingStatus.ACTIVE && listing.status !== ListingStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
 
     const { keep_images, ...fields } = dto;
     const updateData: any = { ...fields };
@@ -293,6 +298,7 @@ export class VendorListingService {
     if (!listing) throw new NotFoundException('Listing not found');
     if (listing.vendor_id !== vendorId)
       throw new ForbiddenException('Access denied');
+    if (listing.status !== ListingStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
     if (!listing.images.length)
       throw new BadRequestException('Add at least one image before publishing');
 

@@ -12,6 +12,7 @@ import { CreateRentalItemDto, RentalBookDto, RentalQuoteDto, RentalReturnDto, Up
 import { availabilityCalendar, availableQuantity, DAY_MS, parseDay, priceRental, rangeProblem, rentalDays, ReservationLike } from './rental-availability';
 import { track } from 'src/common/analytics';
 import { ACTIVE_VENDOR_WHERE, VENDOR_UNAVAILABLE, vendorIsActive } from 'src/common/helper/active-vendor';
+import { assertCanPublish, canPublish, vendorLicence } from 'src/common/helper/publish-licence';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Bookings in these states no longer hold stock. */
@@ -76,6 +77,11 @@ export class RentalsService {
   // ─── Vendor inventory ─────────────────────────────────────────────────────
 
   async createItem(vendorId: string, dto: CreateRentalItemDto, images?: Express.Multer.File[]) {
+    // items go live straight away, which needs an approved licence: asked for, it's refused;
+    // otherwise the item is saved as a draft
+    let status = dto.status;
+    if (status === RentalItemStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
+    else if (!status) status = canPublish(await vendorLicence(this.prisma, vendorId)) ? RentalItemStatus.ACTIVE : RentalItemStatus.DRAFT;
     const names = await this.saveImages(images);
     const item = await this.prisma.rentalItem.create({
       data: {
@@ -88,7 +94,7 @@ export class RentalsService {
         turnaround_hours: dto.turnaround_hours ?? 24,
         category_id: dto.category_id,
         location: dto.location,
-        status: dto.status ?? RentalItemStatus.ACTIVE,
+        status,
         images: names,
       },
     });
@@ -106,6 +112,8 @@ export class RentalsService {
     // refuse a non-image before any of the current photos are removed
     safeStoredNames(images, PHOTOS);
     const item = await this.ownedItem(id, vendorId);
+    // making an item live needs an approved licence; one that's already live stays live
+    if (dto.status === RentalItemStatus.ACTIVE && item.status !== RentalItemStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
     const { keep_images, ...fields } = dto;
     let kept = item.images;
     if (keep_images) {

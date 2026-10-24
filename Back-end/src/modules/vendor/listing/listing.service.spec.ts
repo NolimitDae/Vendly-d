@@ -36,6 +36,7 @@ const mockListing = {
 
 const mockPrisma = {
   serviceSubCategory: { findUnique: jest.fn() },
+  vendorProfile: { findUnique: jest.fn() },
   vendorListing: {
     create: jest.fn(),
     findMany: jest.fn(),
@@ -56,6 +57,7 @@ describe('VendorListingService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockPrisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'APPROVED', license_photo: ['l.pdf'] });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         VendorListingService,
@@ -377,6 +379,66 @@ describe('VendorListingService', () => {
 
       const result = await service.publishListing('listing-1', 'vendor-1');
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('licence needed to publish', () => {
+    const NEEDS = /business licence needs to be approved before you can publish/;
+
+    it('refuses to publish until the licence is approved, and says why', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['img.jpg'] });
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'PENDING', license_photo: [] });
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(NEEDS);
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'PENDING', license_photo: ['l.pdf'] });
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(/Vendly is reviewing your business licence/);
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'SUSPENDED', license_photo: ['l.pdf'] });
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(/needs attention/);
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce(null);
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.vendorListing.update).not.toHaveBeenCalled();
+      expect(mockPrisma.vendorProfile.findUnique).toHaveBeenCalledWith({ where: { user_id: 'vendor-1' }, select: { license_status: true, license_photo: true } });
+    });
+
+    it('lets vendors who need no licence publish', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['img.jpg'] });
+      mockPrisma.vendorListing.update.mockResolvedValue({ ...mockListing, status: ListingStatus.ACTIVE });
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'NOT_APPLICABLE', license_photo: [] });
+      await expect(service.publishListing('listing-1', 'vendor-1')).resolves.toMatchObject({ success: true });
+    });
+
+    it('refuses re-publishing a paused package too', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, status: ListingStatus.PAUSED, images: ['img.jpg'] });
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'PENDING', license_photo: [] });
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(NEEDS);
+    });
+
+    it('refuses creating a live package, but saves a draft', async () => {
+      mockPrisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'PENDING', license_photo: [] });
+      const dto = { title: 'Live now', description: 'x', price: 100 };
+      await expect(service.create('vendor-1', { ...dto, status: ListingStatus.ACTIVE })).rejects.toThrow(NEEDS);
+      expect(mockPrisma.vendorListing.create).not.toHaveBeenCalled();
+      mockPrisma.vendorListing.create.mockResolvedValue(mockListing);
+      await expect(service.create('vendor-1', dto)).resolves.toMatchObject({ success: true });
+      expect(mockPrisma.vendorListing.create.mock.calls[0][0].data.status).toBe(ListingStatus.DRAFT);
+    });
+
+    it('refuses setting a draft live through an edit, but other edits save', async () => {
+      mockPrisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'PENDING', license_photo: [] });
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      await expect(service.update('listing-1', 'vendor-1', { status: ListingStatus.ACTIVE })).rejects.toThrow(NEEDS);
+      expect(mockPrisma.vendorListing.update).not.toHaveBeenCalled();
+      mockPrisma.vendorListing.update.mockResolvedValue({ ...mockListing, title: 'New' });
+      await expect(service.update('listing-1', 'vendor-1', { title: 'New' })).resolves.toMatchObject({ success: true });
+    });
+
+    it('keeps a package that is already live live, edits included', async () => {
+      mockPrisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'PENDING', license_photo: [] });
+      const live = { ...mockListing, status: ListingStatus.ACTIVE, images: ['img.jpg'] };
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(live);
+      mockPrisma.vendorListing.update.mockResolvedValue(live);
+      await expect(service.update('listing-1', 'vendor-1', { title: 'Still live', status: ListingStatus.ACTIVE })).resolves.toMatchObject({ success: true });
+      await expect(service.publishListing('listing-1', 'vendor-1')).resolves.toMatchObject({ success: true });
+      expect(mockPrisma.vendorProfile.findUnique).not.toHaveBeenCalled();
     });
   });
 

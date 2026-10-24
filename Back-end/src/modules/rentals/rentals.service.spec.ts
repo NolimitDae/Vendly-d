@@ -21,6 +21,7 @@ const prisma: any = {
   rentalItem: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), count: jest.fn() },
   rentalReservation: { findMany: jest.fn(), updateMany: jest.fn(), count: jest.fn() },
   rentalReturn: { create: jest.fn() },
+  vendorProfile: { findUnique: jest.fn() },
   booking: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
   $queryRaw: jest.fn(),
   $transaction: jest.fn(),
@@ -38,6 +39,7 @@ describe('RentalsService', () => {
     prisma.$transaction.mockImplementation((fn: any) => (typeof fn === 'function' ? fn(prisma) : Promise.all(fn)));
     prisma.rentalItem.findMany.mockResolvedValue([chairs, arch]);
     prisma.rentalReservation.findMany.mockResolvedValue([]);
+    prisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'APPROVED', license_photo: ['l.pdf'] });
     prisma.booking.create.mockImplementation(({ data }: any) =>
       Promise.resolve({ id: 'b1', status: BookingStatus.PENDING, vendor_id: data.vendor_id, amount: data.amount, rental_reservations: [{ item: { title: 'Chiavari chair' } }, { item: { title: 'Flower arch' } }], vendor: { email: 'v@x.com', name: 'Nia' }, customer: { name: 'Amara' } }),
     );
@@ -180,6 +182,38 @@ describe('RentalsService', () => {
       await expect(service.updateItem('chairs', 'v1', { keep_images: ['a.jpg'] } as any, [html])).rejects.toThrow(BadRequestException);
       expect(TanvirStorage.delete).not.toHaveBeenCalled();
       expect(prisma.rentalItem.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('licence needed to go live', () => {
+    const pending = { license_status: 'PENDING', license_photo: [] };
+    beforeEach(() => prisma.rentalItem.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'i1', ...data })));
+
+    it('new items go live with an approved licence, and are saved as drafts without one', async () => {
+      await service.createItem('v1', { title: 'Chair', daily_rate: 5 } as any);
+      expect(prisma.rentalItem.create.mock.calls[0][0].data.status).toBe(RentalItemStatus.ACTIVE);
+      prisma.vendorProfile.findUnique.mockResolvedValue(pending);
+      await service.createItem('v1', { title: 'Chair', daily_rate: 5 } as any);
+      expect(prisma.rentalItem.create.mock.calls[1][0].data.status).toBe(RentalItemStatus.DRAFT);
+      await service.createItem('v1', { title: 'Chair', daily_rate: 5, status: RentalItemStatus.DRAFT } as any);
+      expect(prisma.rentalItem.create).toHaveBeenCalledTimes(3);
+    });
+
+    it('refuses an item asked to be live without an approved licence', async () => {
+      prisma.vendorProfile.findUnique.mockResolvedValue(pending);
+      await expect(service.createItem('v1', { title: 'Chair', daily_rate: 5, status: RentalItemStatus.ACTIVE } as any)).rejects.toThrow(/licence needs to be approved/);
+      expect(prisma.rentalItem.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses making a paused item live, but a live item stays live', async () => {
+      prisma.vendorProfile.findUnique.mockResolvedValue(pending);
+      prisma.rentalItem.findFirst.mockResolvedValueOnce({ ...chairs, status: RentalItemStatus.PAUSED, images: [] });
+      await expect(service.updateItem('chairs', 'v1', { status: RentalItemStatus.ACTIVE } as any)).rejects.toThrow(ForbiddenException);
+      expect(prisma.rentalItem.update).not.toHaveBeenCalled();
+      prisma.rentalItem.findFirst.mockResolvedValueOnce({ ...chairs, images: [] });
+      prisma.rentalItem.update.mockResolvedValue({ ...chairs, images: [] });
+      await service.updateItem('chairs', 'v1', { status: RentalItemStatus.ACTIVE, title: 'Chairs' } as any);
+      expect(prisma.rentalItem.update).toHaveBeenCalled();
     });
   });
 });

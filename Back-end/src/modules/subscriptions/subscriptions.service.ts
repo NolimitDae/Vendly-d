@@ -112,6 +112,13 @@ const PRICE_ID_MAP: Record<string, { monthly: string; yearly: string }> = {
   },
 };
 
+/**
+ * Vendor plans don't unlock anything yet, so nobody can start one (paid or free trial) until an
+ * admin turns this flag on. Off unless set. Plans already running are left alone.
+ */
+export const SUBSCRIPTIONS_FLAG = 'subscriptions';
+export const SUBSCRIPTIONS_UNAVAILABLE = 'Vendor plans aren’t available yet. Vendly will let you know when they are.';
+
 @Injectable()
 export class SubscriptionsService {
   private readonly logger = new Logger(SubscriptionsService.name);
@@ -152,7 +159,13 @@ export class SubscriptionsService {
     }
   }
 
+  async subscriptionsOn() {
+    const flag = await this.prisma.featureFlag.findUnique({ where: { key: SUBSCRIPTIONS_FLAG }, select: { enabled: true } });
+    return flag?.enabled === true;
+  }
+
   async checkout(userId: string, dto: SubscribeDto) {
+    if (!(await this.subscriptionsOn())) throw new BadRequestException(SUBSCRIPTIONS_UNAVAILABLE);
     try {
       const vendor = await this.prisma.vendorProfile.findUnique({
         where: { user_id: userId },

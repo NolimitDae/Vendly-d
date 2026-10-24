@@ -7,6 +7,7 @@ import { ChevronDown, Edit2, Loader2, Package, Pause, Play, Plus, Trash2, X } fr
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import { RentalsService, errorMessage, money, type RentalItem, type RentalReservation } from "@/service/rentals/rentals.service";
+import LicenceNotice from "@/components/vendor/LicenceNotice";
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -70,6 +71,8 @@ export default function VendorRentalsPage() {
             <Plus className="w-4 h-4" /> Add item
           </button>
         </div>
+
+        <LicenceNotice things="rental items" />
 
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>

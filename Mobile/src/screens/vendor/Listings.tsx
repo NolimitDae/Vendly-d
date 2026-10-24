@@ -8,6 +8,7 @@ import { BrandGradient, ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import type { VendorDashboardStackParams } from '../../navigation/types';
+import LicenceNotice from '../../components/LicenceNotice';
 
 interface Listing {
   id: string;
@@ -57,7 +58,8 @@ export default function VendorListings() {
       const res = await api.patch(`/vendor/listings/${l.id}/${live ? 'pause' : 'publish'}`);
       setListings((prev) => prev.map((x) => (x.id === l.id ? { ...x, status: res.data?.data?.status ?? (live ? 'PAUSED' : 'ACTIVE') } : x)));
     } catch (err: any) {
-      Alert.alert('Could not update', err?.response?.data?.message ?? 'Try again in a moment.');
+      // e.g. the business licence isn't approved yet
+      Alert.alert(live ? 'Could not update' : 'Could not publish', err?.response?.data?.message ?? 'Try again in a moment.');
     }
   };
 
@@ -92,6 +94,7 @@ export default function VendorListings() {
               <Text style={s.h2}>Manage Your Packages</Text>
               <Text style={s.body}>Everything customers can book from you. Pause a package to hide it, or block dates when you're busy.</Text>
             </View>
+            <LicenceNotice style={{ marginHorizontal: 20 }} />
           </View>
         }
         ListEmptyComponent={

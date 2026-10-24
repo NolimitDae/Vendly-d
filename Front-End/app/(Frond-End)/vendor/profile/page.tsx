@@ -368,10 +368,10 @@ export default function VendorProfilePage() {
         </form>
 
         {/* License Upload — separate section */}
-        <div className="mt-6 bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+        <div id="licence" className="mt-6 bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 scroll-mt-24">
           <h2 className="font-semibold text-gray-900 dark:text-white mb-2">License / Verification</h2>
           <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">
-            Upload your business license or certification documents for admin verification.
+            Upload your business license or certification documents for admin verification. You need it approved before you can publish packages.
           </p>
 
           <button

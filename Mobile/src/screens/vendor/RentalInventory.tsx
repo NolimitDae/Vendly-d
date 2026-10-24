@@ -8,6 +8,7 @@ import { GradientButton, ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { RentalsService, type RentalItem } from '../../services/rentals.service';
 import type { VendorDashboardStackParams } from '../../navigation/types';
+import LicenceNotice from '../../components/LicenceNotice';
 
 const STATUS: Record<string, { label: string; color: string }> = {
   ACTIVE: { label: 'Live', color: '#5BD69A' },
@@ -63,13 +64,16 @@ export default function RentalInventory({ navigation }: NativeStackScreenProps<V
           contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: insets.bottom + 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
           ListHeaderComponent={
-            items.length ? (
-              <View style={s.stats}>
-                <Stat label="Items" value={items.length} />
-                <Stat label="Units" value={units} />
-                <Stat label="Out today" value={out} />
-              </View>
-            ) : null
+            <View style={{ gap: 12 }}>
+              <LicenceNotice things="rental items" />
+              {items.length ? (
+                <View style={s.stats}>
+                  <Stat label="Items" value={items.length} />
+                  <Stat label="Units" value={units} />
+                  <Stat label="Out today" value={out} />
+                </View>
+              ) : null}
+            </View>
           }
           ListEmptyComponent={
             <View style={s.empty}>
