@@ -65,7 +65,7 @@ export class ChatExtrasService {
       if (present.has(vendorId)) continue;
       await this.prisma.participant.create({ data: { conversationId, userId: vendorId, role: 'vendor' } });
       await this.systemMessage(conversationId, vendorId, `${name} joined the event chat.`);
-      void this.push.sendToUser(vendorId, { title: event.name, body: 'You were added to the event chat', data: { type: 'chat', conversationId } });
+      void this.push.sendToUser(vendorId, { title: event.name, body: 'You were added to the event chat', data: { type: 'chat', conversationId } }, 'messages');
     }
     return conversationId;
   }
@@ -130,7 +130,7 @@ export class ChatExtrasService {
     const formatted = formatMessage(msg);
     track('quote_sent', vendorId, { quote_id: quote.id, amount, group: conv.is_group });
     this.gateway.server?.to(conversationId).emit('message', { from: vendorId, data: formatted });
-    void this.push.sendToUser(customerId, { title: 'New quote', body: `${quote.title} · $${amount.toFixed(2)}`, data: { type: 'chat', conversationId } });
+    void this.push.sendToUser(customerId, { title: 'New quote', body: `${quote.title} · $${amount.toFixed(2)}`, data: { type: 'chat', conversationId } }, 'messages');
     return { success: true, data: formatted };
   }
 

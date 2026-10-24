@@ -52,7 +52,7 @@ describe('BookingExtrasService', () => {
       const res = await service.request('b1', 'v1', { kind: 'FEE', name: 'Late return', unit_price: 50, price_unit: 'PER_HOUR', quantity: 3, note: 'Returned 3 hours late' } as any);
       expect(prisma.bookingExtra.create).toHaveBeenCalledWith({ data: expect.objectContaining({ amount: 150, fee_amount: 0, status: 'PENDING', quantity: 3 }) });
       expect(res.data.total).toBe(150);
-      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'A fee needs your approval' }));
+      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'A fee needs your approval' }), 'booking_updates');
     });
 
     it('adds the Vendly Protection percentage to add-ons and counts per person add-ons by the booking guests', async () => {
@@ -129,7 +129,7 @@ describe('BookingExtrasService', () => {
     it('declining tells the vendor they can ask Vendly to review a fee', async () => {
       const { service, push } = setup();
       await service.decline('e1', 'c1', 'They were on time');
-      expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ body: expect.stringContaining('ask Vendly to review') }));
+      expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ body: expect.stringContaining('ask Vendly to review') }), 'booking_updates');
     });
   });
 
@@ -186,7 +186,7 @@ describe('BookingExtrasService', () => {
       const res = await service.request('b1', 'v1', { kind: 'ADD_ON', name: 'Extra time', unit_price: 150, price_unit: 'PER_HOUR', quantity: 2, extends_minutes: 120 } as any);
       expect(prisma.bookingExtra.create).toHaveBeenCalledWith({ data: expect.objectContaining({ extends_minutes: 120 }) });
       expect(res.data).toMatchObject({ extends_minutes: 120, extends_label: 'Adds 2 hours once paid' });
-      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ body: expect.stringContaining('adds 2 hours to the booking') }));
+      expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ body: expect.stringContaining('adds 2 hours to the booking') }), 'booking_updates');
     });
 
     it('fees never add time, and time comes in steps of 30 minutes', async () => {
@@ -227,6 +227,6 @@ describe('BookingExtrasService', () => {
     prisma.bookingExtra.findMany.mockResolvedValue([{ id: 'e1', booking_id: 'b1', name: 'Late return', kind: 'FEE', amount: 150, fee_amount: 0 }]);
     expect(await service.remind()).toBe(1);
     expect(prisma.bookingExtra.updateMany).toHaveBeenCalledWith({ where: { id: 'e1', reminded_at: null }, data: { reminded_at: expect.any(Date) } });
-    expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Still waiting for your answer' }));
+    expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Still waiting for your answer' }), 'reminders');
   });
 });

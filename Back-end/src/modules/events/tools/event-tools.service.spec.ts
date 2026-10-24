@@ -98,7 +98,7 @@ describe('EventToolsService', () => {
       prisma.eventTimelineItem.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 't1', ...data, vendor: null }));
       await service.addTimelineItem('e1', 'planner', { starts_at: '2026-11-14T14:00:00Z', title: 'Load-in', vendor_id: 'v1' });
       expect(prisma.eventTimelineItem.create).toHaveBeenCalled();
-      expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.anything());
+      expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.anything(), 'booking_updates');
       await expect(service.addTimelineItem('e1', 'planner', { starts_at: '2026-11-14T14:00:00Z', title: 'X', vendor_id: 'v9' })).rejects.toThrow(BadRequestException);
       await expect(service.addTimelineItem('e1', 'planner', { starts_at: '2026-11-14T14:00:00Z', ends_at: '2026-11-14T13:00:00Z', title: 'X' })).rejects.toThrow(/after the start/);
     });
@@ -232,7 +232,7 @@ describe('EventToolsService', () => {
       const res = await service.inviteTeam('e1', 'planner', 't1');
       expect(res.data.invited).toBe(1);
       expect(prisma.message.create).toHaveBeenCalledTimes(1);
-      expect(push.sendToUser).toHaveBeenCalledWith('v3', expect.anything());
+      expect(push.sendToUser).toHaveBeenCalledWith('v3', expect.anything(), 'messages');
     });
   });
 });

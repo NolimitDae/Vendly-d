@@ -22,6 +22,7 @@ import { track } from 'src/common/analytics';
 import { normalizeHandle, shopImageUrl } from '../../common/helper/handle';
 import { IdentityService } from '../identity/identity.service';
 import { parseWorkingHours, readWorkingHours, type WorkingHours } from '../vendor/working-hours';
+import { NOTIFICATION_PREF_KEYS, NotificationPrefKey, readPrefs } from '../../common/helper/notification-prefs';
 
 /** Roles a person can hold on one login and switch between (CLIENT is the older name for CUSTOMER). */
 export const SWITCHABLE_ROLES = ['CUSTOMER', 'VENDOR', 'EVENT_PLANNER'] as const;
@@ -1199,6 +1200,22 @@ export class AuthService {
       where: { id: userId },
       data: { push_token: token },
     });
+  }
+
+  /** Which optional pushes and emails this user gets; every switch is on until they change it. */
+  async notificationPrefs(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { notification_prefs: true } });
+    if (!user) throw new UnauthorizedException('User not found');
+    return { success: true, data: readPrefs(user.notification_prefs) };
+  }
+
+  /** Changes only the switches sent; the rest keep their value. */
+  async updateNotificationPrefs(userId: string, changes: Partial<Record<NotificationPrefKey, boolean>>) {
+    const current = await this.notificationPrefs(userId);
+    const next = { ...current.data };
+    for (const k of NOTIFICATION_PREF_KEYS) if (typeof changes[k] === 'boolean') next[k] = changes[k];
+    await this.prisma.user.update({ where: { id: userId }, data: { notification_prefs: next } });
+    return { success: true, data: next };
   }
 
   /** The roles this login holds, the one in use, and whether it may switch (ID verified). */

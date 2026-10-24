@@ -149,7 +149,7 @@ describe('BookingService', () => {
 
       expect(result.success).toBe(true);
       expect(mockContracts.createSignedBooking).toHaveBeenCalledWith('customer-1', signedRequest, { ip: '1.2.3.4' });
-      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.objectContaining({ data: { type: 'booking', bookingId: 'booking-1' } }));
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.objectContaining({ data: { type: 'booking', bookingId: 'booking-1' } }), 'booking_updates');
     });
 
     it('propagates contract validation errors (e.g. missing listing)', async () => {
@@ -471,6 +471,7 @@ describe('BookingService', () => {
       expect(mockPush.sendToUser).toHaveBeenCalledWith(
         'customer-1',
         expect.objectContaining({ title: 'Booking confirmed' }),
+        'booking_updates',
       );
     });
 
@@ -480,7 +481,7 @@ describe('BookingService', () => {
 
       await service.cancel('booking-1', 'customer-1', {} as any);
 
-      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.anything());
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.anything(), 'booking_updates');
     });
   });
 
@@ -577,6 +578,7 @@ describe('BookingService', () => {
       expect(mockPush.sendToUser).toHaveBeenCalledWith(
         'customer-1',
         expect.objectContaining({ title: 'New deliverable', body: 'Final files' }),
+        'booking_updates',
       );
     });
   });
@@ -854,7 +856,9 @@ describe('BookingService', () => {
         message: expect.stringContaining('$472.50 is being refunded to your card'),
         lines: expect.arrayContaining([{ label: 'Refund', value: '$472.50' }, { label: 'When', value: 'Within 5–10 business days' }]),
       }));
-      expect(mockPush.sendToUser).toHaveBeenCalledWith('customer-1', expect.objectContaining({ body: expect.stringContaining('$472.50 is being refunded') }));
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('customer-1', expect.objectContaining({ body: expect.stringContaining('$472.50 is being refunded') }), 'booking_updates');
+      // the refund email is never optional
+      expect(mockMail.sendBookingNotification.mock.calls[0][0].topic).toBeUndefined();
       expect(mockPayments.sendFinalInvoice).toHaveBeenCalledWith('booking-1');
     });
 
@@ -862,8 +866,8 @@ describe('BookingService', () => {
       await service.cancel('booking-1', 'customer-1', {});
       expect(mockMail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'customer@test.com', message: expect.stringContaining("The $22.50 Vendly Protection fee isn't refunded.") }));
       expect(mockMail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'vendor@test.com', message: expect.stringContaining('You keep $225.00 under your flexible cancellation policy.') }));
-      expect(mockPush.sendToUser).toHaveBeenCalledWith('customer-1', expect.anything());
-      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.anything());
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('customer-1', expect.anything(), 'booking_updates');
+      expect(mockPush.sendToUser).toHaveBeenCalledWith('vendor-1', expect.anything(), 'booking_updates');
     });
 
     it('an unpaid booking gets no invoice', async () => {
