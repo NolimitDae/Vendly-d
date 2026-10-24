@@ -58,6 +58,8 @@ interface Booking {
   review?: { id: string; rating: number } | null;
   service_fee?: number | string | null;
   paid_at?: string | null;
+  /** set once the vendor accepts: the booking is charged on its payment schedule */
+  payment_plan?: string | null;
   /** set when the vendor didn't answer the request in time */
   expired_at?: string | null;
 }
@@ -229,7 +231,8 @@ export default function CustomerBookingsPageContent() {
                           <CheckCircle2 className="w-3.5 h-3.5" /> Paid
                         </span>
                       )}
-                      {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && !booking.paid_at && (
+                      {/* a booking on a payment plan is charged on its schedule, never through a checkout */}
+                      {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && !booking.paid_at && !booking.payment_plan && (
                         <button
                           onClick={() => handlePayNow(booking.id)}
                           disabled={payingId === booking.id}

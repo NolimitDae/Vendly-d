@@ -11,7 +11,7 @@ export class CreateWithdrawDto {
 
   @IsNotEmpty()
   @IsNumber()
-  @Min(1, { message: 'Minimum withdraw amount is 1 USD' })
+  @Min(20, { message: 'Minimum withdraw amount is $20' })
   amount: number;
 
   @IsOptional()

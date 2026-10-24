@@ -332,6 +332,47 @@ run('Contracts (e2e)', () => {
     expect(mine.body.data.active[0].type).toBe('DEFAULT');
   });
 
+  it('a price amendment re-prices unpaid charges, and is refused once a payment was taken', async () => {
+    // the full payment couldn't be taken at accept (no saved card): nothing paid yet
+    const before = await prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, kind: 'charge' } });
+    expect(before).toHaveLength(1);
+    expect(before[0].status).toBe('FAILED');
+
+    const changes = { amount: 1400 };
+    const pv = await http().post(`/api/contracts/booking/${bookingId}/amendments/preview`).auth(T.vendor, { type: 'bearer' }).send({ changes });
+    expect(pv.status).toBe(201);
+    await signing();
+    const req = await http().post(`/api/contracts/booking/${bookingId}/amendments`).auth(T.vendor, { type: 'bearer' })
+      .send({ changes, signature: sig('Vera Vendor', pv.body.data.content_sha256, { use_saved_signature: true }) });
+    expect(req.body.data.status).toBe('AWAITING_CUSTOMER');
+    await signing();
+    const signed = await http().post(`/api/contracts/${req.body.data.id}/sign`).auth(T.cust, { type: 'bearer' })
+      .send({ signature: sig('Carl Customer', pv.body.data.content_sha256) });
+    expect(signed.body.data.status).toBe('EXECUTED');
+    // price and fee (5%) on the booking and on the charge the customer still has to pay
+    const b = await prisma.booking.findUnique({ where: { id: bookingId }, include: { installments: { where: { kind: 'charge' } } } });
+    expect(Number(b.amount)).toBe(1400);
+    expect(Number(b.service_fee)).toBe(70);
+    expect(Number(b.installments[0].amount)).toBe(1470);
+    expect(Number(b.installments[0].fee_amount)).toBe(70);
+
+    // once a payment is under way the price can't be amended
+    await prisma.bookingInstallment.update({ where: { id: before[0].id }, data: { status: 'PROCESSING' } });
+    const locked = await http().post(`/api/contracts/booking/${bookingId}/amendments/preview`).auth(T.vendor, { type: 'bearer' }).send({ changes: { amount: 1300 } });
+    expect(locked.status).toBe(400);
+    expect(msg(locked)).toMatch(/Give money back/);
+    await prisma.bookingInstallment.update({ where: { id: before[0].id }, data: { status: 'FAILED' } });
+  });
+
+  it('an account with an open booking is kept until the booking is settled', async () => {
+    const blocked = await http().delete('/api/auth/account').auth(T.cust, { type: 'bearer' }).send({ confirm: 'DELETE' });
+    expect(blocked.status).toBe(400);
+    expect(msg(blocked)).toMatch(/can’t delete your account yet\. 1 booking is still open: finish or cancel it first/);
+    expect((await prisma.user.findUnique({ where: { id: U.cust } })).name).toBe('cust user');
+    const cancelled = await http().patch(`/api/bookings/${bookingId}/cancel`).auth(T.cust, { type: 'bearer' }).send({ reason: 'Plans changed' });
+    expect(cancelled.status).toBe(200);
+  });
+
   it('executed contracts survive account deletion while other personal data is removed', async () => {
     const del = await http().delete('/api/auth/account').auth(T.cust, { type: 'bearer' }).send({ confirm: 'DELETE' });
     expect(del.body.anonymized).toBe(true);

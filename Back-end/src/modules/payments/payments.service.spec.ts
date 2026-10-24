@@ -68,6 +68,7 @@ const installment = (over: Record<string, unknown> = {}) => ({
   last_error: null,
   paid_at: null,
   refunded_amount: 0,
+  kind: 'charge',
   booking: bookingRef,
   ...over,
 });
@@ -241,7 +242,7 @@ describe('PaymentsService', () => {
     });
 
     it('holds the vendor payout until rented items are returned', async () => {
-      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, dispute_opened_at: null, installments: [] });
+      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), dispute_opened_at: null, installments: [] });
       prisma.rentalReservation.count.mockResolvedValueOnce(2);
       expect(await service.releaseBooking('b1')).toBeNull();
       expect(prisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ released_at: expect.any(Date) }) }));
@@ -251,7 +252,7 @@ describe('PaymentsService', () => {
   describe('Phase C money tools', () => {
     afterEach(() => __setFeeCache(null));
     const completed = (over: Record<string, unknown> = {}) => ({
-      id: 'b1', status: BookingStatus.COMPLETED, released_at: null, currency: 'usd', vendor_id: 'v1', amount: 100, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0,
+      id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), currency: 'usd', vendor_id: 'v1', amount: 100, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0,
       vendor: { stripe_connect_id: 'acct_1', balance: 0 },
       installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })],
       ...over,
@@ -283,7 +284,7 @@ describe('PaymentsService', () => {
 
     it('releases a paid deposit early and records it against the booking', async () => {
       prisma.booking.findUnique.mockResolvedValue({
-        vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null,
+        vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', payment_plan: PaymentPlan.DEPOSIT_50, early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null,
         vendor: { stripe_connect_id: 'acct_1' }, contracts: [{ id: 'c1' }],
         installments: [installment({ status: InstallmentStatus.PAID, amount: 247.5, fee_amount: 22.5 }), installment({ id: 'i2', sequence: 2, status: InstallmentStatus.SCHEDULED })],
       });
@@ -322,7 +323,7 @@ describe('PaymentsService', () => {
   describe('release', () => {
     it('transfers the vendor share (paid minus fee minus refunds) to their Connect account', async () => {
       prisma.booking.findUnique.mockResolvedValue({
-        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, currency: 'usd', vendor_id: 'v1', amount: 450, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null,
+        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), currency: 'usd', vendor_id: 'v1', amount: 450, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null,
         vendor: { stripe_connect_id: 'acct_1' },
         installments: [installment({ status: InstallmentStatus.PAID, amount: 247.5, fee_amount: 22.5 }), installment({ id: 'i2', status: InstallmentStatus.PAID, amount: 225, fee_amount: 0, refunded_amount: 25 })],
       });
@@ -335,7 +336,7 @@ describe('PaymentsService', () => {
     });
 
     it('credits the Vendly balance when the vendor has no Connect account', async () => {
-      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, currency: 'usd', vendor_id: 'v1', amount: 100, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, vendor: { stripe_connect_id: null }, installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })] });
+      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), currency: 'usd', vendor_id: 'v1', amount: 100, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, vendor: { stripe_connect_id: null }, installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })] });
       await service.releaseBooking('b1');
       expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
       expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { balance: { increment: 100 } } });
@@ -389,7 +390,7 @@ describe('PaymentsService', () => {
     it('never lets an installment refunded past the vendor part count as minus', async () => {
       // i1 was refunded in full (fee included); i2 is a $100 add-on paid later
       prisma.booking.findUnique.mockResolvedValue({
-        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, currency: 'usd', vendor_id: 'v1', amount: 200, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0,
+        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), currency: 'usd', vendor_id: 'v1', amount: 200, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0,
         vendor: { stripe_connect_id: 'acct_1', balance: 0 },
         installments: [
           installment({ id: 'i1', status: InstallmentStatus.REFUNDED, amount: 105, fee_amount: 5, refunded_amount: 105 }),
@@ -403,7 +404,7 @@ describe('PaymentsService', () => {
 
     it('marks what it paid out and records the gross for later refunds', async () => {
       prisma.booking.findUnique.mockResolvedValue({
-        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, currency: 'usd', vendor_id: 'v1', amount: 100, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0,
+        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), currency: 'usd', vendor_id: 'v1', amount: 100, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0,
         vendor: { stripe_connect_id: null, balance: 0 },
         installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })],
       });
@@ -671,6 +672,152 @@ describe('PaymentsService', () => {
       prisma.booking.count.mockResolvedValue(1);
       await expect(service.removeCard('c1', 'pm_1')).rejects.toThrow(BadRequestException);
       expect(StripePayment.detachPaymentMethod).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('money that must move once, or not at all', () => {
+    const released = (over: Record<string, unknown> = {}) => ({
+      id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), payment_transaction_id: null, currency: 'usd', vendor_id: 'v1', amount: 1000, payout_credited_at: null,
+      dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 0, vendor: { stripe_connect_id: 'acct_1', balance: 0 },
+      ...over,
+    });
+    const isReleaseClaim = (c: any) => c[0]?.data?.released_at instanceof Date;
+
+    it('releases nothing (and stays unreleased) when the only charge failed', async () => {
+      prisma.booking.findUnique.mockResolvedValue(released({ paid_at: null, installments: [installment({ status: InstallmentStatus.FAILED, amount: 1050, fee_amount: 50 })] }));
+      expect(await service.releaseBooking('b1')).toBeNull();
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+      expect(prisma.booking.updateMany.mock.calls.some(isReleaseClaim)).toBe(false);
+    });
+
+    it('pays only the paid charges, and the balance paid later once (late payout)', async () => {
+      prisma.booking.findUnique.mockResolvedValue(released({
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 525, fee_amount: 50 }), installment({ id: 'i2', sequence: 2, status: InstallmentStatus.FAILED, amount: 525, fee_amount: 0 })],
+      }));
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_1' });
+      await service.releaseBooking('b1');
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 475 })); // no commission set
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['i1'] }, paid_out_at: null }, data: { paid_out_at: expect.any(Date) } });
+
+      // the customer pays the balance later: only that one is paid out
+      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: new Date(), vendor_id: 'v1', currency: 'usd', commission_amount: 0, released_gross: 475, dispute_opened_at: null, dispute_resolved_at: null, dispute_resolution: null, vendor: { stripe_connect_id: 'acct_1', balance: 0 } });
+      prisma.bookingInstallment.findMany.mockResolvedValueOnce([installment({ id: 'i2', status: InstallmentStatus.PAID, amount: 525, fee_amount: 0, paid_out_at: null })]);
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_2' });
+      await service.payOutLateFor('b1');
+      expect((StripePayment.transferForBooking as jest.Mock).mock.calls.map((c) => c[0].amount)).toEqual([475, 525]);
+    });
+
+    it('never pays an installment out again at release', async () => {
+      prisma.booking.findUnique.mockResolvedValue(released({ amount: 100, installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5, paid_out_at: new Date() })] }));
+      await service.releaseBooking('b1');
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+    });
+
+    it('pays a legacy checkout booking (no installments) its price once, only when it was paid', async () => {
+      prisma.booking.findUnique.mockResolvedValue(released({ amount: 100, installments: [] }));
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_1' });
+      await service.releaseBooking('b1');
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 100 }));
+
+      jest.clearAllMocks();
+      prisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      prisma.booking.findUnique.mockResolvedValue(released({ amount: 100, paid_at: null, installments: [] }));
+      expect(await service.releaseBooking('b1')).toBeNull();
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+    });
+
+    it('pays a legacy booking with a paid add-on its price only when the checkout payment is on record', async () => {
+      const extra = installment({ kind: 'extra', status: InstallmentStatus.PAID, amount: 50, fee_amount: 0 });
+      prisma.booking.findUnique.mockResolvedValue(released({ amount: 100, payment_transaction_id: 'cs_1', installments: [extra] }));
+      prisma.paymentTransaction.count.mockResolvedValueOnce(1);
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_1' });
+      await service.releaseBooking('b1');
+      expect(prisma.paymentTransaction.count).toHaveBeenCalledWith({ where: { reference_number: 'cs_1', type: 'booking_payment', status: 'succeeded' } });
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 150 }));
+    });
+
+    it('only sweeps paid bookings with nothing rented still out, oldest first', async () => {
+      prisma.booking.findMany.mockResolvedValue([]);
+      await service.runReleases(new Date('2026-10-20T00:00:00Z'));
+      expect(prisma.booking.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ paid_at: { not: null }, rental_reservations: { none: { status: 'ACTIVE' } } }),
+        orderBy: [{ release_at: 'asc' }, { id: 'asc' }],
+      }));
+    });
+
+    it('charges due installments oldest first', async () => {
+      prisma.bookingInstallment.findMany.mockResolvedValue([]);
+      await service.runDueCharges(new Date('2026-10-20T00:00:00Z'));
+      expect(prisma.bookingInstallment.findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: [{ due_at: 'asc' }, { id: 'asc' }] }));
+    });
+
+    it('a booking without a card fails the installment once and waits for the customer', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ booking: { ...bookingRef, payment_method_id: null } }));
+      const r: any = await service.chargeInstallment('i1');
+      expect(StripePayment.chargeSavedCard).not.toHaveBeenCalled();
+      expect(prisma.bookingInstallment.update.mock.calls[0][0].data).toMatchObject({ status: InstallmentStatus.FAILED, attempts: 1, next_attempt_at: null });
+      expect(r.status).toBe(InstallmentStatus.FAILED);
+    });
+
+    it('takes a pay-after-service payment straight away when the job is already complete', async () => {
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ capture_manually: true, booking: { ...bookingRef, status: BookingStatus.COMPLETED } }));
+      (StripePayment.chargeSavedCard as jest.Mock).mockResolvedValue({ id: 'pi_n', status: 'succeeded' });
+      await service.chargeInstallment('i1');
+      expect(StripePayment.chargeSavedCard).toHaveBeenCalledWith(expect.objectContaining({ captureManually: false }));
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: InstallmentStatus.PAID }) }));
+    });
+
+    it('captures a hold that landed after the job was completed', async () => {
+      // the booking was completed while the hold was being placed
+      prisma.bookingInstallment.findUnique
+        .mockResolvedValueOnce(installment({ capture_manually: true }))
+        .mockResolvedValueOnce(installment({ capture_manually: true, status: InstallmentStatus.PROCESSING, payment_intent_id: 'pi_h', booking: { status: BookingStatus.CONFIRMED } }))
+        .mockResolvedValueOnce(installment({ capture_manually: true, status: InstallmentStatus.PROCESSING, payment_intent_id: 'pi_h', booking: { status: BookingStatus.COMPLETED } }));
+      (StripePayment.chargeSavedCard as jest.Mock).mockResolvedValue({ id: 'pi_h', status: 'requires_capture' });
+      (StripePayment.capturePaymentIntent as jest.Mock).mockResolvedValue({ id: 'pi_h' });
+      await service.chargeInstallment('i1');
+      expect(StripePayment.capturePaymentIntent).toHaveBeenCalledWith('pi_h', 'capture-i1', 247.5);
+    });
+
+    it('will not retry a payment on a cancelled booking', async () => {
+      prisma.bookingInstallment.findFirst.mockResolvedValue(installment({ status: InstallmentStatus.FAILED, booking: { customer_id: 'c1', status: BookingStatus.CANCELLED, dispute_resolution: null } }));
+      await expect(service.retryInstallment('b1', 'i1', 'c1')).rejects.toThrow('This booking has ended');
+      expect(StripePayment.chargeSavedCard).not.toHaveBeenCalled();
+      expect(prisma.bookingInstallment.update).not.toHaveBeenCalled();
+    });
+
+    it('releases a deposit early only on a deposit plan', async () => {
+      const base = { vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null, vendor: { stripe_connect_id: 'acct_1' }, contracts: [{ id: 'c1' }] };
+      // a full payment plus a later add-on is not a deposit
+      prisma.booking.findUnique.mockResolvedValue({ ...base, payment_plan: PaymentPlan.FULL_ON_ACCEPT, installments: [installment({ status: InstallmentStatus.PAID }), installment({ id: 'x', sequence: 2, kind: 'extra' })] });
+      await expect(service.releaseDepositEarly('b1', 'v1')).rejects.toThrow('There is no paid deposit');
+      // nor is a deposit plan's deposit followed only by an add-on (the balance was merged in)
+      prisma.booking.findUnique.mockResolvedValue({ ...base, payment_plan: PaymentPlan.DEPOSIT_50, installments: [installment({ status: InstallmentStatus.PAID }), installment({ id: 'x', sequence: 2, kind: 'extra' })] });
+      await expect(service.releaseDepositEarly('b1', 'v1')).rejects.toThrow('There is no paid deposit');
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+    });
+
+    it('reports bookings whose money stopped half-way, without moving any', async () => {
+      prisma.booking.findMany
+        .mockResolvedValueOnce([
+          { id: 'r1', released_gross: 100, commission_amount: 10, early_released_amount: 0 },
+          { id: 'r2', released_gross: 100, commission_amount: 10, early_released_amount: 0 },
+          // nothing was owed: no record expected
+          { id: 'r3', released_gross: 100, commission_amount: 10, early_released_amount: 90 },
+        ])
+        .mockResolvedValueOnce([{ id: 'c1' }, { id: 'c2' }]);
+      prisma.paymentTransaction.findMany.mockResolvedValue([
+        { type: 'booking_payout', order_id: 'r2', reference_number: 'tr_1' },
+        { type: 'booking_refund', order_id: 'c2', reference_number: 're_1' },
+      ]);
+      prisma.user.findMany.mockResolvedValueOnce([{ id: 'admin1', email: 'admin@x.com', name: 'Ada' }]);
+      const res = await service.runMoneyCheck(new Date('2026-10-20T12:00:00Z'));
+      expect(res).toEqual({ unpaid_releases: ['r1'], unsettled_cancellations: ['c1'] });
+      expect(push.sendToUser).toHaveBeenCalledWith('admin1', expect.objectContaining({ title: 'Bookings need a money check' }));
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'admin@x.com', subject: 'Bookings need a money check' }));
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 });

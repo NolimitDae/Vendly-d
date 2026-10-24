@@ -272,8 +272,13 @@ export class SubscriptionsService {
       if (activePlan.stripe_subscription_id) {
         try {
           await Stripe.subscriptions.cancel(activePlan.stripe_subscription_id);
-        } catch (stripeError) {
-          this.logger.warn('Could not cancel Stripe subscription', stripeError);
+        } catch (stripeError: any) {
+          // already gone on Stripe: nothing left to bill. Anything else: the vendor would keep being
+          // charged while shown as cancelled, so nothing is changed here and the error is reported
+          if (stripeError?.code !== 'resource_missing') {
+            this.logger.error('Could not cancel Stripe subscription', stripeError);
+            throw stripeError;
+          }
         }
       }
 
@@ -305,6 +310,14 @@ export class SubscriptionsService {
       this.logger.error('cancel error', error);
       throw new InternalServerErrorException('Failed to cancel subscription');
     }
+  }
+
+  /** The vendor plan a Stripe subscription belongs to (saved when its checkout completed). */
+  private planForSubscription(subscriptionId: string) {
+    return this.prisma.vendorSubscriptionPlan.findFirst({
+      where: { stripe_subscription_id: subscriptionId },
+      orderBy: { created_at: 'desc' },
+    });
   }
 
   async handleWebhookEvent(event: stripe.Event) {
@@ -384,21 +397,17 @@ export class SubscriptionsService {
             `Subscription updated: ${subscription.id}, status: ${subscription.status}`,
           );
 
-          const customerId = subscription.customer as string;
-          if (!customerId) break;
-
-          const user = await this.prisma.user.findFirst({
-            where: { billing_id: customerId },
-            include: { vendorProfile: true },
-          });
-          if (!user?.vendorProfile) break;
+          // the plan this subscription paid for (subscription checkout creates its own Stripe
+          // customer, so the vendor's billing id doesn't match)
+          const activePlan = await this.planForSubscription(subscription.id);
+          if (!activePlan) break;
 
           if (
             subscription.status === 'active' ||
             subscription.status === 'trialing'
           ) {
             await this.prisma.vendorProfile.update({
-              where: { id: user.vendorProfile.id },
+              where: { id: activePlan.vendor_id },
               data: { subscription_active: true },
             });
           } else if (
@@ -408,20 +417,14 @@ export class SubscriptionsService {
             subscription.status === 'paused'
           ) {
             await this.prisma.vendorProfile.update({
-              where: { id: user.vendorProfile.id },
+              where: { id: activePlan.vendor_id },
               data: { subscription_active: false },
             });
 
-            const activePlan = await this.prisma.vendorSubscriptionPlan.findFirst({
-              where: { vendor_id: user.vendorProfile.id },
-              orderBy: { created_at: 'desc' },
+            await this.prisma.vendorSubscriptionPlan.update({
+              where: { id: activePlan.id },
+              data: { payment_status: SubscriptionPaymentStatus.FAILED },
             });
-            if (activePlan) {
-              await this.prisma.vendorSubscriptionPlan.update({
-                where: { id: activePlan.id },
-                data: { payment_status: SubscriptionPaymentStatus.FAILED },
-              });
-            }
           }
           break;
         }
@@ -430,34 +433,22 @@ export class SubscriptionsService {
           const subscription = event.data.object as stripe.Subscription;
           this.logger.log(`Subscription deleted: ${subscription.id}`);
 
-          const customerId = subscription.customer as string;
-          if (!customerId) break;
-
-          const user = await this.prisma.user.findFirst({
-            where: { billing_id: customerId },
-            include: { vendorProfile: true },
-          });
-          if (!user?.vendorProfile) break;
+          const activePlan = await this.planForSubscription(subscription.id);
+          if (!activePlan) break;
 
           await this.prisma.vendorProfile.update({
-            where: { id: user.vendorProfile.id },
+            where: { id: activePlan.vendor_id },
             data: { subscription_active: false },
           });
 
-          const activePlan = await this.prisma.vendorSubscriptionPlan.findFirst({
-            where: { vendor_id: user.vendorProfile.id },
-            orderBy: { created_at: 'desc' },
+          await this.prisma.vendorSubscriptionPlan.update({
+            where: { id: activePlan.id },
+            data: { payment_status: SubscriptionPaymentStatus.FAILED },
           });
-          if (activePlan) {
-            await this.prisma.vendorSubscriptionPlan.update({
-              where: { id: activePlan.id },
-              data: { payment_status: SubscriptionPaymentStatus.FAILED },
-            });
-            await this.prisma.subscriptionlist.update({
-              where: { id: activePlan.subscription_id },
-              data: { status: SubscriptionStatus.CANCELLED },
-            });
-          }
+          await this.prisma.subscriptionlist.update({
+            where: { id: activePlan.subscription_id },
+            data: { status: SubscriptionStatus.CANCELLED },
+          });
           break;
         }
 

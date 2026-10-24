@@ -481,3 +481,66 @@ describe('vendor contract preview', () => {
     expect(res.data.missing_fields.length).toBeGreaterThan(0);
   });
 });
+
+describe('an executed amendment and the money still to collect', () => {
+  const DAY = 24 * 3600 * 1000;
+  const service = new BookingContractsService({} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+  const apply = (tx: any, price: { amount: number; service_fee: number } | null, dateChanged: boolean) =>
+    (service as any).applyAmendmentToCharges(tx, 'b1', price, dateChanged);
+  const txFor = (booking: any) => ({
+    booking: { findUniqueOrThrow: jest.fn().mockResolvedValue(booking) },
+    bookingInstallment: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+  });
+  const start = new Date(Date.now() + 40 * DAY);
+
+  it('spreads a new price over the unpaid deposit and balance', async () => {
+    const tx = txFor({
+      payment_plan: 'DEPOSIT_50', event_start_at: start, scheduled_at: start,
+      installments: [
+        { id: 'd', kind: 'charge', status: 'FAILED', amount: 547.5, sequence: 1 },
+        { id: 'bal', kind: 'charge', status: 'SCHEDULED', amount: 500, sequence: 2 },
+      ],
+    });
+    await apply(tx, { amount: 800, service_fee: 40 }, false);
+    expect(tx.bookingInstallment.updateMany).toHaveBeenNthCalledWith(1, { where: { id: 'd', status: { in: ['SCHEDULED', 'FAILED'] }, amount: 547.5 }, data: { amount: 440, fee_amount: 40 } });
+    expect(tx.bookingInstallment.updateMany).toHaveBeenNthCalledWith(2, { where: { id: 'bal', status: { in: ['SCHEDULED', 'FAILED'] }, amount: 500 }, data: { amount: 400, fee_amount: 0 } });
+  });
+
+  it('stops the amendment when a payment started meanwhile', async () => {
+    const tx = txFor({ payment_plan: 'FULL_ON_ACCEPT', event_start_at: start, scheduled_at: start, installments: [{ id: 'f', kind: 'charge', status: 'SCHEDULED', amount: 105, sequence: 1 }] });
+    tx.bookingInstallment.updateMany.mockResolvedValue({ count: 0 });
+    await expect(apply(tx, { amount: 200, service_fee: 10 }, false)).rejects.toThrow(ConflictException);
+  });
+
+  it('moves the balance, the pay-after-service charge and a rental hold with a new date', async () => {
+    const tx = txFor({
+      payment_plan: 'DEPOSIT_25', event_start_at: start, scheduled_at: start,
+      installments: [
+        { id: 'd', kind: 'charge', status: 'PAID', amount: 300, sequence: 1 },
+        { id: 'bal', kind: 'charge', status: 'SCHEDULED', amount: 750, sequence: 2 },
+        { id: 'x', kind: 'extra', status: 'SCHEDULED', amount: 50, sequence: 3 },
+        { id: 'hold', kind: 'security_deposit', status: 'SCHEDULED', amount: 80, sequence: 4 },
+      ],
+    });
+    await apply(tx, null, true);
+    const moved = tx.bookingInstallment.updateMany.mock.calls.map((c: any) => [c[0].where.id, c[0].data.due_at.getTime()]);
+    expect(moved).toEqual([
+      ['bal', start.getTime() - 14 * DAY],
+      ['hold', start.getTime() - DAY],
+    ]);
+
+    const pas = txFor({ payment_plan: 'PAY_AFTER_SERVICE', event_start_at: start, scheduled_at: start, installments: [{ id: 'p', kind: 'charge', status: 'SCHEDULED', amount: 210, sequence: 1 }] });
+    await apply(pas, null, true);
+    expect(pas.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'p', status: 'SCHEDULED' }, data: { due_at: start } });
+  });
+
+  it('refuses a price amendment once anything was paid', async () => {
+    const db = { booking: { findUniqueOrThrow: jest.fn().mockResolvedValue({ paid_at: new Date(), installments: [{ status: 'PAID' }, { status: 'SCHEDULED' }] }) } };
+    await expect((service as any).assertPriceChangeable(db, 'b1')).rejects.toThrow('Give money back');
+    // paid in one go through Checkout (no installments)
+    db.booking.findUniqueOrThrow.mockResolvedValue({ paid_at: new Date(), installments: [] });
+    await expect((service as any).assertPriceChangeable(db, 'b1')).rejects.toThrow('Give money back');
+    db.booking.findUniqueOrThrow.mockResolvedValue({ paid_at: null, installments: [{ status: 'FAILED' }] });
+    await expect((service as any).assertPriceChangeable(db, 'b1')).resolves.toBeUndefined();
+  });
+});

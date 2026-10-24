@@ -1283,6 +1283,9 @@ export class AuthService {
   }
 
   async deleteAccount(userId: string) {
+    // bookings with money still unsettled keep the account (and its ID check) as it is
+    const blocker = await this.userRepository.deletionBlocker(userId);
+    if (blocker) return { success: false, message: blocker };
     // ID photos are deleted with the account, never kept
     await this.identity.purgeForUser(userId).catch(() => undefined);
     const result = await this.userRepository.deleteUser(userId);

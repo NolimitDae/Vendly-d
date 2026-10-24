@@ -85,4 +85,16 @@ describe('cancellationMessage', () => {
       "You haven't been charged, so there's nothing to refund. The $300.00 still to pay won't be charged.",
     );
   });
+
+  it('never says a refund that failed is on its way', () => {
+    // nothing went back
+    expect(cancellationMessage({ ...base, refund_total: 0, refund_failed: 225 }, 'CUSTOMER', true)).toBe(
+      "We couldn't refund $225.00 to your card straight away. Vendly will follow up with you about it. The $22.50 Vendly Protection fee isn't refunded. The vendor keeps $225.00 under their flexible cancellation policy.",
+    );
+    // part went back
+    expect(cancellationMessage({ ...base, refund_total: 100, refund_failed: 125 }, 'CUSTOMER', true)).toMatch(/^\$100\.00 is being refunded to your card\. We couldn't refund \$125\.00/);
+    expect(cancellationMessage({ ...base, refund_total: 0, refund_failed: 225 }, 'VENDOR', true)).toBe(
+      "A refund of $225.00 to the customer didn't go through straight away; Vendly is following it up. You keep $225.00 under your flexible cancellation policy.",
+    );
+  });
 });

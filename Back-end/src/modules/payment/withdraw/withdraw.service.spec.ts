@@ -17,15 +17,18 @@ jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
   },
 }));
 
-const mockPrisma = {
+const mockPrisma: any = {
   user: {
     findUnique: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
   paymentTransaction: {
     create: jest.fn(),
+    update: jest.fn(),
     findMany: jest.fn(),
   },
+  $transaction: jest.fn(),
 };
 
 const mockUser = {
@@ -46,6 +49,11 @@ describe('WithdrawService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation((fn: any) => (typeof fn === 'function' ? fn(mockPrisma) : Promise.all(fn)));
+    // the balance is still there unless a test says otherwise
+    mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.paymentTransaction.create.mockResolvedValue({ id: 'txn-pending' });
+    mockPrisma.paymentTransaction.update.mockResolvedValue({});
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -151,41 +159,77 @@ describe('WithdrawService', () => {
   describe('processWithdraw', () => {
     const withdrawDto = { amount: 100, currency: 'usd' };
 
-    it('should process a successful withdrawal and record the transaction', async () => {
+    it('takes the balance first, then sends the transfer keyed on the pending record', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
       (StripePayment.createTransfer as jest.Mock).mockResolvedValue({
         id: 'tr_transfer_001',
       });
-      mockPrisma.user.update.mockResolvedValue({});
-      mockPrisma.paymentTransaction.create.mockResolvedValue({});
 
       const result = await service.processWithdraw('user-1', withdrawDto);
 
       expect(result.success).toBe(true);
       expect(result.data?.transfer_id).toBe('tr_transfer_001');
       expect(result.data?.status).toBe('completed');
-      expect(StripePayment.createTransfer).toHaveBeenCalledWith(
-        mockUserWithConnect.stripe_connect_id,
-        100,
-        'usd',
-      );
-      expect(mockPrisma.user.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'user-1' },
-          data: { balance: { decrement: 100 } },
-        }),
-      );
+      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({
+        where: { id: 'user-1', balance: { gte: 100 } },
+        data: { balance: { decrement: 100 } },
+      });
       expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            user_id: 'user-1',
-            type: 'withdraw',
-            provider: 'stripe',
-            status: 'completed',
-            amount: 100,
-          }),
-        }),
+        expect.objectContaining({ data: expect.objectContaining({ user_id: 'user-1', type: 'withdraw', status: 'pending', amount: 100 }) }),
       );
+      expect(StripePayment.createTransfer).toHaveBeenCalledWith(mockUserWithConnect.stripe_connect_id, 100, 'usd', 'withdraw-txn-pending');
+      // the balance is only taken once, before the transfer
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.paymentTransaction.update).toHaveBeenCalledWith({
+        where: { id: 'txn-pending' },
+        data: expect.objectContaining({ reference_number: 'tr_transfer_001', status: 'completed' }),
+      });
+    });
+
+    it('sends nothing when a second request already took the balance', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.processWithdraw('user-1', withdrawDto)).rejects.toThrow('Withdraw amount exceeds available balance');
+      expect(StripePayment.createTransfer).not.toHaveBeenCalled();
+      expect(mockPrisma.paymentTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('rounds to whole cents', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
+      (StripePayment.createTransfer as jest.Mock).mockResolvedValue({ id: 'tr_2' });
+      await service.processWithdraw('user-1', { amount: 20.005, currency: 'usd' });
+      expect(StripePayment.createTransfer).toHaveBeenCalledWith('acct_connect_123', 20.01, 'usd', 'withdraw-txn-pending');
+    });
+
+    it('puts the money back when Stripe turns the transfer down', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
+      (StripePayment.createTransfer as jest.Mock).mockRejectedValue(Object.assign(new Error('No such destination'), { statusCode: 400 }));
+
+      await expect(service.processWithdraw('user-1', withdrawDto)).rejects.toThrow(HttpException);
+      expect(StripePayment.createTransfer).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'user-1' }, data: { balance: { increment: 100 } } });
+      expect(mockPrisma.paymentTransaction.update).toHaveBeenCalledWith({ where: { id: 'txn-pending' }, data: { status: 'failed' } });
+    });
+
+    it('tries once more with the same key when Stripe did not answer', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
+      (StripePayment.createTransfer as jest.Mock).mockRejectedValueOnce(new Error('socket hang up')).mockResolvedValueOnce({ id: 'tr_3' });
+
+      const result = await service.processWithdraw('user-1', withdrawDto);
+      expect(result.data?.transfer_id).toBe('tr_3');
+      expect(StripePayment.createTransfer).toHaveBeenNthCalledWith(2, 'acct_connect_123', 100, 'usd', 'withdraw-txn-pending');
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('keeps the money off the balance for review when the outcome is still unknown', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
+      (StripePayment.createTransfer as jest.Mock).mockRejectedValue(new Error('socket hang up'));
+
+      await expect(service.processWithdraw('user-1', withdrawDto)).rejects.toThrow(/Vendly is checking it/);
+      // it may have gone through: never credited back automatically
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.paymentTransaction.update).toHaveBeenCalledWith({ where: { id: 'txn-pending' }, data: { status: 'needs_review' } });
     });
 
     it('should throw NotFoundException when user does not exist', async () => {
@@ -217,12 +261,13 @@ describe('WithdrawService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when amount is below minimum (< 2)', async () => {
+    it('refuses less than the $20 minimum the website shows', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
 
       await expect(
-        service.processWithdraw('user-1', { amount: 1, currency: 'usd' }),
-      ).rejects.toThrow(BadRequestException);
+        service.processWithdraw('user-1', { amount: 19.99, currency: 'usd' }),
+      ).rejects.toThrow('Minimum withdraw amount is $20');
+      expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when amount exceeds available balance', async () => {
@@ -236,27 +281,6 @@ describe('WithdrawService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should record a failed transaction and throw HttpException on Stripe transfer error', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
-      (StripePayment.createTransfer as jest.Mock).mockRejectedValue(
-        new Error('Stripe transfer failed'),
-      );
-      mockPrisma.paymentTransaction.create.mockResolvedValue({});
-
-      await expect(
-        service.processWithdraw('user-1', withdrawDto),
-      ).rejects.toThrow(HttpException);
-
-      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            user_id: 'user-1',
-            type: 'withdraw',
-            status: 'failed',
-          }),
-        }),
-      );
-    });
   });
 
   // ─── checkAccountBalance ──────────────────────────────────────────────────

@@ -12,9 +12,12 @@ export default function DeleteAccountCard() {
   const [open, setOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [busy, setBusy] = useState(false);
+  // why it can't be deleted yet (open bookings, payouts, disputes), kept on screen
+  const [error, setError] = useState<string | null>(null);
 
   const deleteAccount = async () => {
     setBusy(true);
+    setError(null);
     try {
       await Fetch.delete("/auth/account", {
         headers: { Authorization: `Bearer ${CookieHelper.get({ key: "token" })}` },
@@ -25,7 +28,9 @@ export default function DeleteAccountCard() {
       toast.success("Your account was deleted.");
       window.location.href = "/";
     } catch (err) {
-      toast.error(apiError(err, "Couldn't delete your account"));
+      const message = apiError(err, "Couldn't delete your account");
+      setError(message);
+      toast.error(message);
       setBusy(false);
     }
   };
@@ -52,6 +57,11 @@ export default function DeleteAccountCard() {
             onChange={(e) => setConfirmText(e.target.value)}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
           />
+          {error && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          )}
           <div className="flex gap-2">
             <button onClick={() => setOpen(false)} className="px-4 py-2 rounded-lg border text-sm">
               Cancel

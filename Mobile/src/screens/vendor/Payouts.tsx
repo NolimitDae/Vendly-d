@@ -70,6 +70,8 @@ export default function Payouts() {
   const withdraw = async () => {
     const n = Number(amount);
     if (!n || n <= 0) return Alert.alert('Amount', 'Enter how much to withdraw.');
+    // the same minimum as the website and the server
+    if (n < 20) return Alert.alert('Amount', 'The minimum withdrawal is $20.');
     if (balance != null && n > balance) return Alert.alert('Amount', `You can withdraw up to ${money(balance)}.`);
     setBusy(true);
     try {

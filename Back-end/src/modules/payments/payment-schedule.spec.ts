@@ -1,5 +1,5 @@
 import { PaymentPlan } from 'prisma/generated/enums';
-import { buildSchedule } from './payment-schedule';
+import { buildSchedule, eventLinkedDueAt, rebasedAmounts, securityHoldAt } from './payment-schedule';
 
 const DAY = 24 * 3600 * 1000;
 const now = new Date('2026-10-14T12:00:00Z');
@@ -48,5 +48,28 @@ describe('buildSchedule', () => {
   it('never leaves a cent behind when splitting odd prices', () => {
     const s = buildSchedule({ plan: PaymentPlan.DEPOSIT_25, price: 99.99, serviceFee: 5, eventStart: inDays(60), acceptedAt: now });
     expect(s[0].amount + s[1].amount).toBeCloseTo(104.99, 2);
+  });
+});
+
+describe('amended price and date', () => {
+  it('re-prices the charges the booking already has, the way buildSchedule splits them', () => {
+    expect(rebasedAmounts({ plan: PaymentPlan.FULL_ON_ACCEPT, count: 1, price: 400, serviceFee: 20 })).toEqual([{ amount: 420, fee_amount: 20 }]);
+    // a deposit plan whose balance was merged into one charge
+    expect(rebasedAmounts({ plan: PaymentPlan.DEPOSIT_50, count: 1, price: 400, serviceFee: 20 })).toEqual([{ amount: 420, fee_amount: 20 }]);
+    expect(rebasedAmounts({ plan: PaymentPlan.DEPOSIT_25, count: 2, price: 1000, serviceFee: 50 })).toEqual([{ amount: 300, fee_amount: 50 }, { amount: 750, fee_amount: 0 }]);
+    // a shape it doesn't know
+    expect(rebasedAmounts({ plan: PaymentPlan.FULL_ON_ACCEPT, count: 2, price: 400, serviceFee: 20 })).toBeNull();
+  });
+
+  it('moves the balance and the pay-after-service charge with the event, never into the past', () => {
+    expect(eventLinkedDueAt(PaymentPlan.DEPOSIT_50, 1, inDays(30), now)).toEqual(inDays(23));
+    expect(eventLinkedDueAt(PaymentPlan.DEPOSIT_25, 1, inDays(30), now)).toEqual(inDays(16));
+    expect(eventLinkedDueAt(PaymentPlan.DEPOSIT_25, 1, inDays(10), now)).toEqual(now);
+    expect(eventLinkedDueAt(PaymentPlan.PAY_AFTER_SERVICE, 0, inDays(10), now)).toEqual(inDays(10));
+    // the deposit (and a full payment) was due on acceptance
+    expect(eventLinkedDueAt(PaymentPlan.DEPOSIT_50, 0, inDays(30), now)).toBeNull();
+    expect(eventLinkedDueAt(PaymentPlan.FULL_ON_ACCEPT, 0, inDays(30), now)).toBeNull();
+    expect(securityHoldAt(inDays(10), now)).toEqual(inDays(9));
+    expect(securityHoldAt(inDays(0.5), now)).toEqual(now);
   });
 });
