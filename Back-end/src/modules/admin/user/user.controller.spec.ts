@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
+import { AdminPlannersService } from './admin-planners.service';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guard/role/roles.guard';
 
@@ -10,6 +11,8 @@ const mockUserService = {
   getApprovedLicense: jest.fn(),
   approveLicense: jest.fn(),
 };
+
+const mockPlanners = { list: jest.fn(), detail: jest.fn() };
 
 const mockPendingList = [
   {
@@ -40,6 +43,7 @@ describe('UserController', () => {
       controllers: [UserController],
       providers: [
         { provide: UserService, useValue: mockUserService },
+        { provide: AdminPlannersService, useValue: mockPlanners },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -53,6 +57,20 @@ describe('UserController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  describe('planners', () => {
+    it('passes the status filter and search through', async () => {
+      mockPlanners.list.mockResolvedValue({ success: true, data: [] });
+      await controller.getPlanners('suspended', 'jane', 1, 50);
+      expect(mockPlanners.list).toHaveBeenCalledWith({ status: 'suspended', search: 'jane', page: 1, limit: 50 });
+    });
+
+    it('returns one planner', async () => {
+      mockPlanners.detail.mockResolvedValue({ success: true, data: { id: 'p1' } });
+      await expect(controller.getPlanner('p1')).resolves.toEqual({ success: true, data: { id: 'p1' } });
+      expect(mockPlanners.detail).toHaveBeenCalledWith('p1');
+    });
   });
 
   describe('getVendors', () => {

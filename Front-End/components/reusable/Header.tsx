@@ -24,6 +24,7 @@ import CreateServiceModal from "../Dashboard/services/CreateServiceModal";
 import { LogoutIcon } from "@/icons";
 import ProfileSettingModal from "../Dashboard/auth/profile/ProfileSettingModal";
 import { AuthService } from "@/service/auth/auth.service";
+import { signOut } from "@/lib/session";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface HeaderProps {
@@ -269,7 +270,9 @@ const Header: React.FC<HeaderProps> = ({
                   <DropdownMenuSeparator />
 
                   <DropdownMenuItem
-                    onClick={() => {
+                    onClick={async () => {
+                      // end the session first: only going to /login left the admin signed in
+                      await signOut();
                       router.push("/login");
                     }}
                     className=" hover:bg-redColor/10! flex  w-full hover:text-redColor! hover:border hover:border-redColor font-semibold cursor-pointer"
@@ -287,7 +290,7 @@ const Header: React.FC<HeaderProps> = ({
         <CreateServiceModal closeModal={closeCreateServiceModal} />
       )}
       {isProfileModalOpen && (
-        <ProfileSettingModal onClose={closeProfileModal} />
+        <ProfileSettingModal onClose={closeProfileModal} onSaved={setAdmin} />
       )}
     </nav>
   );

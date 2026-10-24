@@ -398,6 +398,13 @@ describe('AuthService', () => {
       await expect(service.validateUser('jane@test.com', 'password')).rejects.toThrow(/verify your email/);
     });
 
+    it('should reject a suspended account', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue({ ...verified, status: 0 });
+      mockUserRepo.validatePassword.mockResolvedValue(true);
+
+      await expect(service.validateUser('jane@test.com', 'password')).rejects.toThrow(/suspended/);
+    });
+
     it('should reject an unknown email', async () => {
       mockPrisma.user.findFirst.mockResolvedValue(null);
 

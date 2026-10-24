@@ -23,6 +23,7 @@ import { Roles } from '../../../common/guard/role/roles.decorator';
 import { RolesGuard } from '../../../common/guard/role/roles.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ApproveLicenseDto } from './dto/approve-license.dto';
+import { AdminPlannersService } from './admin-planners.service';
 
 @ApiExcludeController()
 @ApiTags('User')
@@ -30,7 +31,10 @@ import { ApproveLicenseDto } from './dto/approve-license.dto';
 @Roles(Role.ADMIN)
 @Controller('admin/user')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly planners: AdminPlannersService,
+  ) {}
 
   @Get('vendors')
   async getVendors(
@@ -39,6 +43,22 @@ export class UserController {
     @Query('status') status?: string,
   ) {
     return this.userService.getVendors({ page, limit, status });
+  }
+
+  // every event planner; status: approved | pending | suspended | rejected (or all)
+  @Get('planners')
+  async getPlanners(
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.planners.list({ status, search, page, limit });
+  }
+
+  @Get('planners/:userId')
+  async getPlanner(@Param('userId') userId: string) {
+    return this.planners.detail(userId);
   }
 
 /*------------------------------------------------------

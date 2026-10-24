@@ -42,7 +42,7 @@ const TransactionsPageContent = () => {
   });
 
   const { totalItems, totalPages, currentPage, paginatedData, goToPage } =
-    usePagination({ data: filtered, itemsPerPage, resetDeps: [filtered] });
+    usePagination({ data: filtered, itemsPerPage, resetDeps: [search, statusFilter] });
 
   const load = useCallback(async () => {
     setLoading(true);

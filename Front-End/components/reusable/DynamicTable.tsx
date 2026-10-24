@@ -133,7 +133,9 @@ export default function DynamicTable({
                     {(onView || onDelete) && (
                       <td className="px-4 py-3 cursor-pointer w-[100px]">
                         {onView && (
-                          <ThreeDotIcon />
+                          <button type="button" aria-label="View details" onClick={() => onView(row)} className="cursor-pointer">
+                            <ThreeDotIcon />
+                          </button>
                         )}
                         {onDelete && (
                           <Image

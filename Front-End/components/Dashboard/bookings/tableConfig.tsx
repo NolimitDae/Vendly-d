@@ -14,7 +14,7 @@ const progressStatus: Record<string, string> = {
 }
 
 export const BOOKING_STATUS_OPTIONS = [
-  { label: "All", value: "" },
+  { label: "All", value: "all" },
   { label: "Pending", value: "PENDING" },
   { label: "Confirmed", value: "CONFIRMED" },
   { label: "In Progress", value: "IN_PROGRESS" },
@@ -24,7 +24,7 @@ export const BOOKING_STATUS_OPTIONS = [
 ];
 
 export const BOOKING_PAYMENT_OPTIONS = [
-  { label: "All", value: "" },
+  { label: "All", value: "all" },
   { label: "Paid", value: "COMPLETED" },
   { label: "Refunded", value: "CANCELLED" },
 ];

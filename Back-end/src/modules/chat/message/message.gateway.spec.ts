@@ -22,13 +22,14 @@ const makeSocket = (overrides: Partial<any> = {}): any => ({
   ...overrides,
 });
 
-const prisma = { participant: { findFirst: jest.fn(), findMany: jest.fn() } };
+const prisma = { participant: { findFirst: jest.fn(), findMany: jest.fn() }, user: { findUnique: jest.fn() } };
 
 describe('MessageGateway', () => {
   let gateway: MessageGateway;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    prisma.user.findUnique.mockResolvedValue({ status: 1, deleted_at: null });
     const module: TestingModule = await Test.createTestingModule({
       providers: [MessageGateway, { provide: PrismaService, useValue: prisma }],
     }).compile();
@@ -82,6 +83,17 @@ describe('MessageGateway', () => {
 
     it('rejects refresh tokens', async () => {
       jest.spyOn(jwt, 'verify').mockReturnValue({ sub: 'user-1', typ: 'refresh' } as any);
+      const client = makeSocket();
+
+      await gateway.handleConnection(client);
+
+      expect(client.disconnect).toHaveBeenCalled();
+      expect(client.join).not.toHaveBeenCalled();
+    });
+
+    it('disconnects a suspended account', async () => {
+      jest.spyOn(jwt, 'verify').mockReturnValue({ sub: 'user-1' } as any);
+      prisma.user.findUnique.mockResolvedValue({ status: 0, deleted_at: null });
       const client = makeSocket();
 
       await gateway.handleConnection(client);

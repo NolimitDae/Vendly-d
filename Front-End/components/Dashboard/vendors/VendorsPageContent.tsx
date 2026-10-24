@@ -9,6 +9,7 @@ import { AdminService } from "@/service/admin/admin.service";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { MoneyService } from "@/service/admin/money.service";
+import VendorDetails from "./VendorDetails";
 
 function toRow(v: any, onToggle: (v: any) => void) {
   return {
@@ -33,6 +34,7 @@ const VendorsPageContent = () => {
   const [loading, setLoading] = useState(true);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [search, setSearch] = useState("");
+  const [viewing, setViewing] = useState<any | null>(null);
 
   const filtered = rows.filter((r) => {
     if (!search) return true;
@@ -44,7 +46,7 @@ const VendorsPageContent = () => {
   });
 
   const { paginatedData, currentPage, totalPages, totalItems, goToPage } =
-    usePagination({ data: filtered, itemsPerPage, resetDeps: [filtered] });
+    usePagination({ data: filtered, itemsPerPage, resetDeps: [search] });
 
   const toggle = useCallback(async (v: any) => {
     const suspend = v.status !== 0;
@@ -103,9 +105,10 @@ const VendorsPageContent = () => {
           totalItems={totalItems}
           setItemsPerPage={setItemsPerPage}
           border={false}
-          onView={() => {}}
+          onView={(row) => setViewing(row._raw)}
         />
       </div>
+      {viewing && <VendorDetails vendor={viewing} onClose={() => setViewing(null)} />}
     </>
   );
 };

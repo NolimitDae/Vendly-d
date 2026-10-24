@@ -88,6 +88,16 @@ export const AdminService = {
     return Fetch.get(`/event-planner/planners?${q.toString()}`, authHeaders());
   },
 
+  // Every event planner (admin): status is approved | pending | suspended | rejected, or all
+  getPlanners: async (params?: { status?: string; search?: string; page?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params) Object.entries(params).forEach(([k, v]) => v !== undefined && v !== "" && q.set(k, String(v)));
+    return Fetch.get(`/admin/user/planners?${q.toString()}`, authHeaders());
+  },
+
+  // One planner: profile, licence documents, events, bookings and status history
+  getPlanner: async (userId: string) => Fetch.get(`/admin/user/planners/${userId}`, authHeaders()),
+
   // Event planner pending approvals
   getPendingEventPlanners: async (params?: { page?: number; limit?: number }) => {
     const q = new URLSearchParams();

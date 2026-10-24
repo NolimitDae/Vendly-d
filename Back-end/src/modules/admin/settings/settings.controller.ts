@@ -10,6 +10,7 @@ import { PlatformSettingsService } from 'src/modules/platform/platform-settings.
 import { PromoService, type PromoInput } from 'src/modules/platform/promo.service';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { recordAccountStatus } from '../user/account-status';
 
 class CategoryFeeDto {
   @IsOptional()
@@ -46,6 +47,12 @@ class ResolveDisputeDto {
 class UserStatusDto {
   @IsIn([0, 1])
   status: 0 | 1;
+
+  // shown to the user in their inbox and kept as the account's history
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }
 
 /** Admin money tools: fees, promo codes, feature flags, disputes, revenue and account status. */
@@ -142,14 +149,18 @@ export class SettingsController {
 
   // ─── Account status ────────────────────────────────────────────────────
 
-  /** 0 suspends (every token stops working on its next request), 1 restores. */
+  /** 0 suspends (every token stops working on its next request), 1 restores. An optional reason goes to the user. */
   @Patch('users/:id/status')
   async userStatus(@GetUser() user: any, @Param('id') id: string, @Body() dto: UserStatusDto) {
     if (id === (user.id ?? user.userId)) throw new BadRequestException("You can't suspend your own account");
-    const target = await this.prisma.user.findUnique({ where: { id }, select: { type: true } });
+    const target = await this.prisma.user.findUnique({ where: { id }, select: { type: true, status: true } });
     if (!target) throw new BadRequestException('User not found');
     if (target.type === 'ADMIN' && dto.status === 0) throw new BadRequestException('Admins can’t be suspended here');
     const updated = await this.prisma.user.update({ where: { id }, data: { status: dto.status }, select: { id: true, name: true, email: true, status: true } });
+    // only a real change goes in the history (a null status counts as active)
+    if ((target.status === 0 ? 0 : 1) !== dto.status) {
+      await recordAccountStatus(this.prisma, { userId: id, adminId: user.id ?? user.userId, status: dto.status, reason: dto.reason });
+    }
     return { success: true, data: updated };
   }
 }

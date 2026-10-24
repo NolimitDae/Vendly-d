@@ -5,9 +5,11 @@ import ModalWrapper from "../../common/modal/ModalWrapper";
 import ModalBody from "../../common/modal/ModalBody";
 import ProfileIcon from "@/icons/ProfileIcon";
 import SecurityIcon from "@/icons/SecurityIcon";
-import ProfileContent from "./ProfileContent";
+import ProfileContent, { type SavedProfile } from "./ProfileContent";
 import { LogoutIcon } from "@/icons";
 import SecurityPrivacyContent from "./SecurityPrivacyContent";
+import { useRouter } from "next/navigation";
+import { signOut } from "@/lib/session";
 
 const ProfileSettingTabs = [
   {
@@ -24,8 +26,14 @@ const ProfileSettingTabs = [
   },
 ];
 
-const ProfileSettingModal = ({ onClose }: { onClose: () => void }) => {
+const ProfileSettingModal = ({ onClose, onSaved }: { onClose: () => void; onSaved?: (profile: SavedProfile) => void }) => {
   const [activeTab, setActiveTab] = useState("profile");
+  const router = useRouter();
+
+  const logout = async () => {
+    await signOut();
+    router.push("/login");
+  };
 
   return (
     <ModalWrapper isOpen={true} onClose={onClose} size="full">
@@ -67,19 +75,23 @@ const ProfileSettingModal = ({ onClose }: { onClose: () => void }) => {
 
             {/* Logout (BOTTOM) */}
             <div className="mt-auto pt-0 sm:pt-4 flex justify-center md:justify-start">
-              <div className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-red-50">
+              <button
+                type="button"
+                onClick={logout}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-red-50"
+              >
                 <LogoutIcon color="#EB3D4D" />
                 <span className="text-sm font-medium text-[#EB3D4D]">
                   Logout
                 </span>
-              </div>
+              </button>
             </div>
           </div>
         </div>
 
         {/* Content Area */}
         <div className="flex-1 min-w-0">
-          {activeTab === "profile" && <ProfileContent />}
+          {activeTab === "profile" && <ProfileContent onSaved={onSaved} />}
           {activeTab === "security" && <SecurityPrivacyContent />}
         </div>
       </ModalBody>

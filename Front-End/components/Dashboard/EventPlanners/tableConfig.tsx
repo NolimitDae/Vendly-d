@@ -1,82 +1,114 @@
 import Image from "next/image";
 
+export type PlannerStatus = "approved" | "pending" | "suspended" | "rejected";
+
+export const PLANNER_STATUS_LABELS: Record<PlannerStatus, string> = {
+    approved: "Approved",
+    pending: "Pending",
+    suspended: "Suspended",
+    rejected: "Licence rejected",
+};
+
+const STATUS_STYLES: Record<PlannerStatus, string> = {
+    approved: "bg-greenBg border-greenBorder text-greenText",
+    pending: "border-warningBorder bg-pendingBg text-pendingText",
+    suspended: "bg-red-100 text-red-600 border-red-200 dark:bg-red-900/30",
+    rejected: "border-refundBorder bg-refundBg text-refundText",
+};
+
+export const PlannerStatusBadge = ({ status }: { status: PlannerStatus }) => (
+    <span className={`inline-block border text-xs font-semibold py-1 px-3 rounded-full ${STATUS_STYLES[status] ?? ""}`}>
+        {PLANNER_STATUS_LABELS[status] ?? status}
+    </span>
+);
+
+/** Filter tabs above the list; counts come from the API. */
+export const PLANNER_STATUS_TABS: { value: "all" | PlannerStatus; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "approved", label: "Approved" },
+    { value: "pending", label: "Pending" },
+    { value: "suspended", label: "Suspended" },
+    { value: "rejected", label: "Licence rejected" },
+];
+
+// the EventType values planners pick on their profile
+export const EVENT_TYPE_LABELS: Record<string, string> = {
+    WEDDING: "Wedding",
+    BIRTHDAY: "Birthday",
+    CORPORATE: "Corporate",
+    CONCERT: "Concert",
+    CONFERENCE: "Conference",
+    PRIVATE_PARTY: "Private party",
+    OTHER: "Other",
+};
+
+export const EVENT_TYPE_OPTIONS = [
+    { label: "All event types", value: "all" },
+    ...Object.entries(EVENT_TYPE_LABELS).map(([value, label]) => ({ label, value })),
+];
+
 export const EVENT_PLANNERS_COLUMNS = [
     {
         accessor: "plannerName",
         label: "Planner Name",
-        width: { mobile: "100px", desktop: "200px" },
+        width: { mobile: "200px", desktop: "240px" },
         formatter: (value: any) => <div className="flex items-center gap-2">
-            <Image src={value?.image || "/no-image.jpg"} alt="delete" width={34} height={34} className="rounded-full w-[34px] h-[34px] cursor-pointer" />
-            <div className="flex flex-col">
-                <span className="text-sm font-medium leading-[160%] text-blackColor">{value?.name}</span>
-                <span className="text-xs text-descriptionColor leading-[160%]">{value?.joinedDate}</span>
+            <Image src={value?.image || "/no-image.jpg"} alt="" width={34} height={34} className="rounded-full w-[34px] h-[34px] object-cover" unoptimized />
+            <div className="flex flex-col min-w-0">
+                <span className="text-sm font-medium leading-[160%] text-blackColor truncate">{value?.name}</span>
+                <span className="text-xs text-descriptionColor leading-[160%]">Joined {value?.joinedDate}</span>
             </div>
         </div>
     },
     {
-        accessor: "eventType",
-        label: "Event Type",
-        width: { mobile: "100px", desktop: "200px" }
+        accessor: "email",
+        label: "Email",
+        width: { mobile: "180px", desktop: "220px" }
     },
     {
-        accessor: "services",
-        label: "Services",
-        width: { mobile: "100px", desktop: "200px" }
+        accessor: "eventTypes",
+        label: "Event Types",
+        width: { mobile: "150px", desktop: "180px" }
     },
     {
-        accessor: "subscription",
-        label: "Subscription",
-        width: { mobile: "100px", desktop: "200px" }
+        accessor: "totalEvents",
+        label: "Events",
+        width: { mobile: "80px", desktop: "100px" }
     },
     {
         accessor: "totalBookings",
-        label: "Total Bookings",
-        width: { mobile: "100px", desktop: "200px" }
+        label: "Bookings",
+        width: { mobile: "90px", desktop: "110px" }
     },
-
-]
-
-export const EVENT_TYPE_OPTIONS = [
-    { label: "All Categories", value: "all" },
-    { label: "Wedding", value: "Wedding" },
-    { label: "Salon", value: "Salon" },
-    { label: "Cars", value: "Cars" },
-    { label: "Photography", value: "Photography" },
-    { label: "Corporate", value: "Corporate" },
-    { label: "Makeup", value: "Makeup" },
-    { label: "Repair", value: "Repair" },
-    { label: "Gardening", value: "Gardening" },
-    { label: "Catering", value: "Catering" },
-    { label: "Personal Training", value: "Personal Training" },
-    { label: "Tours", value: "Tours" },
-    { label: "Cleaning", value: "Cleaning" },
-    { label: "Care", value: "Care" },
-    { label: "Yoga", value: "Yoga" },
-    { label: "DJ", value: "DJ" },
-    { label: "Electrical", value: "Electrical" },
-    { label: "Laundry", value: "Laundry" },
-    { label: "Digital", value: "Digital" },
-    { label: "Tutoring", value: "Tutoring" },
-    { label: "Street Food", value: "Street Food" },
-    { label: "Interior", value: "Interior" },
-    { label: "Bike", value: "Bike" },
-    { label: "Spa", value: "Spa" },
-    { label: "Guard", value: "Guard" },
-    { label: "Plumbing", value: "Plumbing" },
-    { label: "Delivery", value: "Delivery" },
-    { label: "Gaming", value: "Gaming" }
-];
-
-export const STATUS_OPTIONS = [
-    { label: "All Status", value: "all" },
-    { label: "Monthly", value: "Monthly" },
-    { label: "Yearly", value: "Yearly" },
-]
-
-export const PLAN_OPTIONS = [
-    { label: "All Plans", value: "all" },
-    { label: "Home", value: "Home" },
-    { label: "Location", value: "Location" },
-    { label: "Mobile", value: "Mobile"}, 
-    { label: "On site", value: "on-site" }
+    {
+        accessor: "status",
+        label: "Status",
+        width: { mobile: "140px", desktop: "160px" },
+        formatter: (value: PlannerStatus) => <PlannerStatusBadge status={value} />
+    },
+    {
+        accessor: "actions",
+        label: "Action",
+        width: { mobile: "190px", desktop: "200px" },
+        formatter: (value: any) => (
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={value?.onView}
+                    aria-label={`View ${value?.name}`}
+                    className="text-xs font-semibold px-3 py-1 rounded-full border border-borderColor text-blackColor hover:bg-white dark:hover:bg-gray-700"
+                >
+                    View
+                </button>
+                <button
+                    type="button"
+                    onClick={value?.onToggle}
+                    aria-label={`${value?.suspended ? "Reactivate" : "Suspend"} ${value?.name}`}
+                    className={`text-xs font-semibold px-3 py-1 rounded-full ${value?.suspended ? "bg-green-100 text-green-700 dark:bg-green-900/30" : "bg-red-100 text-red-600 dark:bg-red-900/30"}`}
+                >
+                    {value?.suspended ? "Reactivate" : "Suspend"}
+                </button>
+            </div>
+        ),
+    },
 ]
