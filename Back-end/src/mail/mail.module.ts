@@ -1,4 +1,4 @@
-import { MailerModule } from '@nestjs-modules/mailer';
+import { MailerModule, MailerOptions } from '@nestjs-modules/mailer';
 import { Global, Module } from '@nestjs/common';
 import { EjsAdapter } from '@nestjs-modules/mailer/dist/adapters/ejs.adapter';
 import { MailService } from './mail.service';
@@ -22,9 +22,11 @@ import { resendTransport } from './resend.transport';
           pass: appConfig().mail.password,
         },
       },
+      // message defaults; nodemailer 10's own types leave message fields such as `from` off the
+      // transport options type this module declares here, but nodemailer still applies them
       defaults: {
         from: appConfig().mail.from,
-      },
+      } as MailerOptions['defaults'],
       template: {
         // dir: join(__dirname, 'templates'),
         dir: process.cwd() + '/dist/mail/templates/',
