@@ -57,7 +57,11 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
       await load();
       onChanged?.();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? fail);
+      // already going through (the automatic retry got there first): not a failure, and the reload shows it
+      if (e?.response?.status === 409) {
+        toast.info(e.response.data?.message ?? "A payment is already going through.");
+        await load();
+      } else toast.error(e?.response?.data?.message ?? fail);
     } finally {
       setBusy(false);
     }

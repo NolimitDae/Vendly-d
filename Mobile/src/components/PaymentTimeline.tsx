@@ -54,8 +54,12 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
       await fn();
       await load();
       onChanged?.();
-    } catch (err) {
-      Alert.alert(fail, apiMessage(err, 'Try again in a moment.'));
+    } catch (err: any) {
+      // already going through (the automatic retry got there first): not a failure, and the reload shows it
+      if (err?.response?.status === 409) {
+        Alert.alert('Payment in progress', apiMessage(err, 'A payment is already going through.'));
+        await load();
+      } else Alert.alert(fail, apiMessage(err, 'Try again in a moment.'));
     } finally {
       setBusy(false);
     }

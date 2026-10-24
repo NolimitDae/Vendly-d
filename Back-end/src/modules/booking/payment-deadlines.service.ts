@@ -72,7 +72,15 @@ export class PaymentDeadlinesService {
   /** Bookings whose deposit or balance still isn't paid at the deadline are cancelled for non-payment. */
   async cancelOverdue(now = new Date()) {
     const overdue = await this.prisma.booking.findMany({
-      where: { status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] }, deleted_at: null, payment_due_by: { lte: now } },
+      where: {
+        status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] },
+        deleted_at: null,
+        payment_due_by: { lte: now },
+        // left out, not skipped in the loop, so they can't fill every batch: Vendly settles a disputed
+        // booking itself, and a charge still going through at Stripe settles first (even one stuck there)
+        OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }],
+        installments: { none: { kind: 'charge', status: 'PROCESSING' } },
+      },
       select: { id: true, payment_due_kind: true, installments: { where: { kind: 'charge' }, select: { sequence: true, status: true } } },
       orderBy: { payment_due_by: 'asc' },
       take: BATCH,

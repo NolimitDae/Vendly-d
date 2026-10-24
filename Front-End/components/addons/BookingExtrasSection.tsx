@@ -115,8 +115,12 @@ export default function BookingExtrasSection({
       await load();
       onChanged?.();
       return true;
-    } catch (e) {
-      toast.error(apiError(e, fail));
+    } catch (e: any) {
+      // a payment already going through (the automatic retry got there first): not a failure, and the reload shows it
+      if (e?.response?.status === 409) {
+        toast.info(apiError(e, "A payment is already going through."));
+        await load();
+      } else toast.error(apiError(e, fail));
       return false;
     } finally {
       setBusy(null);

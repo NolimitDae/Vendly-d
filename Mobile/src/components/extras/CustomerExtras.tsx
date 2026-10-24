@@ -82,8 +82,10 @@ export default function CustomerExtras({ bookingId, vendor, extras, meta, reload
         haptic.success();
         Alert.alert('Paid', `${money(e.total)} for ${e.name}.`);
       }
-    } catch (err) {
-      Alert.alert('Payment failed again', apiMessage(err, 'Try another card.'));
+    } catch (err: any) {
+      // already going through (the automatic retry got there first): not a failure
+      if (err?.response?.status === 409) Alert.alert('Payment in progress', apiMessage(err, 'A payment is already going through.'));
+      else Alert.alert('Payment failed again', apiMessage(err, 'Try another card.'));
     } finally {
       setBusy(null);
       after();

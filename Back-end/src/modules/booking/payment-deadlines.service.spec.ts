@@ -40,6 +40,15 @@ describe('PaymentDeadlinesService', () => {
     expect(bookings.cancelForNonPayment).toHaveBeenCalledWith('b1', now);
   });
 
+  it('leaves disputed bookings and charges still going through out of the batch, so they never crowd out the rest', async () => {
+    const { service, prisma } = setup();
+    await service.cancelOverdue(now);
+    expect(prisma.booking.findMany.mock.calls[0][0].where).toMatchObject({
+      OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }],
+      installments: { none: { kind: 'charge', status: 'PROCESSING' } },
+    });
+  });
+
   it('leaves a charge still going through for the next run, and clears one that was paid', async () => {
     const { service, prisma, bookings } = setup();
     prisma.booking.findMany.mockResolvedValueOnce([

@@ -18,7 +18,7 @@ import { EventToolsService } from 'src/modules/events/tools/event-tools.service'
 import { BookingContractsService, RequestMeta } from 'src/modules/contracts/booking-contracts.service';
 import { SignedBookingRequestDto, VendorConfirmDto } from 'src/modules/contracts/dto/contracts.dto';
 import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
-import { CancellationSummary, cancellationMessage, depositPlanVendorOwed, REFUND_TIMING, settleAgainstPaid, settleCancellation, Settlement } from './cancellation';
+import { CancellationSummary, cancellationMessage, depositPlanVendorOwed, PaidInstallment, REFUND_TIMING, settleAgainstPaid, settleCancellation, Settlement } from './cancellation';
 import { CANCELLATION_PRESETS } from 'src/modules/contracts/contract-templates';
 import { currentFees } from 'src/modules/platform/platform-settings.service';
 import { PaymentsService } from 'src/modules/payments/payments.service';
@@ -33,7 +33,7 @@ import { CustomerBookingTab, customerTabOrder, customerTabWhere } from './custom
 import { NO_SHOW_HINT, pastStartNotStarted } from './no-show';
 import { CancelledBy, cancelReasonLabel, cancelReasonsFor, countsAgainstVendor, describeCancelReason, NON_PAYMENT } from './cancel-reasons';
 import { TRACK_THRESHOLD, TRACK_WINDOW_DAYS, trackWindowStart, vendorCancellationCounts } from './vendor-cancellations';
-import { isDepositPlan, paymentState, PAYMENT_STATE_LABELS } from 'src/modules/payments/payment-due';
+import { deadlineText, isDepositPlan, paymentState, PAYMENT_STATE_LABELS } from 'src/modules/payments/payment-due';
 import { depositShareOf } from 'src/modules/payments/payment-schedule';
 import { MarketplaceService } from 'src/modules/marketplace/marketplace.service';
 
@@ -48,6 +48,10 @@ const OPEN_DISPUTE = 'This booking has an open dispute. Vendly will settle the m
 
 /** Bookings that can still be cancelled. */
 const CANCELLABLE: BookingStatus[] = [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS];
+
+/** A deposit plan's missed payment whose 12 hours to pay (payments/payment-due.ts) are still running. */
+const payWindowOpen = (b: { deposit_rules?: boolean | null; payment_due_by?: Date | null }, now = new Date()) =>
+  !!b.deposit_rules && !!b.payment_due_by && b.payment_due_by > now;
 
 /** A booking as getBookingOrFail loads it. */
 type BookingRow = Awaited<ReturnType<BookingService['getBookingOrFail']>>;
@@ -412,18 +416,35 @@ export class BookingService {
     // each side picks from its own list; apps from before the lists send none and count as "Other"
     const code = dto.reason_code ?? 'other';
     if (!(code in cancelReasonsFor(by))) throw new BadRequestException('Pick one of the reasons offered for cancelling.');
-    if (code === 'customer_didnt_pay' && !(await this.paymentOverdue(booking))) {
-      throw new BadRequestException('You can cancel for non-payment only while a payment on this booking is overdue or has failed.');
+    if (code === 'customer_didnt_pay') {
+      // deposit plans: the customer keeps their 12 hours to pay; the booking is cancelled for them if they don't
+      if (payWindowOpen(booking)) {
+        throw new BadRequestException(`The customer has until ${await this.deadlineFor(booking.id, booking.payment_due_by!)} to pay. If they don't, the booking is cancelled automatically.`);
+      }
+      if (!(await this.paymentOverdue(booking))) throw new BadRequestException('You can cancel for non-payment only while a payment on this booking is overdue or has failed.');
     }
     const note = (dto.note ?? dto.reason)?.trim() || undefined;
     return this.cancelAs(booking, by, code, note, userId);
   }
 
-  /** A deposit or balance waiting to be paid (pending), or a charge on the booking that failed. */
+  /**
+   * When the vendor may cancel with "Customer didn't pay": a deposit plan's deadline to pay has passed,
+   * or a charge towards the price failed (other plans, after their retries). Add-ons, fees and rental
+   * deposits don't count, and never while a deposit plan's 12 hours to pay are still running.
+   */
   private async paymentOverdue(booking: BookingRow) {
+    if (payWindowOpen(booking)) return false;
     if (paymentState(booking)) return true;
-    const failed = await this.prisma.bookingInstallment.count({ where: { booking_id: booking.id, status: 'FAILED', kind: { not: 'security_deposit' } } });
+    const failed = await this.prisma.bookingInstallment.count({ where: { booking_id: booking.id, status: 'FAILED', kind: 'charge' } });
     return failed > 0;
+  }
+
+  /** A deadline worded as the payment emails word it, in the time zone the booking was made in. */
+  private async deadlineFor(bookingId: string, at: Date) {
+    const contract = await Promise.resolve()
+      .then(() => this.prisma.bookingContract.findFirst({ where: { booking_id: bookingId }, orderBy: { version: 'desc' }, select: { merge_data: true } }))
+      .catch(() => null);
+    return deadlineText(at, (contract?.merge_data as Record<string, unknown> | null)?.timezone as string | undefined);
   }
 
   /**
@@ -668,13 +689,19 @@ export class BookingService {
       cancelledAt,
     });
     const paid = !!booking.paid_at;
-    const sum = (rows: typeof installments, f: (i: (typeof installments)[number]) => number) => round2(rows.reduce((s, i) => s + f(i), 0));
-    // with installments, settle against what was actually paid: the vendor keeps at most what the
-    // customer paid towards their price, and everything else paid comes back. Nothing paid: nothing moves.
+    const sum = <T>(rows: T[], f: (i: T) => number) => round2(rows.reduce((s, i) => s + f(i), 0));
+    // paid in one go through Checkout (no installments): settled as one paid charge, less what was
+    // refunded since (a dispute's partial refund), so nothing is refunded or credited twice
+    const checkout = paid && !installments.length ? await this.payments.checkoutPart(booking.id, { ...booking, installments }) : null;
+    const paidRows: PaidInstallment[] = checkout
+      ? [{ status: 'PAID', amount: round2(Number(booking.amount ?? 0) + Number(booking.service_fee ?? 0)), fee_amount: Number(booking.service_fee ?? 0), refunded_amount: checkout.refunded }]
+      : installments;
+    // settle against what was actually paid: the vendor keeps at most what the customer paid towards
+    // their price, and everything else paid comes back. Nothing paid: nothing moves.
     let settlement: Settlement = !paid
       ? { refundTotal: 0, refundVendorPrice: 0, refundFee: 0, vendorKeeps: 0, percent: owed.percent }
-      : installments.length
-        ? settleAgainstPaid(owed, installments, cancelledBy, cancelledBy === 'CUSTOMER' ? round2(owed.vendorKeeps + feesAgreed) : 0)
+      : paidRows.length
+        ? settleAgainstPaid(owed, paidRows, cancelledBy, cancelledBy === 'CUSTOMER' ? round2(owed.vendorKeeps + feesAgreed) : 0)
         : owed;
     // deposit plans (bookings under the Oct 2026 rules): the paid deposit is non-refundable when the
     // customer cancels or didn't pay; what was paid beyond it follows the policy (cancellation.ts)
@@ -699,8 +726,8 @@ export class BookingService {
     // the Vendly Protection fee paid and still held: kept when the customer cancels
     const feePaid = !paid
       ? 0
-      : installments.length
-        ? sum(installments.filter((i) => i.status === 'PAID'), (i) => Math.max(0, Math.min(Number(i.fee_amount), Number(i.amount) - Number(i.refunded_amount))))
+      : paidRows.length
+        ? sum(paidRows.filter((i) => i.status === 'PAID'), (i) => Math.max(0, Math.min(Number(i.fee_amount), Number(i.amount) - Number(i.refunded_amount))))
         : round2(Number(booking.service_fee ?? 0));
     return {
       cancelledBy,

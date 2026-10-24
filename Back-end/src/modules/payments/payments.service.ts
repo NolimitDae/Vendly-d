@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { withBookingLock, withJobLock } from 'src/common/helper/job-lock';
 import * as Sentry from '@sentry/nestjs';
@@ -515,8 +515,14 @@ export class PaymentsService {
       await this.assertOwnsCard(customerId, paymentMethodId);
       await this.prisma.booking.update({ where: { id: bookingId }, data: { payment_method_id: paymentMethodId } });
     }
-    // a fresh attempt window: the retry counter starts over for the new card
-    await this.prisma.bookingInstallment.update({ where: { id: inst.id }, data: { status: InstallmentStatus.SCHEDULED, attempts: 0, next_attempt_at: null } });
+    // a fresh attempt window: the retry counter starts over for the new card. Only while the row is as
+    // read: the sweep or the automatic retry may have just claimed it, and resetting it then would charge twice
+    const reset = await this.prisma.bookingInstallment.updateMany({
+      where: { id: inst.id, status: inst.status, attempts: inst.attempts },
+      data: { status: InstallmentStatus.SCHEDULED, attempts: 0, next_attempt_at: null },
+    });
+    // 409: the apps show it as "in progress" and reload, not as a failed payment
+    if (reset.count !== 1) throw new ConflictException('A payment is already going through.');
     const result = await this.chargeInstallment(inst.id, paymentMethodId);
     return { success: result?.status === InstallmentStatus.PAID || result?.status === InstallmentStatus.PROCESSING, data: result };
   }
@@ -672,8 +678,9 @@ export class PaymentsService {
    * plans; Pay now still opens it for a booking without a plan), or null when there is none. It has
    * no installment: its payment is the booking's amount plus fee, and its refunds are the
    * `booking_refund` rows (order_id = the booking) that aren't refunds of installments.
+   * Cancelling settles against it too (BookingService.cancellationTerms).
    */
-  private async checkoutPart(bookingId: string, b: CheckoutBooking): Promise<{ paid: number; vendorPaid: number } | null> {
+  async checkoutPart(bookingId: string, b: CheckoutBooking): Promise<{ paid: number; vendorPaid: number; refunded: number } | null> {
     const installments = b.installments ?? [];
     if (!b.paid_at || installments.some((i) => i.kind === 'charge')) return null;
     // with other installments (an add-on) paid_at alone doesn't show that, so the checkout payment must be on record
@@ -690,6 +697,7 @@ export class PaymentsService {
       paid: Math.max(0, round2(Number(b.amount ?? 0) + Number(b.service_fee ?? 0) - refunded)),
       // refunds come out of the vendor's price first (a customer cancellation keeps the fee)
       vendorPaid: Math.max(0, round2(Number(b.amount ?? 0) - refunded)),
+      refunded,
     };
   }
 
@@ -1224,7 +1232,10 @@ export class PaymentsService {
       if (early > 0) await this.recordRecovery(b.vendor_id, bookingId, -early, b.currency ?? 'usd');
       // a booking the vendor never started (a no-show) is over: it leaves the vendor's upcoming work
       if (b.status === BookingStatus.CONFIRMED) {
-        await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.CANCELLED, cancelled_at: now, cancel_reason: 'Refunded in full by Vendly after a reported problem', cancelled_by: 'ADMIN', payment_due_by: null, payment_due_kind: null } });
+        const cancelled = await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.CANCELLED, cancelled_at: now, cancel_reason: 'Refunded in full by Vendly after a reported problem', cancelled_by: 'ADMIN', payment_due_by: null, payment_due_kind: null } });
+        // as any cancellation: nothing more is charged and card holds are let go (also one that came
+        // back open after the refund above, such as a charge in flight that then failed)
+        if (cancelled.count === 1) await this.voidOpenCharges(bookingId).catch((e) => this.logger.error(`void charges ${bookingId}`, e));
       }
     }
 

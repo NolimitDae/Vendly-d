@@ -12,6 +12,7 @@ import { MarketplaceService } from 'src/modules/marketplace/marketplace.service'
 import { BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+import { deadlineText } from 'src/modules/payments/payment-due';
 
 jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
   StripePayment: {
@@ -75,6 +76,10 @@ const mockPayments = {
   voidOpenCharges: jest.fn().mockResolvedValue(undefined),
   cardLabel: jest.fn().mockResolvedValue(null),
   sendFinalInvoice: jest.fn().mockResolvedValue(true),
+  // as PaymentsService.checkoutPart with nothing refunded yet
+  checkoutPart: jest.fn((_id: string, b: any) =>
+    Promise.resolve(b.paid_at && !b.installments?.length ? { paid: Number(b.amount) + Number(b.service_fee ?? 0), vendorPaid: Number(b.amount), refunded: 0 } : null),
+  ),
 };
 
 const mockContracts = {
@@ -892,6 +897,35 @@ describe('BookingService', () => {
       expect(out.preview.message).toMatch(/^You won't get a refund\./);
     });
 
+    describe('after an earlier partial refund (a dispute’s $100)', () => {
+      // what is left of the $450 + $22.50 Checkout payment: $350 of the price, the fee
+      const afterRefund = { paid: 372.5, vendorPaid: 350, refunded: 100 };
+      beforeEach(() => mockPayments.checkoutPart.mockResolvedValueOnce(afterRefund).mockResolvedValueOnce(afterRefund));
+
+      it('vendor cancels: only what is left comes back', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
+        const out = await previewThenCancel('vendor-1');
+        expectSame(out);
+        expect(out.preview).toMatchObject({ refund_total: 372.5, refund_fee: 22.5, vendor_keeps: 0 });
+        expect(mockPayments.checkoutPart).toHaveBeenCalledWith('booking-1', expect.objectContaining({ id: 'booking-1', installments: [] }));
+      });
+
+      it('customer cancels in the 50% window: the policy’s half is kept, the refund already made counts towards the other half', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
+        const out = await previewThenCancel('customer-1');
+        expectSame(out);
+        expect(out.preview).toMatchObject({ refund_total: 125, vendor_keeps: 225, fee_kept: 22.5, percent: 50 });
+      });
+
+      it('customer cancels too late for a refund: the vendor keeps only what is left of their price', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(legacyPaid());
+        mockPrisma.bookingContract.findFirst.mockResolvedValue({ merge_data: { cancellation_policy: 'strict' } });
+        const out = await previewThenCancel('customer-1');
+        expectSame(out);
+        expect(out.preview).toMatchObject({ refund_total: 0, vendor_keeps: 350, fee_kept: 22.5, percent: 0 });
+      });
+    });
+
     describe('deposit only paid (payment plan)', () => {
       // $1,000 price, $50 fee; the 25% deposit ($250 + $50 fee) is paid, the $750 balance isn't
       const deposit = { id: 'i1', status: 'PAID', amount: 300, fee_amount: 50, refunded_amount: 0, kind: 'charge', capture_manually: false, payment_intent_id: 'pi_dep' };
@@ -1068,9 +1102,52 @@ describe('BookingService', () => {
       expect(preview.reasons.map((r: any) => r.key)).toEqual(['safety_concern', 'emergency', 'double_booked', 'other']);
     });
 
+    it('the customer’s 12 hours to pay come first: no "Customer didn’t pay" until they are up', async () => {
+      const dueBy = new Date(Date.now() + 3 * 3600_000);
+      mockPrisma.bookingInstallment.findMany.mockResolvedValue([deposit, balance('FAILED')]);
+      // the balance failed for good (no retry left) but the deadline hasn't passed
+      mockPrisma.bookingInstallment.count.mockResolvedValue(1);
+      mockPrisma.booking.findFirst.mockResolvedValue(depositPlan({ payment_due_by: dueBy, payment_due_kind: 'balance' }));
+
+      const err = await service.cancel('booking-1', 'vendor-1', { reason_code: 'customer_didnt_pay' }).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toBe(`The customer has until ${deadlineText(dueBy, 'America/Chicago')} to pay. If they don't, the booking is cancelled automatically.`);
+      expect(err.message).toMatch(/^The customer has until \d{1,2}:\d{2} [AP]M C[DS]T on \w{3}, \w{3} \d{1,2} to pay\./);
+      expect(mockPrisma.booking.updateMany).not.toHaveBeenCalled();
+      const preview = (await service.cancelPreview('booking-1', 'vendor-1', 'customer_didnt_pay')).data as any;
+      expect(preview.reasons.map((r: any) => r.key)).not.toContain('customer_didnt_pay');
+      // previewed as the vendor's own cancellation, since the reason isn't open yet
+      expect(preview.cancelled_by).toBe('VENDOR');
+    });
+
+    it('"Customer didn’t pay" counts only failed charges towards the price, not add-ons, fees or rental deposits', async () => {
+      const rows = [
+        { status: 'PAID', kind: 'charge' },
+        { status: 'FAILED', kind: 'extra' },
+        { status: 'FAILED', kind: 'security_deposit' },
+      ];
+      mockPrisma.bookingInstallment.count.mockImplementation(({ where }: any) => Promise.resolve(rows.filter((r) => r.status === where.status && (typeof where.kind === 'string' ? r.kind === where.kind : r.kind !== where.kind?.not)).length));
+      mockPrisma.bookingInstallment.findMany.mockResolvedValue([]);
+      // paid in full on accept; only an add-on and the rental deposit hold failed
+      mockPrisma.booking.findFirst.mockResolvedValue(depositPlan({ payment_plan: 'FULL_ON_ACCEPT' }));
+      await expect(service.cancel('booking-1', 'vendor-1', { reason_code: 'customer_didnt_pay' })).rejects.toThrow('only while a payment');
+      expect((await service.cancelPreview('booking-1', 'vendor-1')).data.reasons.map((r: any) => r.key)).not.toContain('customer_didnt_pay');
+
+      // pay after service: the price charge failed after its retries
+      rows[0].status = 'FAILED';
+      mockPrisma.booking.findFirst.mockResolvedValue(depositPlan({ payment_plan: 'PAY_AFTER_SERVICE', paid_at: null }));
+      expect((await service.cancelPreview('booking-1', 'vendor-1')).data.reasons[0].key).toBe('customer_didnt_pay');
+      const result = await service.cancel('booking-1', 'vendor-1', { reason_code: 'customer_didnt_pay' });
+      expect(claimData().data).toMatchObject({ cancelled_by: 'VENDOR', cancel_reason_code: 'customer_didnt_pay' });
+      expect(result.success).toBe(true);
+      mockPrisma.bookingInstallment.count.mockReset();
+      mockPrisma.bookingInstallment.count.mockResolvedValue(0);
+    });
+
     it('vendor cancels for non-payment: settled like the customer’s (deposit kept), and not counted against them', async () => {
       mockPrisma.bookingInstallment.findMany.mockResolvedValue([deposit, balance('FAILED')]);
-      mockPrisma.booking.findFirst.mockResolvedValue(depositPlan({ payment_due_by: new Date(Date.now() + 3600_000), payment_due_kind: 'balance', event_start_at: new Date(Date.now() + 10 * DAY) }));
+      // the 12 hours to pay are up (the deadline job hasn't run yet)
+      mockPrisma.booking.findFirst.mockResolvedValue(depositPlan({ payment_due_by: new Date(Date.now() - 60_000), payment_due_kind: 'balance', event_start_at: new Date(Date.now() + 10 * DAY) }));
       const preview = (await service.cancelPreview('booking-1', 'vendor-1', 'customer_didnt_pay')).data as any;
       expect(preview).toMatchObject({ cancelled_by: 'CUSTOMER', vendor_keeps: 250, deposit_kept: 250 });
       expect(preview.reasons[0]).toEqual({ key: 'customer_didnt_pay', label: 'Customer didn’t pay' });

@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { BookingStatus, InstallmentStatus, PaymentPlan } from 'prisma/generated/enums';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { MailService } from 'src/mail/mail.service';
@@ -857,6 +857,24 @@ describe('PaymentsService', () => {
       expect(prisma.bookingInstallment.update).not.toHaveBeenCalled();
     });
 
+    it('a customer’s Pay now racing the sweep or the automatic retry never charges twice', async () => {
+      const waiting = installment({ status: InstallmentStatus.SCHEDULED, attempts: 1, booking: { customer_id: 'c1', status: BookingStatus.CONFIRMED, dispute_resolution: null } });
+      prisma.bookingInstallment.findFirst.mockResolvedValue(waiting);
+      // the sweep claimed the row (PROCESSING, attempts 2) after Pay now read it
+      prisma.bookingInstallment.updateMany.mockResolvedValueOnce({ count: 0 });
+      await expect(service.retryInstallment('b1', 'i1', 'c1')).rejects.toThrow(new ConflictException('A payment is already going through.'));
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i1', status: InstallmentStatus.SCHEDULED, attempts: 1 }, data: { status: InstallmentStatus.SCHEDULED, attempts: 0, next_attempt_at: null } });
+      expect(prisma.bookingInstallment.update).not.toHaveBeenCalled();
+      expect(StripePayment.chargeSavedCard).not.toHaveBeenCalled();
+
+      // nobody else on it: the counter starts over and the card is charged
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ booking: { ...bookingRef, deposit_rules: false } }));
+      (StripePayment.chargeSavedCard as jest.Mock).mockResolvedValue({ id: 'pi_r', status: 'succeeded' });
+      const res = await service.retryInstallment('b1', 'i1', 'c1');
+      expect(res.success).toBe(true);
+      expect(StripePayment.chargeSavedCard).toHaveBeenCalledTimes(1);
+    });
+
     it('releases a deposit early only on a deposit plan', async () => {
       const base = { vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null, vendor: { stripe_connect_id: 'acct_1' }, contracts: [{ id: 'c1' }] };
       // a full payment plus a later add-on is not a deposit
@@ -955,6 +973,33 @@ describe('PaymentsService', () => {
         where: { id: 'b1', status: BookingStatus.CONFIRMED },
         data: { status: BookingStatus.CANCELLED, cancelled_at: expect.any(Date), cancel_reason: expect.stringContaining('Refunded in full'), cancelled_by: 'ADMIN', payment_due_by: null, payment_due_kind: null },
       });
+    });
+
+    it('a full refund that cancels a confirmed booking calls off what is still to charge and lets card holds go', async () => {
+      prisma.booking.findUnique.mockResolvedValue(disputed({ status: BookingStatus.CONFIRMED, paid_at: new Date(), installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })] }));
+      jest.spyOn(service, 'refundBooking').mockResolvedValue(105);
+      (StripePayment.cancelPaymentIntent as jest.Mock).mockResolvedValue({ id: 'pi_hold', status: 'canceled' });
+      // still open once the refund is done: the balance, and a rental deposit hold
+      prisma.bookingInstallment.findMany.mockResolvedValue([
+        installment({ id: 'i2', sequence: 2, status: InstallmentStatus.SCHEDULED }),
+        installment({ id: 'i3', kind: 'security_deposit', status: InstallmentStatus.PROCESSING, capture_manually: true, payment_intent_id: 'pi_hold' }),
+      ]);
+      await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'No-show confirmed' });
+      expect(StripePayment.cancelPaymentIntent).toHaveBeenCalledWith('pi_hold');
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i2', status: InstallmentStatus.SCHEDULED }, data: { status: InstallmentStatus.CANCELLED } });
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i3', status: InstallmentStatus.PROCESSING }, data: { status: InstallmentStatus.CANCELLED } });
+
+      // a completed booking isn't cancelled, so nothing is called off here
+      jest.clearAllMocks();
+      prisma.booking.findUnique.mockResolvedValue(disputed({ paid_at: new Date(), installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })] }));
+      await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'Not as agreed' });
+      expect(StripePayment.cancelPaymentIntent).not.toHaveBeenCalled();
+    });
+
+    it('tells cancellations what was refunded from a Checkout payment', async () => {
+      prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: 100 } });
+      expect(await service.checkoutPart('b1', { ...checkout, installments: [] })).toEqual({ paid: 320, vendorPaid: 300, refunded: 100 });
+      prisma.paymentTransaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
     });
 
     it('deciding for the vendor on a booking not complete yet keeps the money held until they complete it', async () => {

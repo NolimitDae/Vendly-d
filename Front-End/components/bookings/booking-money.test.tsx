@@ -36,7 +36,7 @@ jest.mock('@/service/payments/booking-money.service', () => ({
   money: (n: number) => `$${n.toFixed(2)}`,
 }));
 
-jest.mock('react-toastify', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+jest.mock('react-toastify', () => ({ toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() } }));
 
 import { BookingService } from '@/service/booking/booking.service';
 import { PaymentsService } from '@/service/payments/payments.service';
@@ -177,6 +177,18 @@ describe('PaymentTimeline (missed deposit on a deposit plan)', () => {
     await user.click(screen.getByRole('button', { name: 'Mastercard 4444' }));
     await user.click(screen.getByRole('button', { name: 'Pay $440.00 with this card' }));
     await waitFor(() => expect(PaymentsService.retry).toHaveBeenCalledWith('b1', 'i1', 'pm_other'));
+  });
+
+  it('a payment already going through (the automatic retry got there first) is shown as such, not as a failure', async () => {
+    (PaymentsService.timeline as jest.Mock).mockResolvedValue({ data: { data: timeline } });
+    (PaymentsService.retry as jest.Mock).mockRejectedValue({ response: { status: 409, data: { statusCode: 409, message: 'A payment is already going through.', error: 'Conflict' } } });
+    const user = userEvent.setup();
+    render(<PaymentTimeline bookingId="b1" bookingStatus="CONFIRMED" />);
+    await user.click(await screen.findByRole('button', { name: 'Pay $440.00 now' }));
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('A payment is already going through.'));
+    expect(toast.error).not.toHaveBeenCalled();
+    // reloaded to show the payment in progress
+    await waitFor(() => expect(PaymentsService.timeline).toHaveBeenCalledTimes(2));
   });
 });
 

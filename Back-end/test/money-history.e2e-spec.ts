@@ -279,6 +279,16 @@ run('Money history, cancel preview and invoices (e2e)', () => {
     const custPreview = await as('cust', http().get(`/api/bookings/${B.bal}/cancel-preview`));
     expect(custPreview.body.data.message).toContain('Your deposit of $250.00 is non-refundable.');
     expect(custPreview.body.data.reasons.map((r: any) => r.key)).toEqual(['plans_changed', 'found_another_vendor', 'event_cancelled', 'price', 'other']);
+
+    // the customer's time to pay is still running: the vendor can't use the reason yet
+    const early = await as('vendor', http().get(`/api/bookings/${B.bal}/cancel-preview`));
+    expect(early.body.data.reasons.map((r: any) => r.key)).not.toContain('customer_didnt_pay');
+    const refused = await as('vendor', http().patch(`/api/bookings/${B.bal}/cancel`).send({ reason_code: 'customer_didnt_pay' }));
+    expect(refused.status).toBe(400);
+    expect(refused.body.message).toMatch(/^The customer has until .+ to pay\. If they don't, the booking is cancelled automatically\.$/);
+    // the deadline passes (before the job gets to it)
+    await prisma.booking.update({ where: { id: B.bal }, data: { payment_due_by: new Date(Date.now() - 60_000) } });
+
     const preview = await as('vendor', http().get(`/api/bookings/${B.bal}/cancel-preview?reason_code=customer_didnt_pay`));
     expect(preview.body.data).toMatchObject({ cancelled_by: 'CUSTOMER', refund_total: 0, vendor_keeps: 250, deposit_kept: 250, unpaid_cancelled: 750 });
     expect(preview.body.data.reasons[0]).toEqual({ key: 'customer_didnt_pay', label: 'Customer didn’t pay' });
