@@ -22,7 +22,13 @@ export class PrismaService
       throw new Error('DATABASE_URL is not defined in environment variables');
     }
 
-    const adapter = new PrismaPg({ connectionString: datasourceUrl });
+    // a bigger pool than pg's default 10, and a wait limit so a busy pool fails a request instead of
+    // hanging it forever
+    const adapter = new PrismaPg({
+      connectionString: datasourceUrl,
+      max: Number(process.env.DB_POOL_MAX) || 25,
+      connectionTimeoutMillis: Number(process.env.DB_POOL_WAIT_MS) || 15_000,
+    });
 
     super({
       adapter,

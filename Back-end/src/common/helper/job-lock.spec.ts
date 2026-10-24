@@ -1,4 +1,5 @@
-import { withBookingLock, withJobLock } from './job-lock';
+import Redis from 'ioredis';
+import { __setJobLockRedis, withBookingLock, withJobLock } from './job-lock';
 
 const prismaWith = (locked: boolean) =>
   ({
@@ -16,6 +17,57 @@ describe('withJobLock', () => {
     const job = jest.fn();
     await expect(withJobLock(prismaWith(false), 'x', job)).resolves.toBeUndefined();
     expect(job).not.toHaveBeenCalled();
+  });
+});
+
+describe('withJobLock with Redis (production)', () => {
+  // a tiny in-memory Redis: SET NX PX and the compare-and-delete release
+  const fakeRedis = () => {
+    const store = new Map<string, string>();
+    return {
+      store,
+      set: jest.fn(async (k: string, v: string, _px: string, _ttl: number, nx: string) => {
+        if (nx === 'NX' && store.has(k)) return null;
+        store.set(k, v);
+        return 'OK';
+      }),
+      eval: jest.fn(async (_s: string, _n: number, k: string, token: string) => (store.get(k) === token ? Number(store.delete(k)) : 0)),
+    };
+  };
+  afterEach(() => __setJobLockRedis(undefined));
+  const noDb = { $transaction: jest.fn() } as any;
+
+  it('runs the job without touching the database, then lets the lock go', async () => {
+    const r = fakeRedis();
+    __setJobLockRedis(r as unknown as Redis);
+    await expect(withJobLock(noDb, 'sweep', async () => 7)).resolves.toBe(7);
+    expect(noDb.$transaction).not.toHaveBeenCalled();
+    expect(r.set).toHaveBeenCalledWith('vendly-job:sweep', expect.any(String), 'PX', 3600000, 'NX');
+    expect(r.store.size).toBe(0);
+  });
+
+  it('skips while another server runs it, and releases even when the job fails', async () => {
+    const r = fakeRedis();
+    __setJobLockRedis(r as unknown as Redis);
+    let release!: () => void;
+    const first = withJobLock(noDb, 'sweep', () => new Promise<string>((ok) => (release = () => ok('first'))));
+    await new Promise((ok) => setImmediate(ok));
+    const job = jest.fn();
+    await expect(withJobLock(noDb, 'sweep', job)).resolves.toBeUndefined();
+    expect(job).not.toHaveBeenCalled();
+    release();
+    await expect(first).resolves.toBe('first');
+    await expect(withJobLock(noDb, 'sweep', async () => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
+    expect(r.store.size).toBe(0);
+  });
+
+  it("never deletes a lock another run took after this one's expired", async () => {
+    const r = fakeRedis();
+    __setJobLockRedis(r as unknown as Redis);
+    await withJobLock(noDb, 'sweep', async () => {
+      r.store.set('vendly-job:sweep', 'someone-else');
+    });
+    expect(r.store.get('vendly-job:sweep')).toBe('someone-else');
   });
 });
 

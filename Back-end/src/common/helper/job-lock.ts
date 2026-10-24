@@ -1,17 +1,48 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { createHash, randomUUID } from 'crypto';
+import Redis from 'ioredis';
+import appConfig from 'src/config/app.config';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/** Releases the lock only if this run still owns it (it may have expired and been taken by another). */
+const RELEASE = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0`;
+
+let lockRedis: Redis | null | undefined;
+/** The Redis the job locks live in (null in unit tests, which use the database lock below). */
+function jobLockRedis(): Redis | null {
+  if (lockRedis !== undefined) return lockRedis;
+  lockRedis = process.env.NODE_ENV === 'test' && !process.env.JOB_LOCK_REDIS ? null : new Redis({ ...appConfig().redis, maxRetriesPerRequest: 2 });
+  return lockRedis;
+}
+/** Test hook: use this Redis (or the database lock with null). */
+export const __setJobLockRedis = (r: Redis | null | undefined) => {
+  lockRedis = r;
+};
+
 /**
- * Runs `job` only if no other server is already running the same one.
- * A Postgres transaction-level advisory lock is held for the length of the job and is released
- * automatically on commit, rollback or a dropped connection, so a crash can never leave it stuck.
- * Returns undefined when another server holds the lock.
+ * Runs `job` only if no other server is already running the same one; returns undefined when another
+ * server holds the lock. The lock is a Redis key with an expiry (released when the job ends, and on its
+ * own after `ttlMs` if a server dies mid-way), so a running job never holds a database connection:
+ * jobs holding one each for their whole run used up the pool when several started at once and
+ * stalled every request.
  */
-export async function withJobLock<T>(prisma: PrismaService, name: string, job: () => Promise<T>): Promise<T | undefined> {
-  // shortcut: a job longer than one hour loses its lock transaction, raise the timeout if one ever does
+export async function withJobLock<T>(prisma: PrismaService, name: string, job: () => Promise<T>, ttlMs = HOUR_MS): Promise<T | undefined> {
+  const redis = jobLockRedis();
+  if (!redis) return withDatabaseJobLock(prisma, name, job);
+  const key = `vendly-job:${name}`;
+  const token = randomUUID();
+  if ((await redis.set(key, token, 'PX', ttlMs, 'NX')) !== 'OK') return undefined;
+  try {
+    return await job();
+  } finally {
+    await redis.eval(RELEASE, 1, key, token).catch(() => undefined);
+  }
+}
+
+/** Unit tests only: a transaction-level advisory lock (holds one connection while the job runs). */
+async function withDatabaseJobLock<T>(prisma: PrismaService, name: string, job: () => Promise<T>): Promise<T | undefined> {
   const key = createHash('sha1').update(`vendly-job:${name}`).digest().readBigInt64BE(0);
   return prisma.$transaction(
     async (tx) => {
