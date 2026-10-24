@@ -52,6 +52,8 @@ describe('storage (R2)', () => {
   it('builds public links from the R2 public URL and uploads with a content type and long cache', async () => {
     const s3 = new S3Adapter({ driver: 's3', connection: { awsBucket: 'vendly-public', awsEndpoint: R2.S3_ENDPOINT, awsPublicUrl: 'https://media.vendly.app/', minio: true } });
     expect(s3.url('listings/abc_photo.jpg')).toBe('https://media.vendly.app/listings/abc_photo.jpg');
+    // folders like '/avatar' upload with a leading slash, so the link must keep it or R2 returns 404
+    expect(s3.url('/avatar/x.jpg')).toBe('https://media.vendly.app//avatar/x.jpg');
     await s3.put('avatar/x.png', Buffer.from('png'));
     expect(inputsOf('PutObject')).toEqual([expect.objectContaining({ Bucket: 'vendly-public', Key: 'avatar/x.png', ContentType: 'image/png', CacheControl: expect.stringContaining('immutable') })]);
     expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({ forcePathStyle: true, endpoint: R2.S3_ENDPOINT }));

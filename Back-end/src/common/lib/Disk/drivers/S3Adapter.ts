@@ -47,9 +47,10 @@ export class S3Adapter implements IStorage {
    */
 
   url(key: string): string {
-    // a public bucket URL or CDN domain (Cloudflare R2) wins
+    // a public bucket URL or CDN domain (Cloudflare R2) wins.
+    // keep the key exactly as put() stored it: '/avatar/x.jpg' and 'avatar/x.jpg' are different R2 objects
     if (this._config.connection.awsPublicUrl) {
-      return `${this._config.connection.awsPublicUrl.replace(/\/+$/, '')}/${key.replace(/^\/+/, '')}`;
+      return `${this._config.connection.awsPublicUrl.replace(/\/+$/, '')}/${key}`;
     }
     if (this._config.connection.minio) {
       return `${this._config.connection.awsEndpoint}/${this._config.connection.awsBucket}/${key}`;
