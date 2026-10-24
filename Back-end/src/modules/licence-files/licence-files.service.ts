@@ -14,6 +14,7 @@ import {
   movedLicenceKey,
   readPublicFile,
 } from './licence-files';
+import { storageSettings } from 'src/common/lib/Disk/storage-settings';
 
 /** Wait this long after start-up before moving old files, so the server is serving first. */
 const MOVE_DELAY_MS = 15_000;
@@ -33,6 +34,13 @@ export class LicenceFilesService implements OnApplicationBootstrap {
 
   /** One server moves the old public licence files into private storage; the others skip. Never throws. */
   async runLegacyMove() {
+    // with public files in S3 but no private bucket, "private" would be this container's disk, which
+    // the next deploy wipes: never move (and delete the public copies) then
+    const settings = storageSettings();
+    if (settings.driver === 's3' && !settings.privateBucket) {
+      this.logger.warn('Licence files not moved: S3_PRIVATE_BUCKET is not set');
+      return;
+    }
     try {
       const r = await withJobLock(this.prisma, 'licence-files-move', () => this.moveLegacy());
       if (!r) return;
@@ -94,8 +102,13 @@ export class LicenceFilesService implements OnApplicationBootstrap {
         return { count: 0 };
       });
     if (done.count !== 1) {
-      // the public copies are untouched; drop the private ones and try again next start
-      await Promise.all(moved.map((v) => PrivateStorage.remove(movedLicenceKey(kind, userId, v)).catch(() => null)));
+      // the public copies are untouched; drop the private ones and try again next start, unless the
+      // profile already points at them (another run got there first)
+      const now = await this.profiles(kind).findUnique({ where: { user_id: userId }, select: { license_photo: true } }).catch(() => null);
+      const inUse = new Set<string>(now?.license_photo ?? []);
+      await Promise.all(
+        moved.map((v) => movedLicenceKey(kind, userId, v)).filter((k) => !inUse.has(k)).map((k) => PrivateStorage.remove(k).catch(() => null)),
+      );
       return { moved: 0, failed: failed + moved.length };
     }
     for (const v of moved) {

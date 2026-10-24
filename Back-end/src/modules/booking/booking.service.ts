@@ -632,6 +632,10 @@ export class BookingService {
 
     const early = Number((booking as { early_released_amount?: unknown }).early_released_amount ?? 0);
     const net = Math.round((settlement.vendorKeeps - early) * 100) / 100;
+    // the vendor already has their share (a deposit paid out early): settled, nothing to move
+    if (net === 0 && settlement.vendorKeeps > 0) {
+      await this.prisma.booking.updateMany({ where: { id: booking.id, payout_credited_at: null }, data: { payout_credited_at: new Date() } });
+    }
     if (net !== 0) {
       await this.prisma.$transaction(async (tx) => {
         const claimed = await tx.booking.updateMany({

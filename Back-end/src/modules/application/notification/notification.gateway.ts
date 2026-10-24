@@ -77,8 +77,9 @@ export class NotificationGateway
     } catch {
       return;
     }
-    // to that user's own connections only, never to everyone
-    if (typeof data?.userId === 'string') this.server?.to(`user_${data.userId}`).emit('receiveNotification', data);
+    // to that user's own connections only, never to everyone; `local` because every instance gets the
+    // Redis message itself (the socket Redis adapter would otherwise repeat it once per instance)
+    if (typeof data?.userId === 'string') this.server?.local.to(`user_${data.userId}`).emit('receiveNotification', data);
   }
 
   afterInit(_server: Server) {

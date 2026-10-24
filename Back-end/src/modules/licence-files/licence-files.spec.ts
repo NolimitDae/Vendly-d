@@ -143,6 +143,7 @@ function setup(rows: { vendor?: any[]; planner?: any[] } = {}, users: Record<str
       row.license_photo = data.license_photo;
       return { count: 1 };
     }),
+    findUnique: jest.fn(async ({ where }: any) => list.find((r) => r.user_id === where.user_id) ?? null),
   });
   const vendor = rows.vendor ?? [];
   const planner = rows.planner ?? [];
@@ -210,6 +211,33 @@ describe('moving legacy licences to private storage', () => {
     await expect(service.moveLegacy()).resolves.toEqual({ rows: 1, moved: 0, failed: 1 });
     expect(mockPublic.get('/license/v.pdf')).toEqual(PDF);
     expect(mockPrivate.has('licences/vendor/u1/legacy-v.pdf')).toBe(false);
+  });
+
+  it('keeps a private copy that the profile already points to when its own save loses the race', async () => {
+    const { service, prisma } = setup({ vendor: [{ user_id: 'u1', license_photo: ['v.pdf'] }] });
+    mockPublic.set('/license/v.pdf', PDF);
+    prisma.vendorProfile.updateMany.mockImplementationOnce(async () => {
+      // another run already moved it
+      prisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_photo: ['licences/vendor/u1/legacy-v.pdf'] });
+      return { count: 0 };
+    });
+    await service.moveLegacy();
+    expect(mockPrivate.has('licences/vendor/u1/legacy-v.pdf')).toBe(true);
+  });
+
+  it('never moves without a private bucket when files are in S3', async () => {
+    const { service, prisma } = setup({ vendor: [{ user_id: 'u1', license_photo: ['v.pdf'] }] });
+    const saved = { d: process.env.STORAGE_DRIVER, b: process.env.S3_PRIVATE_BUCKET };
+    process.env.STORAGE_DRIVER = 's3';
+    delete process.env.S3_PRIVATE_BUCKET;
+    try {
+      await service.runLegacyMove();
+      expect(prisma.vendorProfile.findMany).not.toHaveBeenCalled();
+    } finally {
+      process.env.STORAGE_DRIVER = saved.d;
+      if (saved.b) process.env.S3_PRIVATE_BUCKET = saved.b;
+      if (saved.d === undefined) delete process.env.STORAGE_DRIVER;
+    }
   });
 });
 

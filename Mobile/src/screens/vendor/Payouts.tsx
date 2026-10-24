@@ -27,10 +27,10 @@ export default function Payouts() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [b, a, h] = await Promise.allSettled([api.get('/withdraw/balance'), api.get('/withdraw/account-info'), api.get('/withdraw/history')]);
-    // GET /withdraw/balance → { data: { available: { amount } } } (dollars).
+    const [b, a, h] = await Promise.allSettled([api.get('/payments/earnings'), api.get('/withdraw/account-info'), api.get('/withdraw/history')]);
+    // the Vendly balance withdrawals are taken from (the same figure as the website), not the Stripe account's
     if (b.status === 'fulfilled') {
-      const n = Number(b.value.data?.data?.available?.amount);
+      const n = Number(b.value.data?.data?.balance);
       setBalance(Number.isFinite(n) ? n : 0);
     }
     if (a.status === 'fulfilled') {

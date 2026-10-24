@@ -22,7 +22,9 @@ jest.mock('ioredis', () => {
 
 const mockNotificationService = { remove: jest.fn() };
 const room = { emit: jest.fn() };
-const mockServer = { emit: jest.fn(), to: jest.fn(() => room) };
+const localServer = { to: jest.fn(() => room) };
+// deliveries go through `local`: each instance already gets the Redis message itself
+const mockServer = { emit: jest.fn(), to: localServer.to, local: localServer };
 
 const secret = appConfig().jwt.secret;
 const token = (claims: Record<string, unknown>, key = secret) => jwt.sign(claims, key);
