@@ -3,6 +3,7 @@ import { UserService } from './user.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UserRepository } from 'src/common/repository/user/user.repository';
 import { ADMIN_APPROVE_STATUS } from './dto/approve-license.dto';
+import { SignedUrl } from 'src/modules/contracts/private-storage';
 
 jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
   TanvirStorage: {
@@ -12,6 +13,7 @@ jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
 
 jest.mock('src/config/app.config', () => ({
   default: jest.fn(() => ({
+    app: { url: 'https://api.test' },
     storageUrl: {
       avatar: 'avatars',
       license: 'licenses',
@@ -78,7 +80,7 @@ describe('UserService', () => {
     it('should return mapped pending license users', async () => {
       mockPrisma.user.findMany.mockResolvedValue([mockVendorUser]);
 
-      const result = await service.getPendingLicense();
+      const result = await service.getPendingLicense('admin-1');
 
       expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -90,12 +92,16 @@ describe('UserService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('vendor-1');
       expect(result[0].license_status).toBe('PENDING');
+      // a signed link for this admin, not a public storage address
+      expect(result[0].license_photo).toEqual([expect.stringMatching(/^https:\/\/api\.test\/api\/licence-files\/[\w-]+\.[\w-]+$/)]);
+      const claims = SignedUrl.verify(result[0].license_photo[0].split('/').pop()!);
+      expect(claims).toMatchObject({ key: 'licences/legacy/vendor/photo1.jpg', uid: 'admin-1', cid: 'vendor-1' });
     });
 
     it('should return empty array when no pending users exist', async () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
 
-      const result = await service.getPendingLicense();
+      const result = await service.getPendingLicense('admin-1');
 
       expect(result).toEqual([]);
     });
@@ -107,7 +113,7 @@ describe('UserService', () => {
       };
       mockPrisma.user.findMany.mockResolvedValue([userNoPhoto]);
 
-      const result = await service.getPendingLicense();
+      const result = await service.getPendingLicense('admin-1');
 
       expect(result[0].license_photo).toEqual([]);
     });
@@ -121,7 +127,7 @@ describe('UserService', () => {
       };
       mockPrisma.user.findMany.mockResolvedValue([approvedUser]);
 
-      const result = await service.getApprovedLicense();
+      const result = await service.getApprovedLicense('admin-1');
 
       expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -137,7 +143,7 @@ describe('UserService', () => {
     it('should return empty array when no approved users exist', async () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
 
-      const result = await service.getApprovedLicense();
+      const result = await service.getApprovedLicense('admin-1');
 
       expect(result).toEqual([]);
     });

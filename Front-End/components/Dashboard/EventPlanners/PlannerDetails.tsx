@@ -29,6 +29,7 @@ export interface PlannerDetail {
     license_status: string;
     approved_at: string | null;
     portfolio: string[];
+    /** short-lived signed links to the licence files */
     documents: string[];
   } | null;
   events: { total: number; by_status: Record<string, number> };

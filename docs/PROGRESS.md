@@ -15,6 +15,7 @@ _Updated: 2026-10-23. All Build Plan Phase 0 items resolved._
 | B6 | Web "unblock dates" called a non-existent route | Fixed: `DELETE /vendor/listings/availability/:blockId` |
 | B7 | Mobile sent deliverable `links` as an array; backend only parsed a JSON string | Backend accepts both |
 | S6 | Deliverable links rendered as `href` / `Linking.openURL` allowed `javascript:` URLs (stored XSS) | Backend keeps only `http(s)://` links |
+| S7 | Vendor and event-planner licence documents sat in the public bucket; anyone with the link could open them | Stored in private storage (`licences/<vendor\|planner>/<userId>/...`), shown only through 30-minute signed links (`/api/licence-files/:token`) issued to the owner and admins; old public files are moved on API start-up (one server, under a job lock) |
 | B8 | A failed proofs/deliverables/availability request blanked the whole booking or listing page | Secondary requests are now non-fatal (web + mobile) |
 | B9 | Two website tabs refreshing the login at once signed the user out | The replaced refresh token keeps working for 30 seconds (rotation is atomic in Redis); tabs share one refresh through a browser lock |
 | B10 | Any 401 signed the user out on the server; chat permission errors were 401 | A 401 only clears the local session; chat permission errors are 403 |

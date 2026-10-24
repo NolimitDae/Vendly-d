@@ -49,7 +49,7 @@ const detail = {
     license_status: "APPROVED",
     approved_at: "2026-01-12T10:00:00Z",
     portfolio: [],
-    documents: ["https://cdn.test/event-planner/license/lic.pdf"],
+    documents: ["https://api.test/api/licence-files/t1.sig"],
   },
   events: { total: 3, by_status: { PLANNING: 2, COMPLETED: 1 } },
   bookings: { total: 1, recent: [{ id: "b1", status: "CONFIRMED", amount: 250, created_at: "2026-02-01T10:00:00Z", date: null, title: "DJ set", vendor: "Dee Sounds" }] },
@@ -124,7 +124,7 @@ describe("EventPlannersPageContent", () => {
     const panel = await screen.findByRole("dialog", { name: "Planner details" });
     expect(AdminService.getPlanner).toHaveBeenCalledWith("p1");
     expect(await within(panel).findByText("Weddings in Texas")).toBeInTheDocument();
-    expect(within(panel).getByRole("link", { name: /Document 1/ })).toHaveAttribute("href", "https://cdn.test/event-planner/license/lic.pdf");
+    expect(within(panel).getByRole("link", { name: /Document 1/ })).toHaveAttribute("href", "https://api.test/api/licence-files/t1.sig");
     expect(within(panel).getByText(/DJ set with Dee Sounds/)).toBeInTheDocument();
     expect(within(panel).getByText("Licence approved")).toBeInTheDocument();
     expect(within(panel).getByText("Planning: 2")).toBeInTheDocument();

@@ -172,6 +172,22 @@ describe('MarketplaceService', () => {
     });
   });
 
+  describe('licence documents', () => {
+    it('are never read for the public shop page or a listing', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue({ id: 'v1', name: 'Vendor', avatar: null, vendorProfile: { business_name: 'Photo Pro' }, vendorListings: [], _count: {} });
+      mockPrisma.review.aggregate.mockResolvedValue({ _avg: { rating: null } });
+      const shop = await service.getVendorProfile('v1');
+      expect(JSON.stringify(mockPrisma.user.findFirst.mock.calls[0][0])).not.toContain('license_photo');
+      expect(JSON.stringify(shop)).not.toMatch(/license_photo|licence-files/);
+
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      const listing = await service.getListing('listing-1');
+      expect(JSON.stringify(mockPrisma.vendorListing.findFirst.mock.calls[0][0])).not.toContain('license_photo');
+      expect(JSON.stringify(listing)).not.toMatch(/license_photo|licence-files/);
+    });
+  });
+
   describe('getListing', () => {
     it('should return a single listing', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue(mockListing);

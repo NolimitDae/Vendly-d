@@ -5,7 +5,8 @@ import {
 import { ADMIN_APPROVE_STATUS } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
-import { PHOTOS, PHOTOS_OR_PDF, safeStoredNames } from 'src/common/helper/upload-files';
+import { PHOTOS, safeStoredNames } from 'src/common/helper/upload-files';
+import { checkLicenceFiles, licenceFileUrls, removeLicenceFiles, storeLicenceFiles } from 'src/modules/licence-files/licence-files';
 import appConfig from 'src/config/app.config';
 import { CreateEventPlannerProfileDto } from './dto/create-profile.dto';
 
@@ -21,7 +22,7 @@ export class EventPlannerService {
   ) {
     // check every file before any old one is removed: portfolio is photos, licences photos or PDFs
     const portfolioNames = safeStoredNames(portfolioFiles, PHOTOS);
-    const licenseNames = safeStoredNames(licenseFiles, PHOTOS_OR_PDF);
+    const licenseExts = checkLicenceFiles(licenseFiles ?? []);
     if (portfolioFiles?.length) {
       const existing = await this.prisma.eventPlannerProfile.findUnique({
         where: { user_id: userId },
@@ -35,8 +36,13 @@ export class EventPlannerService {
       }
     }
 
-    for (const [i, file] of (licenseFiles ?? []).entries()) {
-      await TanvirStorage.put(`event-planner/license/${licenseNames[i]}`, file.buffer);
+    // licences go to private storage; the ones they replace are removed once the profile is saved
+    let replacedLicences: string[] = [];
+    let licenceKeys: string[] = [];
+    if (licenseExts.length) {
+      const existing = await this.prisma.eventPlannerProfile.findUnique({ where: { user_id: userId }, select: { license_photo: true } });
+      replacedLicences = existing?.license_photo ?? [];
+      licenceKeys = await storeLicenceFiles('planner', userId, licenseFiles!, licenseExts);
     }
 
     const data: any = {
@@ -50,18 +56,25 @@ export class EventPlannerService {
     };
 
     if (portfolioNames.length) data.portfolio = portfolioNames;
-    if (licenseNames.length) {
-      data.license_photo = licenseNames;
+    if (licenceKeys.length) {
+      data.license_photo = licenceKeys;
       data.license_status = ADMIN_APPROVE_STATUS.PENDING;
     }
 
-    const profile = await this.prisma.eventPlannerProfile.upsert({
-      where: { user_id: userId },
-      create: { user_id: userId, ...data },
-      update: data,
-    });
+    let profile;
+    try {
+      profile = await this.prisma.eventPlannerProfile.upsert({
+        where: { user_id: userId },
+        create: { user_id: userId, ...data },
+        update: data,
+      });
+    } catch (err) {
+      await removeLicenceFiles('planner', licenceKeys);
+      throw err;
+    }
+    await removeLicenceFiles('planner', replacedLicences);
 
-    return { success: true, data: this.formatProfile(profile) };
+    return { success: true, data: this.formatProfile(profile, userId) };
   }
 
   async getMyProfile(userId: string) {
@@ -70,7 +83,7 @@ export class EventPlannerService {
       include: { user: { select: { id: true, name: true, email: true, avatar: true } } },
     });
     if (!profile) throw new NotFoundException('Profile not found');
-    return { success: true, data: this.formatProfile(profile) };
+    return { success: true, data: this.formatProfile(profile, userId) };
   }
 
   async getPublicProfile(userId: string) {
@@ -138,7 +151,7 @@ export class EventPlannerService {
     return { success: true, data: updated };
   }
 
-  async getPendingPlanners(query: { page?: number; limit?: number }) {
+  async getPendingPlanners(query: { page?: number; limit?: number }, adminId: string) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
@@ -158,7 +171,7 @@ export class EventPlannerService {
 
     return {
       success: true,
-      data: planners.map((p) => this.formatProfile(p)),
+      data: planners.map((p) => this.formatProfile(p, adminId)),
       meta: { total, page, limit, last_page: Math.ceil(total / limit) },
     };
   }
@@ -170,19 +183,18 @@ export class EventPlannerService {
 
   /** What anyone may see: the profile without the licence documents (only the planner and admins see those). */
   private formatPublicProfile(profile: any) {
-    const { license_photo: _private, ...shown } = this.formatProfile(profile);
+    const { license_photo: _private, ...shown } = this.formatProfile(profile, null);
     return shown;
   }
 
-  private formatProfile(profile: any) {
+  /** viewerId: the planner themselves or an admin, who get signed links to the licences; null for anyone else. */
+  private formatProfile(profile: any, viewerId: string | null) {
     return {
       ...profile,
       portfolio: (profile.portfolio ?? []).map((img: string) =>
         TanvirStorage.url(`event-planner/portfolio/${img}`),
       ),
-      license_photo: (profile.license_photo ?? []).map((img: string) =>
-        TanvirStorage.url(`event-planner/license/${img}`),
-      ),
+      license_photo: viewerId ? licenceFileUrls('planner', profile.user_id, profile.license_photo, viewerId) : [],
       user: profile.user
         ? {
             ...profile.user,

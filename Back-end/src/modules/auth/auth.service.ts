@@ -8,7 +8,8 @@ import Redis from 'ioredis';
 
 //internal imports
 import { DateHelper } from '../../common/helper/date.helper';
-import { PHOTOS, PHOTOS_OR_PDF, safeStoredName, safeStoredNames, sniffUpload, uploadRefusedMessage } from '../../common/helper/upload-files';
+import { PHOTOS, safeStoredName, sniffUpload, uploadRefusedMessage } from '../../common/helper/upload-files';
+import { checkLicenceFiles, licenceFileUrls, removeLicenceFiles, storeLicenceFiles } from '../licence-files/licence-files';
 import { TanvirStorage } from '../../common/lib/Disk/TanvirStorage';
 import { StripePayment } from '../../common/lib/Payment/stripe/StripePayment';
 import { UcodeRepository } from '../../common/repository/ucode/ucode.repository';
@@ -299,66 +300,57 @@ export class AuthService {
     }
   }
 
-  // add license (multiple images)
+  // add license (photos or PDFs), kept in private storage
   async addLicense(
     userId: string,
     license: Express.Multer.File[],
   ) {
     const data: any = {};
+    let replaced: string[] = [];
 
     if (license && license.length > 0) {
       // check every file is a photo or PDF before touching the ones on file
-      const fileNames = safeStoredNames(license, PHOTOS_OR_PDF);
-
-      // delete old license images if exist
+      const exts = checkLicenceFiles(license);
       const existingProfile = await this.prisma.vendorProfile.findUnique({
         where: { user_id: userId },
         select: { license_photo: true },
       });
-
-      if (existingProfile?.license_photo?.length) {
-        for (const oldPhoto of existingProfile.license_photo) {
-          await TanvirStorage.delete(
-            appConfig().storageUrl.license + '/' + oldPhoto,
-          );
-        }
-      }
-
-      // upload new license images
-      for (const [i, file] of license.entries()) {
-        await TanvirStorage.put(
-          appConfig().storageUrl.license + '/' + fileNames[i],
-          file.buffer,
-        );
-      }
-      // VendorProfile.license_photo is a String[] in Prisma schema
-      data.license_photo = fileNames;
+      replaced = existingProfile?.license_photo ?? [];
+      data.license_photo = await storeLicenceFiles('vendor', userId, license, exts);
       // a new document goes back in the review queue (e.g. after a rejection)
       data.license_status = 'PENDING';
     }
 
-    const updatedVendorProfile = await this.prisma.vendorProfile.upsert({
-      where: { user_id: userId },
-      create: {
-        user_id: userId,
-        license_photo: data.license_photo || [],
-      },
-      update: {
-        ...data,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            avatar: true,
-            address: true,
-            type: true,
+    let updatedVendorProfile;
+    try {
+      updatedVendorProfile = await this.prisma.vendorProfile.upsert({
+        where: { user_id: userId },
+        create: {
+          user_id: userId,
+          license_photo: data.license_photo || [],
+        },
+        update: {
+          ...data,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              avatar: true,
+              address: true,
+              type: true,
+            },
           },
         },
-      },
-    });
+      });
+    } catch (err) {
+      await removeLicenceFiles('vendor', data.license_photo);
+      throw err;
+    }
+    // the old documents go only once the new ones are saved
+    await removeLicenceFiles('vendor', replaced);
 
     const user = updatedVendorProfile.user;
     
@@ -376,13 +368,8 @@ export class AuthService {
           : null,
         address: user.address,
         type: user.type,
-        license_photo: updatedVendorProfile.license_photo
-          ? updatedVendorProfile.license_photo.map((photo) =>
-              TanvirStorage.url(
-                appConfig().storageUrl.license + '/' + photo,
-              ),
-            )
-          : [],
+        // short-lived signed links, for this vendor only
+        license_photo: licenceFileUrls('vendor', userId, updatedVendorProfile.license_photo, userId),
       },
     };
 

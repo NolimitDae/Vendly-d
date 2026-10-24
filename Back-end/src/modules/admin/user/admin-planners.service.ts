@@ -4,6 +4,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { TanvirStorage } from '../../../common/lib/Disk/TanvirStorage';
 import appConfig from '../../../config/app.config';
 import { ACCOUNT_STATUS_TYPES, ACCOUNT_SUSPENDED, accountStatusReason } from './account-status';
+import { licenceFileUrls } from '../../licence-files/licence-files';
 
 /** Where a planner stands for the admin list: the account first (suspended), then their licence check. */
 export const PLANNER_STATUSES = ['approved', 'pending', 'suspended', 'rejected'] as const;
@@ -124,7 +125,7 @@ export class AdminPlannersService {
     };
   }
 
-  async detail(userId: string) {
+  async detail(userId: string, adminId: string) {
     const user = await this.prisma.user.findFirst({
       where: { AND: [IS_PLANNER, { id: userId }] },
       select: {
@@ -208,9 +209,9 @@ export class AdminPlannersService {
               team_size: profile.team_size,
               license_status: profile.license_status,
               approved_at: profile.approved_at,
-              // the same storage links the pending-requests page shows
               portfolio: (profile.portfolio ?? []).map((f) => TanvirStorage.url(`event-planner/portfolio/${f}`)),
-              documents: (profile.license_photo ?? []).map((f) => TanvirStorage.url(`event-planner/license/${f}`)),
+              // short-lived signed links for this admin
+              documents: licenceFileUrls('planner', user.id, profile.license_photo, adminId),
             }
           : null,
         events: {

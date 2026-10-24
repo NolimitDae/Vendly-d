@@ -68,8 +68,8 @@ describe('UserController', () => {
 
     it('returns one planner', async () => {
       mockPlanners.detail.mockResolvedValue({ success: true, data: { id: 'p1' } });
-      await expect(controller.getPlanner('p1')).resolves.toEqual({ success: true, data: { id: 'p1' } });
-      expect(mockPlanners.detail).toHaveBeenCalledWith('p1');
+      await expect(controller.getPlanner('p1', 'admin-1')).resolves.toEqual({ success: true, data: { id: 'p1' } });
+      expect(mockPlanners.detail).toHaveBeenCalledWith('p1', 'admin-1');
     });
   });
 
@@ -109,16 +109,16 @@ describe('UserController', () => {
     it('should return pending license list from service', async () => {
       mockUserService.getPendingLicense.mockResolvedValue(mockPendingList);
 
-      const result = await controller.getPendingLicense();
+      const result = await controller.getPendingLicense('admin-1');
 
-      expect(mockUserService.getPendingLicense).toHaveBeenCalled();
+      expect(mockUserService.getPendingLicense).toHaveBeenCalledWith('admin-1');
       expect(result).toEqual(mockPendingList);
     });
 
     it('should return empty array when no pending licenses', async () => {
       mockUserService.getPendingLicense.mockResolvedValue([]);
 
-      const result = await controller.getPendingLicense();
+      const result = await controller.getPendingLicense('admin-1');
 
       expect(result).toEqual([]);
     });
@@ -128,16 +128,16 @@ describe('UserController', () => {
     it('should return approved license list from service', async () => {
       mockUserService.getApprovedLicense.mockResolvedValue(mockApprovedList);
 
-      const result = await controller.getApprovedLicense();
+      const result = await controller.getApprovedLicense('admin-1');
 
-      expect(mockUserService.getApprovedLicense).toHaveBeenCalled();
+      expect(mockUserService.getApprovedLicense).toHaveBeenCalledWith('admin-1');
       expect(result).toEqual(mockApprovedList);
     });
 
     it('should return empty array when no approved licenses', async () => {
       mockUserService.getApprovedLicense.mockResolvedValue([]);
 
-      const result = await controller.getApprovedLicense();
+      const result = await controller.getApprovedLicense('admin-1');
 
       expect(result).toEqual([]);
     });
