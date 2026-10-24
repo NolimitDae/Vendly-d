@@ -12,6 +12,8 @@ export function proxy(req: NextRequest) {
   // whatever a visitor sends under these names is never passed on
   headers.delete("x-vendly-client-ip");
   headers.delete("x-vendly-proxy-key");
+  // Cloudflare's own headers from the visitor's request are not passed on to the API
+  for (const name of [...headers.keys()]) if (name.startsWith("cf-") || name === "cdn-loop") headers.delete(name);
   const key = process.env.VENDLY_PROXY_KEY;
   const ip = req.headers.get("x-real-ip")?.trim() || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   if (key && ip) {

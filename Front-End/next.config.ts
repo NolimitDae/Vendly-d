@@ -34,8 +34,12 @@ const hostOf = (url?: string) => {
 };
 const extraImageHosts = [hostOf(process.env.NEXT_PUBLIC_MEDIA_URL), hostOf(process.env.NEXT_PUBLIC_API_ENDPOINT)].filter((h): h is string => !!h);
 
-/** The API the website's /api path forwards to (baked in at build time, like NEXT_PUBLIC_API_ENDPOINT). */
-const apiOrigin = (process.env.NEXT_PUBLIC_API_ENDPOINT || "http://127.0.0.1:4000").replace(/\/+$/, "");
+/**
+ * The API the website's /api path forwards to (baked in at build time). API_PROXY_ORIGIN is the API's
+ * own Railway address: the website server can't reach the API through Cloudflare (it refuses the
+ * forwarded request with error 1000), so this hop skips it. Falls back to NEXT_PUBLIC_API_ENDPOINT.
+ */
+const apiOrigin = (process.env.API_PROXY_ORIGIN || process.env.NEXT_PUBLIC_API_ENDPOINT || "http://127.0.0.1:4000").replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,

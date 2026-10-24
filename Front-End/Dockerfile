@@ -10,6 +10,9 @@ COPY . .
 # Build args for public env vars (injected at build time)
 ARG NEXT_PUBLIC_API_ENDPOINT
 ENV NEXT_PUBLIC_API_ENDPOINT=$NEXT_PUBLIC_API_ENDPOINT
+# where the /api rewrite forwards to (the API's Railway address, see next.config.ts)
+ARG API_PROXY_ORIGIN
+ENV API_PROXY_ORIGIN=$API_PROXY_ORIGIN
 
 RUN npm run build
 

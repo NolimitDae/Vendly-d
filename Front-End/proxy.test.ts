@@ -28,6 +28,19 @@ describe("website proxy", () => {
     expect(forwarded(res, "x-vendly-proxy-key")).toBe("shared-secret");
   });
 
+  it("doesn't pass Cloudflare's headers on to the API", () => {
+    const res = proxy(
+      new NextRequest("https://vendly.test/api/health", {
+        headers: { "cf-connecting-ip": "203.0.113.7", "cf-ray": "8d1-IAD", "cdn-loop": "cloudflare", cookie: "vendly_session=s" },
+      }),
+    );
+    const passed = res.headers.get("x-middleware-override-headers")!.split(",");
+    expect(passed).not.toEqual(expect.arrayContaining(["cf-connecting-ip"]));
+    expect(passed).not.toContain("cf-ray");
+    expect(passed).not.toContain("cdn-loop");
+    expect(forwarded(res, "cookie")).toBe("vendly_session=s");
+  });
+
   it("adds nothing without the secret", () => {
     delete process.env.VENDLY_PROXY_KEY;
     const res = proxy(new NextRequest("https://vendly.test/api/bookings", { headers: { "x-real-ip": "203.0.113.7", "x-vendly-client-ip": "1.2.3.4" } }));
