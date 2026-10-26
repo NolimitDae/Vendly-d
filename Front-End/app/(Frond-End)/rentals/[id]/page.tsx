@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 import RangeCalendar from "@/components/rentals/RangeCalendar";
 import SavedCards from "@/components/payments/SavedCards";
 import { RentalsService, dayKey, errorMessage, money, type RentalItem, type RentalQuote } from "@/service/rentals/rentals.service";
+import LocationField from "@/components/listing/LocationField";
 
 const parse = (s: string | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10))) : null);
 
@@ -204,7 +205,7 @@ export default function RentalItemPage() {
             {start && (
               <>
                 <section className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 space-y-3">
-                  <input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Delivery address (optional)" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address (optional)" maxLength={500} street />
                   <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Pickup time, colours, setup needs…" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 </section>
 

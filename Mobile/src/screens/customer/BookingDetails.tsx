@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { addHours, format, parseISO, set } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import LocationPicker from '../../components/LocationPicker';
 import { DARK, FONTS } from '../../constants/colors';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { haptic } from '../../utils/haptics';
@@ -183,7 +184,10 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
             )}
           </View>
 
-          <Field label="Service Address" placeholder="Where should the vendor come?" value={venue} onChangeText={setVenue} autoComplete="street-address" />
+          <View style={{ gap: 8 }}>
+            <Text style={ui.label}>Service Address</Text>
+            <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Service address" placeholder="Where should the vendor come?" street />
+          </View>
 
           <View style={{ gap: 8 }}>
             <Field

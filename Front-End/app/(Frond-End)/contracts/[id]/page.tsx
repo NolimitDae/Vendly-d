@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import ContractBody from "@/components/contracts/ContractBody";
 import ContractStatusBadge from "@/components/contracts/ContractStatusBadge";
 import SignContractPanel from "@/components/contracts/SignContractPanel";
+import LocationField from "@/components/listing/LocationField";
 import {
   AmendmentChanges,
   ContractsService,
@@ -347,7 +348,7 @@ export default function ContractPage() {
                 <input type="time" aria-label="New start time" value={amend.start} onChange={(e) => setAmend({ ...amend, start: e.target.value })} className={inputCls} />
                 <input type="time" aria-label="New end time" value={amend.end} onChange={(e) => setAmend({ ...amend, end: e.target.value })} className={inputCls} />
               </div>
-              <input placeholder="New venue address" value={amend.venue} onChange={(e) => setAmend({ ...amend, venue: e.target.value })} className={inputCls} />
+              <LocationField value={{ label: amend.venue }} onChange={(p) => setAmend({ ...amend, venue: p.label })} label="New venue address" placeholder="New venue address" maxLength={500} street />
               <input type="number" min={1} placeholder="New guest count" value={amend.guests} onChange={(e) => setAmend({ ...amend, guests: e.target.value })} className={inputCls} />
               {contract.my_role === "VENDOR" && (
                 <div className="grid grid-cols-2 gap-2">

@@ -10,11 +10,23 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
 import { SOCIALS, type SocialKey } from '../../components/SocialLinks';
+import LocationPicker, { type PickedPlace } from '../../components/LocationPicker';
+
+/** Loose check, as the server does: digits, spaces, +, - and brackets, 7 to 20 digits. Empty is fine. */
+export function phoneProblem(phone: string): string | null {
+  const t = phone.trim();
+  if (!t) return null;
+  if (!/^[\d\s+\-().]+$/.test(t)) return 'Use only digits, spaces, +, - and brackets in your phone number.';
+  const digits = t.replace(/\D/g, '').length;
+  return digits < 7 || digits > 20 ? 'Enter a phone number with 7 to 20 digits.' : null;
+}
 
 export default function EditProfile({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const insets = useSafeAreaInsets();
   const { user, refreshUser } = useAuth();
-  const [form, setForm] = useState({ first_name: '', last_name: '', address: '', business_name: '', about_me: '', handle: '' });
+  const [form, setForm] = useState({ first_name: '', last_name: '', address: '', business_name: '', about_me: '', handle: '', phone_number: '' });
+  // vendors: where customers come for packages at their place (private until a booking is accepted)
+  const [business, setBusiness] = useState<PickedPlace>({ label: '' });
   const isVendor = user?.type === 'VENDOR';
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
@@ -28,7 +40,8 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
     // /auth/me carries first/last name and address; fall back to splitting the display name.
     const u = user as any;
     const [first = '', ...rest] = (u?.name ?? '').split(' ');
-    setForm({ first_name: u?.first_name ?? first, last_name: u?.last_name ?? rest.join(' '), address: u?.address ?? '', business_name: u?.business_name ?? '', about_me: u?.about_me ?? u?.bio ?? '', handle: u?.handle ?? '' });
+    setForm({ first_name: u?.first_name ?? first, last_name: u?.last_name ?? rest.join(' '), address: u?.address ?? '', business_name: u?.business_name ?? '', about_me: u?.about_me ?? u?.bio ?? '', handle: u?.handle ?? '', phone_number: u?.phone_number ?? '' });
+    setBusiness({ label: u?.business_address ?? '' });
     setSocials(Object.fromEntries(SOCIALS.map(({ key }) => [key, u?.socials?.[key] ?? ''])) as Record<SocialKey, string>);
   }, [user]);
 
@@ -40,6 +53,8 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
 
   const save = async () => {
     if (!form.first_name.trim() || !form.last_name.trim()) return Alert.alert('Name', 'First and last name are required.');
+    const badPhone = phoneProblem(form.phone_number);
+    if (badPhone) return Alert.alert('Phone number', badPhone);
     setSaving(true);
     try {
       const body = new FormData();
@@ -47,7 +62,10 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
       body.append('last_name', form.last_name.trim());
       body.append('name', `${form.first_name.trim()} ${form.last_name.trim()}`);
       if (form.address.trim()) body.append('address', form.address.trim());
+      // always sent, so clearing it removes the number
+      body.append('phone_number', form.phone_number.trim());
       if (isVendor) {
+        body.append('business_address', business.label.trim());
         body.append('business_name', form.business_name.trim());
         body.append('about_me', form.about_me.trim());
         body.append('handle', form.handle.trim());
@@ -96,12 +114,29 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
             <Text style={s.hint}>Your email is used to sign in and can't be changed here.</Text>
           </View>
           <View style={{ gap: 8 }}>
-            <Text style={ui.label}>Location</Text>
-            <View style={ui.field}>
-              <Ionicons name="location-outline" size={20} color={DARK.muted} />
-              <TextInput style={ui.input} placeholder="City, State" placeholderTextColor={DARK.muted} value={form.address} onChangeText={set('address')} autoComplete="street-address" />
-            </View>
+            <Field
+              label="Phone number"
+              placeholder="e.g. +1 512 555 0134"
+              value={form.phone_number}
+              onChangeText={set('phone_number')}
+              keyboardType="phone-pad"
+              textContentType="telephoneNumber"
+              autoComplete="tel"
+              maxLength={40}
+            />
+            <Text style={s.hint}>Only shared with {isVendor ? 'a customer' : 'your vendor'} once a booking is accepted, so you can call each other on the day.</Text>
           </View>
+          <View style={{ gap: 8 }}>
+            <Text style={ui.label}>Location</Text>
+            <LocationPicker value={{ label: form.address }} onChange={(p) => set('address')(p.label)} label="Location" placeholder="City, State" />
+          </View>
+          {isVendor && (
+            <View style={{ gap: 8 }}>
+              <Text style={ui.label}>Business address</Text>
+              <LocationPicker value={business} onChange={setBusiness} label="Business address" street />
+              <Text style={s.hint}>Private. For packages done at your place, customers see it only once you accept their booking.</Text>
+            </View>
+          )}
           {isVendor && (
             <>
               <Field label="Business Name" placeholder="What customers see on your profile" value={form.business_name} onChangeText={set('business_name')} autoComplete="organization" />

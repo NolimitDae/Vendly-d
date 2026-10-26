@@ -28,6 +28,8 @@ const position = (maximumAge: number) =>
 /**
  * Package location with address suggestions as you type, "use my current location", and how far the vendor travels.
  * Without `onRadiusChange` it is just the location (e.g. where an event is); `inputId` ties it to an outside <label>.
+ * `street` is for a full street address (a booking venue, a business address): the browser's address autofill
+ * is offered, and "use my current location" is left out because it only names the town.
  */
 export default function LocationField({
   value,
@@ -36,6 +38,10 @@ export default function LocationField({
   onRadiusChange,
   label = "Package location",
   inputId,
+  placeholder,
+  street = false,
+  required,
+  maxLength,
 }: {
   value: PickedPlace;
   onChange: (p: PickedPlace) => void;
@@ -43,6 +49,10 @@ export default function LocationField({
   onRadiusChange?: (miles: number) => void;
   label?: string;
   inputId?: string;
+  placeholder?: string;
+  street?: boolean;
+  required?: boolean;
+  maxLength?: number;
 }) {
   const id = useId();
   const [suggestions, setSuggestions] = useState<Place[]>([]);
@@ -158,8 +168,10 @@ export default function LocationField({
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
-          placeholder="Start typing a city or address"
-          autoComplete="off"
+          placeholder={placeholder ?? (street ? "Start typing the street address" : "Start typing a city or address")}
+          autoComplete={street ? "street-address" : "off"}
+          required={required}
+          maxLength={maxLength}
           className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary text-gray-900 dark:text-white"
         />
         {!!value.label && (
@@ -204,15 +216,17 @@ export default function LocationField({
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={useCurrent}
-        disabled={locating}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline disabled:opacity-60"
-      >
-        {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
-        Use my current location
-      </button>
+      {!street && (
+        <button
+          type="button"
+          onClick={useCurrent}
+          disabled={locating}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline disabled:opacity-60"
+        >
+          {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
+          Use my current location
+        </button>
+      )}
       {error && (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">
           {error}

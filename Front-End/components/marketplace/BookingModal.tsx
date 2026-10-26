@@ -13,6 +13,7 @@ import {
 } from "@/service/contracts/contracts.service";
 import SignContractPanel from "@/components/contracts/SignContractPanel";
 import SavedCards from "@/components/payments/SavedCards";
+import LocationField from "@/components/listing/LocationField";
 import { InspirationPhotosPicker } from "@/components/bookings/InspirationPhotos";
 import { DEPOSIT_RULE_TEXT, isDepositPlan, PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
 import { toast } from "react-toastify";
@@ -432,7 +433,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                 <MapPin className="w-4 h-4 inline mr-1" />
                 Venue address{eventId ? " (defaults to your event's venue)" : ""}
               </label>
-              <input id="venue" value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={500} className={inputCls} />
+              <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} inputId="venue" maxLength={500} street />
             </div>
             <div>
               <label htmlFor="guests" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">

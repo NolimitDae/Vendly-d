@@ -56,6 +56,8 @@ export default function ListingForm() {
   const [subCategoryId, setSubCategoryId] = useState('');
   const [place, setPlace] = useState<PickedPlace>({ label: '' });
   const [radius, setRadius] = useState<number | null>(null);
+  // where the service happens: at the customer's place, or they come to the vendor's business address
+  const [serviceAt, setServiceAt] = useState<'CUSTOMER_LOCATION' | 'VENDOR_LOCATION'>('CUSTOMER_LOCATION');
   const [plan, setPlan] = useState<PaymentPlan>('FULL_ON_ACCEPT');
   const [minQ, setMinQ] = useState('');
   const [maxQ, setMaxQ] = useState('');
@@ -97,6 +99,7 @@ export default function ListingForm() {
             setSubCategoryId(l.sub_category_id ?? l.sub_category?.id ?? '');
             setPlace({ label: l.location ?? '', lat: l.lat ?? undefined, lng: l.lng ?? undefined });
             setRadius(l.service_radius_miles ?? null);
+            setServiceAt(l.service_at === 'VENDOR_LOCATION' ? 'VENDOR_LOCATION' : 'CUSTOMER_LOCATION');
             setPlan(l.payment_plan ?? l.effective_payment_plan ?? 'FULL_ON_ACCEPT');
             setExisting(l.images ?? []);
             setMinQ(l.min_quantity ? String(l.min_quantity) : '');
@@ -155,6 +158,7 @@ export default function ListingForm() {
         fd.append('lng', String(place.lng));
       }
       if (radius != null) fd.append('service_radius_miles', String(radius));
+      fd.append('service_at', serviceAt);
       fd.append('payment_plan', plan);
       // guests / hours / days limits only apply to counted prices; 0 clears one
       if (counted) {
@@ -405,6 +409,19 @@ export default function ListingForm() {
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Location</Text>
             <LocationPicker value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
+          </View>
+
+          <View style={{ gap: 8 }}>
+            <Text style={ui.label}>Where does it happen?</Text>
+            <View style={s.chips}>
+              <Chip label="At the customer's place" active={serviceAt === 'CUSTOMER_LOCATION'} onPress={() => setServiceAt('CUSTOMER_LOCATION')} />
+              <Chip label="Customers come to me" active={serviceAt === 'VENDOR_LOCATION'} onPress={() => setServiceAt('VENDOR_LOCATION')} />
+            </View>
+            <Text style={s.hint}>
+              {serviceAt === 'VENDOR_LOCATION'
+                ? 'Customers see your business address (set in Profile) once you accept their booking. Before that they only see the area above.'
+                : 'You go to the address the customer gives when they book. You get directions on the booking.'}
+            </Text>
           </View>
 
           {addOnsReady && (

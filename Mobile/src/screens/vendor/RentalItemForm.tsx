@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import LocationPicker from '../../components/LocationPicker';
 import { DARK, FONTS } from '../../constants/colors';
 import { RentalsService } from '../../services/rentals.service';
 import { apiMessage } from '../auth/SignIn';
@@ -140,10 +141,7 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
 
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Pickup location</Text>
-            <View style={ui.field}>
-              <Ionicons name="location-outline" size={20} color={DARK.muted} />
-              <TextInput style={ui.input} placeholder="City, State" placeholderTextColor={DARK.muted} value={location} onChangeText={setLocation} />
-            </View>
+            <LocationPicker value={{ label: location }} onChange={(p) => setLocation(p.label)} label="Pickup location" placeholder="City, State" />
           </View>
 
           <GradientButton title={itemId ? 'Save Changes' : 'List Item'} onPress={save} loading={saving} style={{ marginTop: 8 }} />

@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import { RentalsService, errorMessage, money, type RentalItem, type RentalReservation } from "@/service/rentals/rentals.service";
 import LicenceNotice from "@/components/vendor/LicenceNotice";
+import LocationField from "@/components/listing/LocationField";
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -272,10 +273,10 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
             ))}
           </div>
         </div>
-        <label className="block text-sm">
-          <span className="text-gray-600 dark:text-gray-300">Pickup location</span>
-          <input className={input} value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, State" />
-        </label>
+        <div className="block text-sm">
+          <label htmlFor="rental-pickup" className="text-gray-600 dark:text-gray-300">Pickup location</label>
+          <LocationField value={{ label: location }} onChange={(p) => setLocation(p.label)} inputId="rental-pickup" placeholder="City, State" />
+        </div>
         <div className="text-sm space-y-2">
           <span className="text-gray-600 dark:text-gray-300">Photos</span>
           <div className="flex flex-wrap gap-2">

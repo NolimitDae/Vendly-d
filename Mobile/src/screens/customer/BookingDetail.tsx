@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +24,10 @@ import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/b
 import RefundCard from '../../components/booking/RefundCard';
 import InvoiceButton from '../../components/booking/InvoiceButton';
 import { invoiceAvailable } from '../../services/bookingMoney.service';
+import { SocketService } from '../../services/socket.service';
+import BookingProgress from '../../components/booking/BookingProgress';
+import MapPicture from '../../components/booking/MapPicture';
+import { callNumber, showsTracker } from '../../utils/bookingTracker';
 
 interface Proof { id: string; photos: string[]; notes?: string; created_at: string }
 interface Deliverable { id: string; title: string; message?: string; files: string[]; links: string[]; created_at: string }
@@ -72,6 +76,14 @@ export default function BookingDetail() {
   }, [bookingId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  // the vendor's steps (On my way, Arrived…) arrive as live notifications: refresh the tracker
+  useEffect(() => {
+    const onNew = (data: any) => {
+      if ((data?.notification ?? data)?.entity_id === bookingId) load();
+    };
+    void SocketService.on('receiveNotification', onNew);
+    return () => SocketService.off('receiveNotification', onNew);
+  }, [bookingId, load]);
 
   // opens the report form in the payments card (the cancel prompt's no-show hint)
   const [reporting, setReporting] = useState(false);
@@ -198,19 +210,50 @@ export default function BookingDetail() {
                 </View>
               </View>
             </View>
-            <Pressable onPress={() => openChatWith(nav, booking.vendor.id, vendor)} accessibilityRole="button">
-              <BrandGradient style={s.msgBtn}>
-                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" />
-                <Text style={s.msgText}>Message {vendor.split(' ')[0]}</Text>
-              </BrandGradient>
-            </Pressable>
+            <View style={s.contactRow}>
+              <Pressable style={{ flex: 1 }} onPress={() => openChatWith(nav, booking.vendor.id, vendor)} accessibilityRole="button">
+                <BrandGradient style={s.msgBtn}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" />
+                  <Text style={s.msgText}>Message {vendor.split(' ')[0]}</Text>
+                </BrandGradient>
+              </Pressable>
+              {/* the number is only sent once the booking is accepted */}
+              {!!booking.contact_phone && (
+                <Pressable style={s.callBtn} onPress={() => callNumber(booking.contact_phone!)} accessibilityRole="button" accessibilityLabel={`Call ${vendor}`}>
+                  <Ionicons name="call-outline" size={18} color={DARK.accent} />
+                  <Text style={s.callText}>Call</Text>
+                </Pressable>
+              )}
+            </View>
           </Card>
+
+          {showsTracker(booking) && <BookingProgress booking={booking} />}
+
+          {booking.service_at === 'VENDOR_LOCATION' && !booking.is_rental && (!!booking.vendor_place || ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(st)) && (
+            <Card style={{ gap: 12 }}>
+              <Text style={s.h2}>Where to go</Text>
+              {booking.vendor_place ? (
+                <>
+                  <Row icon="location-outline" label="Address" value={booking.vendor_place.address} />
+                  <MapPicture lat={booking.vendor_place.lat} lng={booking.vendor_place.lng} address={booking.vendor_place.address} directions label={`Map of ${vendor}'s address`} />
+                </>
+              ) : (
+                <>
+                  {!!booking.listing?.location && <Row icon="location-outline" label="Area" value={booking.listing.location} />}
+                  <Text style={s.paidNote}>
+                    {st === 'PENDING' ? `You go to ${vendor} for this booking. You'll see their address once they accept.` : `You go to ${vendor} for this booking. They haven't added their address yet, so message them for it.`}
+                  </Text>
+                </>
+              )}
+            </Card>
+          )}
 
           <Card style={{ gap: 14, borderWidth: 1, borderColor: DARK.field }}>
             <Text style={s.h2}>Booking Details</Text>
             {!booking.is_rental && <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />}
             <Row icon="storefront-outline" label="Vendor" value={vendor} />
             {!!booking.venue_address && <Row icon="location-outline" label="Location" value={booking.venue_address} />}
+            {booking.service_at !== 'VENDOR_LOCATION' && <MapPicture lat={booking.venue_lat} lng={booking.venue_lng} address={booking.venue_address} height={150} />}
             {booking.is_rental ? (
               <>
                 {booking.rental_reservations?.map((r) => <Row key={r.id} icon="layers-outline" label={`${r.quantity} ×`} value={r.item.title} />)}
@@ -424,6 +467,9 @@ const s = StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   msgBtn: { height: 50, borderRadius: 100, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   msgText: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
+  contactRow: { flexDirection: 'row', gap: 10 },
+  callBtn: { height: 50, paddingHorizontal: 20, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  callText: { color: DARK.accent, fontSize: 15, fontFamily: FONTS.medium },
   detailRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
   rowLabel: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.regular },
   // the value keeps its own width (amounts never get squeezed); a long label wraps instead
