@@ -18,6 +18,7 @@ import { ContractsService, apiError, deviceTimezone, type BookingFields, type Si
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import type { AddOn } from '../../services/addons.service';
 import { DEPOSIT_RULE_TEXT, isDepositPlan } from '../../utils/bookingStatus';
+import type { ChosenCustomization } from '../../utils/packageOptions';
 
 interface Preview {
   title: string;
@@ -43,6 +44,8 @@ interface Pricing {
   /** the package line, e.g. "$45.00 per person × 120 guests" */
   package?: { label: string; unit: string; quantity: number; unit_price: number; amount: number } | null;
   add_ons?: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[];
+  /** the customizations picked, priced by the server */
+  options?: ChosenCustomization[];
   /** fees the vendor may request after the service */
   fees?: AddOn[];
 }
@@ -93,6 +96,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
     quote_id: listing.quoteId,
     // the same picks go to the preview and the booking request
     add_ons: draft.addOns?.length ? draft.addOns : undefined,
+    options: draft.options?.length ? draft.options : undefined,
   };
 
   // The contract preview is also where the real price breakdown comes from.
@@ -221,9 +225,12 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
               ) : (
                 !price?.add_ons?.length && <Row label={price?.quote ? 'Quoted price' : 'Service price'} value={money(price?.price ?? listing.price)} />
               )}
+              {price?.options?.map((g) => (
+                <Row key={g.group_id} label={`${g.title}: ${g.options.map((o) => o.label).join(', ')}`} value={g.amount > 0 ? `+${money(g.amount)}` : 'Included'} />
+              ))}
               {price?.add_ons?.map((a) => <Row key={a.add_on_id} label={a.label} value={money(a.amount)} />)}
               {!!price?.discount && <Row label={`Promo ${price.promo_code ?? ''}`} value={`-${money(price.discount)}`} />}
-              {(!!price?.add_ons?.length || !!price?.discount) && <Row label="Subtotal" value={money(price?.price)} />}
+              {(!!price?.add_ons?.length || !!price?.options?.some((g) => g.amount > 0) || !!price?.discount) && <Row label="Subtotal" value={money(price?.price)} />}
               <Row label="Vendly Protection fee" value={money(price?.service_fee)} />
               <View style={s.line} />
               <Row label="Total" value={money(price?.total ?? listing.price)} bold />

@@ -59,6 +59,8 @@ export type BookingDraft = {
   notes?: string;
   /** Add-ons picked when booking; sent as-is to both the contract preview and the booking request. */
   addOns?: { add_on_id: string; quantity?: number }[];
+  /** What was picked for the package's customizations; sent as-is to the preview and the request. */
+  options?: { group_id: string; option_ids: string[] }[];
 };
 
 export type CustomerHomeStackParams = {

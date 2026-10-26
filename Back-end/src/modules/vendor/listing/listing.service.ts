@@ -15,6 +15,7 @@ import appConfig from 'src/config/app.config';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
 import { MAX_LISTING_PHOTOS, keptImageNames } from './package-details';
+import { formatOptionGroups, OPTION_GROUPS_INCLUDE } from 'src/modules/add-ons/package-options.service';
 
 /** Minimum and maximum guests / hours / days, or nulls for a flat price. Throws if they don't make sense. */
 export function quantityLimits(priceUnit: string, min?: number | null, max?: number | null) {
@@ -80,6 +81,8 @@ export class VendorListingService {
         ...limits,
         included_items: dto.included_items ?? [],
         min_notice_hours: dto.min_notice_hours || null,
+        dos: dto.dos ?? [],
+        donts: dto.donts ?? [],
       },
       include: {
         category: { select: { id: true, name: true } },
@@ -147,6 +150,7 @@ export class VendorListingService {
           include: { author: { select: { id: true, name: true, avatar: true } } },
         },
         _count: { select: { bookings: true, reviews: true } },
+        option_groups: OPTION_GROUPS_INCLUDE,
       },
     });
 
@@ -154,7 +158,9 @@ export class VendorListingService {
     if (vendorId && listing.vendor_id !== vendorId)
       throw new ForbiddenException('Access denied');
 
-    return { success: true, data: this.formatListing(listing) };
+    const { option_groups, ...rest } = listing;
+    // the package's customizations, as the edit form shows them
+    return { success: true, data: { ...this.formatListing(rest), customizations: formatOptionGroups(option_groups, listing.price_unit) } };
   }
 
   async update(

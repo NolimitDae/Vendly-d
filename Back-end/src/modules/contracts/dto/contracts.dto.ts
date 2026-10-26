@@ -22,6 +22,8 @@ import {
 import { ContractCategory } from 'prisma/generated/client';
 import { MAX_ADDITIONAL_TERMS } from '../contract-templates';
 import { AddOnSelectionDto } from 'src/modules/add-ons/dto/add-ons.dto';
+import { OptionChoiceDto } from 'src/modules/add-ons/dto/package-options.dto';
+import { MAX_OPTION_GROUPS } from 'src/modules/add-ons/package-options';
 
 // read the raw input: the global implicit conversion turns any non-empty string into true
 const toBool = ({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
@@ -185,6 +187,14 @@ export class BookingContractFieldsDto {
   @ValidateNested({ each: true })
   @Type(() => AddOnSelectionDto)
   add_ons?: AddOnSelectionDto[];
+
+  @ApiPropertyOptional({ type: [OptionChoiceDto], description: 'What the customer picked for the package customizations' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_OPTION_GROUPS)
+  @ValidateNested({ each: true })
+  @Type(() => OptionChoiceDto)
+  options?: OptionChoiceDto[];
 }
 
 export class SignedBookingRequestDto extends BookingContractFieldsDto {

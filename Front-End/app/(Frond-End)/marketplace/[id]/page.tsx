@@ -34,6 +34,8 @@ import { noticeLine } from "@/lib/package-details";
 import { dateOnly } from "@/lib/date-only";
 import { DEPOSIT_RULE_TEXT, isDepositPlan } from "@/service/payments/payments.service";
 import TestBadge from "@/components/marketplace/TestBadge";
+import DosDontsList from "@/components/listing/DosDontsList";
+import type { Customization } from "@/lib/package-options";
 
 interface Listing {
   id: string;
@@ -46,6 +48,11 @@ interface Listing {
   max_quantity?: number | null;
   add_ons?: AddOn[];
   fees?: AddOn[];
+  /** dropdowns customers answer when booking ("Style": Knotless…) */
+  customizations?: Customization[];
+  /** the vendor's instructions for using the equipment */
+  dos?: string[] | null;
+  donts?: string[] | null;
   /** from the vendor's contract for this package */
   cancellation_policy?: { key: string; label: string; text: string } | null;
   /** the payment plan a booking would use (deposit plans keep the deposit when the customer cancels) */
@@ -402,6 +409,41 @@ export default function ListingDetailPage() {
                 </div>
               )}
             </div>
+
+            {/* Customizations: the customer answers these when booking */}
+            {!!listing.customizations?.length && (
+              <section aria-labelledby="customizations-heading" className="bg-white dark:bg-gray-800 rounded-2xl p-6">
+                <h3 id="customizations-heading" className="font-semibold text-gray-900 dark:text-white">Customizations available</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">You choose these when you book.</p>
+                <div className="space-y-4">
+                  {listing.customizations.map((g) => (
+                    <div key={g.id}>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {g.title}
+                        <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                          {g.max_select > 1 ? `Pick up to ${g.max_select}` : "Pick one"}
+                          {g.required ? " · Required" : ""}
+                        </span>
+                      </p>
+                      <ul className="mt-1 divide-y divide-gray-100 dark:divide-gray-700">
+                        {g.options.map((o) => (
+                          <li key={o.id} className="py-1.5 flex justify-between gap-3 text-sm text-gray-600 dark:text-gray-300">
+                            <span>{o.label}</span>
+                            {o.price_text && <span className="whitespace-nowrap">{o.price_text}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {(!!listing.dos?.length || !!listing.donts?.length) && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl p-6">
+                <DosDontsList dos={listing.dos} donts={listing.donts} />
+              </div>
+            )}
 
             {/* Add-ons and fees */}
             {(!!listing.add_ons?.length || !!listing.fees?.length) && (

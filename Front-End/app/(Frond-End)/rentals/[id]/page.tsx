@@ -11,6 +11,7 @@ import RangeCalendar from "@/components/rentals/RangeCalendar";
 import SavedCards from "@/components/payments/SavedCards";
 import { RentalsService, dayKey, errorMessage, money, type RentalItem, type RentalQuote } from "@/service/rentals/rentals.service";
 import LocationField from "@/components/listing/LocationField";
+import DosDontsList from "@/components/listing/DosDontsList";
 
 const parse = (s: string | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10))) : null);
 
@@ -170,6 +171,7 @@ export default function RentalItemPage() {
             </div>
 
             {item.description && <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">{item.description}</p>}
+            <DosDontsList dos={item.dos} donts={item.donts} />
 
             <section className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
               <h2 className="font-semibold text-gray-900 dark:text-white">Pick your dates</h2>

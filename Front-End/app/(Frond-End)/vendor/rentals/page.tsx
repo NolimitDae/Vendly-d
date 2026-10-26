@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { RentalsService, errorMessage, money, type RentalItem, type RentalReservation } from "@/service/rentals/rentals.service";
 import LicenceNotice from "@/components/vendor/LicenceNotice";
 import LocationField from "@/components/listing/LocationField";
+import DosDontsFields from "@/components/listing/DosDontsFields";
+import { appendDosDonts, dosDontsError, dosDontsFrom, type DosDonts } from "@/lib/package-options";
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -207,6 +209,7 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
   const [location, setLocation] = useState(item?.location ?? "");
   const [keep, setKeep] = useState<{ key: string; url: string }[]>((item?.image_keys ?? []).map((key, i) => ({ key, url: item!.images[i] })));
   const [files, setFiles] = useState<File[]>([]);
+  const [dosDonts, setDosDonts] = useState<DosDonts>(dosDontsFrom(item ?? {}));
   const [saving, setSaving] = useState(false);
 
   const save = async (e: React.FormEvent) => {
@@ -218,6 +221,8 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
     if (!daily || daily < 0.5) return toast.error("Enter a daily rate of at least $0.50");
     if (!qty || qty < 1) return toast.error("Quantity must be at least 1");
     if (Number.isNaN(dep) || dep < 0) return toast.error("Enter a valid deposit, or leave it empty");
+    const dosProblem = dosDontsError(dosDonts);
+    if (dosProblem) return toast.error(dosProblem);
     const fd = new FormData();
     fd.append("title", title.trim());
     fd.append("description", description.trim());
@@ -227,6 +232,7 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
     fd.append("turnaround_hours", String(turnaround));
     if (location.trim()) fd.append("location", location.trim());
     if (item) fd.append("keep_images", JSON.stringify(keep.map((k) => k.key)));
+    appendDosDonts(fd, dosDonts, !!item);
     files.forEach((f) => fd.append("images", f));
     setSaving(true);
     try {
@@ -277,6 +283,7 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
           <label htmlFor="rental-pickup" className="text-gray-600 dark:text-gray-300">Pickup location</label>
           <LocationField value={{ label: location }} onChange={(p) => setLocation(p.label)} inputId="rental-pickup" placeholder="City, State" />
         </div>
+        <DosDontsFields plain value={dosDonts} onChange={setDosDonts} />
         <div className="text-sm space-y-2">
           <span className="text-gray-600 dark:text-gray-300">Photos</span>
           <div className="flex flex-wrap gap-2">

@@ -10,6 +10,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { dayKey, RentalsService, type RentalItem as Item } from '../../services/rentals.service';
 import { apiError } from '../../services/contracts.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
+import { DosDontsList } from '../../components/listing/DosDonts';
 
 const W = Dimensions.get('window').width;
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
@@ -107,6 +108,11 @@ export default function RentalItem({ navigation, route }: NativeStackScreenProps
           </View>
 
           {!!item.description && <Text style={s.body}>{item.description}</Text>}
+          {(!!item.dos?.length || !!item.donts?.length) && (
+            <Card>
+              <DosDontsList dos={item.dos} donts={item.donts} />
+            </Card>
+          )}
 
           <Card style={{ gap: 14 }}>
             <Text style={s.h2}>Pick your dates</Text>

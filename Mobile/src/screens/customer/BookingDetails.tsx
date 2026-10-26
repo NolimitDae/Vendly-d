@@ -12,6 +12,8 @@ import { haptic } from '../../utils/haptics';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { countedUnit, estimate, money, plural, rangeText, type AddOn } from '../../services/addons.service';
 import { tooSoonMessage } from '../../utils/packageDetails';
+import CustomizationPicker from '../../components/booking/CustomizationPicker';
+import { choicesPayload, missingChoice, upchargeEstimate, type Customization, type Picks } from '../../utils/packageOptions';
 import { dayKeyOf, fitsHours, hoursMessage, minutesOf, otherZone, startTimesOn, type WorkingHours } from '../../utils/workingHours';
 
 // Half-hour start times from 7am to 9pm, shown as one-tap chips like Figma's time slots.
@@ -36,14 +38,16 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const [guests, setGuests] = useState('');
   const [notes, setNotes] = useState('');
   // the package's limits and add-ons come from the listing itself (the summary passed in doesn't carry them)
-  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; working_hours?: WorkingHours | null } | null>(null);
+  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null } | null>(null);
   const [picks, setPicks] = useState<Record<string, number>>({});
+  // the package's customizations: what was picked for each
+  const [choices, setChoices] = useState<Picks>({});
 
   useEffect(() => {
     MarketplaceService.getListing(listing.id)
       .then((r) => {
         const l = r.data?.data;
-        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], working_hours: l.working_hours ?? null });
+        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null });
       })
       .catch(() => {});
   }, [listing.id]);
@@ -103,6 +107,11 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
     setPicks((prev) => ({ ...prev, [a.id]: Math.min(cap, Math.max(1, (prev[a.id] ?? 1) + by)) }));
   };
 
+  // per unit upcharges count what the package counts: guests, hours (at least the minimum) or days
+  const optionUnit = countedUnit(pkg?.price_unit ?? listing.priceUnit);
+  const optionUnits = optionUnit === 'person' ? guestCount ?? 0 : optionUnit === 'hour' ? Math.max(duration.hours, min ?? 0) : optionUnit === 'day' ? Math.max(1, min ?? 0) : 1;
+  const upcharges = upchargeEstimate(pkg?.customizations, choices, optionUnits);
+
   const startAt = start ? set(day, { ...start, seconds: 0, milliseconds: 0 }) : null;
   const endAt = startAt ? addHours(startAt, duration.hours) : null;
 
@@ -119,6 +128,9 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
     }
     if (unit === 'person' && guestCount && min && guestCount < min) return Alert.alert('Guest count', `This package is for at least ${plural(min, 'guest')}.`);
     if (unit === 'person' && guestCount && max && guestCount > max) return Alert.alert('Guest count', `This package is for up to ${plural(max, 'guest')}. Message the vendor about a bigger event.`);
+    const unanswered = missingChoice(pkg?.customizations, choices);
+    if (unanswered) return Alert.alert('Customizations', unanswered);
+    const options = choicesPayload(pkg?.customizations, choices);
     navigation.navigate('BookingSummary', {
       listing,
       draft: {
@@ -130,6 +142,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
         guests: guests ? Number(guests) : undefined,
         notes: notes.trim() || undefined,
         addOns: picked.length ? picked.map(({ addOn, quantity }) => (addOn.price_unit === 'PER_ITEM' ? { add_on_id: addOn.id, quantity } : { add_on_id: addOn.id })) : undefined,
+        options: options.length ? options : undefined,
       },
     });
   };
@@ -201,6 +214,8 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
             {unit === 'person' && <Text style={s.hint}>Priced per person{rangeText('person', min, max) ? ` · ${rangeText('person', min, max)}` : ''}</Text>}
           </View>
 
+          <CustomizationPicker groups={pkg?.customizations ?? []} value={choices} onChange={setChoices} />
+
           {addOns.length > 0 && (
             <View style={{ gap: 8 }}>
               <Text style={ui.label}>Add-ons</Text>
@@ -247,9 +262,9 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
             </View>
           )}
 
-          {(unit || picked.length > 0) && startAt && (!needsGuests || !!guestCount) && (
+          {(unit || picked.length > 0 || upcharges > 0) && startAt && (!needsGuests || !!guestCount) && (
             <Text style={s.estimate}>
-              About {money(estimate({ price: listing.price, price_unit: pkg?.price_unit ?? listing.priceUnit, min_quantity: min, quote: !!listing.quoteId }, { guests: guestCount, hours: duration.hours }, picked))} before the Vendly Protection fee. You’ll see the exact price next.
+              About {money(estimate({ price: listing.price, price_unit: pkg?.price_unit ?? listing.priceUnit, min_quantity: min, quote: !!listing.quoteId }, { guests: guestCount, hours: duration.hours }, picked) + upcharges)} before the Vendly Protection fee. You’ll see the exact price next.
             </Text>
           )}
 

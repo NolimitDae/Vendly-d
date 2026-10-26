@@ -33,6 +33,7 @@ import BookingProgress from "@/components/bookings/BookingProgress";
 import MapPicture from "@/components/bookings/MapPicture";
 import { showsTracker, type TrackerFields } from "@/lib/booking-tracker";
 import { useBookingRefresh } from "@/hooks/useBookingRefresh";
+import BookingChoices from "@/components/bookings/BookingChoices";
 
 interface Proof {
   id: string;
@@ -242,6 +243,7 @@ export default function CustomerBookingDetailPage() {
             </div>
           )}
         </div>
+        <BookingChoices booking={booking} />
         {(["PENDING", "CONFIRMED"].includes(booking.status) || invoiceAvailable(booking)) && (
           <div className="flex flex-wrap gap-2 pt-1">
             {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}

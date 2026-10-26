@@ -99,6 +99,8 @@ export class RentalsService {
         location: dto.location,
         status,
         images: names,
+        dos: dto.dos ?? [],
+        donts: dto.donts ?? [],
       },
     });
     return { success: true, data: this.format(item) };

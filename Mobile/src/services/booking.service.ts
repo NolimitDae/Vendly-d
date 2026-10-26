@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { BookingFields, SignaturePayload } from './contracts.service';
+import type { ChosenCustomization } from '../utils/packageOptions';
 
 export type BookingStatus =
   | 'PENDING'
@@ -67,7 +68,10 @@ export interface Booking {
   /** Rentals: the "listing" is synthesised from the rented items */
   is_rental?: boolean;
   security_deposit?: number | string | null;
-  rental_reservations?: { id: string; quantity: number; start_date: string; end_date: string; status: string; item: { id: string; title: string; images?: string[] } }[];
+  rental_reservations?: { id: string; quantity: number; start_date: string; end_date: string; status: string; item: { id: string; title: string; images?: string[]; dos?: string[] | null; donts?: string[] | null } }[];
+  /** what was picked for the package's customizations, frozen when the booking was made */
+  customizations?: ChosenCustomization[] | null;
+  options_amount?: number | null;
   rental_return?: { damage_fee: number | string; late_fee: number | string; notes?: string | null; created_at: string } | null;
   /** the planner event this booking is part of */
   event_bookings?: { event: { id: string; name: string; date?: string | null } }[];
@@ -99,6 +103,9 @@ export interface Booking {
     /** the package's public, city-level place */
     location?: string | null;
     service_at?: 'CUSTOMER_LOCATION' | 'VENDOR_LOCATION';
+    /** the vendor's instructions for using the equipment */
+    dos?: string[] | null;
+    donts?: string[] | null;
   };
   vendor: {
     id: string;

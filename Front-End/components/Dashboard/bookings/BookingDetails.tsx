@@ -4,6 +4,7 @@ import Link from "next/link";
 import ModalWrapper from "../common/modal/ModalWrapper";
 import DetailGrid from "../common/DetailGrid";
 import { cancelledByText, dueByText, paymentStateText } from "@/lib/booking-status";
+import type { ChosenCustomization } from "@/lib/package-options";
 
 const money = (v: unknown) => (v === null || v === undefined || v === "" ? null : `$${Number(v).toFixed(2)}`);
 const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString() : null);
@@ -43,6 +44,10 @@ export default function BookingDetails({ booking, onClose }: { booking: any; onC
             [booking.cancel_reason_label ? "Cancel note" : "Cancel reason", booking.cancel_reason],
             ["Decline reason", booking.reject_reason],
             ["Dispute", booking.dispute_opened_at ? `${disputed ? "Open" : "Resolved"} since ${day(booking.dispute_opened_at)}` : null],
+            // the package customizations picked, as they were when booked
+            ...((booking.customizations ?? []) as ChosenCustomization[]).map(
+              (g): [string, string] => [`Customization: ${g.title}`, `${g.options.map((o) => o.label).join(", ")}${g.amount > 0 ? ` (+${money(g.amount)})` : ""}`],
+            ),
           ]}
         />
         {disputed && (

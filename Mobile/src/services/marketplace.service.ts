@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { AddOn } from './addons.service';
+import type { Customization } from '../utils/packageOptions';
 import type { WorkingHours } from '../utils/workingHours';
 import type { SocialLinksData } from '../components/SocialLinks';
 
@@ -16,6 +17,11 @@ export interface Listing {
   add_ons?: AddOn[];
   /** fees the vendor may request after the service (only with the customer's approval) */
   fees?: AddOn[];
+  /** dropdowns the customer answers when booking ("Style": Knotless…), some with an upcharge */
+  customizations?: Customization[];
+  /** the vendor's instructions for using the equipment */
+  dos?: string[] | null;
+  donts?: string[] | null;
   /** from the vendor's contract for this package */
   cancellation_policy?: { key: string; label: string; text: string } | null;
   /** the payment plan a booking would use (deposit plans keep the deposit when the customer cancels) */

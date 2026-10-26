@@ -24,6 +24,9 @@ export interface RentalItem {
   turnaround_hours: number;
   location?: string | null;
   status: RentalItemStatus;
+  /** the vendor's instructions for using the equipment */
+  dos?: string[] | null;
+  donts?: string[] | null;
   vendor?: { id: string; name: string; avatar_url?: string | null };
   available?: number;
   available_today?: number;

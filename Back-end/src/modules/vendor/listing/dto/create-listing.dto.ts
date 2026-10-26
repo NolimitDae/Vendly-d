@@ -17,7 +17,7 @@ import { PaymentPlan } from 'prisma/generated/enums';
 import { ListingStatus } from 'prisma/generated/client';
 import { Transform, Type } from 'class-transformer';
 import { SERVICE_AT, type ServiceAt } from 'src/modules/booking/booking-tracker';
-import { MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readIncludedItems, readNoticeHours } from '../package-details';
+import { MAX_DOS, MAX_DO_LENGTH, MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readIncludedItems, readNoticeHours } from '../package-details';
 
 export class CreateVendorListingDto {
   @ApiProperty()
@@ -137,6 +137,24 @@ export class CreateVendorListingDto {
   @IsString({ each: true })
   @MaxLength(MAX_INCLUDED_ITEM_LENGTH, { each: true, message: `Each included item can be up to ${MAX_INCLUDED_ITEM_LENGTH} characters.` })
   included_items?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Dos: how to use the equipment, one short line each (a JSON array in multipart forms)' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readIncludedItems(obj[key]))
+  @IsArray()
+  @ArrayMaxSize(MAX_DOS, { message: `Add up to ${MAX_DOS} dos.` })
+  @IsString({ each: true })
+  @MaxLength(MAX_DO_LENGTH, { each: true, message: `Each do can be up to ${MAX_DO_LENGTH} characters.` })
+  dos?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: "Don'ts: what not to do with the equipment, one short line each (a JSON array in multipart forms)" })
+  @IsOptional()
+  @Transform(({ obj, key }) => readIncludedItems(obj[key]))
+  @IsArray()
+  @ArrayMaxSize(MAX_DOS, { message: `Add up to ${MAX_DOS} don'ts.` })
+  @IsString({ each: true })
+  @MaxLength(MAX_DO_LENGTH, { each: true, message: `Each don't can be up to ${MAX_DO_LENGTH} characters.` })
+  donts?: string[];
 
   @ApiPropertyOptional({ description: 'How many hours ahead the package must be booked (0 or empty = no minimum)' })
   @IsOptional()

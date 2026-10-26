@@ -5,12 +5,13 @@ import { PushModule } from 'src/modules/push/push.module';
 import { PaymentsModule } from 'src/modules/payments/payments.module';
 import { AddOnsService } from './add-ons.service';
 import { BookingExtrasService } from './booking-extras.service';
-import { AdminBookingExtrasController, BookingExtrasController, VendorAddOnsController } from './add-ons.controller';
+import { AdminBookingExtrasController, BookingExtrasController, VendorAddOnsController, VendorPackageOptionsController } from './add-ons.controller';
+import { PackageOptionsService } from './package-options.service';
 
 @Module({
   imports: [PrismaModule, MailModule, PushModule, PaymentsModule],
-  controllers: [VendorAddOnsController, BookingExtrasController, AdminBookingExtrasController],
-  providers: [AddOnsService, BookingExtrasService],
-  exports: [AddOnsService, BookingExtrasService],
+  controllers: [VendorAddOnsController, VendorPackageOptionsController, BookingExtrasController, AdminBookingExtrasController],
+  providers: [AddOnsService, BookingExtrasService, PackageOptionsService],
+  exports: [AddOnsService, BookingExtrasService, PackageOptionsService],
 })
 export class AddOnsModule {}

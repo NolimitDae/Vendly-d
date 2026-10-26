@@ -814,6 +814,9 @@ model VendorListing {
   // what the package includes (shown as a list), and how far ahead it must be booked
   included_items   String[]
   min_notice_hours Int?
+  // special instructions for using the equipment: short lines the customer sees on the package and booking
+  dos              String[]
+  donts            String[]
 
   bookings       Booking[]
   add_ons        ListingAddOn[]
@@ -822,9 +825,55 @@ model VendorListing {
   blockedDates   ListingAvailability[]
   contractAssignments VendorContractListing[]
   quotes         Quote[]
+  option_groups  ListingOptionGroup[]
 
   @@index([lat, lng])
   @@map("vendor_listings")
+}
+
+/// How an option's upcharge is counted: once, or times the package quantity (guests, hours or days).
+enum OptionPriceMode {
+  FLAT
+  PER_UNIT
+}
+
+/// A customization on a package ("Style"): the customer picks one option, or up to max_select of them.
+model ListingOptionGroup {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  listing_id String
+  listing    VendorListing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  title      String   @db.VarChar(60)
+  required   Boolean  @default(false)
+  // 1 = pick one; more = pick up to this many
+  max_select Int      @default(1)
+  sort       Int      @default(0)
+
+  options ListingOption[]
+
+  @@index([listing_id])
+  @@map("listing_option_groups")
+}
+
+/// One choice in a package customization ("Knotless"), with an optional upcharge.
+model ListingOption {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  group_id String
+  group    ListingOptionGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
+
+  label      String          @db.VarChar(80)
+  price      Decimal         @default(0) @db.Decimal(10, 2)
+  price_mode OptionPriceMode @default(FLAT)
+  sort       Int             @default(0)
+
+  @@index([group_id])
+  @@map("listing_options")
 }
 
 model ListingAvailability {
@@ -978,6 +1027,11 @@ model Booking {
   en_route_at   DateTime?
   arrived_at    DateTime?
   checked_in_at DateTime?
+
+  // the package customizations the customer chose, frozen at booking (titles, labels and prices) so
+  // later package edits don't change it; their upcharges are already part of amount
+  chosen_options Json?
+  options_amount Decimal?  @db.Decimal(10, 2)
 
   // requests the vendor doesn't answer in time are declined automatically (see booking-requests.ts);
   // the clock starts when the vendor can answer: at the request, or once a planner's client co-signs
@@ -1246,6 +1300,9 @@ model RentalItem {
   turnaround_hours Int              @default(24)
   location         String?          @db.VarChar(255)
   status           RentalItemStatus @default(DRAFT)
+  // special instructions for using the equipment, shown on the item and the rental
+  dos              String[]
+  donts            String[]
 
   reservations RentalReservation[]
 

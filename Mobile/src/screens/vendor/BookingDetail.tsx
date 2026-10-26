@@ -15,6 +15,7 @@ import { openChatWith } from '../../navigation/openChat';
 import { BookingService, type Booking } from '../../services/booking.service';
 import { PaymentsService } from '../../services/payments.service';
 import RentalReturnCard from '../../components/RentalReturnCard';
+import BookingChoices from '../../components/booking/BookingChoices';
 import VendorExtras from '../../components/extras/VendorExtras';
 import VendorDisputeCard from '../../components/VendorDisputeCard';
 import type { VendorBookingsStackParams } from '../../navigation/types';
@@ -312,6 +313,8 @@ export default function VendorBookingDetail() {
           {st === 'CANCELLED' && <RefundCard bookingId={booking.id} role="VENDOR" />}
           {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
 
+          {/* the customizations picked, and the vendor's dos and don'ts */}
+          <BookingChoices booking={booking} />
           <RentalReturnCard booking={booking} role="VENDOR" onDone={load} />
 
           <VendorExtras booking={booking} onChanged={load} />

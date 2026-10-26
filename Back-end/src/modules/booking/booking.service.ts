@@ -39,6 +39,7 @@ import { depositShareOf } from 'src/modules/payments/payment-schedule';
 import { MarketplaceService } from 'src/modules/marketplace/marketplace.service';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { trackerDetails } from './booking-tracker';
+import { chosenGroupText, readChosenOptions } from 'src/modules/add-ons/package-options';
 
 /** Extra tabs on the vendor's bookings list. */
 export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
@@ -134,6 +135,8 @@ export class BookingService {
     });
     const listing = { title: titleOf(booking) ?? 'Service', vendor: booking.vendor };
     const customer = booking.customer;
+    // what the customer picked for the package's customizations ("Style: Knotless")
+    const chosen = readChosenOptions(booking.chosen_options).map(chosenGroupText).join('; ');
 
     // notify vendor via email
     const clientUrl = appConfig().app.client_app_url;
@@ -141,9 +144,9 @@ export class BookingService {
       to: listing.vendor.email,
       recipientName: listing.vendor.name,
       subject: `New booking request — ${listing.title}`,
-      message: created.awaiting_client
+      message: (created.awaiting_client
         ? `${customer.name} signed the contract and sent a booking request. Their client is co-signing it too; you can Accept & Sign once they have.`
-        : `${customer.name} signed the contract and sent a booking request. Review it, then Accept & Sign or decline.`,
+        : `${customer.name} signed the contract and sent a booking request. Review it, then Accept & Sign or decline.`) + (chosen ? ` They chose: ${chosen}.` : ''),
       status: 'PENDING',
       listingTitle: listing.title,
       scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
@@ -1224,10 +1227,10 @@ export class BookingService {
     return {
       customer: { select: { id: true, name: true, avatar: true, email: true } },
       vendor: { select: { id: true, name: true, avatar: true, email: true } },
-      // service_at: where it happens; location: the package's public, city-level place
-      listing: { select: { id: true, title: true, price: true, images: true, category_id: true, service_at: true, location: true } },
+      // service_at: where it happens; location: the package's public, city-level place; dos and don'ts: the vendor's instructions for using the equipment
+      listing: { select: { id: true, title: true, price: true, images: true, category_id: true, service_at: true, location: true, dos: true, donts: true } },
       review: { select: { id: true, rating: true, comment: true } },
-      rental_reservations: { select: { id: true, quantity: true, start_date: true, end_date: true, daily_rate: true, status: true, item: { select: { id: true, title: true, images: true } } } },
+      rental_reservations: { select: { id: true, quantity: true, start_date: true, end_date: true, daily_rate: true, status: true, item: { select: { id: true, title: true, images: true, dos: true, donts: true } } } },
       rental_return: true,
       // the planner event this booking is part of (vendors open its run of show and files)
       event_bookings: { select: { event: { select: { id: true, name: true, date: true } } } },
@@ -1250,6 +1253,10 @@ export class BookingService {
       payment_due_by: paymentState(booking) ? booking.payment_due_by : null,
       // why it was cancelled, as picked from the list ("Double booked"); the note is cancel_reason
       cancel_reason_label: cancelReasonLabel(booking.cancel_reason_code, booking.cancelled_by),
+      // the package customizations chosen, as they were when booked (a later package edit doesn't change them)
+      customizations: readChosenOptions(booking.chosen_options),
+      chosen_options: undefined,
+      options_amount: booking.options_amount != null ? Number(booking.options_amount) : null,
       customer: booking.customer
         ? { ...booking.customer, avatar_url: avatarUrl(booking.customer.avatar) }
         : null,

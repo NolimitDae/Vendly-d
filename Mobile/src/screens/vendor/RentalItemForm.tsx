@@ -10,6 +10,8 @@ import { DARK, FONTS } from '../../constants/colors';
 import { RentalsService } from '../../services/rentals.service';
 import { apiMessage } from '../auth/SignIn';
 import type { VendorDashboardStackParams } from '../../navigation/types';
+import { DosDontsEditor } from '../../components/listing/DosDonts';
+import { appendDosDonts, dosDontsError, dosDontsFrom, emptyDosDonts, type DosDonts } from '../../utils/packageOptions';
 
 interface PickedImage { uri: string; type: string; name: string }
 
@@ -34,6 +36,7 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
   const [location, setLocation] = useState('');
   const [existing, setExisting] = useState<{ key: string; url: string }[]>([]);
   const [images, setImages] = useState<PickedImage[]>([]);
+  const [dosDonts, setDosDonts] = useState<DosDonts>(emptyDosDonts());
 
   useEffect(() => {
     if (!itemId) return;
@@ -49,6 +52,7 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
         setTurnaround(i.turnaround_hours);
         setLocation(i.location ?? '');
         setExisting((i.image_keys ?? []).map((key, idx) => ({ key, url: i.images[idx] })));
+        setDosDonts(dosDontsFrom(i));
       })
       .catch(() => Alert.alert('Error', 'Could not load the item.'))
       .finally(() => setLoading(false));
@@ -69,6 +73,8 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
     if (!daily || daily < 0.5) return Alert.alert('Daily rate', 'Enter a daily rate of at least $0.50.');
     if (!qty || qty < 1) return Alert.alert('Quantity', 'How many of these do you have? At least 1.');
     if (Number.isNaN(dep) || dep < 0) return Alert.alert('Deposit', 'Enter a deposit amount, or leave it empty for none.');
+    const dosProblem = dosDontsError(dosDonts);
+    if (dosProblem) return Alert.alert('Dos and don’ts', dosProblem);
     setSaving(true);
     try {
       const fd = new FormData();
@@ -80,6 +86,7 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
       fd.append('turnaround_hours', String(turnaround));
       if (location.trim()) fd.append('location', location.trim());
       if (itemId) fd.append('keep_images', JSON.stringify(existing.map((e) => e.key)));
+      appendDosDonts(fd, dosDonts, !!itemId);
       images.forEach((img) => fd.append('images', img as unknown as Blob));
       await RentalsService.save(fd, itemId);
       Alert.alert(itemId ? 'Item updated' : 'Item listed', itemId ? 'Your changes are live.' : 'Customers can now rent it.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
@@ -143,6 +150,8 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
             <Text style={ui.label}>Pickup location</Text>
             <LocationPicker value={{ label: location }} onChange={(p) => setLocation(p.label)} label="Pickup location" placeholder="City, State" />
           </View>
+
+          <DosDontsEditor value={dosDonts} onChange={setDosDonts} />
 
           <GradientButton title={itemId ? 'Save Changes' : 'List Item'} onPress={save} loading={saving} style={{ marginTop: 8 }} />
         </View>

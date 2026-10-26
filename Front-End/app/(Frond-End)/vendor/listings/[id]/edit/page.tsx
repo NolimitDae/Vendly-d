@@ -16,6 +16,9 @@ import type { PickerCategory } from "@/lib/categories";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
 import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, packageDetailsFrom, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
+import PackageCustomizationsFields, { emptyCustomizations, saveCustomizations, type PackageCustomizationsValue } from "@/components/listing/PackageCustomizationsFields";
+import DosDontsFields from "@/components/listing/DosDontsFields";
+import { appendDosDonts, customizationsError, dosDontsError, dosDontsFrom, draftsFrom, emptyDosDonts, type DosDonts } from "@/lib/package-options";
 import { apiError } from "@/service/contracts/contracts.service";
 import LicenceNotice from "@/components/vendor/LicenceNotice";
 import { dateOnly } from "@/lib/date-only";
@@ -69,6 +72,9 @@ export default function EditListingPage() {
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
   const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
+  // not saved until the package's own list has loaded
+  const [customizations, setCustomizations] = useState<PackageCustomizationsValue>(emptyCustomizations(false));
+  const [dosDonts, setDosDonts] = useState<DosDonts>(emptyDosDonts());
 
   const fetchBlockedDates = async () => {
     try {
@@ -104,6 +110,8 @@ export default function EditListingPage() {
         setServiceAt(l.service_at === "VENDOR_LOCATION" ? "VENDOR_LOCATION" : "CUSTOMER_LOCATION");
         setLimits({ min: l.min_quantity ? String(l.min_quantity) : "", max: l.max_quantity ? String(l.max_quantity) : "" });
         setDetails(packageDetailsFrom(l));
+        setDosDonts(dosDontsFrom(l));
+        setCustomizations({ drafts: draftsFrom(l.customizations), loaded: Array.isArray(l.customizations) });
       } else {
         toast.error("Listing not found");
         router.push("/vendor/listings");
@@ -148,7 +156,7 @@ export default function EditListingPage() {
       toast.error(limitProblem);
       return;
     }
-    const detailsProblem = packageDetailsError(details);
+    const detailsProblem = packageDetailsError(details) ?? dosDontsError(dosDonts) ?? customizationsError(customizations.drafts);
     if (detailsProblem) {
       toast.error(detailsProblem);
       return;
@@ -163,6 +171,7 @@ export default function EditListingPage() {
       fd.append("service_at", serviceAt);
       appendLimits(fd, form.price_unit, limits, true);
       appendPackageDetails(fd, details, true);
+      appendDosDonts(fd, dosDonts, true);
 
       // the current photos the vendor kept (the rest are deleted); new ones are added after them
       fd.append("keep_images", JSON.stringify(existingImages));
@@ -174,6 +183,13 @@ export default function EditListingPage() {
           await savePackageAddOns(id, addOns, true);
         } catch (err) {
           toast.error(`Listing saved, but the add-ons weren't: ${apiError(err, (err as Error)?.message || "please try again")}`);
+          return;
+        }
+        try {
+          // bookings already made keep the choices (and prices) they were made with
+          await saveCustomizations(id, customizations, form.price_unit, true);
+        } catch (err) {
+          toast.error(`Listing saved, but the customizations weren't: ${apiError(err, "please try again")}`);
           return;
         }
         toast.success("Listing updated!");
@@ -410,7 +426,11 @@ export default function EditListingPage() {
 
           <PackageDetailsFields value={details} onChange={setDetails} />
 
+          <PackageCustomizationsFields value={customizations} onChange={setCustomizations} priceUnit={form.price_unit} />
+
           <PackageAddOns listingId={id} value={addOns} onChange={setAddOns} />
+
+          <DosDontsFields value={dosDonts} onChange={setDosDonts} />
 
           {/* Category */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
