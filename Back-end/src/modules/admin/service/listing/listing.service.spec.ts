@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ListingService } from './listing.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 
 const mockListing = {
   id: 'listing-1',
@@ -62,6 +63,20 @@ describe('ListingService', () => {
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(1);
       expect(result.meta).toMatchObject({ total: 1, page: 1, limit: 20, last_page: 1 });
+    });
+
+    it('returns photos as public links, not stored file names', async () => {
+      TanvirStorage.config({ driver: 'local', connection: { rootUrl: '/tmp/admin-listing-spec', publicUrl: 'https://media.test' } });
+      mockPrisma.vendorListing.count.mockResolvedValue(1);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([{ ...mockListing, images: ['a.jpg', 'b.png'] }]);
+
+      const result = await service.findAll({});
+
+      expect(result.data[0].images).toEqual([
+        expect.stringMatching(/^https:\/\/media\.test\/.*listings\/a\.jpg$/),
+        expect.stringMatching(/listings\/b\.png$/),
+      ]);
+      expect(result.data[0].images[0]).not.toBe('a.jpg');
     });
 
     it('should apply status filter when provided', async () => {

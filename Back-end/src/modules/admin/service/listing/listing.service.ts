@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ListingStatus } from 'prisma/generated/client';
+import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 
 @Injectable()
 export class ListingService {
@@ -44,7 +45,8 @@ export class ListingService {
 
     return {
       success: true,
-      data: listings,
+      // stored as file names; the dashboard needs the public links, as on the marketplace
+      data: listings.map((l) => ({ ...l, images: (l.images ?? []).map((img) => TanvirStorage.url(`listings/${img}`)) })),
       meta: { total, page, limit, last_page: Math.ceil(total / limit) },
     };
   }

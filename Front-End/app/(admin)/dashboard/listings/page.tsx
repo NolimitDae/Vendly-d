@@ -116,7 +116,7 @@ export default function AdminListingsPage() {
             >
               <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 dark:bg-gray-800">
                 {listing.images?.[0] ? (
-                  <Image src={listing.images[0]} alt="" fill className="object-cover" />
+                  <Image src={listing.images[0]} alt="" fill className="object-cover" unoptimized />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-2xl">🖼️</div>
                 )}
