@@ -45,8 +45,11 @@ function setup() {
         db.users.push(u);
         return { id: u.id };
       }),
+      findUnique: jest.fn(async ({ where }: any) => db.users.find((u) => u.id === where.id) ?? null),
       updateMany: jest.fn(async ({ where, data }: any) => {
-        const hit = db.users.filter((u) => u.is_test === where.is_test && !u.deleted_at);
+        const hit = where.id
+          ? db.users.filter((u) => u.id === where.id && Number(u.balance ?? 0) === Number(where.balance))
+          : db.users.filter((u) => u.is_test === where.is_test && !u.deleted_at);
         hit.forEach((u) => Object.assign(u, data));
         return { count: hit.length };
       }),
@@ -55,6 +58,8 @@ function setup() {
     vendorListing: { findMany: jest.fn(async ({ where }: any) => db.listings.filter((l) => l.vendor_id === where.vendor_id && !l.deleted_at)) },
     vendorAddOn: { findMany: jest.fn(async ({ where }: any) => db.addOns.filter((a) => a.vendor_id === where.vendor_id)) },
     rentalItem: { findMany: jest.fn(async ({ where }: any) => db.rentals.filter((r) => r.vendor_id === where.vendor_id && !r.deleted_at)) },
+    paymentTransaction: { create: jest.fn(async () => ({})) },
+    $transaction: jest.fn(async (fn: any) => fn(prisma)),
     booking: { findMany: jest.fn(async ({ where }: any) => db.bookings.filter((b) => (b.vendor_id === where.OR[0].vendor_id || b.customer_id === where.OR[1].customer_id) && where.status.in.includes(b.status))) },
   };
   const listings = {
@@ -222,6 +227,24 @@ describe('TestDataService', () => {
     expect(auth.deleteAccount).toHaveBeenCalledTimes(4);
     expect(res.data.kept).toEqual([{ email: 'test-catering-food-1@vendly.test', reason: expect.stringMatching(/open dispute/) }]);
     expect(res.data.removed).toHaveLength(3);
+  });
+
+  it('removal wipes a leftover balance (in or owed), with a record, before deleting the account', async () => {
+    const { service, db, prisma } = setup();
+    await service.create({ near: 'Atlanta, GA' });
+    db.users[0].balance = 85.25;
+    db.users[1].balance = -12;
+    const [first, second] = [db.users[0].email, db.users[1].email];
+
+    const res = await service.remove();
+    expect(res.data.wiped).toEqual([
+      { email: first, amount: 85.25 },
+      { email: second, amount: -12 },
+    ]);
+    expect(db.users[0].balance).toBe(0);
+    expect(db.users[1].balance).toBe(0);
+    expect(prisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: db.users[0].id, type: 'test_balance_wiped', amount: 85.25 }) });
+    expect(res.data.counts.wiped).toBe(2);
   });
 });
 
