@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { differenceInCalendarDays, format, isBefore, isSameDay } from 'date-fns';
@@ -172,12 +172,40 @@ function Fact({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; la
 }
 
 export function Stepper({ value, min, max, onChange }: { value: number; min: number; max: number; onChange: (n: number) => void }) {
+  // the number can also be typed: kept as text while editing (it may be empty), never above max, and
+  // back to at least min when the field is left
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const type = (text: string) => {
+    const digits = text.replace(/[^0-9]/g, '');
+    if (!digits) return setDraft('');
+    const n = Math.min(max, Number(digits));
+    setDraft(String(n));
+    if (n >= min) onChange(n);
+  };
+  const done = () => {
+    const n = Math.max(min, Math.min(max, Number(draft) || 0));
+    setDraft(String(n));
+    onChange(n);
+  };
   return (
     <View style={s.stepper}>
       <Pressable onPress={() => onChange(Math.max(min, value - 1))} disabled={value <= min} style={[s.stepBtn, value <= min && { opacity: 0.35 }]} accessibilityLabel="Fewer" hitSlop={6}>
         <Ionicons name="remove" size={18} color="#fff" />
       </Pressable>
-      <Text style={s.stepValue} accessibilityLabel={`Quantity ${value}`}>{value}</Text>
+      <TextInput
+        style={s.stepValue}
+        value={draft}
+        onChangeText={type}
+        onBlur={done}
+        onSubmitEditing={done}
+        keyboardType="number-pad"
+        returnKeyType="done"
+        selectTextOnFocus
+        maxLength={String(max).length}
+        accessibilityLabel="Quantity"
+        accessibilityHint={`Type a number from ${min} to ${max}`}
+      />
       <Pressable onPress={() => onChange(Math.min(max, value + 1))} disabled={value >= max} style={[s.stepBtn, value >= max && { opacity: 0.35 }]} accessibilityLabel="More" hitSlop={6}>
         <Ionicons name="add" size={18} color="#fff" />
       </Pressable>
@@ -207,7 +235,7 @@ const s = StyleSheet.create({
   qtyCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: DARK.field, borderRadius: 24, padding: 4 },
   stepBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: DARK.card, alignItems: 'center', justifyContent: 'center' },
-  stepValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold, minWidth: 22, textAlign: 'center' },
+  stepValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold, minWidth: 44, paddingVertical: 8, textAlign: 'center' },
   estimate: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 },
   estimateValue: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8 },
