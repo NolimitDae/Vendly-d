@@ -48,6 +48,23 @@ describe('ProfileSection', () => {
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('over 5 MB'));
   });
 
+  it('saves a phone number, checked loosely, and sends an empty one to clear it', async () => {
+    render(<ProfileSection />);
+    await screen.findByRole('heading', { name: 'Profile' });
+    const phone = screen.getByLabelText(/Phone number/);
+    expect(phone).toHaveAttribute('autocomplete', 'tel');
+    await userEvent.type(phone, 'call me');
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('only digits'));
+    expect(AuthService.updateProfile).not.toHaveBeenCalled();
+
+    await userEvent.clear(phone);
+    await userEvent.type(phone, '+1 (512) 555-0134');
+    await userEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    await waitFor(() => expect(AuthService.updateProfile).toHaveBeenCalled());
+    expect(((AuthService.updateProfile as jest.Mock).mock.calls[0][0] as FormData).get('phone_number')).toBe('+1 (512) 555-0134');
+  });
+
   it('needs a first name', async () => {
     render(<ProfileSection />);
     await screen.findByRole('heading', { name: 'Profile' });

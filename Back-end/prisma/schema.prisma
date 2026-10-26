@@ -319,6 +319,12 @@ model VendorProfile {
   facebook                String?                  @db.VarChar(255)
   youtube                 String?                  @db.VarChar(255)
   x                       String?                  @db.VarChar(255)
+  // where customers come for packages done at the vendor's place: private, shown only to customers
+  // with an accepted booking (booking/booking-tracker.ts); position geocoded in the background
+  business_address        String?                  @db.VarChar(500)
+  business_lat            Float?
+  business_lng            Float?
+  business_geocoded_at    DateTime?
 
   @@map("vendor_profiles")
 }
@@ -789,6 +795,9 @@ model VendorListing {
   geocoded_at   DateTime?
   // how far the vendor travels from `location` (miles); null = customers come to them / not set
   service_radius_miles Int?
+  // where the service happens: CUSTOMER_LOCATION (the vendor goes to the venue) or VENDOR_LOCATION
+  // (the customer comes to the vendor's business address)
+  service_at    String    @default("CUSTOMER_LOCATION") @db.VarChar(20)
   availability  String?   @db.Text
   delivery_time Int?
 
@@ -958,6 +967,17 @@ model Booking {
   event_end_at   DateTime?
   venue_address  String?  @db.VarChar(500)
   guest_count    Int?
+  // venue_address on the map, geocoded in the background (null = not found or not done yet)
+  venue_lat         Float?
+  venue_lng         Float?
+  venue_geocoded_at DateTime?
+  // the tracker's times (booking/booking-tracker.ts): accepted, started, and the vendor's day-of steps.
+  // They never change status or money; `status` stays the authority for that
+  confirmed_at  DateTime?
+  started_at    DateTime?
+  en_route_at   DateTime?
+  arrived_at    DateTime?
+  checked_in_at DateTime?
 
   // requests the vendor doesn't answer in time are declined automatically (see booking-requests.ts);
   // the clock starts when the vendor can answer: at the request, or once a planner's client co-signs

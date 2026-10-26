@@ -16,6 +16,7 @@ export default function NewEventPage() {
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<EventFormValues>({ resolver: zodResolver(eventFormSchema) });
@@ -77,7 +78,7 @@ export default function NewEventPage() {
           onSubmit={handleSubmit(onSubmit)}
           className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-5"
         >
-          <EventFormFields register={register} errors={errors} minDate={new Date().toISOString().slice(0, 16)} idPrefix="new-event" />
+          <EventFormFields register={register} control={control} errors={errors} minDate={new Date().toISOString().slice(0, 16)} idPrefix="new-event" />
 
           {/* Actions */}
           <div className="flex gap-3 pt-2">

@@ -1,8 +1,9 @@
 "use client";
 
-import type { FieldErrors, UseFormRegister } from "react-hook-form";
+import { Controller, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
+import LocationField from "@/components/listing/LocationField";
 
 /** Shared by the create page and the edit dialog on the event detail page. */
 export const EVENT_TYPES = [
@@ -35,11 +36,14 @@ const labelClass = "block text-sm font-medium text-gray-700 dark:text-gray-300 m
 /** The event fields (name, type, date, venue, guests, budget, notes) for a react-hook-form form. */
 export function EventFormFields({
   register,
+  control,
   errors,
   minDate,
   idPrefix = "event",
 }: {
   register: UseFormRegister<EventFormValues>;
+  /** given: the venue gets address suggestions as you type */
+  control?: Control<EventFormValues>;
   errors: FieldErrors<EventFormValues>;
   /** The create page stops past dates; editing keeps whatever date the event already has. */
   minDate?: string;
@@ -84,7 +88,23 @@ export function EventFormFields({
       {/* Venue */}
       <div>
         <label htmlFor={id("venue")} className={labelClass}>Venue / Location</label>
-        <input id={id("venue")} {...register("venue")} placeholder="e.g. Grand Ballroom, New York" className={eventInputClass} />
+        {control ? (
+          <Controller
+            name="venue"
+            control={control}
+            render={({ field }) => (
+              <LocationField
+                value={{ label: field.value ?? "" }}
+                onChange={(p) => field.onChange(p.label)}
+                inputId={id("venue")}
+                placeholder="e.g. Grand Ballroom, New York"
+                street
+              />
+            )}
+          />
+        ) : (
+          <input id={id("venue")} {...register("venue")} placeholder="e.g. Grand Ballroom, New York" autoComplete="street-address" className={eventInputClass} />
+        )}
       </div>
 
       {/* Guest count + Budget row */}

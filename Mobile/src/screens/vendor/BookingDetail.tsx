@@ -25,6 +25,8 @@ import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/b
 import RefundCard from '../../components/booking/RefundCard';
 import InvoiceButton from '../../components/booking/InvoiceButton';
 import { invoiceAvailable } from '../../services/bookingMoney.service';
+import MapPicture from '../../components/booking/MapPicture';
+import { callNumber } from '../../utils/bookingTracker';
 
 interface Proof { id: string; photos: string[]; notes?: string; created_at: string }
 interface Deliverable { id: string; title: string; message?: string; files: string[]; links: string[]; created_at: string }
@@ -94,6 +96,8 @@ export default function VendorBookingDetail() {
   // shows the vendor what the customer gets back (and what they keep) and asks why before cancelling
   const [cancelling, setCancelling] = useState(false);
   const cancelBooking = () => setCancelling(true);
+  // day-of steps: the customer sees each one on their tracker (they don't change the booking's status or money)
+  const takeStep = (step: 'en-route' | 'arrived' | 'check-in', fail: string) => run(() => BookingService.trackerStep(bookingId, step), fail);
   const complete = () => Alert.alert('Mark as completed?', 'Upload proof photos first so the customer can confirm the work.', [
     { text: 'Not yet', style: 'cancel' },
     { text: 'Complete', onPress: () => run(() => BookingService.completeBooking(bookingId), 'Could not complete') },
@@ -179,6 +183,24 @@ export default function VendorBookingDetail() {
                 : { title: 'Cancelled', body: cancellationLine(booking, 'VENDOR') ?? 'This booking was cancelled.', icon: 'close' as const };
   const total = Number(booking.amount ?? 0) + Number(booking.service_fee ?? 0);
   const startAt = booking.event_start_at ?? booking.scheduled_at;
+  // the next day-of step, on the booking's day (or the day before): On my way → Arrived, or Customer arrived
+  const atVendor = booking.service_at === 'VENDOR_LOCATION';
+  const nextStep: { step: 'en-route' | 'arrived' | 'check-in'; title: string; fail: string } | null =
+    !booking.steps_open || booking.is_rental
+      ? null
+      : atVendor
+        ? booking.checked_in_at ? null : { step: 'check-in', title: 'Customer arrived', fail: 'Could not check the customer in' }
+        : booking.arrived_at ? null
+          : booking.en_route_at ? { step: 'arrived', title: 'Arrived', fail: 'Could not mark arrived' }
+            : { step: 'en-route', title: 'On my way', fail: 'Could not mark on your way' };
+  const hm = (iso: string) => format(parseISO(iso), 'h:mm a');
+  const stepNote = booking.checked_in_at
+    ? `Customer arrived at ${hm(booking.checked_in_at)}`
+    : booking.arrived_at
+      ? `Arrived at ${hm(booking.arrived_at)}`
+      : booking.en_route_at
+        ? `On your way since ${hm(booking.en_route_at)}. ${customer.split(' ')[0]} can see it.`
+        : '';
 
   return (
     <View style={s.root}>
@@ -211,14 +233,23 @@ export default function VendorBookingDetail() {
                 <Text style={s.muted}>{st === 'PENDING' ? 'Pending booking' : `Booked ${booking.listing?.title ?? 'a service'}`}</Text>
               </View>
             </View>
-            {booking.customer?.id && (
-              <Pressable onPress={() => openChatWith(nav, booking.customer!.id, customer)} accessibilityRole="button">
-                <BrandGradient style={s.msgBtn}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" />
-                  <Text style={s.msgText}>Message {customer.split(' ')[0]}</Text>
-                </BrandGradient>
-              </Pressable>
-            )}
+            <View style={s.contactRow}>
+              {booking.customer?.id && (
+                <Pressable style={{ flex: 1 }} onPress={() => openChatWith(nav, booking.customer!.id, customer)} accessibilityRole="button">
+                  <BrandGradient style={s.msgBtn}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={18} color="#fff" />
+                    <Text style={s.msgText}>Message {customer.split(' ')[0]}</Text>
+                  </BrandGradient>
+                </Pressable>
+              )}
+              {/* the number is only sent once the booking is accepted */}
+              {!!booking.contact_phone && (
+                <Pressable style={s.callBtn} onPress={() => callNumber(booking.contact_phone!)} accessibilityRole="button" accessibilityLabel={`Call ${customer}`}>
+                  <Ionicons name="call-outline" size={18} color={DARK.accent} />
+                  <Text style={s.callText}>Call</Text>
+                </Pressable>
+              )}
+            </View>
           </Card>
 
           {st === 'PENDING' && !!booking.same_day_bookings?.length && (
@@ -243,6 +274,13 @@ export default function VendorBookingDetail() {
             <Text style={s.h2}>Your Service</Text>
             {!booking.is_rental && <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />}
             {!!booking.venue_address && <Row icon="location-outline" label="Address" value={booking.venue_address} />}
+            {booking.service_at === 'VENDOR_LOCATION' ? (
+              <Row icon="storefront-outline" label="Where" value="The customer comes to you" />
+            ) : (
+              !!booking.venue_address && (
+                <MapPicture lat={booking.venue_lat} lng={booking.venue_lng} address={booking.venue_address} height={160} directions={st === 'CONFIRMED' || st === 'IN_PROGRESS'} label="Map of the venue" />
+              )
+            )}
             {booking.is_rental ? (
               <>
                 {booking.rental_reservations?.map((r) => <Row key={r.id} icon="layers-outline" label={`${r.quantity} ×`} value={r.item.title} />)}
@@ -410,7 +448,17 @@ export default function VendorBookingDetail() {
               </Pressable>
             </>
           )}
-          {st === 'CONFIRMED' && paid && <GradientButton title="Start booking" onPress={start} loading={busy} />}
+          {st === 'CONFIRMED' && paid && !!stepNote && <Text style={s.footerHint}>{stepNote}</Text>}
+          {st === 'CONFIRMED' && paid && (nextStep ? (
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable style={[s.decline, { flex: 1 }]} onPress={start} disabled={busy} accessibilityRole="button">
+                <Text style={s.declineText}>Start booking</Text>
+              </Pressable>
+              <GradientButton title={nextStep.title} onPress={() => takeStep(nextStep.step, nextStep.fail)} loading={busy} style={{ flex: 1.4 }} />
+            </View>
+          ) : (
+            <GradientButton title="Start booking" onPress={start} loading={busy} />
+          ))}
           {st === 'IN_PROGRESS' && (!booking.is_rental || booking.rental_return) && <GradientButton title="Mark as completed" onPress={complete} loading={busy} />}
           {st === 'IN_PROGRESS' && booking.is_rental && !booking.rental_return && <Text style={s.footerHint}>Check the items back in above, then complete the rental</Text>}
         </View>
@@ -448,6 +496,9 @@ const s = StyleSheet.create({
   muted: { color: DARK.muted, fontSize: 13, lineHeight: 19, fontFamily: FONTS.regular },
   msgBtn: { height: 50, borderRadius: 100, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   msgText: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
+  contactRow: { flexDirection: 'row', gap: 10 },
+  callBtn: { height: 50, paddingHorizontal: 20, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  callText: { color: DARK.accent, fontSize: 15, fontFamily: FONTS.medium },
   detailRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
   rowLabel: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.regular, flexShrink: 1 },
   // the value keeps its own width (amounts never get squeezed); a long label wraps instead

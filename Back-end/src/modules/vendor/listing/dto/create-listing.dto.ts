@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -15,6 +16,7 @@ import {
 import { PaymentPlan } from 'prisma/generated/enums';
 import { ListingStatus } from 'prisma/generated/client';
 import { Transform, Type } from 'class-transformer';
+import { SERVICE_AT, type ServiceAt } from 'src/modules/booking/booking-tracker';
 import { MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readIncludedItems, readNoticeHours } from '../package-details';
 
 export class CreateVendorListingDto {
@@ -71,6 +73,11 @@ export class CreateVendorListingDto {
   @Min(0)
   @Max(250)
   service_radius_miles?: number;
+
+  @ApiPropertyOptional({ enum: SERVICE_AT, default: 'CUSTOMER_LOCATION', description: 'Where the service happens: at the customer’s place, or the customer comes to the vendor’s business address' })
+  @IsOptional()
+  @IsIn(SERVICE_AT)
+  service_at?: ServiceAt;
 
   @ApiPropertyOptional()
   @IsOptional()

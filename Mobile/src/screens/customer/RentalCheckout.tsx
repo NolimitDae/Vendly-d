@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import LocationPicker from '../../components/LocationPicker';
 import AddCardSheet from '../../components/AddCardSheet';
 import { DARK, FONTS } from '../../constants/colors';
 import { CardRow } from './PaymentMethods';
@@ -137,10 +138,7 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
 
         <Card style={{ gap: 14 }}>
           <Text style={s.h2}>Delivery & notes</Text>
-          <View style={ui.field}>
-            <Ionicons name="location-outline" size={20} color={DARK.muted} />
-            <TextInput style={ui.input} placeholder="Delivery address (optional)" placeholderTextColor={DARK.muted} value={venue} onChangeText={setVenue} />
-          </View>
+          <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address (optional)" street />
           <View style={[ui.field, { height: undefined, paddingVertical: 12, alignItems: 'flex-start' }]}>
             <Ionicons name="chatbox-ellipses-outline" size={20} color={DARK.muted} style={{ marginTop: 2 }} />
             <TextInput style={[ui.input, { minHeight: 70, textAlignVertical: 'top' }]} placeholder="Pickup time, colours, setup needs…" placeholderTextColor={DARK.muted} value={notes} onChangeText={setNotes} multiline />

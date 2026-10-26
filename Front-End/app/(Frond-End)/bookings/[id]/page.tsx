@@ -28,6 +28,11 @@ import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { bookingStatusColor, bookingStatusLabel, cancellationLine, dueByText, paymentStateText } from "@/lib/booking-status";
 import SimilarVendors, { type SimilarVendorsData } from "@/components/bookings/SimilarVendors";
+import BookingContact from "@/components/bookings/BookingContact";
+import BookingProgress from "@/components/bookings/BookingProgress";
+import MapPicture from "@/components/bookings/MapPicture";
+import { showsTracker, type TrackerFields } from "@/lib/booking-tracker";
+import { useBookingRefresh } from "@/hooks/useBookingRefresh";
 
 interface Proof {
   id: string;
@@ -46,7 +51,7 @@ interface Deliverable {
   created_at: string;
 }
 
-interface Booking {
+interface Booking extends TrackerFields {
   /** an open request closes on its own at this time */
   request_expires_at?: string | null;
   id: string;
@@ -61,7 +66,7 @@ interface Booking {
   /** reference photos sent with the request (short-lived signed links) */
   request_photo_urls?: string[];
   created_at: string;
-  listing?: { id: string; title: string; images: string[] };
+  listing?: { id: string; title: string; images: string[]; location?: string | null };
   vendor?: { id: string; name: string; avatar_url?: string };
   is_rental?: boolean;
   security_deposit?: number | string | null;
@@ -111,6 +116,8 @@ export default function CustomerBookingDetailPage() {
     BookingService.getOne(id)
       .then((res) => res.data?.success && setBooking(res.data.data))
       .catch(() => null);
+  // the vendor's steps (on the way, arrived, started) show up without a reload
+  useBookingRefresh(id, reloadBooking);
 
   useEffect(() => {
     if (!id) return;
@@ -250,6 +257,41 @@ export default function CustomerBookingDetailPage() {
           </div>
         )}
       </div>
+
+      {booking.vendor && <BookingContact person={booking.vendor} role="Vendor" phone={booking.contact_phone} />}
+
+      {showsTracker(booking) && <BookingProgress booking={booking} />}
+
+      {booking.service_at === "VENDOR_LOCATION" && !booking.is_rental && (!!booking.vendor_place || ["PENDING", "CONFIRMED", "IN_PROGRESS"].includes(booking.status)) && (
+        <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3" aria-labelledby="where-to-go">
+          <h2 id="where-to-go" className="font-semibold text-gray-900 dark:text-white">
+            Where to go
+          </h2>
+          {booking.vendor_place ? (
+            <>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{booking.vendor_place.address}</p>
+              <MapPicture lat={booking.vendor_place.lat} lng={booking.vendor_place.lng} address={booking.vendor_place.address} directions label={`Map of ${booking.vendor?.name ?? "the vendor"}'s address`} />
+            </>
+          ) : (
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              {booking.listing?.location ? `${booking.listing.location}. ` : ""}
+              {booking.status === "PENDING"
+                ? `You go to ${booking.vendor?.name ?? "the vendor"} for this booking. You'll see their address once they accept.`
+                : `You go to ${booking.vendor?.name ?? "the vendor"} for this booking. They haven't added their address yet, so message them for it.`}
+            </p>
+          )}
+        </section>
+      )}
+
+      {booking.service_at !== "VENDOR_LOCATION" && !!booking.venue_address && (
+        <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3" aria-labelledby="booking-location">
+          <h2 id="booking-location" className="font-semibold text-gray-900 dark:text-white">
+            Location
+          </h2>
+          <p className="text-sm text-gray-700 dark:text-gray-300">{booking.venue_address}</p>
+          <MapPicture lat={booking.venue_lat} lng={booking.venue_lng} address={booking.venue_address} height={160} />
+        </section>
+      )}
 
       {booking.status === "CANCELLED" && <RefundCard bookingId={booking.id} role="CUSTOMER" cancelledAt={booking.cancelled_at} />}
       {booking.status === "CANCELLED" && booking.similar_vendors && <SimilarVendors data={booking.similar_vendors} />}

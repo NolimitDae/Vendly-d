@@ -7,6 +7,8 @@ import Image from "next/image";
 import { Camera, Loader2, Upload, X, BadgeCheck, Clock, ImagePlus } from "lucide-react";
 import { shopUrl } from "@/components/marketplace/VendorShop";
 import { SOCIALS, type SocialKey, type SocialLinksData } from "@/components/marketplace/SocialLinks";
+import LocationField from "@/components/listing/LocationField";
+import { phoneProblem } from "@/lib/booking-tracker";
 
 /** Same rule as the server: 3–30 lower-case letters or numbers, single dashes between. */
 const HANDLE_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -24,6 +26,8 @@ interface ProfileData {
   banner_url?: string | null;
   logo_url?: string | null;
   socials?: SocialLinksData | null;
+  phone_number?: string | null;
+  business_address?: string | null;
   vendorProfile?: {
     business_name?: string;
     about_me?: string;
@@ -42,6 +46,10 @@ export default function VendorProfilePage() {
   const [businessName, setBusinessName] = useState("");
   const [aboutMe, setAboutMe] = useState("");
   const [address, setAddress] = useState("");
+  // shared with a customer only once their booking is accepted
+  const [phone, setPhone] = useState("");
+  // where customers come for packages done at the vendor's place (private until a booking is accepted)
+  const [businessAddress, setBusinessAddress] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [licenseStatus, setLicenseStatus] = useState("");
@@ -69,6 +77,8 @@ export default function VendorProfilePage() {
         setBusinessName(d.vendorProfile?.business_name ?? "");
         setAboutMe(d.vendorProfile?.about_me ?? d.bio ?? "");
         setAddress(d.address ?? "");
+        setPhone(d.phone_number ?? "");
+        setBusinessAddress(d.business_address ?? "");
         setAvatarUrl(d.avatar_url ?? null);
         setLicenseStatus(d.vendorProfile?.license_status ?? "");
         setHandle(d.handle ?? "");
@@ -104,6 +114,8 @@ export default function VendorProfilePage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (handleError) return toast.error(handleError);
+    const badPhone = phoneProblem(phone);
+    if (badPhone) return toast.error(badPhone);
     setSaving(true);
     try {
       const fd = new FormData();
@@ -112,6 +124,9 @@ export default function VendorProfilePage() {
       if (businessName) fd.append("business_name", businessName);
       if (aboutMe) fd.append("about_me", aboutMe);
       if (address) fd.append("address", address);
+      // always sent, so clearing them removes them
+      fd.append("phone_number", phone.trim());
+      fd.append("business_address", businessAddress.trim());
       if (avatarFile) fd.append("image", avatarFile);
       if (cleanHandle !== savedHandle) fd.append("handle", cleanHandle);
       if (bannerFile) fd.append("banner", bannerFile);
@@ -260,14 +275,31 @@ export default function VendorProfilePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Address</label>
+              <label htmlFor="profile-address" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Address</label>
+              <LocationField value={{ label: address }} onChange={(p) => setAddress(p.label)} inputId="profile-address" placeholder="123 Main St, New York, NY" street />
+            </div>
+
+            <div>
+              <label htmlFor="profile-phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone number</label>
               <input
-                type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="123 Main St, New York, NY"
+                id="profile-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 512 555 0134"
+                maxLength={40}
+                aria-describedby="profile-phone-hint"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary text-sm"
               />
+              <p id="profile-phone-hint" className="text-xs text-gray-400 mt-1">Only shared with a customer once you accept their booking, so you can call each other on the day.</p>
+            </div>
+
+            <div>
+              <label htmlFor="profile-business-address" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Business address</label>
+              <LocationField value={{ label: businessAddress }} onChange={(p) => setBusinessAddress(p.label)} inputId="profile-business-address" label="Business address" street maxLength={500} />
+              <p className="text-xs text-gray-400 mt-1">Private. For packages done at your place, customers see it only once you accept their booking.</p>
             </div>
           </div>
 

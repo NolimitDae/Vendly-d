@@ -1,5 +1,5 @@
 import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { CreateUserDto } from './create-user.dto';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
@@ -39,6 +39,18 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsString()
   @ApiPropertyOptional({ example: 'A little about my business…' })
   about_me?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  @ApiPropertyOptional({ example: '+1 (512) 555-0134', description: 'Phone number: digits, spaces, +, - and brackets, 7 to 20 digits. Empty clears it. Shown only to the other side of an accepted booking.' })
+  phone_number?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  @ApiPropertyOptional({ example: '12 Main St, Austin, TX', description: 'Vendors: private business address where customers come for packages at the vendor’s place. Shown only on accepted bookings. Empty clears it.' })
+  business_address?: string;
 
   @IsOptional()
   @IsString()

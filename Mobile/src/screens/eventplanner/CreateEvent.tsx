@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import LocationPicker from '../../components/LocationPicker';
 import MonthCalendar from '../../components/MonthCalendar';
 import { DARK, FONTS } from '../../constants/colors';
 import { EventsService, type EventType } from '../../services/events.service';
@@ -96,10 +96,7 @@ export default function CreateEvent() {
           </View>
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Venue</Text>
-            <View style={ui.field}>
-              <Ionicons name="location-outline" size={20} color={DARK.muted} />
-              <TextInput style={ui.input} placeholder="e.g. Grand Ballroom, NYC" placeholderTextColor={DARK.muted} value={venue} onChangeText={setVenue} />
-            </View>
+            <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Venue" placeholder="e.g. Grand Ballroom, NYC" street />
           </View>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <View style={{ flex: 1 }}>

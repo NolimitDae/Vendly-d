@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { BookingStatus, PaymentPlan, Prisma, RentalItemStatus, RentalReservationStatus } from 'prisma/generated/client';
 import { PHOTOS, safeStoredNames } from 'src/common/helper/upload-files';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
@@ -8,6 +8,7 @@ import { PaymentsService } from 'src/modules/payments/payments.service';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { CreateRentalItemDto, RentalBookDto, RentalQuoteDto, RentalReturnDto, UpdateRentalItemDto } from './dto/rentals.dto';
 import { availabilityCalendar, availableQuantity, DAY_MS, parseDay, priceRental, rangeProblem, rentalDays, ReservationLike } from './rental-availability';
 import { track } from 'src/common/analytics';
@@ -30,6 +31,8 @@ export class RentalsService {
     private payments: PaymentsService,
     private mail: MailService,
     private push: PushService,
+    // puts the delivery address on the booking map in the background (missing in tests that don't load it)
+    @Optional() private geocoder?: GeocodeService,
   ) {}
 
   // ─── Formatting ───────────────────────────────────────────────────────────
@@ -325,6 +328,7 @@ export class RentalsService {
         })
         .catch(() => null);
     }
+    if (created.venue_address) void this.geocoder?.booking(created.id);
     void this.push.sendToUser(created.vendor_id, { title: 'New rental request', body: `${created.customer.name ?? 'A customer'} requested ${title}`, data: { type: 'booking', bookingId: created.id } }, 'booking_updates');
     return { success: true, data: { id: created.id, status: created.status, title } };
   }

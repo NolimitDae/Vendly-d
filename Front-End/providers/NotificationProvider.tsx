@@ -19,6 +19,8 @@ export interface AppNotification {
   user_id?: string;
   read_at: string | null;
   created_at: string;
+  /** what it's about, e.g. the booking id (pages showing it refresh when one arrives) */
+  entity_id?: string | null;
   notification_event: { type: string; text: string };
   sender: { id: string; name: string; avatar?: string | null } | null;
 }

@@ -23,7 +23,9 @@ export const SERVICE_RADII = [
 
 /**
  * Location with address suggestions as you type, "use my current location", and how far the vendor travels.
- * Without `onRadiusChange` it is just the location (e.g. where an event is).
+ * Without `onRadiusChange` it is just the location (e.g. where an event is). `street` is for a full street
+ * address (a booking venue, a business address): the phone's address autofill is offered, and "use my
+ * current location" is left out because it only names the town.
  */
 export default function LocationPicker({
   value,
@@ -31,12 +33,16 @@ export default function LocationPicker({
   radius = null,
   onRadiusChange,
   label = 'Package location',
+  placeholder,
+  street = false,
 }: {
   value: PickedPlace;
   onChange: (p: PickedPlace) => void;
   radius?: number | null;
   onRadiusChange?: (miles: number) => void;
   label?: string;
+  placeholder?: string;
+  street?: boolean;
 }) {
   const [suggestions, setSuggestions] = useState<{ label: string; lat: number; lng: number }[]>([]);
   const [focused, setFocused] = useState(false);
@@ -109,7 +115,7 @@ export default function LocationPicker({
         <Ionicons name={value.lat != null ? 'location' : 'location-outline'} size={20} color={value.lat != null ? DARK.accent : DARK.muted} />
         <TextInput
           style={ui.input}
-          placeholder="Start typing a city or address"
+          placeholder={placeholder ?? (street ? 'Start typing the street address' : 'Start typing a city or address')}
           placeholderTextColor={DARK.muted}
           value={value.label}
           onChangeText={type}
@@ -117,6 +123,7 @@ export default function LocationPicker({
           onBlur={() => setTimeout(() => setFocused(false), 150)}
           autoCorrect={false}
           accessibilityLabel={label}
+          {...(street && { textContentType: 'fullStreetAddress' as const, autoComplete: 'street-address' as const })}
         />
         {!!value.label && (
           <Pressable onPress={() => { onChange({ label: '' }); setSuggestions([]); }} hitSlop={8} accessibilityLabel="Clear location">
@@ -141,10 +148,12 @@ export default function LocationPicker({
         </View>
       )}
 
-      <Pressable style={s.current} onPress={useCurrent} disabled={locating} accessibilityRole="button">
-        {locating ? <ActivityIndicator size="small" color={DARK.accent} /> : <Ionicons name="navigate-outline" size={16} color={DARK.accent} />}
-        <Text style={s.currentText}>Use my current location</Text>
-      </Pressable>
+      {!street && (
+        <Pressable style={s.current} onPress={useCurrent} disabled={locating} accessibilityRole="button">
+          {locating ? <ActivityIndicator size="small" color={DARK.accent} /> : <Ionicons name="navigate-outline" size={16} color={DARK.accent} />}
+          <Text style={s.currentText}>Use my current location</Text>
+        </Pressable>
+      )}
 
       {onRadiusChange && (
         <>

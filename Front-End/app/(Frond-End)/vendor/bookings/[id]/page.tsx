@@ -32,6 +32,10 @@ import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { closesIn } from "@/lib/requests";
 import { bookingStatusColor, bookingStatusLabel, cancellationLine, dueByText, paymentStateText } from "@/lib/booking-status";
+import BookingContact from "@/components/bookings/BookingContact";
+import MapPicture from "@/components/bookings/MapPicture";
+import VendorDayPanel from "@/components/bookings/VendorDayPanel";
+import type { TrackerFields } from "@/lib/booking-tracker";
 
 interface Proof {
   id: string;
@@ -50,7 +54,7 @@ interface Deliverable {
   created_at: string;
 }
 
-interface Booking extends DisputeFields {
+interface Booking extends DisputeFields, TrackerFields {
   id: string;
   status: string;
   amount?: number;
@@ -63,7 +67,7 @@ interface Booking extends DisputeFields {
   created_at: string;
   /** an open request closes on its own at this time */
   request_expires_at?: string | null;
-  listing?: { id: string; title: string; images: string[] };
+  listing?: { id: string; title: string; images: string[]; location?: string | null };
   customer?: { id: string; name: string; avatar_url?: string; email: string };
   is_rental?: boolean;
   security_deposit?: number | string | null;
@@ -284,6 +288,35 @@ export default function VendorBookingDetailPage() {
           </div>
         )}
       </div>
+
+      {booking.customer && <BookingContact person={booking.customer} role="Customer" phone={booking.contact_phone} />}
+
+      <VendorDayPanel booking={booking} customerName={booking.customer?.name ?? "The customer"} onChanged={fetchAll} />
+
+      {!booking.is_rental && (booking.service_at === "VENDOR_LOCATION" || !!booking.venue_address) && (
+        <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3" aria-labelledby="booking-location">
+          <h2 id="booking-location" className="font-semibold text-gray-900 dark:text-white">
+            Location
+          </h2>
+          {booking.service_at === "VENDOR_LOCATION" ? (
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              The customer comes to you. Once you accept, they see the business address from your profile.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{booking.venue_address}</p>
+              <MapPicture
+                lat={booking.venue_lat}
+                lng={booking.venue_lng}
+                address={booking.venue_address}
+                height={170}
+                directions={["CONFIRMED", "IN_PROGRESS"].includes(booking.status)}
+                label="Map of the venue"
+              />
+            </>
+          )}
+        </section>
+      )}
 
       {booking.status === "CANCELLED" && <RefundCard bookingId={booking.id} role="VENDOR" />}
 

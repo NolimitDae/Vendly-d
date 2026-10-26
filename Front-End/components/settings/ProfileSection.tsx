@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Loader2, MapPin, User } from "lucide-react";
+import { Camera, Loader2, MapPin, Phone, User } from "lucide-react";
 import { toast } from "react-toastify";
 import { AuthService } from "@/service/auth/auth.service";
 import { useOnboarding } from "@/providers/OnboardingProvider";
+import { phoneProblem } from "@/lib/booking-tracker";
 
 const apiMessage = (e: any, fallback: string) => {
   const m = e?.response?.data?.message;
@@ -14,13 +15,13 @@ const apiMessage = (e: any, fallback: string) => {
 const inputCls =
   "w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary text-gray-900 dark:text-white text-sm";
 
-/** Name, profile photo and city: what vendors see when someone books them. */
+/** Name, profile photo and city: what vendors see when someone books them. The phone number only once they accept. */
 export default function ProfileSection() {
   const fileRef = useRef<HTMLInputElement>(null);
   const { refresh } = useOnboarding();
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ first_name: "", last_name: "", address: "" });
+  const [form, setForm] = useState({ first_name: "", last_name: "", address: "", phone_number: "" });
   const [avatar, setAvatar] = useState<string | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
 
@@ -29,7 +30,7 @@ export default function ProfileSection() {
       .then((res) => {
         const u = res.data?.data;
         if (!u) return;
-        setForm({ first_name: u.first_name ?? "", last_name: u.last_name ?? "", address: u.address ?? "" });
+        setForm({ first_name: u.first_name ?? "", last_name: u.last_name ?? "", address: u.address ?? "", phone_number: u.phone_number ?? "" });
         setAvatar(u.avatar_url ?? null);
         setLoaded(true);
       })
@@ -60,6 +61,8 @@ export default function ProfileSection() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.first_name.trim()) return toast.error("Add your first name.");
+    const badPhone = phoneProblem(form.phone_number);
+    if (badPhone) return toast.error(badPhone);
     setSaving(true);
     try {
       const fd = new FormData();
@@ -67,6 +70,8 @@ export default function ProfileSection() {
       fd.append("last_name", form.last_name.trim());
       fd.append("name", `${form.first_name.trim()} ${form.last_name.trim()}`.trim());
       if (form.address.trim()) fd.append("address", form.address.trim());
+      // always sent, so clearing it removes the number
+      fd.append("phone_number", form.phone_number.trim());
       if (photo) fd.append("image", photo);
       const res = await AuthService.updateProfile(fd);
       if (res.data?.success === false) throw new Error(res.data?.message);
@@ -138,6 +143,25 @@ export default function ProfileSection() {
         <span className="relative block mt-1.5">
           <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input value={form.address} onChange={set("address")} placeholder="City, State" autoComplete="address-level2" maxLength={255} className={`${inputCls} pl-9`} />
+        </span>
+      </label>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        Phone number
+        <span className="relative block mt-1.5">
+          <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="tel"
+            inputMode="tel"
+            value={form.phone_number}
+            onChange={set("phone_number")}
+            placeholder="+1 512 555 0134"
+            autoComplete="tel"
+            maxLength={40}
+            className={`${inputCls} pl-9`}
+          />
+        </span>
+        <span className="block mt-1 text-xs font-normal text-gray-500 dark:text-gray-400">
+          Only shared with your vendor once they accept your booking, so you can call each other on the day.
         </span>
       </label>
 

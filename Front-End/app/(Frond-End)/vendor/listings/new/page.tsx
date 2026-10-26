@@ -10,6 +10,8 @@ import Image from "next/image";
 import Link from "next/link";
 import CategoryCombobox from "@/components/listing/CategoryCombobox";
 import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
+import ServiceAtField from "@/components/listing/ServiceAtField";
+import type { ServiceAt } from "@/lib/booking-tracker";
 import type { PickerCategory } from "@/lib/categories";
 import { SubscriptionService } from "@/service/subscription/subscription.service";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
@@ -42,6 +44,8 @@ export default function NewListingPage() {
   });
   const [place, setPlace] = useState<PickedPlace>({ label: "" });
   const [radius, setRadius] = useState<number | null>(null);
+  // where the service happens: at the customer's place, or they come to the vendor's business address
+  const [serviceAt, setServiceAt] = useState<ServiceAt>("CUSTOMER_LOCATION");
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
   const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
@@ -121,6 +125,7 @@ export default function NewListingPage() {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, v); });
       appendPlace(fd, place, radius, false);
+      fd.append("service_at", serviceAt);
       appendLimits(fd, form.price_unit, limits, false);
       appendPackageDetails(fd, details, false);
       images.forEach((img) => fd.append("images", img));
@@ -332,6 +337,7 @@ export default function NewListingPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
             <h2 className="font-semibold text-gray-900 dark:text-white">Location</h2>
             <LocationField value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
+            <ServiceAtField value={serviceAt} onChange={setServiceAt} />
           </div>
 
           {/* Details */}

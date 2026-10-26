@@ -54,6 +54,7 @@ export default function EditEventDialog({
   const [saving, setSaving] = useState(false);
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<EventFormValues>({ resolver: zodResolver(eventFormSchema), defaultValues: eventToFormValues(event) });
@@ -107,7 +108,7 @@ export default function EditEventDialog({
           </button>
         </div>
 
-        <EventFormFields register={register} errors={errors} idPrefix="edit-event" />
+        <EventFormFields register={register} control={control} errors={errors} idPrefix="edit-event" />
 
         <div className="flex gap-3 pt-2">
           <button

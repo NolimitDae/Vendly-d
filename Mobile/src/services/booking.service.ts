@@ -72,11 +72,33 @@ export interface Booking {
   /** the planner event this booking is part of */
   event_bookings?: { event: { id: string; name: string; date?: string | null } }[];
   created_at: string;
+  completed_at?: string | null;
+  /** the venue on the map (geocoded by the API; null when not found yet) */
+  venue_lat?: number | null;
+  venue_lng?: number | null;
+  /** where it happens: the vendor goes to the venue, or the customer comes to the vendor */
+  service_at?: 'CUSTOMER_LOCATION' | 'VENDOR_LOCATION';
+  /** the tracker's times: accepted, the vendor's day-of steps, started */
+  confirmed_at?: string | null;
+  en_route_at?: string | null;
+  arrived_at?: string | null;
+  checked_in_at?: string | null;
+  started_at?: string | null;
+  /** on the booking itself, once accepted (and for 3 days after it's done): the other side's number */
+  contact_revealed?: boolean;
+  contact_phone?: string | null;
+  /** customers, packages at the vendor's place, once accepted: where to go */
+  vendor_place?: { address: string; lat: number | null; lng: number | null } | null;
+  /** vendors: the day-of steps (On my way, Arrived…) are open today */
+  steps_open?: boolean;
   listing: {
     id: string;
     title: string;
     price: number;
     images?: string[];
+    /** the package's public, city-level place */
+    location?: string | null;
+    service_at?: 'CUSTOMER_LOCATION' | 'VENDOR_LOCATION';
   };
   vendor: {
     id: string;
@@ -142,6 +164,10 @@ export const BookingService = {
 
   completeBooking: (id: string) =>
     api.patch<{ success: boolean; data: Booking }>(`/bookings/${id}/complete`),
+
+  /** The vendor's day-of steps: on my way, arrived (at the customer's), the customer arrived (at the vendor's). */
+  trackerStep: (id: string, step: 'en-route' | 'arrived' | 'check-in') =>
+    api.post<{ success: boolean; data: Booking }>(`/bookings/${id}/${step}`),
 
   cancelBooking: (id: string) =>
     api.patch<{ success: boolean; data: Booking }>(`/bookings/${id}/cancel`),

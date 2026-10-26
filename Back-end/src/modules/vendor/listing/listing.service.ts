@@ -69,6 +69,7 @@ export class VendorListingService {
         // picked from address suggestions: the position is known, no geocoding needed
         ...(dto.lat !== undefined && dto.lng !== undefined && dto.location && { lat: dto.lat, lng: dto.lng, geocoded_at: new Date() }),
         service_radius_miles: dto.service_radius_miles,
+        service_at: dto.service_at,
         availability: dto.availability,
         delivery_time: dto.delivery_time,
         category_id: categoryId,

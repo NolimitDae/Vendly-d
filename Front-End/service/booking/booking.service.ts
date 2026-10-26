@@ -53,6 +53,10 @@ export const BookingService = {
   complete: async (id: string) =>
     Fetch.patch(`/bookings/${id}/complete`, {}, authHeaders()),
 
+  /** The vendor's day-of steps: on my way, arrived (at the customer's), the customer arrived (at the vendor's). */
+  trackerStep: async (id: string, step: "en-route" | "arrived" | "check-in") =>
+    Fetch.post(`/bookings/${id}/${step}`, {}, authHeaders()),
+
   /** `reason_code`: one of the reasons the cancel preview lists; `note` is optional and the other side sees it. */
   cancel: async (id: string, body: { reason_code?: string; note?: string } = {}) =>
     Fetch.patch(`/bookings/${id}/cancel`, body, authHeaders()),

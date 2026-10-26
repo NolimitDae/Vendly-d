@@ -187,7 +187,7 @@ export default function RequestBookingSheet({ visible, listing, eventId, onClose
             )}
 
             <Text style={s.label}>Venue address{eventId ? " (defaults to your event's venue)" : ''}</Text>
-            <TextInput style={s.input} value={venue} onChangeText={setVenue} placeholder="Where is the event?" placeholderTextColor={COLORS.gray[400]} />
+            <TextInput style={s.input} value={venue} onChangeText={setVenue} placeholder="Where is the event?" placeholderTextColor={COLORS.gray[400]} textContentType="fullStreetAddress" autoComplete="street-address" />
 
             <Text style={s.label}>Guest count</Text>
             <TextInput

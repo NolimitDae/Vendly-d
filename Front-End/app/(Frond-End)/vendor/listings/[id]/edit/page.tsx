@@ -10,6 +10,8 @@ import Image from "next/image";
 import Link from "next/link";
 import CategoryCombobox from "@/components/listing/CategoryCombobox";
 import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
+import ServiceAtField from "@/components/listing/ServiceAtField";
+import type { ServiceAt } from "@/lib/booking-tracker";
 import type { PickerCategory } from "@/lib/categories";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
 import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, packageDetailsFrom, type PackageDetails } from "@/components/listing/PackageDetailsFields";
@@ -62,6 +64,8 @@ export default function EditListingPage() {
   });
   const [place, setPlace] = useState<PickedPlace>({ label: "" });
   const [radius, setRadius] = useState<number | null>(null);
+  // where the service happens: at the customer's place, or they come to the vendor's business address
+  const [serviceAt, setServiceAt] = useState<ServiceAt>("CUSTOMER_LOCATION");
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
   const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
@@ -97,6 +101,7 @@ export default function EditListingPage() {
         });
         setPlace({ label: l.location ?? "", lat: l.lat ?? undefined, lng: l.lng ?? undefined });
         setRadius(l.service_radius_miles ?? null);
+        setServiceAt(l.service_at === "VENDOR_LOCATION" ? "VENDOR_LOCATION" : "CUSTOMER_LOCATION");
         setLimits({ min: l.min_quantity ? String(l.min_quantity) : "", max: l.max_quantity ? String(l.max_quantity) : "" });
         setDetails(packageDetailsFrom(l));
       } else {
@@ -155,6 +160,7 @@ export default function EditListingPage() {
       // empty category values clear what was there
       Object.entries(form).forEach(([k, v]) => { if (v || k === "category_id" || k === "sub_category_id") fd.append(k, v); });
       appendPlace(fd, place, radius, true);
+      fd.append("service_at", serviceAt);
       appendLimits(fd, form.price_unit, limits, true);
       appendPackageDetails(fd, details, true);
 
@@ -421,6 +427,7 @@ export default function EditListingPage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
             <h2 className="font-semibold text-gray-900 dark:text-white">Location</h2>
             <LocationField value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
+            <ServiceAtField value={serviceAt} onChange={setServiceAt} />
           </div>
 
           {/* Details */}
