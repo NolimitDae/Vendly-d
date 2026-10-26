@@ -6,15 +6,17 @@ import {
   ExistingLine,
   isProposal,
   MAX_LINE_PRICE,
+  packageAsRequested,
   packageForProposal,
-  packageOnRequest,
   pairLines,
   priceProposalLines,
+  quoteBasis,
   readProposal,
   reopenedAt,
   RequestChangeError,
   RequestTerms,
   sameTerms,
+  suggestedTimes,
   withChosenPrices,
 } from './request-changes';
 import { RequestChangesService } from './request-changes.service';
@@ -83,22 +85,58 @@ describe('pricing the add-ons and fees of suggested changes', () => {
 });
 
 describe('the package line', () => {
-  it('works the unit price back from the request and counts it again on the new guests, at that price', () => {
-    const before = packageOnRequest({ amount: 450, unit: 'person', ev });
-    expect(before).toMatchObject({ unit: 'person', unit_price: 45, quantity: 10, amount: 450, label: '$45.00 per person × 10 guests' });
+  it('takes the package as requested (kept with the contract) and counts it again on the new guests, at that price', () => {
+    const saved = { unit: 'person', unit_price: 45, quantity: 10, amount: 450, label: '$45.00 per person × 10 guests', min_quantity: null, basis_unit: 'person' };
+    const before = packageAsRequested(saved, undefined, 450);
+    expect(before).toMatchObject({ unit: 'person', unit_price: 45, quantity: 10, amount: 450 });
     expect(packageForProposal(before, { ...ev, guest_count: 12 })).toMatchObject({ quantity: 12, amount: 540, label: '$45.00 per person × 12 guests' });
     // unchanged guests keep the exact amount
     expect(packageForProposal(before, ev)).toBe(before);
   });
 
-  it('hours bill at least the package minimum; flat packages and quotes never change', () => {
-    const byHour = packageOnRequest({ amount: 300, unit: 'hour', minQuantity: 3, ev: { event_start_at: start, event_end_at: new Date(start.getTime() + 2 * HOUR) } });
-    expect(byHour).toMatchObject({ unit_price: 100, quantity: 3 });
-    expect(packageForProposal(byHour, { event_start_at: start, event_end_at: new Date(start.getTime() + 1 * HOUR) }, 3).amount).toBe(300);
-    expect(packageForProposal(byHour, { event_start_at: start, event_end_at: new Date(start.getTime() + 5 * HOUR) }, 3).amount).toBe(500);
-    const flat = packageOnRequest({ amount: 900, unit: 'fixed', ev });
+  it('reads an older request’s Schedule A, never the listing (which the vendor may have edited since)', () => {
+    const schedule = '## Schedule A: Price at booking, add-ons and fees\n- Package: $1,250.00 per hour × 3 hours (3 hours minimum) = $3,750.00\n- Vendor price: $3,750.00';
+    const byHour = packageAsRequested(null, schedule, 3750);
+    expect(byHour).toMatchObject({ unit: 'hour', unit_price: 1250, quantity: 3, min_quantity: 3, label: '$1,250.00 per hour × 3 hours (3 hours minimum)' });
+    // the minimum it was requested with still bills
+    expect(packageForProposal(byHour, { event_start_at: start, event_end_at: new Date(start.getTime() + 1 * HOUR) }).amount).toBe(3750);
+    expect(packageForProposal(byHour, { event_start_at: start, event_end_at: new Date(start.getTime() + 5 * HOUR) }).amount).toBe(6250);
+    expect(packageAsRequested(null, '- Package: $45.00 per person × 10 guests = $450.00', 450)).toMatchObject({ unit: 'person', unit_price: 45, quantity: 10, min_quantity: null });
+    // a flat package (no breakdown) and a quote never change
+    const flat = packageAsRequested(null, '- Package: $900.00\n- Add-on: Album = $200.00', 900);
+    expect(flat).toMatchObject({ unit: 'fixed', amount: 900 });
     expect(packageForProposal(flat, { ...ev, guest_count: 200 })).toBe(flat);
-    expect(packageOnRequest({ amount: 1200, unit: 'person', quoteTitle: 'Gala', ev })).toMatchObject({ unit: 'fixed', amount: 1200, label: 'Quote: Gala' });
+    expect(packageAsRequested(null, undefined, 900)).toMatchObject({ unit: 'fixed', amount: 900 });
+    const perGuest = [{ group_id: 'g', title: 'Extras', amount: 50, options: [{ option_id: 'o', label: 'Beads', price: 5, price_mode: 'PER_UNIT' as const, quantity: 10, amount: 50, price_text: '+$50.00 ($5.00 × 10 guests)' }] }];
+    expect(packageAsRequested(null, '- Package: Quote: Gala = $1,200.00', 1200, perGuest)).toMatchObject({ unit: 'fixed', amount: 1200, label: 'Quote: Gala', basis_unit: 'person' });
+  });
+
+  it('a quote’s per unit upcharges count the guests, hours or days given', () => {
+    expect(quoteBasis('person', ev)).toEqual({ unit: 'person', quantity: 10 });
+    expect(quoteBasis('hour', ev)).toEqual({ unit: 'hour', quantity: 4 });
+    expect(quoteBasis('person', { ...ev, guest_count: null }).quantity).toBeNull();
+    expect(quoteBasis('fixed', ev)).toEqual({ unit: 'fixed', quantity: 1 });
+  });
+});
+
+describe('moving the date of a multi-day event', () => {
+  // Friday 10:00 to Sunday 18:00
+  const fri = new Date('2026-12-04T16:00:00Z');
+  const sun = new Date('2026-12-07T00:00:00Z');
+  it('a new start alone moves the end with it, so the event keeps its length', () => {
+    const nextFri = new Date(fri.getTime() + 7 * 24 * HOUR);
+    const moved = suggestedTimes({ start: fri, end: sun }, { start: nextFri });
+    expect(moved.end).toEqual(new Date(sun.getTime() + 7 * 24 * HOUR));
+    // and a per day package still counts the three days
+    const days = { unit: 'day' as const, unit_price: 500, quantity: 3, amount: 1500, label: '$500.00 per day × 3 days' };
+    expect(packageForProposal(days, { event_start_at: moved.start, event_end_at: moved.end })).toBe(days);
+  });
+
+  it('an end that was sent is taken as it is; nothing sent keeps both', () => {
+    const satNight = new Date('2026-12-06T04:00:00Z');
+    expect(suggestedTimes({ start: fri, end: sun }, { end: satNight })).toEqual({ start: fri, end: satNight });
+    expect(suggestedTimes({ start: fri, end: sun }, {})).toEqual({ start: fri, end: sun });
+    expect(suggestedTimes({ start: fri, end: null }, { start: sun })).toEqual({ start: sun, end: null });
   });
 });
 
@@ -211,6 +249,44 @@ describe('state rules', () => {
     ]);
     await s.countersignForBooking('b1', 'v', sig, {}, async () => null);
     expect(execute).toHaveBeenCalledWith('c2', 'v', 'VENDOR', sig, 'sig.png', {}, expect.any(Function));
+  });
+
+  it('accepting voids any suggestion that slipped in meanwhile, so it can’t wait on a confirmed booking', async () => {
+    const { s, execute } = contractsService([{ id: 'c1', version: 1, status: 'AWAITING_VENDOR', supersedes_id: null, content_sha256: sha, merge_data: {} }]);
+    const confirmed = jest.fn();
+    await s.countersignForBooking('b1', 'v', sig, {}, confirmed);
+    const onExecuted = execute.mock.calls[0][6] as (tx: any) => Promise<void>;
+    const tx = { bookingContract: { updateMany: jest.fn() } };
+    await onExecuted(tx);
+    expect(confirmed).toHaveBeenCalledWith(tx);
+    expect(tx.bookingContract.updateMany).toHaveBeenCalledWith({
+      where: { booking_id: 'b1', status: 'AWAITING_CUSTOMER', supersedes_id: { not: null } },
+      data: expect.objectContaining({ status: 'VOID' }),
+    });
+  });
+
+  it('the vendor isn’t reminded to sign while their changes wait, and the reminder counts from the customer’s answer', async () => {
+    const now = new Date('2026-11-10T12:00:00Z');
+    const old = new Date(now.getTime() - 100 * HOUR);
+    const people = { vendor: { id: 'v', email: 'v@x.test', name: 'V' }, customer: { id: 'c', email: 'c@x.test', name: 'C' }, listing: { title: 'Party' } };
+    const prisma: any = {
+      bookingContract: {
+        findMany: jest.fn().mockResolvedValue([
+          // approved two hours ago (updated_at), though sent days ago
+          { id: 'c2', booking_id: 'b1', status: 'AWAITING_VENDOR', supersedes_id: 'c1', created_at: old, updated_at: new Date(now.getTime() - 2 * HOUR), last_reminder_at: null, merge_data: proposal, booking: people },
+        ]),
+        update: jest.fn(),
+      },
+    };
+    const s = new BookingContractsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any);
+    const notify = jest.spyOn(s, 'notify').mockResolvedValue(undefined);
+    expect(await s.sendReminders(now)).toBe(0);
+    expect(notify).not.toHaveBeenCalled();
+    expect(prisma.bookingContract.findMany.mock.calls[0][0].where.NOT).toEqual({ status: 'AWAITING_VENDOR', booking: { contracts: { some: { status: 'AWAITING_CUSTOMER' } } } });
+    // a day after the answer, it goes
+    prisma.bookingContract.findMany.mockResolvedValue([{ id: 'c2', booking_id: 'b1', status: 'AWAITING_VENDOR', supersedes_id: 'c1', created_at: old, updated_at: new Date(now.getTime() - 25 * HOUR), last_reminder_at: null, merge_data: proposal, booking: people }]);
+    expect(await s.sendReminders(now)).toBe(1);
+    expect(notify).toHaveBeenCalledWith('v', 'v@x.test', 'V', expect.objectContaining({ ctaPath: '/vendor/bookings/b1' }));
   });
 
   it('an amendment waiting for the vendor still isn’t accepted with Accept & Sign', async () => {

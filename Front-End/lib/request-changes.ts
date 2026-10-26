@@ -72,6 +72,8 @@ export interface ProposalView extends Comparison {
   sent_at: string;
   vendor_name: string;
   signed_by: string | null;
+  /** approved, and now with the planner's client to co-sign before the vendor can accept */
+  client_cosigning?: boolean;
   content_sha256: string;
 }
 
@@ -132,9 +134,14 @@ export interface DraftLine {
 }
 
 export interface Draft {
+  /** the start's local date and time ("2026-12-05", "16:00") */
   date: string;
   start: string;
+  /** the end's own date: an event can run over several days */
+  endDate: string;
   end: string;
+  /** the vendor set the end themselves (otherwise it moves with the start) */
+  endEdited?: boolean;
   guests: string;
   lines: DraftLine[];
   picks: Picks;
@@ -150,6 +157,7 @@ export function draftFrom(current: RequestTerms): Draft {
   return {
     date: start ? dayjs(start).format("YYYY-MM-DD") : "",
     start: current.event_start_at ? dayjs(current.event_start_at).format("HH:mm") : "",
+    endDate: current.event_end_at ? dayjs(current.event_end_at).format("YYYY-MM-DD") : "",
     end: current.event_end_at ? dayjs(current.event_end_at).format("HH:mm") : "",
     guests: current.guest_count != null ? String(current.guest_count) : "",
     lines: current.lines.map((l) => ({
@@ -174,7 +182,8 @@ export function lineFor(item: CatalogItem): DraftLine {
 
 /** A message for the first thing to fix in the editor, or null. */
 export function draftError(d: Draft, opts: { needsGuests?: boolean; customizations?: Customization[] } = {}): string | null {
-  if (d.date && d.start && d.end && d.end === d.start) return "The end time must be after the start time.";
+  if (d.date && d.start && d.end && (d.endDate || d.date) === d.date && d.end === d.start) return "The end time must be after the start time.";
+  if (d.date && d.endDate && d.endDate < d.date) return "The end date can’t be before the start date.";
   if (d.guests && !(Number.isInteger(Number(d.guests)) && Number(d.guests) >= 1)) return "Enter the number of guests as a whole number.";
   if (opts.needsGuests && !d.guests) return "Enter how many guests are coming. A venue is booked for a number of guests.";
   for (const l of d.lines) {
@@ -201,8 +210,24 @@ function at(date: string, time: string) {
 }
 
 /**
- * The request body for preview and send. Only what the vendor changed is sent for the date and guests;
- * the add-ons and fees and the customizations are always sent whole (the server checks and prices them).
+ * A new start date or time. The end moves by the same amount, so a Friday to Sunday event stays three
+ * days (the server does the same when only the start is sent).
+ */
+export function moveStart(d: Draft, date: string, start: string): Draft {
+  const next = { ...d, date, start };
+  if (!d.date || !date || !d.end || !d.endDate || d.endEdited) return next;
+  const by = at(date, start || "00:00").getTime() - at(d.date, d.start || "00:00").getTime();
+  const end = dayjs(at(d.endDate, d.end).getTime() + by);
+  return { ...next, endDate: end.format("YYYY-MM-DD"), end: end.format("HH:mm") };
+}
+
+/** The vendor sets the end themselves. */
+export const setEnd = (d: Draft, endDate: string, end: string): Draft => ({ ...d, endDate, end, endEdited: true });
+
+/**
+ * The request body for preview and send. Only what the vendor changed is sent for the date and guests
+ * (an end only when they set it; otherwise the server moves it with the start); the add-ons and fees and
+ * the customizations are always sent whole (the server checks and prices them).
  */
 export function draftPayload(d: Draft, initial: Draft, customizations: Customization[]) {
   const body: Record<string, unknown> = {
@@ -213,16 +238,14 @@ export function draftPayload(d: Draft, initial: Draft, customizations: Customiza
     })),
     options: choicesPayload(customizations, d.picks),
   };
-  const timeChanged = d.date !== initial.date || d.start !== initial.start || d.end !== initial.end;
-  if (timeChanged && d.date) {
-    const start = at(d.date, d.start || "00:00");
-    body.event_start_at = start.toISOString();
-    if (d.end) {
-      let end = at(d.date, d.end);
-      // an end before the start runs past midnight
-      if (end <= start) end = dayjs(end).add(1, "day").toDate();
-      body.event_end_at = end.toISOString();
-    }
+  const start = d.date ? at(d.date, d.start || "00:00") : null;
+  if (start && (d.date !== initial.date || d.start !== initial.start)) body.event_start_at = start.toISOString();
+  if (start && d.endEdited && d.end && (d.endDate !== initial.endDate || d.end !== initial.end || body.event_start_at)) {
+    const sameDay = !d.endDate || d.endDate === d.date;
+    let end = at(sameDay ? d.date : d.endDate, d.end);
+    // an end before the start on the same day runs past midnight
+    if (sameDay && end <= start) end = dayjs(end).add(1, "day").toDate();
+    body.event_end_at = end.toISOString();
   }
   if (d.guests && d.guests !== initial.guests) body.guest_count = Number(d.guests);
   if (d.note.trim()) body.note = d.note.trim();

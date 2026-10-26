@@ -1,6 +1,6 @@
 import { BookingStatus } from 'prisma/generated/client';
 import { BookingRemindersService, CHANGES_EXPIRED_REASON, CLIENT_EXPIRED_REASON, EXPIRED_REASON } from './booking-reminders.service';
-import { clientSignExpiresAt, requestExpiresAt } from './booking-requests';
+import { changesExpireAt, clientSignExpiresAt, requestExpiresAt } from './booking-requests';
 
 jest.mock('src/config/app.config', () => ({ __esModule: true, default: () => ({ app: { client_app_url: 'https://vendly.test' } }) }));
 
@@ -101,16 +101,46 @@ describe('BookingRemindersService', () => {
 
   it('closes a request at the event start when the customer never answered the suggested changes', async () => {
     const { service, prisma, push, contracts } = setup();
-    // nothing for the vendor or client queues; suggested changes waiting on an event that started an hour ago
-    prisma.booking.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([booking({ created_at: ago(400), event_start_at: ago(1) }), booking({ id: 'b2', created_at: ago(400), event_start_at: ago(-5) })]);
+    const waiting = (start: Date | null, sentHoursAgo = 30) => [{ id: 'cs', created_at: ago(sentHoursAgo), merge_data: { request_changes: { after: { event_start_at: start?.toISOString() ?? null } } } }];
+    // nothing for the vendor or client queues; suggested changes waiting:
+    prisma.booking.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([
+      // the event (and the suggested date) started an hour ago: closes
+      booking({ created_at: ago(400), event_start_at: ago(1), contracts: waiting(ago(2)) }),
+      // the event started, but the suggestion moves it to next week: stays open
+      booking({ id: 'b2', created_at: ago(400), event_start_at: ago(1), contracts: waiting(ago(-7 * 24)) }),
+      // not started yet
+      booking({ id: 'b3', created_at: ago(400), event_start_at: ago(-5), contracts: waiting(null) }),
+    ]);
     expect(await service.expireRequests(now)).toBe(1);
+    const where = prisma.booking.findMany.mock.calls[2][0].where;
+    expect(where.OR).toEqual([
+      { event_start_at: { lte: now } },
+      { contracts: { some: { status: 'AWAITING_CUSTOMER', created_at: { lte: new Date(now.getTime() - 14 * 24 * HOUR) } } } },
+    ]);
+    // only if the suggestion is still waiting and the date is the one that was checked (an approval can't be undone)
+    expect(prisma.booking.updateMany).toHaveBeenCalledTimes(1);
     expect(prisma.booking.updateMany).toHaveBeenCalledWith({
-      where: { id: 'b1', status: BookingStatus.PENDING },
+      where: { id: 'b1', status: BookingStatus.PENDING, event_start_at: ago(1), contracts: { some: { id: 'cs', status: 'AWAITING_CUSTOMER' } } },
       data: { status: BookingStatus.REJECTED, reject_reason: CHANGES_EXPIRED_REASON, expired_at: now },
     });
     expect(contracts.voidPendingForBooking).toHaveBeenCalledWith('b1', expect.stringContaining('suggested changes'), null);
     expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ body: expect.stringContaining('weren’t answered before the event') }), 'booking_updates');
     expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ body: expect.stringContaining('didn’t answer your suggested changes') }), 'booking_updates');
+  });
+
+  it('leaves the request open when the customer answered between the check and the close', async () => {
+    const { service, prisma, contracts } = setup();
+    prisma.booking.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([booking({ event_start_at: ago(1), contracts: [{ id: 'cs', created_at: ago(30), merge_data: {} }] })]);
+    prisma.booking.updateMany.mockResolvedValueOnce({ count: 0 });
+    expect(await service.expireRequests(now)).toBe(0);
+    expect(contracts.voidPendingForBooking).not.toHaveBeenCalled();
+  });
+
+  it('suggested changes on an undated request close 14 days after they were sent', () => {
+    expect(changesExpireAt({ event_start_at: null }, { sent_at: ago(10), start: null })).toEqual(new Date(ago(10).getTime() + 14 * 24 * HOUR));
+    // the later of the request's date and the suggested one
+    expect(changesExpireAt({ event_start_at: ago(5) }, { sent_at: ago(10), start: ago(-48) })).toEqual(ago(-48));
+    expect(changesExpireAt({ event_start_at: ago(-48) }, { sent_at: ago(10), start: ago(5) })).toEqual(ago(-48));
   });
 
   it("closes a planner's undated request 14 days after it was made", async () => {

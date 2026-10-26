@@ -166,7 +166,9 @@ export default function RequestChangesCard({ bookingId, role, bookingStatus, oth
         ) : (
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {p.status === "APPROVED"
-              ? `You approved the changes. ${p.vendor_name} can now accept your request.`
+              ? p.client_cosigning
+                ? `You approved the changes. Your client co-signs them next, then ${p.vendor_name} can accept your request.`
+                : `You approved the changes. ${p.vendor_name} can now accept your request.`
               : p.status === "DECLINED"
                 ? "You declined the suggested changes. Your original request stands."
                 : `${p.vendor_name} withdrew the changes they suggested. Your original request stands.`}
@@ -202,7 +204,13 @@ export default function RequestChangesCard({ bookingId, role, bookingStatus, oth
           </button>
         </>
       )}
-      {p?.status === "APPROVED" && <div className={notice}>Customer approved your changes. Review the updated contract below and Accept &amp; Sign to confirm the booking.</div>}
+      {p?.status === "APPROVED" && (
+        <div className={notice}>
+          {p.client_cosigning
+            ? `${otherName} approved your changes. Their client co-signs them next; you can Accept & Sign once they have.`
+            : "Customer approved your changes. Review the updated contract below and Accept & Sign to confirm the booking."}
+        </div>
+      )}
       {p?.status === "DECLINED" && (
         <p className="text-sm text-gray-600 dark:text-gray-300">
           {otherName} declined your suggested changes. Their original request stands: you can accept it, suggest other changes, or decline it.

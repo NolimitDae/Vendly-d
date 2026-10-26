@@ -63,6 +63,8 @@ export interface ProposalView extends Comparison {
   sent_at: string;
   vendor_name: string;
   signed_by: string | null;
+  /** approved, and now with the planner's client to co-sign before the vendor can accept */
+  client_cosigning?: boolean;
   content_sha256: string;
 }
 
@@ -165,7 +167,10 @@ export interface DraftLine {
 
 export interface Draft {
   start: Date | null;
+  /** the end on its own day: an event can run over several days */
   end: Date | null;
+  /** the vendor set the end themselves (otherwise it moves with the start) */
+  endEdited?: boolean;
   guests: string;
   lines: DraftLine[];
   picks: Picks;
@@ -205,6 +210,7 @@ export function lineFor(item: CatalogItem): DraftLine {
 /** A message for the first thing to fix, or null. */
 export function draftError(d: Draft, opts: { needsGuests?: boolean; customizations?: Customization[] } = {}): string | null {
   if (d.start && d.end && d.end.getTime() === d.start.getTime()) return 'The end time must be after the start time.';
+  if (d.start && d.end && !sameDay(d.start, d.end) && d.end < d.start) return 'The end date can’t be before the start date.';
   if (d.guests && !(Number.isInteger(Number(d.guests)) && Number(d.guests) >= 1)) return 'Enter the number of guests as a whole number.';
   if (opts.needsGuests && !d.guests) return 'Enter how many guests are coming. A venue is booked for a number of guests.';
   for (const l of d.lines) {
@@ -222,7 +228,24 @@ export function draftError(d: Draft, opts: { needsGuests?: boolean; customizatio
   return null;
 }
 
-/** The body for preview and send: the date and guests only when changed; lines and choices whole. */
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/**
+ * A new start. The end moves by the same amount, so a Friday to Sunday event stays three days (the
+ * server does the same when only the start is sent).
+ */
+export function moveStart(d: Draft, start: Date): Draft {
+  if (!d.start || !d.end || d.endEdited) return { ...d, start };
+  return { ...d, start, end: new Date(d.end.getTime() + (start.getTime() - d.start.getTime())) };
+}
+
+/** The vendor sets the end themselves. */
+export const setEnd = (d: Draft, end: Date): Draft => ({ ...d, end, endEdited: true });
+
+/**
+ * The body for preview and send: the date and guests only when changed (an end only when the vendor set
+ * it; otherwise the server moves it with the start); lines and choices whole.
+ */
 export function draftPayload(d: Draft, initial: Draft, customizations: Customization[]) {
   const body: Record<string, unknown> = {
     lines: d.lines.map((l) => ({
@@ -233,13 +256,11 @@ export function draftPayload(d: Draft, initial: Draft, customizations: Customiza
     options: choicesPayload(customizations, d.picks),
   };
   const same = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
-  if (d.start && (!same(d.start, initial.start) || !same(d.end, initial.end))) {
-    body.event_start_at = d.start.toISOString();
-    if (d.end) {
-      // an end before the start runs past midnight
-      const end = d.end <= d.start ? new Date(d.end.getTime() + 86400e3) : d.end;
-      body.event_end_at = end.toISOString();
-    }
+  if (d.start && !same(d.start, initial.start)) body.event_start_at = d.start.toISOString();
+  if (d.start && d.end && d.endEdited && (!same(d.end, initial.end) || body.event_start_at)) {
+    // an end before the start on the same day runs past midnight
+    const end = sameDay(d.start, d.end) && d.end <= d.start ? new Date(d.end.getTime() + 86400e3) : d.end;
+    body.event_end_at = end.toISOString();
   }
   if (d.guests && d.guests !== initial.guests) body.guest_count = Number(d.guests);
   if (d.note.trim()) body.note = d.note.trim();

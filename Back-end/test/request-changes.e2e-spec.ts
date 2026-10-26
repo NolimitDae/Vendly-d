@@ -39,8 +39,8 @@ run('Suggested changes to a booking request (e2e)', () => {
   let app: INestApplication;
   let prisma: any;
   const id = randomBytes(4).toString('hex');
-  const U = { vendor: `rv-${id}`, cust: `rc-${id}`, other: `ro-${id}` };
-  const types: Record<string, string> = { vendor: 'VENDOR', cust: 'CUSTOMER', other: 'CUSTOMER' };
+  const U = { vendor: `rv-${id}`, cust: `rc-${id}`, other: `ro-${id}`, planner: `rp-${id}`, client: `rl-${id}` };
+  const types: Record<string, string> = { vendor: 'VENDOR', cust: 'CUSTOMER', other: 'CUSTOMER', planner: 'EVENT_PLANNER', client: 'CUSTOMER' };
   const T = Object.fromEntries(Object.entries(U).map(([k, sub]) => [k, jwt.sign({ sub, email: `${sub}@t.test`, type: types[k] }, SECRET)])) as Record<keyof typeof U, string>;
   const L = { party: `lp-${id}` };
   const A = { bartender: `ab-${id}`, dessert: `ad-${id}`, travel: `at-${id}` };
@@ -373,5 +373,72 @@ run('Suggested changes to a booking request (e2e)', () => {
     const b = await prisma.booking.findUnique({ where: { id: bid } });
     expect(b.guest_count).toBe(10);
     expect(Number(b.amount)).toBe(770);
+  });
+
+  it('a planner’s client who co-signed the request co-signs the approved changes before the vendor can accept', async () => {
+    const flag = await prisma.featureFlag.findUnique({ where: { key: 'client_cosign' } });
+    await prisma.featureFlag.upsert({ where: { key: 'client_cosign' }, create: { key: 'client_cosign', enabled: true }, update: { enabled: true } });
+    try {
+      const event = await prisma.event.create({ data: { event_planner_id: U.planner, name: 'Spring gala', client_email: `${U.client}@t.test` } });
+      const body = { ...fields, event_id: event.id, options: style(0), payment_method_id: 'pm_e2e_card' };
+      const pv = await as('planner', http().post('/api/contracts/booking-preview')).send(body);
+      expect(pv.status).toBe(201);
+      await sleep(2100);
+      const created = await as('planner', http().post('/api/bookings')).send({ ...body, preview_token: pv.body.data.preview_token, signature: sig('Pat Planner', pv.body.data.content_sha256) });
+      expect(created.status).toBe(201);
+      const bid = created.body.data.id;
+      const v1 = await prisma.bookingContract.findFirst({ where: { booking_id: bid, version: 1 } });
+      expect(v1.status).toBe('AWAITING_CLIENT');
+      expect((await as('client', http().post(`/api/contracts/${v1.id}/sign`)).send({ signature: sig('Cleo Client', v1.content_sha256) })).status).toBe(201);
+
+      // the vendor moves only the start: the end moves with it, so the event keeps its length
+      const moved = { event_start_at: new Date(start.getTime() + DAY) };
+      const cp = await as('vendor', http().post(`/api/bookings/${bid}/changes/preview`)).send(moved);
+      expect(cp.status).toBe(201);
+      expect(cp.body.data.after.event_end_at).toBe(new Date(end.getTime() + DAY).toISOString());
+      await sleep(1100);
+      expect((await as('vendor', http().post(`/api/bookings/${bid}/changes`)).send({ ...moved, signature: sig('Vic Vendor', cp.body.data.content_sha256) })).status).toBe(201);
+      await sleep(1100);
+      expect((await as('planner', http().post(`/api/bookings/${bid}/changes/approve`)).send({ signature: sig('Pat Planner', cp.body.data.content_sha256) })).status).toBe(201);
+
+      // the client co-signs next; the vendor can't accept before
+      const v2 = await prisma.bookingContract.findFirst({ where: { booking_id: bid, version: 2 } });
+      expect(v2).toMatchObject({ status: 'AWAITING_CLIENT', client_email: `${U.client}@t.test` });
+      const state = await as('planner', http().get(`/api/bookings/${bid}/changes`));
+      expect(state.body.data.proposal).toMatchObject({ status: 'APPROVED', client_cosigning: true });
+      await sleep(1100);
+      const early = await accept(bid, v2.content_sha256);
+      expect(early.status).toBe(400);
+      expect(msg(early)).toMatch(/client hasn’t co-signed/);
+      const theirs = await as('client', http().get(`/api/contracts/client/event/${event.id}`));
+      expect(theirs.body.data.find((c: any) => c.id === v2.id)).toMatchObject({ can_sign: true });
+      await sleep(1100);
+      expect((await as('client', http().post(`/api/contracts/${v2.id}/sign`)).send({ signature: sig('Cleo Client', v2.content_sha256) })).status).toBe(201);
+      await sleep(1100);
+      expect((await accept(bid, v2.content_sha256)).status).toBe(200);
+      const executed = await prisma.bookingContract.findUnique({ where: { id: v2.id }, include: { signatures: true } });
+      expect(executed.status).toBe('EXECUTED');
+      expect(executed.signatures.map((s: any) => s.role).sort()).toEqual(['CLIENT', 'PLANNER', 'VENDOR']);
+    } finally {
+      if (flag) await prisma.featureFlag.update({ where: { key: 'client_cosign' }, data: { enabled: flag.enabled } });
+      else await prisma.featureFlag.delete({ where: { key: 'client_cosign' } });
+    }
+  });
+
+  it('the package keeps the price and minimum it was requested at, whatever the listing says now', async () => {
+    const bid = await book();
+    // the vendor edits the package after the request
+    await prisma.vendorListing.update({ where: { id: L.party }, data: { price: 80, price_unit: 'hour', min_quantity: 6 } });
+    try {
+      const pv = await as('vendor', http().post(`/api/bookings/${bid}/changes/preview`)).send({ guest_count: 12 });
+      expect(pv.status).toBe(201);
+      expect(pv.body.data.before.package).toMatchObject({ unit: 'person', unit_price: 45, quantity: 10, amount: 450 });
+      expect(pv.body.data.after.package).toMatchObject({ unit: 'person', unit_price: 45, quantity: 12, amount: 540 });
+      // and it was kept with the request's contract
+      const v1 = await prisma.bookingContract.findFirst({ where: { booking_id: bid, version: 1 } });
+      expect(v1.merge_data.package_terms).toMatchObject({ unit: 'person', unit_price: 45, quantity: 10 });
+    } finally {
+      await prisma.vendorListing.update({ where: { id: L.party }, data: { price: 45, price_unit: 'person', min_quantity: null } });
+    }
   });
 });

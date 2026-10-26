@@ -21,7 +21,7 @@
  * Pure functions here, so the prices and checks can be unit tested; RequestChangesService does the rest.
  */
 import { addOnLabel, AddOnUnit, eventDayCount, eventHours, EventInput, PackageLine, PackageUnit, PricingError, priceForPackage, round2 } from 'src/modules/add-ons/pricing';
-import { ChosenGroup, OfferedGroup } from 'src/modules/add-ons/package-options';
+import { ChosenGroup, OfferedGroup, UnitBasis } from 'src/modules/add-ons/package-options';
 import { REQUEST_EXPIRY_HOURS } from 'src/modules/booking/booking-requests';
 
 /** The most a vendor can set one add-on or fee to, per unit, for a booking. */
@@ -164,59 +164,111 @@ export function priceProposalLines(inputs: LineInput[] | null | undefined, exist
   return out;
 }
 
-/** The package line as it is on the request, worked back from the booking (whose amount includes everything). */
+/** The package line as it was requested: kept with the contract, never read from the (editable) listing. */
 export interface PackageTerms {
   unit: PackageUnit;
   unit_price: number;
   quantity: number;
   amount: number;
   label: string;
+  /** the package's minimum hours or days when it was requested (they still bill) */
+  min_quantity?: number | null;
+  /** a quote's package: what per unit upcharges count (the listing's unit when it was requested) */
+  basis_unit?: PackageUnit;
+}
+
+const PACKAGE_LINE = /^- Package: \$([\d,]+\.\d{2}) per (person|hour|day) × ([\d.]+) \w+(?: \(([\d.]+) \w+ minimum\))? = /;
+const QUOTE_LINE = /^- Package: Quote: (.*) = /;
+const UNITS: PackageUnit[] = ['fixed', 'person', 'hour', 'day'];
+
+/**
+ * The package as it was requested. `saved` is what the request (or an approved suggestion) kept with its
+ * contract; older requests have only their Schedule A, whose package line ("$45.00 per person × 10 guests")
+ * says the same. Anything else is a flat price. `amount` is the package part of the booking's price (the
+ * money's source of truth), and stays the amount.
+ */
+export function packageAsRequested(saved: unknown, schedule: unknown, amount: number, options: ChosenGroup[] = []): PackageTerms {
+  const total = round2(Math.max(0, amount));
+  const t = saved as Partial<PackageTerms> | null;
+  if (t && typeof t === 'object' && UNITS.includes(t.unit as PackageUnit) && Number(t.unit_price) >= 0 && Number(t.quantity) > 0) {
+    return {
+      unit: t.unit as PackageUnit,
+      unit_price: round2(Number(t.unit_price)),
+      quantity: Number(t.quantity),
+      amount: total,
+      label: String(t.label ?? money(total)),
+      min_quantity: t.min_quantity ?? null,
+      basis_unit: t.basis_unit ?? (t.unit as PackageUnit),
+    };
+  }
+  const line = typeof schedule === 'string' ? schedule.split('\n').find((l) => l.startsWith('- Package: ')) : undefined;
+  const quote = line?.match(QUOTE_LINE);
+  if (quote) return { unit: 'fixed', unit_price: total, quantity: 1, amount: total, label: `Quote: ${quote[1]}`, min_quantity: null, basis_unit: basisFromChoices(options) };
+  const m = line?.match(PACKAGE_LINE);
+  if (m) {
+    const unit = m[2] as PackageUnit;
+    const label = line!.slice('- Package: '.length, line!.lastIndexOf(' = '));
+    return { unit, unit_price: Number(m[1].replace(/,/g, '')), quantity: Number(m[3]), amount: total, label, min_quantity: m[4] ? Number(m[4]) : null, basis_unit: unit };
+  }
+  return { unit: 'fixed', unit_price: total, quantity: 1, amount: total, label: money(total), min_quantity: null, basis_unit: 'fixed' };
+}
+
+/** An older quote request: what its per unit choices were counted on ("+$50.00 ($5.00 × 10 guests)"). */
+function basisFromChoices(groups: ChosenGroup[]): PackageUnit {
+  for (const o of groups.flatMap((g) => g.options)) {
+    const m = o.price_mode === 'PER_UNIT' ? o.price_text?.match(/× [\d.]+ (guest|hour|day)/) : null;
+    if (m) return m[1] === 'guest' ? 'person' : (m[1] as PackageUnit);
+  }
+  return 'fixed';
 }
 
 /**
- * The package part of a request: the booking's price before the promo, less its add-ons and
- * customizations. A per person, hour or day package's unit price is that amount over the guests, hours
- * or days it was counted on (the package's minimum hours or days count, like they did when requested).
+ * What a quote's per unit upcharges count: the guests, hours or days given (a quote has no minimum), or
+ * what to ask for when they're missing. Same rule as the booking request (BookingContractsService.unitBasis).
  */
-export function packageOnRequest(args: { amount: number; unit: PackageUnit; quoteTitle?: string | null; minQuantity?: number | null; ev: EventInput }): PackageTerms {
-  const amount = round2(Math.max(0, args.amount));
-  const flat = (label: string): PackageTerms => ({ unit: 'fixed', unit_price: amount, quantity: 1, amount, label });
-  if (args.quoteTitle) return flat(`Quote: ${args.quoteTitle}`);
-  const qty = countedQuantity(args.unit, args.ev, args.minQuantity);
-  if (args.unit === 'fixed' || !qty) return flat(money(amount));
-  const unitPrice = round2(amount / qty);
-  const line = priceForPackage({ price: unitPrice, price_unit: args.unit, min_quantity: args.unit === 'person' ? null : args.minQuantity }, args.ev);
-  return { unit: args.unit, unit_price: unitPrice, quantity: qty, amount, label: line.label };
-}
-
-/** Guests, billed hours or billed days a package is counted on; null when they're missing. */
-function countedQuantity(unit: PackageUnit, ev: EventInput, min?: number | null): number | null {
-  const floor = (n: number) => (min && min > 0 && n < min ? min : n);
-  if (unit === 'person') return Number(ev.guest_count ?? 0) >= 1 ? Number(ev.guest_count) : null;
-  if (unit === 'hour') {
-    const h = eventHours(ev.event_start_at, ev.event_end_at);
-    return h == null ? null : floor(h);
+export function quoteBasis(unit: PackageUnit, ev: EventInput): UnitBasis {
+  if (unit === 'person') {
+    const guests = Number(ev.guest_count ?? 0);
+    return guests >= 1 ? { unit, quantity: guests } : { unit, quantity: null, missing: 'Enter how many guests are coming. Some of the choices are priced per person.' };
   }
-  if (unit === 'day') return floor(eventDayCount(ev.event_start_at, ev.event_end_at));
-  return 1;
+  if (unit === 'hour') {
+    const hours = eventHours(ev.event_start_at, ev.event_end_at);
+    return hours != null ? { unit, quantity: hours } : { unit, quantity: null, missing: 'Add an end time. Some of the choices are priced by the hour.' };
+  }
+  if (unit === 'day') return { unit, quantity: eventDayCount(ev.event_start_at, ev.event_end_at) };
+  return { unit: 'fixed', quantity: 1 };
 }
 
 /**
  * The package counted again for the suggested guests, hours or days, at the unit price it was requested at
- * (the vendor can't change the package price itself). The package's minimum hours or days still bill; its
- * guest limits don't stop the vendor (they're the vendor's own). Unchanged counts keep the exact amount.
+ * (the vendor can't change the package price itself). The minimum hours or days it was requested with still
+ * bill; its guest limits don't stop the vendor (they're the vendor's own). Unchanged counts keep the exact amount.
  */
-export function packageForProposal(before: PackageTerms, ev: EventInput, minQuantity?: number | null): PackageTerms {
+export function packageForProposal(before: PackageTerms, ev: EventInput): PackageTerms {
   if (before.unit === 'fixed') return before;
   let line: PackageLine;
   try {
-    line = priceForPackage({ price: before.unit_price, price_unit: before.unit, min_quantity: before.unit === 'person' ? null : minQuantity }, ev);
+    line = priceForPackage({ price: before.unit_price, price_unit: before.unit, min_quantity: before.unit === 'person' ? null : before.min_quantity }, ev);
   } catch (e) {
     if (e instanceof PricingError) throw new RequestChangeError(e.message);
     throw e;
   }
   if (line.quantity === before.quantity) return before;
-  return { unit: before.unit, unit_price: before.unit_price, quantity: line.quantity, amount: line.amount, label: line.label };
+  return { ...before, quantity: line.quantity, amount: line.amount, label: line.label };
+}
+
+/**
+ * The suggested start and end. A new start alone moves the end with it (a Friday to Sunday event stays
+ * three days); a new end is taken as sent.
+ */
+export function suggestedTimes(
+  was: { start: Date | null; end: Date | null },
+  sent: { start?: Date | null; end?: Date | null },
+): { start: Date | null; end: Date | null } {
+  const start = sent.start ?? was.start;
+  if (sent.end) return { start, end: sent.end };
+  if (sent.start && was.start && was.end) return { start, end: new Date(sent.start.getTime() + (was.end.getTime() - was.start.getTime())) };
+  return { start, end: was.end };
 }
 
 /**

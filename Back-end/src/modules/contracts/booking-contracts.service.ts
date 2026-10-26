@@ -596,7 +596,19 @@ export class BookingContractsService {
           client_email: clientEmail,
           title: p.rendered.title,
           rendered_body: p.rendered.body,
-          merge_data: p.data,
+          // the package line as requested, kept for suggested changes (request-changes.ts): the listing can change later
+          merge_data: {
+            ...p.data,
+            package_terms: {
+              unit: p.quote ? 'fixed' : p.pkg.unit,
+              unit_price: p.pkg.unit_price,
+              quantity: p.pkg.quantity,
+              amount: p.pkg.amount,
+              label: p.pkg.label,
+              min_quantity: p.quote ? null : p.listing.min_quantity ?? null,
+              basis_unit: packageUnit(p.listing.price_unit),
+            },
+          },
           source_pdf_key: p.vc.file_key,
           source_pdf_sha256: p.vc.file_sha256,
           content_sha256: p.rendered.content_sha256,
@@ -758,7 +770,14 @@ export class BookingContractsService {
       throw new ConflictException('The contract you reviewed does not match. Please reload and sign again.');
     }
     const imageKey = await this.resolveVendorSignatureImage(vendorId, sig);
-    return this.execute(current.id, vendorId, ContractSignerRole.VENDOR, sig, imageKey, meta, onExecuted);
+    return this.execute(current.id, vendorId, ContractSignerRole.VENDOR, sig, imageKey, meta, async (tx) => {
+      await onExecuted(tx);
+      // suggested changes sent while this was being signed can't wait on a confirmed booking (they'd block amendments)
+      await tx.bookingContract.updateMany({
+        where: { booking_id: bookingId, status: BookingContractStatus.AWAITING_CUSTOMER, supersedes_id: { not: null } },
+        data: { status: BookingContractStatus.VOID, voided_at: new Date(), void_reason: 'The vendor accepted the request' },
+      });
+    });
   }
 
   private async certificateSigners(contractId: string, extra?: Prisma.ContractSignatureUncheckedCreateInput) {
@@ -1166,7 +1185,7 @@ export class BookingContractsService {
     });
     const current = contracts.find((c) => c.status === BookingContractStatus.EXECUTED);
     if (!current) throw new BadRequestException('Only an executed contract can be amended.');
-    if (contracts.some((c) => c.supersedes_id && PENDING_STATUSES.includes(c.status))) {
+    if (contracts.some((c) => c.supersedes_id && !isProposal(c) && PENDING_STATUSES.includes(c.status))) {
       throw new ConflictException('An amendment is already waiting for a signature.');
     }
 
@@ -1648,6 +1667,8 @@ export class BookingContractsService {
       where: {
         status: { in: [BookingContractStatus.AWAITING_CUSTOMER, BookingContractStatus.AWAITING_CLIENT, BookingContractStatus.AWAITING_VENDOR] },
         created_at: { lte: new Date(now.getTime() - 24 * HOUR) },
+        // the request's contract while the vendor's suggested changes wait for the customer: the vendor can't sign it now
+        NOT: { status: BookingContractStatus.AWAITING_VENDOR, booking: { contracts: { some: { status: BookingContractStatus.AWAITING_CUSTOMER } } } },
       },
       include: { booking: { include: { vendor: true, customer: true, listing: true } } },
       take: 200,
@@ -1684,6 +1705,9 @@ export class BookingContractsService {
       } else if (!c.last_reminder_at && c.status === BookingContractStatus.AWAITING_CLIENT) {
         await this.notifyClientToSign(c.booking_id);
       } else if (!c.last_reminder_at) {
+        // waiting for the vendor since it last changed hands (a client's co-signature, or the customer's answer
+        // to suggested changes), not since the version was made
+        if (c.status === BookingContractStatus.AWAITING_VENDOR && now.getTime() - c.updated_at.getTime() < 24 * HOUR) continue;
         await this.notify(signer.id, signer.email, signer.name, {
           subject: `Contract waiting for your signature: ${title}`,
           message: 'A contract has been waiting for your signature for over 24 hours.',

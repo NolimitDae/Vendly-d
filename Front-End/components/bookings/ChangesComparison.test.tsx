@@ -3,7 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ChangesComparison, { comparisonRows } from './ChangesComparison';
 import RequestChangesCard from './RequestChangesCard';
-import { draftFrom, draftPayload, draftError, lineFor, type Comparison, type RequestTerms, type TermsLine } from '@/lib/request-changes';
+import dayjs from 'dayjs';
+import { draftFrom, draftPayload, draftError, lineFor, moveStart, setEnd, type Comparison, type RequestTerms, type TermsLine } from '@/lib/request-changes';
 
 jest.mock('@/service/booking/booking.service', () => ({
   BookingService: { changes: jest.fn(), approveChanges: jest.fn(), declineChanges: jest.fn(), withdrawChanges: jest.fn() },
@@ -151,6 +152,33 @@ describe('RequestChangesCard (customer)', () => {
 });
 
 describe('the vendor’s editor helpers', () => {
+  it('keeps a multi-day event’s length when the start moves, and sends the end only when the vendor sets it', () => {
+    // Friday morning to Sunday evening
+    const weekend: RequestTerms = { ...before, scheduled_at: '2026-12-04T10:00:00.000Z', event_start_at: '2026-12-04T10:00:00.000Z', event_end_at: '2026-12-06T18:00:00.000Z' };
+    const initial = draftFrom(weekend);
+    expect(initial.endDate).toBe(dayjs(weekend.event_end_at).format('YYYY-MM-DD'));
+    expect(initial.endDate).not.toBe(initial.date);
+
+    // a week later: the end moves with it (the server does the same with the start alone)
+    const nextWeek = moveStart(initial, dayjs(weekend.event_start_at).add(7, 'day').format('YYYY-MM-DD'), initial.start);
+    expect(nextWeek.endDate).toBe(dayjs(weekend.event_end_at).add(7, 'day').format('YYYY-MM-DD'));
+    expect(nextWeek.end).toBe(initial.end);
+    const body = draftPayload(nextWeek, initial, []);
+    expect(body.event_start_at).toBe(dayjs(weekend.event_start_at).add(7, 'day').toISOString());
+    expect(body).not.toHaveProperty('event_end_at');
+
+    // a later start time moves the end by as much
+    const later = moveStart(initial, initial.date, dayjs(weekend.event_start_at).add(2, 'hour').format('HH:mm'));
+    expect(dayjs(`${later.endDate}T${later.end}`).toISOString()).toBe(dayjs(weekend.event_end_at).add(2, 'hour').toISOString());
+
+    // the vendor sets the end themselves: it is sent on its own date, still days after the start
+    const shorter = setEnd(nextWeek, dayjs(weekend.event_end_at).add(6, 'day').format('YYYY-MM-DD'), nextWeek.end);
+    const sent = draftPayload(shorter, initial, []);
+    expect(sent.event_end_at).toBe(dayjs(weekend.event_end_at).add(6, 'day').toISOString());
+    expect(new Date(sent.event_end_at as string).getTime() - new Date(sent.event_start_at as string).getTime()).toBe(32 * 3600e3);
+    expect(draftError({ ...shorter, endDate: dayjs(weekend.event_start_at).subtract(1, 'day').format('YYYY-MM-DD') })).toMatch(/end date/);
+  });
+
   it('fills the editor from the request and sends only what changed, with every line priced', () => {
     const initial = draftFrom(before);
     expect(initial.guests).toBe('10');

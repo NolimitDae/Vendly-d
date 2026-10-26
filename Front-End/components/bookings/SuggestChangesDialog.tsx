@@ -14,6 +14,8 @@ import {
   lineFor,
   MAX_NOTE,
   money,
+  moveStart,
+  setEnd,
   unitWord,
   type ChangesState,
   type Comparison,
@@ -136,18 +138,22 @@ export default function SuggestChangesDialog({ bookingId, editor, customerName, 
 
             <section className="space-y-3" aria-labelledby="changes-when">
               <h4 id="changes-when" className="text-sm font-semibold text-gray-900 dark:text-white">When</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <label className="text-sm text-gray-700 dark:text-gray-300">
-                  Date
-                  <input type="date" value={draft.date} onChange={(e) => set({ date: e.target.value })} className={`${inputCls} mt-1`} />
+                  Start date
+                  <input type="date" value={draft.date} onChange={(e) => setDraft((d) => moveStart(d, e.target.value, d.start))} className={`${inputCls} mt-1`} />
                 </label>
                 <label className="text-sm text-gray-700 dark:text-gray-300">
-                  Start
-                  <input type="time" value={draft.start} onChange={(e) => set({ start: e.target.value })} className={`${inputCls} mt-1`} />
+                  Start time
+                  <input type="time" value={draft.start} onChange={(e) => setDraft((d) => moveStart(d, d.date, e.target.value))} className={`${inputCls} mt-1`} />
                 </label>
                 <label className="text-sm text-gray-700 dark:text-gray-300">
-                  End
-                  <input type="time" value={draft.end} onChange={(e) => set({ end: e.target.value })} className={`${inputCls} mt-1`} />
+                  End date
+                  <input type="date" value={draft.endDate} min={draft.date || undefined} onChange={(e) => setDraft((d) => setEnd(d, e.target.value, d.end))} className={`${inputCls} mt-1`} />
+                </label>
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  End time
+                  <input type="time" value={draft.end} onChange={(e) => setDraft((d) => setEnd(d, d.endDate || d.date, e.target.value))} className={`${inputCls} mt-1`} />
                 </label>
               </div>
               <label className="block text-sm text-gray-700 dark:text-gray-300 max-w-[12rem]">

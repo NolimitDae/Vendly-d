@@ -15,6 +15,8 @@ import {
   lineFor,
   MAX_NOTE,
   money,
+  moveStart,
+  setEnd,
   unitWord,
   type ChangesEditor,
   type Comparison,
@@ -32,7 +34,7 @@ interface Review extends Comparison {
   missing_message: string | null;
 }
 
-type Picker = null | 'date' | 'start' | 'end';
+type Picker = null | 'date' | 'start' | 'endDate' | 'end';
 
 /** `day` with the time of `time` (or midnight). */
 function withTime(day: Date, time: Date | null) {
@@ -72,13 +74,11 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
     const which = picker;
     if (Platform.OS !== 'ios') setPicker(null);
     if (!selected || !which) return;
-    if (which === 'date') {
-      set({ start: withTime(selected, draft.start), end: draft.end ? withTime(selected, draft.end) : null });
-    } else if (which === 'start') {
-      set({ start: withTime(draft.start ?? selected, selected) });
-    } else {
-      set({ end: withTime(draft.start ?? selected, selected) });
-    }
+    // a new start moves the end with it (a multi-day event keeps its length); the end is set on its own day
+    if (which === 'date') setDraft((d) => moveStart(d, withTime(selected, d.start)));
+    else if (which === 'start') setDraft((d) => moveStart(d, withTime(d.start ?? selected, selected)));
+    else if (which === 'endDate') setDraft((d) => setEnd(d, withTime(selected, d.end ?? d.start)));
+    else setDraft((d) => setEnd(d, withTime(d.end ?? d.start ?? selected, selected)));
   };
 
   const toReview = async () => {
@@ -116,7 +116,7 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
     }
   };
 
-  const pickerValue = picker === 'end' ? draft.end ?? draft.start : draft.start;
+  const pickerValue = picker === 'end' || picker === 'endDate' ? draft.end ?? draft.start : draft.start;
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={review ? () => setReview(null) : onClose}>
@@ -147,22 +147,30 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
             <Text style={s.muted}>Change what you need. The package price stays the same; {customerName} sees what changed and approves or declines.</Text>
 
             <Text style={s.h2}>When</Text>
-            <Pressable style={ui.field} onPress={() => setPicker('date')} accessibilityRole="button" accessibilityLabel="Event date">
-              <Ionicons name="calendar-outline" size={20} color={DARK.muted} />
-              <Text style={s.value}>{draft.start ? format(draft.start, 'EEE, dd MMM yyyy') : 'Choose a date'}</Text>
-            </Pressable>
+            <Text style={s.small}>Starts</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable style={[ui.field, { flex: 1.4 }]} onPress={() => setPicker('date')} accessibilityRole="button" accessibilityLabel="Start date">
+                <Ionicons name="calendar-outline" size={20} color={DARK.muted} />
+                <Text style={s.value}>{draft.start ? format(draft.start, 'EEE, dd MMM') : 'Date'}</Text>
+              </Pressable>
               <Pressable style={[ui.field, { flex: 1 }]} onPress={() => setPicker('start')} accessibilityRole="button" accessibilityLabel="Start time">
                 <Ionicons name="time-outline" size={20} color={DARK.muted} />
-                <Text style={s.value}>{draft.start && editor.current.event_start_at ? format(draft.start, 'h:mm a') : 'Start'}</Text>
+                <Text style={s.value}>{draft.start && editor.current.event_start_at ? format(draft.start, 'h:mm a') : 'Time'}</Text>
+              </Pressable>
+            </View>
+            <Text style={s.small}>Ends</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable style={[ui.field, { flex: 1.4 }]} onPress={() => setPicker('endDate')} accessibilityRole="button" accessibilityLabel="End date">
+                <Ionicons name="calendar-outline" size={20} color={DARK.muted} />
+                <Text style={s.value}>{draft.end ? format(draft.end, 'EEE, dd MMM') : 'Date'}</Text>
               </Pressable>
               <Pressable style={[ui.field, { flex: 1 }]} onPress={() => setPicker('end')} accessibilityRole="button" accessibilityLabel="End time">
                 <Ionicons name="time-outline" size={20} color={DARK.muted} />
-                <Text style={s.value}>{draft.end ? format(draft.end, 'h:mm a') : 'End'}</Text>
+                <Text style={s.value}>{draft.end ? format(draft.end, 'h:mm a') : 'Time'}</Text>
               </Pressable>
             </View>
             {picker && (
-              <DateTimePicker value={pickerValue ?? new Date()} mode={picker === 'date' ? 'date' : 'time'} minimumDate={picker === 'date' ? new Date() : undefined} onChange={pick} themeVariant="dark" />
+              <DateTimePicker value={pickerValue ?? new Date()} mode={picker === 'date' || picker === 'endDate' ? 'date' : 'time'} minimumDate={picker === 'date' ? new Date() : undefined} onChange={pick} themeVariant="dark" />
             )}
             {Platform.OS === 'ios' && picker && (
               <TouchableOpacity style={{ alignSelf: 'flex-end', padding: 8 }} onPress={() => setPicker(null)}>

@@ -16,23 +16,25 @@ import { buildMergeData, buildPricingSchedule, contentHash, MergeData, missingFi
 import { CONSENT_TEXT, CONSENT_TEXT_VERSION } from './contract-templates';
 import { ResolvedVendorContract } from './vendor-contracts.service';
 import { ProposalDto, SendProposalDto } from './dto/request-changes.dto';
-import { BookingContractFieldsDto, SignatureDto } from './dto/contracts.dto';
+import { SignatureDto } from './dto/contracts.dto';
 import {
   CatalogItem,
   describeChanges,
   ExistingLine,
   lineLabel,
   MAX_PROPOSAL_PRICE,
+  packageAsRequested,
   packageForProposal,
-  packageOnRequest,
   pairLines,
   priceProposalLines,
   ProposalData,
+  quoteBasis,
   readProposal,
   reopenedAt,
   RequestChangeError,
   RequestTerms,
   sameTerms,
+  suggestedTimes,
   withChosenPrices,
 } from './request-changes';
 
@@ -119,17 +121,15 @@ export class RequestChangesService {
     }));
   }
 
-  private async quoteTitle(bookingId: string) {
-    const q = await this.prisma.quote.findFirst({ where: { booking_id: bookingId }, select: { title: true } });
-    return q?.title ?? null;
-  }
-
   private evOf(t: { guest_count?: number | null; event_start_at?: Date | string | null; scheduled_at?: Date | string | null; event_end_at?: Date | string | null }): EventInput {
     return { guest_count: t.guest_count ?? null, event_start_at: t.event_start_at ?? t.scheduled_at ?? null, event_end_at: t.event_end_at ?? null };
   }
 
-  /** The request's terms as they are now, from the booking row (the source of truth for money). */
-  private async currentTerms(b: RequestRow, plan: PaymentPlan, quoteTitle: string | null): Promise<RequestTerms> {
+  /**
+   * The request's terms as they are now, from the booking row (the source of truth for money). The package
+   * line comes from `source`, the contract the vendor would accept: what was requested (or last agreed).
+   */
+  private currentTerms(b: RequestRow, plan: PaymentPlan, source: ContractRow | null): RequestTerms {
     const lines = b.extras.map((e) => {
       const unit_price = Number(e.unit_price);
       const quantity = Number(e.quantity);
@@ -152,13 +152,13 @@ export class RequestChangesService {
     const discount = round2(Number(b.discount ?? 0));
     const price = round2(Number(b.amount ?? 0));
     const ev = this.evOf(b);
-    const pkg = packageOnRequest({
-      amount: round2(price + discount - lines.reduce((s, l) => s + l.amount, 0) - optionsAmount),
-      unit: packageUnit(b.listing?.price_unit),
-      quoteTitle,
-      minQuantity: b.listing?.min_quantity,
-      ev,
-    });
+    const md = (source?.merge_data ?? null) as { package_terms?: unknown; pricing_schedule?: unknown } | null;
+    const pkg = packageAsRequested(
+      readProposal(md)?.after.package ?? md?.package_terms,
+      md?.pricing_schedule,
+      round2(price + discount - lines.reduce((s, l) => s + l.amount, 0) - optionsAmount),
+      options,
+    );
     const fee = round2(Number(b.service_fee ?? 0));
     return {
       scheduled_at: b.scheduled_at?.toISOString() ?? null,
@@ -192,14 +192,11 @@ export class RequestChangesService {
    * The suggested terms, priced on the server from what the vendor sent (nothing the apps total is used).
    * Throws a 400 with a message the vendor can act on.
    */
-  private async proposedTerms(b: RequestRow, before: RequestTerms, dto: ProposalDto, plan: PaymentPlan, quoteTitle: string | null) {
+  private async proposedTerms(b: RequestRow, before: RequestTerms, dto: ProposalDto, plan: PaymentPlan) {
     const listing = b.listing!;
     const now = new Date();
-    // dates: a new start moves the end with it unless a new end is sent
-    const oldStart = b.event_start_at ?? b.scheduled_at;
-    const start = dto.event_start_at ?? oldStart;
-    let end = dto.event_end_at ?? b.event_end_at;
-    if (dto.event_start_at && !dto.event_end_at && b.event_end_at && oldStart) end = new Date(dto.event_start_at.getTime() + (b.event_end_at.getTime() - oldStart.getTime()));
+    // a new start moves the end with it (a multi-day event keeps its length) unless a new end is sent
+    const { start, end } = suggestedTimes({ start: b.event_start_at ?? b.scheduled_at, end: b.event_end_at }, { start: dto.event_start_at, end: dto.event_end_at });
     if (dto.event_start_at && dto.event_start_at <= now) throw new BadRequestException('Pick a date and time in the future.');
     if (start && end && end <= start) throw new BadRequestException('The end time must be after the start time.');
     const guests = dto.guest_count ?? b.guest_count;
@@ -208,7 +205,7 @@ export class RequestChangesService {
     const ev: EventInput = { guest_count: guests, event_start_at: start, event_end_at: end };
 
     try {
-      const pkg = quoteTitle ? before.package : packageForProposal(before.package, ev, listing.min_quantity);
+      const pkg = packageForProposal(before.package, ev);
       const lines = priceProposalLines(
         dto.lines ?? before.lines.map((l) => ({ extra_id: l.extra_id, quantity: l.quantity, unit_price: l.unit_price })),
         b.extras.map((e): ExistingLine => ({ id: e.id, add_on_id: e.add_on_id, kind: e.kind, name: e.name, description: e.description, price_unit: e.price_unit as AddOnUnit, unit_price: Number(e.unit_price), quantity: Number(e.quantity), amount: Number(e.amount) })),
@@ -216,9 +213,9 @@ export class RequestChangesService {
         ev,
       );
       // customizations: the customer's pickers and rules (required, pick up to N); prices as chosen
-      const basis: UnitBasis = quoteTitle
-        ? this.contracts.unitBasis(listing, { guest_count: guests ?? undefined, event_start_at: start ?? undefined, event_end_at: end ?? undefined } as BookingContractFieldsDto)
-        : { unit: pkg.unit, quantity: pkg.quantity };
+      // (a quote's price is flat: its per unit upcharges count the guests, hours or days given, as at the request)
+      const basis: UnitBasis =
+        pkg.unit === 'fixed' && pkg.basis_unit && pkg.basis_unit !== 'fixed' ? quoteBasis(pkg.basis_unit, ev) : { unit: pkg.unit, quantity: pkg.quantity };
       const choices = dto.options ?? before.options.map((g) => ({ group_id: g.group_id, option_ids: g.options.map((o) => o.option_id) }));
       const options = priceOptionChoices(withChosenPrices(await this.packageOptions.offered(listing.id), before.options), choices, basis);
 
@@ -321,9 +318,8 @@ export class RequestChangesService {
     if (blocked) throw new BadRequestException(blocked);
     const base = this.base(b)!;
     const plan = this.planOf(b);
-    const quoteTitle = await this.quoteTitle(b.id);
-    const before = await this.currentTerms(b, plan, quoteTitle);
-    const { after, promoNote } = await this.proposedTerms(b, before, dto, plan, quoteTitle);
+    const before = this.currentTerms(b, plan, base);
+    const { after, promoNote } = await this.proposedTerms(b, before, dto, plan);
     if (sameTerms(before, after)) throw new BadRequestException('Nothing has changed yet. Edit the date, guests, add-ons, fees or customizations first.');
     const changes = describeChanges(before, after);
     const contract = await this.proposalContract(b, base, after, changes);
@@ -365,9 +361,10 @@ export class RequestChangesService {
     // customer approves, so the signature sent with the changes is kept with them and in the audit trail.
     const sentWith = { legal_name: dto.signature.legal_name.trim(), signed_at: new Date().toISOString(), signature_image_key: imageKey, document_sha256: p.contract.content };
     const created = await this.prisma.$transaction(async (tx) => {
-      // only while the request is still open and nothing else is waiting
-      const open = await tx.booking.count({ where: { id: bookingId, status: BookingStatus.PENDING } });
-      if (!open) throw new BadRequestException('This request is no longer open.');
+      // only while the request is still open and nothing else is waiting. Touching the row locks it, so an
+      // Accept & Sign, decline, cancellation or expiry running now waits for this (and then sees the suggestion)
+      const open = await tx.booking.updateMany({ where: { id: bookingId, status: BookingStatus.PENDING }, data: { updated_at: new Date() } });
+      if (!open.count) throw new BadRequestException('This request is no longer open.');
       const busy = await tx.bookingContract.count({ where: { booking_id: bookingId, status: BookingContractStatus.AWAITING_CUSTOMER } });
       if (busy) throw new ConflictException('Your suggested changes are already waiting for the customer.');
       const c = await tx.bookingContract.create({
@@ -384,6 +381,8 @@ export class RequestChangesService {
           content_sha256: p.contract.content,
           verification_code: verificationCode(),
           supersedes_id: p.base.id,
+          // a planner's client who co-signed the request co-signs the changes too, once the planner approves
+          client_email: p.base.client_email,
         },
       });
       await this.contracts.audit(tx, { booking_contract_id: c.id, actor_id: user.userId, actor_role: ContractSignerRole.VENDOR, action: ContractAuditAction.CREATED, meta, details: { suggests_changes_to: p.base.id, changes: p.changes } });
@@ -452,10 +451,16 @@ export class RequestChangesService {
     const imageKey = await this.contracts.storeSignatureImage(sig.signature_image, `signatures/${user.userId}`);
     const after = proposal.after;
     const now = new Date();
+    // the planner's client co-signed the request: they co-sign the approved changes before the vendor accepts
+    const clientNext = !!c.client_email;
 
     await this.prisma.$transaction(async (tx) => {
       // the status guards stop a double approval, or an approval racing a withdrawal or an answer
-      const moved = await tx.bookingContract.updateMany({ where: { id: c.id, status: BookingContractStatus.AWAITING_CUSTOMER }, data: { status: BookingContractStatus.AWAITING_VENDOR, last_reminder_at: null } });
+      const moved = await tx.bookingContract.updateMany({
+        where: { id: c.id, status: BookingContractStatus.AWAITING_CUSTOMER },
+        // the vendor's 24-hour reminder counts from now (updated_at), not from when the changes were sent
+        data: { status: clientNext ? BookingContractStatus.AWAITING_CLIENT : BookingContractStatus.AWAITING_VENDOR, last_reminder_at: null },
+      });
       if (moved.count !== 1) throw new ConflictException('These changes were already answered or withdrawn.');
       const replaced = await tx.bookingContract.updateMany({ where: { id: c.supersedes_id!, status: BookingContractStatus.AWAITING_VENDOR }, data: { status: BookingContractStatus.SUPERSEDED } });
       if (replaced.count !== 1) throw new ConflictException('This request changed in the meantime. Please reload.');
@@ -489,9 +494,12 @@ export class RequestChangesService {
     });
 
     const title = titleOf(b);
+    if (clientNext) await this.contracts.notifyClientToSign(bookingId).catch((err) => this.logger.warn(`Client co-sign notice failed: ${(err as Error).message}`));
     void this.contracts.notify(b.vendor_id, b.vendor.email, b.vendor.name, {
       subject: `Customer approved your changes: ${title}`,
-      message: `${b.customer.name ?? 'The customer'} approved and signed the changes you suggested for ${title}. Review the request and tap Accept & Sign to confirm it.`,
+      message: clientNext
+        ? `${b.customer.name ?? 'The planner'} approved and signed the changes you suggested for ${title}. Their client co-signs them next; you can Accept & Sign once they have.`
+        : `${b.customer.name ?? 'The customer'} approved and signed the changes you suggested for ${title}. Review the request and tap Accept & Sign to confirm it.`,
       bookingId,
       contractId: c.id,
       listingTitle: title,
@@ -500,7 +508,7 @@ export class RequestChangesService {
     });
     await this.notice(b.customer_id, b.vendor_id, `${b.customer.name ?? 'The customer'} approved the suggested changes for ${title}. It is back with ${vendorName(b)} to accept.`);
     // a new date may be busy elsewhere; the vendor sees that on the request as usual
-    return { success: true, message: 'Changes approved. The vendor can now accept your request.' };
+    return { success: true, message: clientNext ? 'Changes approved. Your client co-signs them next, then the vendor can accept.' : 'Changes approved. The vendor can now accept your request.' };
   }
 
   /** The customer turns the suggestion down: the original request stands, and the vendor can still answer it. */
@@ -531,6 +539,8 @@ export class RequestChangesService {
       const voided = await tx.bookingContract.updateMany({ where: { id: c.id, status: BookingContractStatus.AWAITING_CUSTOMER }, data: { status: BookingContractStatus.VOID, voided_at: now, void_reason: reason } });
       if (voided.count !== 1) throw new ConflictException('These changes were already answered or withdrawn.');
       await this.contracts.audit(tx, { booking_contract_id: c.id, actor_id: actorId, actor_role: actorRole, action: ContractAuditAction.VOIDED, meta, details: { reason, ...(note ? { note } : {}) } });
+      // the request's contract is the vendor's to sign again: their 24-hour reminder counts from now (updated_at)
+      if (c.supersedes_id) await tx.bookingContract.updateMany({ where: { id: c.supersedes_id, status: BookingContractStatus.AWAITING_VENDOR }, data: { last_reminder_at: null } });
       // the vendor has at least 48 hours from now to answer the original request
       await tx.booking.updateMany({ where: { id: b.id, status: BookingStatus.PENDING }, data: { request_opened_at: reopenedAt(b.request_opened_at ?? b.created_at, now), expiry_reminded_at: null } });
     });
@@ -582,19 +592,19 @@ export class RequestChangesService {
     let editor: Record<string, unknown> | null = null;
     if (role === 'VENDOR' && b.status === BookingStatus.PENDING && b.listing) {
       const plan = this.planOf(b);
-      const [quoteTitle, catalog, groups] = await Promise.all([
-        this.quoteTitle(b.id),
+      const current = this.currentTerms(b, plan, this.base(b) ?? b.contracts.find((c) => c.version === 1) ?? null);
+      const [catalog, groups] = await Promise.all([
         this.catalog(b.vendor_id, b.listing.id),
         this.prisma.listingOptionGroup.findMany({ where: { listing_id: b.listing.id }, ...OPTION_GROUPS_INCLUDE }),
       ]);
       editor = {
-        current: await this.currentTerms(b, plan, quoteTitle),
+        current,
         add_ons: catalog.filter((a) => a.kind === AddOnKind.ADD_ON),
         fees: catalog.filter((a) => a.kind === AddOnKind.FEE),
         customizations: formatOptionGroups(groups, b.listing.price_unit),
         price_unit: packageUnit(b.listing.price_unit),
         needs_guest_count: needsGuestCount(b.listing),
-        from_quote: !!quoteTitle,
+        from_quote: current.package.label.startsWith('Quote:'),
       };
     }
     return {
@@ -613,6 +623,8 @@ export class RequestChangesService {
                 vendor_name: vendorName(b),
                 // who signed the changes for the vendor when sending them
                 signed_by: proposal.vendor_signature?.legal_name ?? null,
+                // approved, and now with the planner's client to co-sign before the vendor can accept
+                client_cosigning: latest.status === BookingContractStatus.AWAITING_CLIENT,
                 content_sha256: latest.content_sha256,
                 ...this.comparison(proposal),
               }

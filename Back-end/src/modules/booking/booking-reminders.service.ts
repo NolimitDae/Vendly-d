@@ -6,7 +6,8 @@ import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
 import { BookingContractsService } from 'src/modules/contracts/booking-contracts.service';
 import appConfig from 'src/config/app.config';
-import { CLIENT_SIGN_DAYS, EXPIRY_REMINDER_HOURS, REQUEST_EXPIRY_HOURS, REVIEW_REMINDER_HOURS, REVIEW_WINDOW_DAYS, clientSignExpiresAt, hoursFromNow, requestExpiresAt } from './booking-requests';
+import { CLIENT_SIGN_DAYS, EXPIRY_REMINDER_HOURS, REQUEST_EXPIRY_HOURS, REVIEW_REMINDER_HOURS, REVIEW_WINDOW_DAYS, changesExpireAt, clientSignExpiresAt, hoursFromNow, requestExpiresAt } from './booking-requests';
+import { readProposal } from 'src/modules/contracts/request-changes';
 
 export const EXPIRED_REASON = 'The vendor didn’t respond in time, so the request was closed. You haven’t been charged.';
 export const CLIENT_EXPIRED_REASON = 'The client didn’t co-sign the contract in time, so the request was closed. Nothing was charged.';
@@ -135,18 +136,39 @@ export class BookingRemindersService {
               // checked precisely below; this just narrows to requests that could be due
               OR: [{ request_opened_at: { lte: due } }, { request_opened_at: null, created_at: { lte: due } }, { event_start_at: { lte: now } }],
             }
-          : // suggested changes nobody answered close the request on the same terms as a missing co-signature
-            { ...(kind === 'client' ? awaitingClient : awaitingCustomer), OR: [{ event_start_at: { lte: now } }, { event_start_at: null, created_at: { lte: hoursFromNow(-CLIENT_SIGN_DAYS * 24, now) } }] },
-      include: titled,
+          : kind === 'client'
+            ? { ...awaitingClient, OR: [{ event_start_at: { lte: now } }, { event_start_at: null, created_at: { lte: hoursFromNow(-CLIENT_SIGN_DAYS * 24, now) } }] }
+            : // suggested changes nobody answered: checked precisely below (changesExpireAt)
+              {
+                ...awaitingCustomer,
+                OR: [
+                  { event_start_at: { lte: now } },
+                  { contracts: { some: { status: BookingContractStatus.AWAITING_CUSTOMER, created_at: { lte: hoursFromNow(-CLIENT_SIGN_DAYS * 24, now) } } } },
+                ],
+              },
+      include: { ...titled, contracts: { where: { status: BookingContractStatus.AWAITING_CUSTOMER }, select: { id: true, created_at: true, merge_data: true } } },
       orderBy: { created_at: 'asc' },
       take: BATCH,
     });
     let expired = 0;
     for (const b of candidates) {
-      if ((kind === 'vendor' ? requestExpiresAt(b) : clientSignExpiresAt(b)) > now) continue;
-      // only if the vendor hasn't answered in the meantime
+      const suggestion = kind === 'changes' ? b.contracts?.[0] : undefined;
+      const dueAt =
+        kind === 'vendor'
+          ? requestExpiresAt(b)
+          : kind === 'client'
+            ? clientSignExpiresAt(b)
+            : suggestion
+              ? changesExpireAt(b, { sent_at: suggestion.created_at, start: readProposal(suggestion.merge_data)?.after.event_start_at })
+              : null;
+      if (!dueAt || dueAt > now) continue;
+      // only if the vendor hasn't answered in the meantime (and, for suggested changes, the customer hasn't either)
       const closed = await this.prisma.booking.updateMany({
-        where: { id: b.id, status: BookingStatus.PENDING },
+        where: {
+          id: b.id,
+          status: BookingStatus.PENDING,
+          ...(suggestion ? { event_start_at: b.event_start_at, contracts: { some: { id: suggestion.id, status: BookingContractStatus.AWAITING_CUSTOMER } } } : {}),
+        },
         data: { status: BookingStatus.REJECTED, reject_reason: kind === 'vendor' ? EXPIRED_REASON : kind === 'client' ? CLIENT_EXPIRED_REASON : CHANGES_EXPIRED_REASON, expired_at: now },
       });
       if (!closed.count) continue;

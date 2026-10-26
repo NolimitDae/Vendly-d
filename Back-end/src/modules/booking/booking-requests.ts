@@ -47,3 +47,16 @@ export function clientSignExpiresAt(booking: { created_at: Date | string; event_
   const start = new Date(booking.event_start_at);
   return isMidnightUtc(start) ? new Date(start.getTime() + 24 * HOUR) : start;
 }
+
+/**
+ * When a request closes while the vendor's suggested changes wait for the customer: when the event starts,
+ * on the request's date or the suggested one, whichever is later (date-only starts count from the end of
+ * that day), or 14 days after the changes were sent when neither has a date.
+ */
+export function changesExpireAt(booking: { event_start_at?: Date | string | null }, suggestion: { sent_at: Date | string; start?: Date | string | null }): Date {
+  const starts = [booking.event_start_at, suggestion.start]
+    .filter((d): d is Date | string => !!d)
+    .map((d) => clientSignExpiresAt({ created_at: suggestion.sent_at, event_start_at: d }).getTime());
+  if (!starts.length) return clientSignExpiresAt({ created_at: suggestion.sent_at });
+  return new Date(Math.max(...starts));
+}
