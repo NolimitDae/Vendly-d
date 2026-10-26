@@ -27,6 +27,9 @@ if (DB) {
 
 jest.setTimeout(240_000);
 
+const SIGNATURE_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), randomBytes(64)]);
 const PDF = Buffer.from('%PDF-1.7 not a photo');
@@ -50,7 +53,8 @@ run('Booking requests (e2e)', () => {
     listing_id: LISTING, vendor_id: U.vendor, timezone: 'America/Chicago',
     event_start_at: start, event_end_at: end, venue_address: 'Grand Hall, Austin TX', guest_count: 80,
   };
-  const sig = (hash: string) => ({ legal_name: 'Cara Customer', consent: true, content_sha256: hash, device_platform: 'web' });
+  // a drawn signature (1x1 PNG) is required to sign
+  const sig = (hash: string) => ({ legal_name: 'Cara Customer', consent: true, content_sha256: hash, device_platform: 'web', signature_image: SIGNATURE_PNG });
 
   const http = () => request(app.getHttpServer());
   const msg = (res: request.Response) => res.body?.message?.message ?? res.body?.message;

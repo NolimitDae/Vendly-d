@@ -7,7 +7,8 @@ jest.mock('./private-storage', () => ({
 }));
 
 const SHA = 'a'.repeat(64);
-const sig = { legal_name: 'Cara Client', consent: true, content_sha256: SHA } as any;
+// 1x1 transparent PNG: a drawn signature is required
+const sig = { legal_name: 'Cara Client', consent: true, content_sha256: SHA, signature_image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' } as any;
 
 function setup(contract: any, users: Record<string, string>) {
   const tx = {

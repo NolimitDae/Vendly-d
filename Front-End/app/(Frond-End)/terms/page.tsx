@@ -149,7 +149,7 @@ const sections: { id: string; title: string; body: React.ReactNode }[] = [
           signed contract (Flexible, Moderate or Strict). The Vendly Protection fee is not refunded when a customer
           cancels, unless the vendor&apos;s policy gives a full refund.
         </li>
-        {/* [LAWYER REVIEW] deposits and missed payments (owner's rules, Oct 2026) */}
+        {/* deposits and missed payments (owner's rules, Oct 2026) */}
         <li>
           <strong>Deposits.</strong> On a booking paid with a deposit (the 50% and 25% deposit plans), the deposit is
           non-refundable if the customer cancels, or if the booking is cancelled because a payment wasn&apos;t made.

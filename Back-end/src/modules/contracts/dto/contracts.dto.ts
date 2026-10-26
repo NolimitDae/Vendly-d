@@ -75,7 +75,7 @@ export class SignatureDto {
   @Matches(/^[a-f0-9]{64}$/)
   content_sha256: string;
 
-  @ApiPropertyOptional({ description: 'Drawn signature as a PNG data URL' })
+  @ApiPropertyOptional({ description: 'Drawn signature as a PNG data URL. Required, except for a vendor using use_saved_signature' })
   @IsOptional()
   @IsString()
   @MaxLength(700_000)

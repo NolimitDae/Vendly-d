@@ -24,6 +24,9 @@ if (DB) {
 
 jest.setTimeout(240_000);
 
+const SIGNATURE_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 run('Vendor inbox tabs and the customer message limit (e2e)', () => {
@@ -166,7 +169,8 @@ run('Vendor inbox tabs and the customer message limit (e2e)', () => {
     const sent = await http().post('/api/bookings').auth(T.cust, { type: 'bearer' }).send({
       ...body,
       preview_token: pv.body.data.preview_token,
-      signature: { legal_name: 'Cara Customer', consent: true, content_sha256: pv.body.data.content_sha256, device_platform: 'web' },
+      // a drawn signature (1x1 PNG) is required to sign
+      signature: { legal_name: 'Cara Customer', consent: true, content_sha256: pv.body.data.content_sha256, device_platform: 'web', signature_image: SIGNATURE_PNG },
     });
     expect(sent.status).toBe(201);
 

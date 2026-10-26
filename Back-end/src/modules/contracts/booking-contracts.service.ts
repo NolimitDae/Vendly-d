@@ -96,6 +96,9 @@ const PENDING_STATUSES: BookingContractStatus[] = [
   BookingContractStatus.AWAITING_VENDOR,
 ];
 
+/** Sent when a signature arrives with a typed name but no drawn signature. */
+export const DRAW_SIGNATURE_MESSAGE = 'Please draw your signature to sign.';
+
 /** Feature flag for the planner's client co-signing contracts (off unless an admin turns it on). */
 export const CLIENT_COSIGN_FLAG = 'client_cosign';
 
@@ -437,6 +440,10 @@ export class BookingContractsService {
     return forEvent ? ContractSignerRole.PLANNER : this.signerRoleFor(userType);
   }
 
+  /**
+   * Stores the drawn signature. Every signature needs one (owner's rule, Nov 2026): a typed name
+   * alone is refused. Vendors may use their saved one instead (resolveVendorSignatureImage).
+   */
   private async storeSignatureImage(dataUrl: string | undefined, folder: string) {
     let buf: Buffer | null;
     try {
@@ -445,7 +452,7 @@ export class BookingContractsService {
       if (err instanceof PdfValidationError) throw new BadRequestException(err.message);
       throw err;
     }
-    if (!buf) return null;
+    if (!buf) throw new BadRequestException(DRAW_SIGNATURE_MESSAGE);
     const key = PrivateStorage.newKey(folder, 'png');
     await PrivateStorage.put(key, buf);
     return key;
@@ -692,7 +699,7 @@ export class BookingContractsService {
       return profile.saved_signature_key;
     }
     const key = await this.storeSignatureImage(sig.signature_image, `signatures/${vendorId}`);
-    if (key && sig.save_signature) {
+    if (sig.save_signature) {
       await this.prisma.vendorProfile.upsert({
         where: { user_id: vendorId },
         create: { user_id: vendorId, saved_signature_key: key },

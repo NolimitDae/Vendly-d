@@ -53,7 +53,10 @@ export default function SignContractPanel({
     if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 24) setReadToEnd(true);
   };
 
-  const canSign = readToEnd && consent && name.trim().length >= 2 && !busy;
+  // a drawn, confirmed signature is required; a vendor may use their saved one instead
+  const usingSaved = !!(vendor?.hasSavedSignature && useSaved);
+  const signed = usingSaved || !!image;
+  const canSign = readToEnd && consent && name.trim().length >= 2 && signed && !busy;
 
   const submit = () => {
     if (!canSign) return;
@@ -62,9 +65,8 @@ export default function SignContractPanel({
       consent: true,
       content_sha256: contentSha256,
       device_platform: "web",
-      ...(vendor && useSaved ? { use_saved_signature: true } : {}),
-      ...(image && !(vendor && useSaved) ? { signature_image: image } : {}),
-      ...(vendor && image && !useSaved && saveForLater ? { save_signature: true } : {}),
+      ...(usingSaved ? { use_saved_signature: true } : { signature_image: image! }),
+      ...(vendor && !usingSaved && saveForLater ? { save_signature: true } : {}),
     });
   };
 
@@ -120,13 +122,25 @@ export default function SignContractPanel({
 
       {vendor?.hasSavedSignature && (
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={useSaved} onChange={(e) => setUseSaved(e.target.checked)} className="h-4 w-4 accent-primary" />
+          <input
+            type="checkbox"
+            checked={useSaved}
+            onChange={(e) => {
+              setUseSaved(e.target.checked);
+              // the pad starts empty again, so nothing unseen is sent
+              setImage(null);
+            }}
+            className="h-4 w-4 accent-primary"
+          />
           Use my saved signature
         </label>
       )}
-      {!(vendor && useSaved) && (
+      {!usingSaved && (
         <>
-          <SignaturePad onChange={setImage} />
+          <div>
+            <p className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Signature</p>
+            <SignaturePad onChange={setImage} />
+          </div>
           {vendor && !vendor.hasSavedSignature && image && (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={saveForLater} onChange={(e) => setSaveForLater(e.target.checked)} className="h-4 w-4 accent-primary" />
@@ -135,6 +149,8 @@ export default function SignContractPanel({
           )}
         </>
       )}
+
+      {!signed && <p className="text-xs text-amber-600">Draw your signature and tap Confirm signature to sign.</p>}
 
       <div className="flex gap-3 pt-1">
         {onCancel && (
