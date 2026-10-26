@@ -93,6 +93,16 @@ run('Test vendors (e2e)', () => {
     const mine = search.body.data.filter((l: any) => l.vendor_id === vendor.id);
     expect(mine.map((l: any) => l.title).sort()).toEqual(['Plated Three-Course Dinner', 'Southern Buffet Dinner']);
     expect(mine.every((l: any) => l.is_test === true && l.distance_miles < 10)).toBe(true);
+    // search matches word by word across title, place, category and vendor name
+    const words = await http().get(`/api/marketplace/listings?q=${encodeURIComponent('buffet atlanta')}&limit=50`).expect(200);
+    expect(words.body.data.map((l: any) => l.title)).toContain('Southern Buffet Dinner');
+    const byVendor = await http().get(`/api/marketplace/listings?q=${encodeURIComponent(vendor.vendorProfile.business_name)}&limit=50`).expect(200);
+    expect(byVendor.body.data.some((l: any) => l.vendor_id === vendor.id)).toBe(true);
+    // a typed place that can't be looked up matches by its words ("Atlanta GA" in "Atlanta, GA")
+    process.env.GEOCODER_URL = 'http://127.0.0.1:9';
+    const place = await http().get(`/api/marketplace/listings?category_id=${catering.id}&location=${encodeURIComponent('Atlanta GA')}&limit=50`).expect(200);
+    delete process.env.GEOCODER_URL;
+    expect(place.body.data.filter((l: any) => l.vendor_id === vendor.id)).toHaveLength(2);
     // the photo is stored like any upload
     const file = decodeURIComponent(new URL(mine[0].images[0]).pathname.split('/').pop()!);
     expect(existsSync(`${STORAGE}/listings/${file}`)).toBe(true);

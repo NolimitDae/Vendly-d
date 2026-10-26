@@ -1,7 +1,11 @@
 import { ACTIVE_VENDOR_WHERE } from 'src/common/helper/active-vendor';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
-import { MarketplaceService } from './marketplace.service';
+import { MarketplaceService, searchWords } from './marketplace.service';
+import { geocode } from 'src/modules/geo/geo';
+
+// typed places are looked up on the map; never over the network in tests
+jest.mock('src/modules/geo/geo', () => ({ ...jest.requireActual('src/modules/geo/geo'), geocode: jest.fn(async () => null) }));
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ListingStatus } from 'prisma/generated/client';
 
@@ -137,12 +141,69 @@ describe('MarketplaceService', () => {
       expect(mockPrisma.vendorListing.count).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            OR: expect.arrayContaining([
-              expect.objectContaining({ title: expect.objectContaining({ contains: 'photography' }) }),
-            ]),
+            AND: [
+              {
+                OR: expect.arrayContaining([
+                  expect.objectContaining({ title: expect.objectContaining({ contains: 'photography' }) }),
+                  expect.objectContaining({ location: expect.objectContaining({ contains: 'photography' }) }),
+                  expect.objectContaining({ category: { name: expect.objectContaining({ contains: 'photography' }) } }),
+                ]),
+              },
+            ],
           }),
         }),
       );
+    });
+
+    it('matches each typed word on its own, so "makeup smyrna" finds a makeup package in Smyrna', async () => {
+      mockPrisma.vendorListing.count.mockResolvedValue(0);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+
+      await service.searchListings({ q: 'makeup  smyrna', page: 1, limit: 12 });
+
+      const where = mockPrisma.vendorListing.count.mock.calls.at(-1)[0].where;
+      expect(where.AND).toHaveLength(2);
+      expect(JSON.stringify(where.AND[0])).toContain('"makeup"');
+      expect(JSON.stringify(where.AND[1])).toContain('"smyrna"');
+    });
+
+    it('searches a typed place by distance, so nearby towns and longer addresses match', async () => {
+      (geocode as jest.Mock).mockResolvedValueOnce({ lat: 39.3, lng: -75.6 });
+      mockPrisma.vendorListing.count.mockResolvedValue(3);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([
+        { ...mockListing, id: 'near', location: 'Smyrna, Kent, DE', lat: 39.31, lng: -75.61 },
+        { ...mockListing, id: 'far', location: 'Atlanta, GA', lat: 33.75, lng: -84.39 },
+        { ...mockListing, id: 'unplaced', location: 'Smyrna, DE', lat: null, lng: null },
+      ]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+
+      const res = await service.searchListings({ location: 'Smyrna, DE', page: 1, limit: 12 });
+
+      expect(res.data.map((l: any) => l.id)).toEqual(['near', 'unplaced']);
+      const where = mockPrisma.vendorListing.count.mock.calls.at(-1)[0].where;
+      expect(where.location).toBeUndefined();
+      expect(JSON.stringify(where.AND)).toContain('"lat":null');
+    });
+
+    it('matches a place by its words when it cannot be found on the map', async () => {
+      mockPrisma.vendorListing.count.mockResolvedValue(0);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+
+      await service.searchListings({ location: 'Smyrna, DE', page: 1, limit: 12 });
+
+      const where = mockPrisma.vendorListing.count.mock.calls.at(-1)[0].where;
+      expect(where.AND).toEqual([
+        { location: { contains: 'Smyrna', mode: 'insensitive' } },
+        { location: { contains: 'DE', mode: 'insensitive' } },
+      ]);
+    });
+
+    it('splits typed text into words', () => {
+      expect(searchWords(' Smyrna,  DE ')).toEqual(['Smyrna', 'DE']);
+      expect(searchWords('a b')).toEqual([]);
+      expect(searchWords('one two three four five six seven')).toHaveLength(6);
     });
 
     it('should apply price range filter', async () => {
