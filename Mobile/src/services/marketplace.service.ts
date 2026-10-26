@@ -46,6 +46,8 @@ export interface Listing {
     vendorProfile?: { business_name?: string | null; about_me?: string | null; license_status?: string } | null;
   };
   reviews?: { id: string; rating: number; comment?: string | null; created_at: string; author?: { id: string; name: string; avatar_url?: string | null } | null }[];
+  /** a test vendor's package (Admin → Settings → Test vendors): shown with a "Test" badge */
+  is_test?: boolean;
 }
 
 export interface Category {
@@ -68,6 +70,8 @@ export interface VendorProfile {
   vendorProfile?: { business_name?: string | null; about_me?: string | null; license_status?: string } | null;
   vendorListings: Listing[];
   avg_rating?: number | null;
+  /** a test vendor (Admin → Settings → Test vendors) */
+  is_test?: boolean;
   _count?: { vendorListings: number; receivedReviews: number };
 }
 

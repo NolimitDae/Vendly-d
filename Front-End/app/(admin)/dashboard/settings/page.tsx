@@ -1,4 +1,5 @@
 import FeeSettings from "@/components/Dashboard/money/FeeSettings";
+import TestVendorsCard from "@/components/Dashboard/settings/TestVendorsCard";
 
 const SettingsPage = () => {
   return (
@@ -8,6 +9,7 @@ const SettingsPage = () => {
         <p className="text-descriptionColor text-sm leading-[160%]">Fees, limits and feature flags. Saved to the database and used for new bookings straight away.</p>
       </div>
       <FeeSettings />
+      <TestVendorsCard />
     </div>
   );
 };

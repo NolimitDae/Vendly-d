@@ -139,6 +139,13 @@ Expo Go can't run card payments, Apple sign-in, the camera stamp or haptics; you
 - [ ] Admin → Settings: Vendly Protection fee %, minimum fee, vendor commission %, per-category fee overrides.
 - [ ] Admin → Settings → feature flags: to hide rentals everywhere (apps and website), add a flag named `rentals` and switch it off.
       Rentals show by default. Other flag names aren't connected to anything yet; tell me what else you want switchable.
+- [ ] **Test vendors: Admin → Settings → Test vendors; remove them before launch.** Type a place in "Near" (e.g. Atlanta, GA),
+      press **Create test vendors**, and copy the password it shows (it's shown only once; every test vendor uses it).
+      Sign in as any of them with the emails listed under "Test vendor sign-ins" (`test-<category>-1@vendly.test`).
+      Everyone sees them in search with a "Test" badge. Pressing Create again only fills gaps; **Reset password** gives
+      them all a new one. Before launch press **Remove test vendors**: their open bookings are cancelled and refunded,
+      then their packages and accounts are removed. A test vendor with an open dispute, money still being settled, or money in
+      its Vendly balance is kept (the card says why); after a dispute or settlement, press Remove again.
 - [ ] Admin → Promo codes: any launch codes.
 - [ ] Admin → Vendors: approve vendor licences (vendors can now upload them from the app).
 - [ ] Admin → **ID checks**: approve or reject people's ID photos. Switching between customer, vendor and planner on one

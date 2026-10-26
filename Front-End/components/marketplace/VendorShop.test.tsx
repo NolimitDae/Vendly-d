@@ -43,6 +43,19 @@ describe('VendorShop', () => {
     expect(screen.getByText('reviews for user-1')).toBeInTheDocument();
   });
 
+  it('marks a test vendor’s shop and packages with a "Test" badge, and no one else’s', async () => {
+    getVendorProfile.mockResolvedValue({ data: { success: true, data: { ...vendor, is_test: true } } });
+    const { unmount } = render(<VendorShop idOrHandle="bellas-catering" />);
+    expect(await screen.findByRole('heading', { name: "Bella's Catering Test" })).toBeInTheDocument();
+    expect(screen.getAllByText('Test')).toHaveLength(2);
+    unmount();
+
+    getVendorProfile.mockResolvedValue({ data: { success: true, data: vendor } });
+    render(<VendorShop idOrHandle="bellas-catering" />);
+    await screen.findByRole('heading', { name: "Bella's Catering" });
+    expect(screen.queryByText('Test')).not.toBeInTheDocument();
+  });
+
   it('says the shop was not found for an unknown handle', async () => {
     getVendorProfile.mockRejectedValue(new Error('404'));
     render(<VendorShop idOrHandle="nobody" />);

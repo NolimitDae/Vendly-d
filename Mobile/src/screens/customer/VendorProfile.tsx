@@ -10,6 +10,7 @@ import { MarketplaceService, type VendorProfile as Vendor } from '../../services
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import Sheet from '../../components/Sheet';
+import TestBadge from '../../components/TestBadge';
 import { EventToolsService, MAX_TEAM_SIZE, type TeamVendor, type VendorTeam } from '../../services/eventTools.service';
 import { apiError } from '../../services/contracts.service';
 
@@ -60,6 +61,7 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
           <View style={s.meta}>
             {!!vendor.logo_url && <Image source={{ uri: vendor.logo_url }} style={s.logo} accessibilityLabel={`${name} logo`} />}
             <Text style={[s.h1, { flex: 1 }]}>{name}</Text>
+            {vendor.is_test && <TestBadge />}
           </View>
           <View style={s.rowBetween}>
             <View style={s.meta}>
@@ -103,7 +105,10 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
                   {l.images?.[0] ? <Image source={{ uri: l.images[0] }} style={StyleSheet.absoluteFill} /> : <Ionicons name="image-outline" size={24} color={DARK.muted} />}
                 </View>
                 <View style={{ flex: 1, gap: 20 }}>
-                  <Text style={s.pkgTitle} numberOfLines={1}>{l.title}</Text>
+                  <View style={s.meta}>
+                    <Text style={[s.pkgTitle, { flexShrink: 1 }]} numberOfLines={1}>{l.title}</Text>
+                    {vendor.is_test && <TestBadge />}
+                  </View>
                   <View style={s.meta}>
                     <Ionicons name="star" size={16} color="#F5B700" />
                     <Text style={s.muted}>

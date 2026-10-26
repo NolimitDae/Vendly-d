@@ -10,5 +10,6 @@ import { RentalsService } from './rentals.service';
   imports: [PrismaModule, MailModule, PushModule, PaymentsModule],
   controllers: [VendorRentalsController, RentalsController],
   providers: [RentalsService],
+  exports: [RentalsService],
 })
 export class RentalsModule {}

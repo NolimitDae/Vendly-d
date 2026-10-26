@@ -14,6 +14,7 @@ import { rangeText, unitSuffix, type AddOn } from '../../services/addons.service
 import { summariseHours, withZone } from '../../utils/workingHours';
 import { noticeLine } from '../../utils/packageDetails';
 import { DEPOSIT_RULE_TEXT, isDepositPlan } from '../../utils/bookingStatus';
+import TestBadge from '../../components/TestBadge';
 
 export const toSummary = (l: Listing): ListingSummary => ({
   id: l.id,
@@ -105,6 +106,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
           <View style={s.rowBetween}>
             <View style={{ flex: 1, gap: 8 }}>
               <Text style={s.h1}>{listing.title}</Text>
+              {listing.is_test && <TestBadge />}
               <Text style={s.price}>
                 ${Number(listing.price).toLocaleString()}
                 <Text style={s.unit}>{unit}</Text>

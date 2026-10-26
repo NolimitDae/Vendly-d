@@ -43,7 +43,7 @@ describe('MailService', () => {
       mockPrisma.user.findUnique.mockResolvedValue({ notification_prefs: { review_requests: false, payments: false, email: false } });
       expect(await service.sendBookingNotification({ ...params, subject: 'How was it?', topic: 'review_requests' })).toBe(true);
       expect(mockQueue.add).not.toHaveBeenCalled();
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@x.com' }, select: { notification_prefs: true } });
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@x.com' }, select: { notification_prefs: true, is_test: true } });
 
       await service.sendBookingNotification(params);
       expect(mockQueue.add).toHaveBeenCalledTimes(1);
@@ -59,6 +59,28 @@ describe('MailService', () => {
     it('still sends when the settings cannot be read', async () => {
       mockPrisma.user.findUnique.mockRejectedValueOnce(new Error('db down'));
       expect(await service.sendBookingNotification({ ...params, topic: 'reminders' })).toBe(true);
+      expect(mockQueue.add).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('test accounts', () => {
+    it('never emails a @vendly.test address or a test vendor, whatever the email', async () => {
+      const log = jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined);
+      const params = { to: 'test-catering-food-1@vendly.test', recipientName: 'Test', subject: 'Receipt', message: 'Thanks', status: 'RECEIPT', listingTitle: 'Buffet' };
+      // nothing to retry: it counts as handled
+      expect(await service.sendBookingNotification(params)).toBe(true);
+      await service.sendOtpCodeToEmail({ name: 'Test', email: 'TEST-x-1@Vendly.Test', otp: '123456' });
+      await service.sendVerificationLink({ name: 'Test', email: 'test-x-1@vendly.test', token: 't', type: 'verify' });
+      expect(mockQueue.add).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith('Not emailing test account test-catering-food-1@vendly.test');
+
+      // a test vendor whose address was changed to a real-looking one
+      mockPrisma.user.findUnique.mockResolvedValueOnce({ notification_prefs: null, is_test: true });
+      await service.sendBookingNotification({ ...params, to: 'someone@gmail.com' });
+      expect(mockQueue.add).not.toHaveBeenCalled();
+
+      mockPrisma.user.findUnique.mockResolvedValueOnce({ notification_prefs: null, is_test: false });
+      await service.sendBookingNotification({ ...params, to: 'someone@gmail.com' });
       expect(mockQueue.add).toHaveBeenCalledTimes(1);
     });
   });

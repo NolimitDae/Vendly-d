@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import ReviewList from "@/components/marketplace/ReviewList";
 import { AddToTeamButton } from "@/components/events/VendorTeams";
+import TestBadge from "@/components/marketplace/TestBadge";
 
 export interface VendorShopData {
   id: string;
@@ -18,6 +19,8 @@ export interface VendorShopData {
   handle?: string | null;
   avg_rating?: number | null;
   vendorProfile?: { business_name?: string | null; about_me?: string | null } | null;
+  /** a test vendor (Admin → Settings → Test vendors) */
+  is_test?: boolean;
   vendorListings?: {
     id: string;
     title: string;
@@ -131,7 +134,10 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
               )}
 
               <div className="flex-1 min-w-0">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">{displayName}</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white break-words">
+                  {displayName}
+                  {vendor.is_test && <TestBadge className="ml-2 align-middle" />}
+                </h1>
                 {profile?.business_name && vendor.name !== profile.business_name && (
                   <p className="text-sm text-gray-500 mt-0.5 dark:text-gray-400">{vendor.name}</p>
                 )}
@@ -207,7 +213,10 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
                     )}
                   </div>
                   <div className="p-4">
-                    {listing.category && <span className="text-xs text-primary font-medium">{listing.category.name}</span>}
+                    <div className="flex items-center gap-1.5">
+                      {listing.category && <span className="text-xs text-primary font-medium">{listing.category.name}</span>}
+                      {vendor.is_test && <TestBadge />}
+                    </div>
                     <h3 className="font-semibold text-gray-900 dark:text-white mt-1 line-clamp-2">{listing.title}</h3>
                     <p className="mt-2 font-bold text-gray-900 dark:text-white">
                       ${Number(listing.price).toFixed(2)}

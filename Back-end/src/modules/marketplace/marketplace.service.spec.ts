@@ -237,6 +237,28 @@ describe('MarketplaceService', () => {
     });
   });
 
+  describe('test vendors (Admin -> Settings -> Test vendors)', () => {
+    it('are marked on search cards, the package page and the shop, so the apps can show a "Test" badge', async () => {
+      const testListing = { ...mockListing, vendor: { ...mockListing.vendor, is_test: true } };
+      mockPrisma.vendorListing.count.mockResolvedValue(2);
+      mockPrisma.vendorListing.findMany.mockResolvedValue([testListing, mockListing]);
+      mockPrisma.review.groupBy.mockResolvedValue([]);
+      const search = await service.searchListings({ page: 1, limit: 12 });
+      expect(search.data.map((l: any) => l.is_test)).toEqual([true, false]);
+      expect(mockPrisma.vendorListing.findMany.mock.calls[0][0].include.vendor.select.is_test).toBe(true);
+
+      mockPrisma.vendorListing.findFirst.mockResolvedValue(testListing);
+      const page = await service.getListing('listing-1');
+      expect(page.data.is_test).toBe(true);
+
+      mockPrisma.user.findFirst.mockResolvedValue({ id: 'v1', name: 'Vendor', avatar: null, is_test: true, vendorProfile: { business_name: 'Photo Pro' }, vendorListings: [mockListing], _count: {} });
+      mockPrisma.review.aggregate.mockResolvedValue({ _avg: { rating: null } });
+      const shop: any = await service.getVendorProfile('v1');
+      expect(shop.data.is_test).toBe(true);
+      expect(shop.data.vendorListings[0].is_test).toBe(true);
+    });
+  });
+
   describe('licence documents', () => {
     it('are never read for the public shop page or a listing', async () => {
       mockPrisma.user.findFirst.mockResolvedValue({ id: 'v1', name: 'Vendor', avatar: null, vendorProfile: { business_name: 'Photo Pro' }, vendorListings: [], _count: {} });

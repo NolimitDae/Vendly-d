@@ -13,6 +13,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { withJobLock } from 'src/common/helper/job-lock';
 import { PushService } from 'src/modules/push/push.service';
+import { TEST_ACCOUNT_NO_PAYOUTS } from 'src/common/helper/test-accounts';
 import * as Sentry from '@sentry/nestjs';
 
 /** Smallest withdrawal in dollars (the website says the same). */
@@ -56,6 +57,8 @@ export class WithdrawService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    // test vendors never get a real payout account
+    if (user.is_test) throw new BadRequestException(TEST_ACCOUNT_NO_PAYOUTS);
 
     if (user.stripe_connect_id) {
       throw new BadRequestException('You already have a payout account');
@@ -96,7 +99,8 @@ export class WithdrawService {
     data: { url: string };
   }> {
     // An onboarding link can change where payouts go, so only the account's owner may get one.
-    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { stripe_connect_id: true } });
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { stripe_connect_id: true, is_test: true } });
+    if (owner?.is_test) throw new BadRequestException(TEST_ACCOUNT_NO_PAYOUTS);
     if (!owner?.stripe_connect_id || owner.stripe_connect_id !== accountId) {
       throw new NotFoundException('Payout account not found');
     }
@@ -137,6 +141,7 @@ export class WithdrawService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    if (user.is_test) throw new BadRequestException(TEST_ACCOUNT_NO_PAYOUTS);
 
     // Check if user has a connected account
     if (!user.stripe_connect_id) {

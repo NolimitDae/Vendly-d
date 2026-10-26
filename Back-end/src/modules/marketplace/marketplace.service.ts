@@ -128,6 +128,7 @@ export class MarketplaceService {
               id: true,
               name: true,
               avatar: true,
+              is_test: true,
               vendorProfile: { select: { business_name: true } },
             },
           },
@@ -210,6 +211,7 @@ export class MarketplaceService {
             name: true,
             avatar: true,
             created_at: true,
+            is_test: true,
             vendorProfile: {
               select: {
                 business_name: true,
@@ -287,6 +289,7 @@ export class MarketplaceService {
         bio: true,
         location: true,
         created_at: true,
+        is_test: true,
         vendorProfile: {
           select: {
             business_name: true,
@@ -334,9 +337,10 @@ export class MarketplaceService {
             )
           : null,
         avg_rating: avgRating._avg.rating,
-        vendorListings: vendor.vendorListings.map((l) =>
-          this.formatListingCard(l),
-        ),
+        vendorListings: vendor.vendorListings.map((l) => ({
+          ...this.formatListingCard(l),
+          is_test: vendor.is_test,
+        })),
       },
     };
   }
@@ -403,6 +407,7 @@ export class MarketplaceService {
             id: true,
             name: true,
             avatar: true,
+            is_test: true,
             vendorProfile: { select: { business_name: true } },
           },
         },
@@ -437,6 +442,8 @@ export class MarketplaceService {
     return {
       // positions only drive near me here; never sent out (a vendor may have pinned their home)
       ...(withoutPosition(listing) as any),
+      // a test vendor's package (Admin -> Settings -> Test vendors): the apps show a "Test" badge
+      is_test: !!listing.vendor?.is_test,
       // what the customer will be asked to pay and when (vendor's choice, else the category default)
       effective_payment_plan: listing.payment_plan ?? listing.category?.default_payment_plan ?? 'FULL_ON_ACCEPT',
       images: (listing.images ?? []).map((img: string) =>

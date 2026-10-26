@@ -1217,7 +1217,7 @@ describe('BookingService', () => {
 
       await service.cancel('booking-1', 'vendor-1', { reason_code: 'emergency' });
 
-      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'vendor-1', OR: [{ cancellations_alerted_at: null }, { cancellations_alerted_at: { lt: expect.any(Date) } }] }, data: { cancellations_alerted_at: expect.any(Date) } });
+      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'vendor-1', is_test: false, OR: [{ cancellations_alerted_at: null }, { cancellations_alerted_at: { lt: expect.any(Date) } }] }, data: { cancellations_alerted_at: expect.any(Date) } });
       expect(mockPush.sendToUser).toHaveBeenCalledWith('admin-1', expect.objectContaining({ title: 'Vendor cancelling bookings', body: expect.stringContaining('Glam Co has cancelled 2 bookings in the last 90 days') }));
       expect(mockMail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'admin@vendly.test' }));
 

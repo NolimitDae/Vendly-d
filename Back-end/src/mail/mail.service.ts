@@ -1,32 +1,46 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { MailerService } from '@nestjs-modules/mailer';
 import appConfig from '../config/app.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationTopic, wants } from '../common/helper/notification-prefs';
+import { isTestEmail } from '../common/helper/test-accounts';
 
 @Injectable()
 export class MailService {
+  private readonly logger = new Logger(MailService.name);
+
   constructor(
     @InjectQueue('mail-queue') private queue: Queue,
     private mailerService: MailerService,
     private prisma: PrismaService,
   ) {}
 
-  /** Whether the account behind this address wants an optional email about `topic` (see notification-prefs). */
+  /**
+   * Whether to send at all: never to test vendors (Admin -> Settings -> Test vendors), whose mail
+   * would bounce and hurt Vendly's sending reputation, and an optional email about `topic` only
+   * when the account wants it (see notification-prefs).
+   */
   private async wantsEmail(to: string, topic?: NotificationTopic) {
-    if (!topic) return true;
+    if (isTestEmail(to)) return this.skipTest(to);
     try {
-      const user = await this.prisma.user.findUnique({ where: { email: to }, select: { notification_prefs: true } });
-      return wants(user?.notification_prefs, topic, 'email');
+      const user = await this.prisma.user.findUnique({ where: { email: to }, select: { notification_prefs: true, is_test: true } });
+      if (user?.is_test) return this.skipTest(to);
+      return topic ? wants(user?.notification_prefs, topic, 'email') : true;
     } catch {
       return true;
     }
   }
 
+  private skipTest(to: string) {
+    this.logger.log(`Not emailing test account ${to}`);
+    return false;
+  }
+
   async sendMemberInvitation({ user, member, url }) {
     try {
+      if (!(await this.wantsEmail(member.email))) return;
       const from = `${process.env.APP_NAME} <${appConfig().mail.from}>`;
       const subject = `${user.fname} is inviting you to ${appConfig().app.name}`;
 
@@ -50,6 +64,7 @@ export class MailService {
   // send otp code for email verification
   async sendOtpCodeToEmail({ name, email, otp }) {
     try {
+      if (!(await this.wantsEmail(email))) return;
       const from = `${process.env.APP_NAME} <${appConfig().mail.from}>`;
       const subject = 'Email Verification';
 
@@ -76,6 +91,7 @@ export class MailService {
     type: string;
   }) {
     try {
+      if (!(await this.wantsEmail(params.email))) return;
       const q = new URLSearchParams({ token: params.token, email: params.email, type: params.type });
       const verificationLink = `${appConfig().app.client_app_url}/verify-email?${q.toString()}`;
 
@@ -114,7 +130,7 @@ export class MailService {
   }): Promise<boolean> {
     try {
       const { topic, ...context } = params;
-      // turned off by the user: nothing to retry
+      // turned off by the user, or a test account: nothing to retry
       if (!(await this.wantsEmail(params.to, topic))) return true;
       const from = `${process.env.APP_NAME} <${appConfig().mail.from}>`;
       await this.queue.add('sendBookingNotification', {

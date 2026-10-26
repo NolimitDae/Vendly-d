@@ -24,6 +24,7 @@ import { useNearMe } from '../../hooks/useNearMe';
 import { api } from '../../services/api';
 import { SocketService } from '../../services/socket.service';
 import ReviewPrompt from '../../components/ReviewPrompt';
+import TestBadge from '../../components/TestBadge';
 
 type Nav = NativeStackNavigationProp<any>;
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -38,6 +39,8 @@ interface Listing {
   location?: string | null;
   distance_miles?: number | null;
   vendor?: { id: string; name: string; vendorProfile?: { business_name?: string | null } | null } | null;
+  /** a test vendor's package (Admin → Settings → Test vendors) */
+  is_test?: boolean;
 }
 
 interface Category {
@@ -373,6 +376,7 @@ function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) 
             {item.price_unit && item.price_unit !== 'fixed' ? ` / ${item.price_unit}` : ''}
           </Text>
         </View>
+        {item.is_test && <TestBadge style={s.testBadge} />}
       </View>
       <View style={s.cardTitleRow}>
         <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
@@ -485,6 +489,7 @@ const s = StyleSheet.create({
     marginBottom: 4,
   },
   price: { position: 'absolute', top: 8, left: 8, backgroundColor: '#F6F8FA', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 },
+  testBadge: { position: 'absolute', bottom: 8, left: 8 },
   priceText: { color: '#030303', fontSize: 11, fontFamily: FONTS.semibold },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   cardTitle: { flex: 1, color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.semibold },

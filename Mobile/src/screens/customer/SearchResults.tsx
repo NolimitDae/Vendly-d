@@ -6,6 +6,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Chip, GradientButton, ScreenHeader } from '../../components/brand';
 import SearchFilters, { activeFilters, type Filters } from '../../components/SearchFilters';
 import { ResultRowSkeleton } from '../../components/Skeleton';
+import TestBadge from '../../components/TestBadge';
 import { DARK, FONTS } from '../../constants/colors';
 import { useSaved } from '../../hooks/useSaved';
 import { MarketplaceService, vendorName, type Category, type Listing } from '../../services/marketplace.service';
@@ -161,6 +162,7 @@ export function ResultCard({ item, saved, onSave, onPress }: { item: Listing; sa
         >
           <Ionicons name={saved ? 'heart' : 'heart-outline'} size={18} color={saved ? '#E0479E' : '#111'} />
         </Pressable>
+        {item.is_test && <TestBadge style={s.testBadge} />}
       </View>
       <Text style={s.title} numberOfLines={1}>{item.title}</Text>
       <View style={s.row}>
@@ -192,6 +194,7 @@ export function ResultCard({ item, saved, onSave, onPress }: { item: Listing; sa
 }
 
 const s = StyleSheet.create({
+  testBadge: { position: 'absolute', bottom: 10, left: 10 },
   filterDot: { position: 'absolute', top: -6, right: -8, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: DARK.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   filterDotText: { color: DARK.bg, fontSize: 10, fontFamily: FONTS.bold },
   clear: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold },

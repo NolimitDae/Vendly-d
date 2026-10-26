@@ -77,6 +77,19 @@ describe('WithdrawService', () => {
     expect(service).toBeDefined();
   });
 
+  it('never sets up payouts or withdraws for a test vendor', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ ...mockUserWithConnect, stripe_connect_id: null, is_test: true });
+    await expect(service.createConnectedAccount('user-1', 'test-x-1@vendly.test')).rejects.toThrow(/test vendor/);
+    expect(StripePayment.createConnectedAccount).not.toHaveBeenCalled();
+
+    mockPrisma.user.findUnique.mockResolvedValue({ ...mockUserWithConnect, is_test: true });
+    await expect(service.createOnboardingLink('acct_connect_123', 'user-1')).rejects.toThrow(BadRequestException);
+    await expect(service.processWithdraw('user-1', { amount: 50 } as any)).rejects.toThrow(/test vendor/);
+    expect(StripePayment.createOnboardingAccountLink).not.toHaveBeenCalled();
+    expect(StripePayment.createTransfer).not.toHaveBeenCalled();
+    expect(mockPrisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
   // ─── createConnectedAccount ───────────────────────────────────────────────
 
   describe('createConnectedAccount', () => {

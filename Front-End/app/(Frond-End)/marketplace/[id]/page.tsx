@@ -33,6 +33,7 @@ import { summariseHours, withZone, type WorkingHours } from "@/lib/working-hours
 import { noticeLine } from "@/lib/package-details";
 import { dateOnly } from "@/lib/date-only";
 import { DEPOSIT_RULE_TEXT, isDepositPlan } from "@/service/payments/payments.service";
+import TestBadge from "@/components/marketplace/TestBadge";
 
 interface Listing {
   id: string;
@@ -73,6 +74,8 @@ interface Listing {
   };
   reviews?: unknown[];
   _count?: { reviews: number; bookings: number };
+  /** a test vendor's package (Admin → Settings → Test vendors) */
+  is_test?: boolean;
 }
 
 interface EventOption {
@@ -302,7 +305,10 @@ export default function ListingDetailPage() {
               </div>
 
               <div className="flex items-start justify-between gap-3">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{listing.title}</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {listing.title}
+                  {listing.is_test && <TestBadge className="ml-2 align-middle" />}
+                </h1>
                 <button
                   onClick={toggleSave}
                   disabled={savingToggle}

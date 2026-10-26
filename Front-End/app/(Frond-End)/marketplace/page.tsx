@@ -14,6 +14,7 @@ const RADII = [10, 25, 50, 100];
 import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import BrowseSwitch from "@/components/rentals/BrowseSwitch";
+import TestBadge from "@/components/marketplace/TestBadge";
 
 interface Listing {
   id: string;
@@ -28,6 +29,8 @@ interface Listing {
   vendor?: { id: string; name: string; avatar_url?: string; vendorProfile?: { business_name?: string } };
   _count?: { reviews: number };
   distance_miles?: number | null;
+  /** a test vendor's package (Admin → Settings → Test vendors) */
+  is_test?: boolean;
 }
 
 interface Category {
@@ -437,10 +440,15 @@ function ListingCard({
               <span className="text-4xl">🖼️</span>
             </div>
           )}
-          {listing.category && (
-            <span className="absolute top-3 left-3 bg-white/90 dark:bg-gray-900/90 text-xs font-medium px-2 py-1 rounded-full text-gray-600 dark:text-gray-300">
-              {listing.category.name}
-            </span>
+          {(listing.category || listing.is_test) && (
+            <div className="absolute top-3 left-3 flex items-center gap-1.5">
+              {listing.category && (
+                <span className="bg-white/90 dark:bg-gray-900/90 text-xs font-medium px-2 py-1 rounded-full text-gray-600 dark:text-gray-300">
+                  {listing.category.name}
+                </span>
+              )}
+              {listing.is_test && <TestBadge />}
+            </div>
           )}
           {/* Heart button */}
           <button

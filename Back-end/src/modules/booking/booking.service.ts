@@ -601,8 +601,9 @@ export class BookingService {
   private async trackVendorCancellations(vendorId: string, now = new Date()) {
     const count = (await vendorCancellationCounts(this.prisma, [vendorId], now))[vendorId] ?? 0;
     if (count < TRACK_THRESHOLD) return;
+    // test vendors (Admin -> Settings -> Test vendors) are never reported
     const claimed = await this.prisma.user.updateMany({
-      where: { id: vendorId, OR: [{ cancellations_alerted_at: null }, { cancellations_alerted_at: { lt: trackWindowStart(now) } }] },
+      where: { id: vendorId, is_test: false, OR: [{ cancellations_alerted_at: null }, { cancellations_alerted_at: { lt: trackWindowStart(now) } }] },
       data: { cancellations_alerted_at: now },
     });
     if (claimed.count !== 1) return;

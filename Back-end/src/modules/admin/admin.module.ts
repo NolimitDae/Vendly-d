@@ -7,6 +7,7 @@ import { NotificationModule } from './notification/notification.module';
 import { ServiceModule } from './service/service.module';
 import { AdminBookingModule } from './booking/admin-booking.module';
 import { SettingsModule } from './settings/settings.module';
+import { TestDataModule } from './test-data/test-data.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SettingsModule } from './settings/settings.module';
     ServiceModule,
     AdminBookingModule,
     SettingsModule,
+    TestDataModule,
   ],
 })
 export class AdminModule {}

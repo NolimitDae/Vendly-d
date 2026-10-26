@@ -192,6 +192,8 @@ model User {
   notification_prefs Json?
   // Vendly's admins were told this vendor cancelled too many bookings (see booking/vendor-cancellations.ts)
   cancellations_alerted_at DateTime?
+  // a demo account made in Admin -> Settings -> Test vendors: shown with a "Test" badge, never emailed or paid out
+  is_test           Boolean   @default(false)
   // email verification
   email_verified_at DateTime?
   terms_accepted_at DateTime? // when they ticked Terms of Service + Privacy Policy at sign-up
