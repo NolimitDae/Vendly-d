@@ -7,6 +7,8 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { ConversationService } from './conversation.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
@@ -15,7 +17,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { Role } from '../../../common/guard/role/role.enum';
 import { Roles } from '../../../common/guard/role/roles.decorator';
-import { ApiExcludeController } from '@nestjs/swagger';
+import { ApiExcludeController, ApiQuery } from '@nestjs/swagger';
+import { INBOX_TABS, InboxTab } from '../extras/inbox';
 
 
 @ApiTags('Conversation')
@@ -38,11 +41,23 @@ export class ConversationController {
   //  *conversation list of user
   @Get('conversation-list') 
   @ApiOperation({ summary: 'Get all conversations for the authenticated user' })
-  async findAll(@Req() req) { 
+  @ApiQuery({ name: 'tab', required: false, enum: INBOX_TABS, description: 'Vendors: one inbox tab, with counts for both' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'perPage', required: false })
+  async findAll(@Req() req, @Query('tab') tab?: string, @Query('page') page?: string, @Query('perPage') perPage?: string) { 
   
     const user = req.user.userId; 
 
-    return this.conversationService.findAll(user);
+    // without a tab: the whole list, as before
+    if (!tab) return this.conversationService.findAll(user);
+    if (!INBOX_TABS.includes(tab as InboxTab)) throw new BadRequestException(`tab must be one of: ${INBOX_TABS.join(', ')}`);
+    const num = (v: string | undefined, max: number) => {
+      if (v === undefined || v === '') return undefined;
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1) throw new BadRequestException('page and perPage must be whole numbers from 1');
+      return Math.min(n, max);
+    };
+    return this.conversationService.findAll(user, { tab: tab as InboxTab, page: num(page, 100000), perPage: num(perPage, 100) });
   }
 
   // get conversation by id

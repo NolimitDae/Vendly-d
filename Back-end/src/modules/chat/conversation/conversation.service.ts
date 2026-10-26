@@ -10,7 +10,10 @@ import appConfig from '../../../config/app.config';
 import { DateHelper } from '../../../common/helper/date.helper';
 import { MessageGateway } from '../message/message.gateway';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+import { paginateResponse } from 'src/common/pagination';
 import { assertCanMessage, blockSets, blockState } from '../safety/block';
+import { BookingStatus, UserType } from 'prisma/generated/client';
+import { classifyConversation, clientBookingWhere, InboxTab } from '../extras/inbox';
 
 @Injectable()
 export class ConversationService {
@@ -118,8 +121,8 @@ export class ConversationService {
     };
   }
 
-  //  *conversation list of user
-  async findAll(userId: string) {
+  //  *conversation list of user (vendors can ask for one inbox tab: extras/inbox.ts)
+  async findAll(userId: string, opts: { tab?: InboxTab; page?: number; perPage?: number } = {}) {
 
     const conversations = await this.prisma.conversation.findMany({
       where: {
@@ -228,10 +231,75 @@ export class ConversationService {
       };
     });
 
+    if (opts.tab) {
+      const tabbed = await this.inboxTab(userId, conversations, formattedConversations, opts as { tab: InboxTab; page?: number; perPage?: number });
+      if (tabbed) return { message: 'Conversations retrieved successfully', success: true, ...tabbed };
+    }
+
     return {
       message: 'Conversations retrieved successfully',
       success: true,
       conversations: formattedConversations,
+    };
+  }
+
+  /**
+   * One tab of a vendor's inbox (Clients or Inquiries), with both tabs' totals and unread counts so
+   * the badges stay right. Clients with a booking under way come first. Null for anyone not signed in
+   * as a vendor: they keep a single list.
+   */
+  private async inboxTab<T extends { unread: number }>(
+    userId: string,
+    conversations: { is_group: boolean; participants: { userId: string; role: string | null }[] }[],
+    formatted: T[],
+    opts: { tab: InboxTab; page?: number; perPage?: number },
+  ) {
+    const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { type: true } });
+    if (me?.type !== UserType.VENDOR) return null;
+
+    // the customer in each chat: the other person, or the planner of an event chat
+    const counterparts = conversations.map((c) =>
+      (c.is_group ? c.participants.find((p) => p.role === 'planner') : c.participants.find((p) => p.userId !== userId))?.userId ?? null,
+    );
+    const ids = [...new Set(counterparts.filter((id): id is string => !!id && id !== userId))];
+    const bookings = ids.length
+      ? await this.prisma.booking.findMany({ where: { ...clientBookingWhere, vendor_id: userId, customer_id: { in: ids } }, select: { customer_id: true, status: true } })
+      : [];
+    const statuses = new Map<string, BookingStatus[]>();
+    for (const b of bookings) statuses.set(b.customer_id, [...(statuses.get(b.customer_id) ?? []), b.status]);
+
+    const rows = formatted.map((f, i) => {
+      const c = classifyConversation({ is_group: conversations[i].is_group, counterpart: counterparts[i] }, statuses);
+      return { ...f, tab: c.tab, current_booking: c.current };
+    });
+    const countOf = (tab: InboxTab) => {
+      const inTab = rows.filter((r) => r.tab === tab);
+      return {
+        total: inTab.length,
+        // chats with something unread (the tab badge), and the messages in them
+        unread: inTab.filter((r) => r.unread > 0).length,
+        unread_messages: inTab.reduce((n, r) => n + r.unread, 0),
+      };
+    };
+
+    // newest activity first, as the full list; clients with a booking under way ahead of the rest
+    let list = rows.filter((r) => r.tab === opts.tab);
+    if (opts.tab === 'clients') list = [...list.filter((r) => r.current_booking), ...list.filter((r) => !r.current_booking)];
+
+    const total = list.length;
+    let pagination: ReturnType<typeof paginateResponse>['pagination'] | undefined;
+    if (opts.page || opts.perPage) {
+      const page = opts.page ?? 1;
+      const perPage = opts.perPage ?? 20;
+      pagination = paginateResponse([], total, page, perPage).pagination;
+      list = list.slice((page - 1) * perPage, page * perPage);
+    }
+
+    return {
+      conversations: list,
+      tab: opts.tab,
+      counts: { clients: countOf('clients'), inquiries: countOf('inquiries') },
+      ...(pagination ? { pagination } : {}),
     };
   }
 

@@ -1,13 +1,24 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, isToday, parseISO } from 'date-fns';
+import { BrandGradient } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
-import { ChatService, type Conversation } from '../../services/chat.service';
+import { ChatService, type Conversation, type InboxCounts, type InboxTab } from '../../services/chat.service';
 import { SocketService } from '../../services/socket.service';
 import { useAuth } from '../../context/AuthContext';
+
+// Vendors' inbox is split so booking clients aren't buried under first questions (sorted on the server)
+const TABS: { key: InboxTab; label: string }[] = [
+  { key: 'clients', label: 'Clients' },
+  { key: 'inquiries', label: 'Inquiries' },
+];
+const EMPTY: Record<InboxTab, [string, string]> = {
+  clients: ['No clients yet', 'Chats with customers who have booked you or sent a booking request show up here.'],
+  inquiries: ['No inquiries', "Questions from customers who haven't booked yet show up here."],
+};
 
 export default function ChatList() {
   const navigation = useNavigation<any>();
@@ -16,17 +27,41 @@ export default function ChatList() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const isVendor = user?.type === 'VENDOR';
+  const [tab, setTab] = useState<InboxTab>('clients');
+  const [counts, setCounts] = useState<InboxCounts | null>(null);
+  // a slow answer for the tab just left must not replace the new tab's list
+  const latest = useRef(0);
+  const listRef = useRef(conversations);
+  listRef.current = conversations;
 
   const load = useCallback(async () => {
+    const call = ++latest.current;
     try {
-      const res = await ChatService.getConversations();
-      if (res.data?.success) setConversations(res.data.data);
+      if (isVendor) {
+        const res = await ChatService.getInboxTab(tab);
+        if (call !== latest.current) return;
+        if (res.success) {
+          setConversations(res.conversations);
+          setCounts(res.counts);
+        }
+      } else {
+        const res = await ChatService.getConversations();
+        if (res.data?.success) setConversations(res.data.data);
+      }
     } catch {
       // keep what we have
     } finally {
-      setLoading(false);
+      if (call === latest.current) setLoading(false);
     }
-  }, []);
+  }, [isVendor, tab]);
+
+  const pickTab = (t: InboxTab) => {
+    if (t === tab) return;
+    setConversations([]);
+    setLoading(true);
+    setTab(t);
+  };
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -34,11 +69,16 @@ export default function ChatList() {
   useEffect(() => {
     const onRead = (e: { conversation_id: string; user_id: string }) => {
       if (e?.user_id !== user?.id) return;
-      setConversations((list) => list.map((c) => (c.id === e.conversation_id && c.unread ? { ...c, unread: 0 } : c)));
+      const read = listRef.current.find((c) => c.id === e.conversation_id && c.unread);
+      if (!read) return;
+      setConversations((list) => list.map((c) => (c.id === read.id ? { ...c, unread: 0 } : c)));
+      // and the tab's badge
+      const n = read.unread ?? 0;
+      setCounts((cs) => (cs ? { ...cs, [tab]: { ...cs[tab], unread: Math.max(0, cs[tab].unread - 1), unread_messages: Math.max(0, cs[tab].unread_messages - n) } } : cs));
     };
     SocketService.on('conversationRead', onRead);
     return () => SocketService.off('conversationRead', onRead);
-  }, [user?.id]);
+  }, [user?.id, tab]);
 
   const other = (c: Conversation) => c.participants.find((p) => p.id !== user?.id) ?? c.participants[0];
   const when = (iso: string) => {
@@ -59,6 +99,36 @@ export default function ChatList() {
         ListHeaderComponent={
           <View style={{ gap: 24, marginBottom: 12 }}>
             <Text style={s.title}>Message</Text>
+            {isVendor && (
+              <View style={s.segment} accessibilityRole="tablist">
+                {TABS.map((t) => {
+                  const on = t.key === tab;
+                  const unread = counts?.[t.key].unread ?? 0;
+                  const label = (
+                    <>
+                      <Text style={[s.segmentText, on && { color: '#fff' }]}>{t.label}</Text>
+                      {unread > 0 && (
+                        <View style={[s.badge, s.segmentBadge, on && s.segmentBadgeOn]}>
+                          <Text style={s.badgeText}>{unread > 99 ? '99+' : unread}</Text>
+                        </View>
+                      )}
+                    </>
+                  );
+                  return (
+                    <Pressable
+                      key={t.key}
+                      style={{ flex: 1 }}
+                      onPress={() => pickTab(t.key)}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: on }}
+                      accessibilityLabel={unread ? `${t.label}, ${unread} unread` : t.label}
+                    >
+                      {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
             <View style={s.search}>
               <Ionicons name="search-outline" size={22} color={DARK.muted} />
               <TextInput style={s.searchInput} placeholder="Search..." placeholderTextColor={DARK.muted} value={q} onChangeText={setQ} />
@@ -71,8 +141,8 @@ export default function ChatList() {
           ) : (
             <View style={s.empty}>
               <Ionicons name="chatbubbles-outline" size={48} color={DARK.muted} />
-              <Text style={s.emptyTitle}>{q ? 'No one by that name' : 'No conversations yet'}</Text>
-              <Text style={s.emptyText}>{q ? '' : 'Message a vendor from their profile or a booking and it shows up here.'}</Text>
+              <Text style={s.emptyTitle}>{q ? 'No one by that name' : isVendor ? EMPTY[tab][0] : 'No conversations yet'}</Text>
+              <Text style={s.emptyText}>{q ? '' : isVendor ? EMPTY[tab][1] : 'Message a vendor from their profile or a booking and it shows up here.'}</Text>
             </View>
           )
         }
@@ -134,4 +204,10 @@ const s = StyleSheet.create({
   previewUnread: { color: '#fff', fontFamily: FONTS.medium },
   badge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: '#fff', fontSize: 12, fontFamily: FONTS.semibold },
+  // the vendor Bookings screen's filter tabs
+  segment: { flexDirection: 'row', marginHorizontal: 20, padding: 4, borderRadius: 100, backgroundColor: DARK.card, gap: 2 },
+  segmentItem: { height: 44, paddingHorizontal: 16, borderRadius: 100, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
+  segmentText: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.medium },
+  segmentBadge: { minWidth: 20, height: 20, borderRadius: 10 },
+  segmentBadgeOn: { backgroundColor: 'rgba(255,255,255,0.25)' },
 });

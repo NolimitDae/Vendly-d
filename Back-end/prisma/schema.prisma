@@ -528,7 +528,7 @@ model Message {
 
   attachments String[] @db.Text
 
-  // "text" | "quote" (a custom price card) | "system" (joined / pinned notices)
+  // "text" | "quote" (a custom price card) | "system" (joined / pinned notices) | "invite" (a planner's team invite)
   kind     String  @default("text") @db.VarChar(20)
   quote_id String?
   quote    Quote?  @relation(fields: [quote_id], references: [id], onDelete: SetNull)

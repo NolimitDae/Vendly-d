@@ -122,6 +122,8 @@ export default function ChatDetail() {
       if (!incoming) return;
       setMessages((prev) => (prev.some((m) => m.id === incoming.id) ? prev : [incoming, ...prev]));
       if (incoming.sender_id !== user?.id) markRead();
+      // the vendor replied: the customer can send freely again
+      if (incoming.sender_id !== user?.id && incoming.kind !== 'system') setInfo((i) => (i?.send_limit ? { ...i, send_limit: null } : i));
     };
     const onRead = (e: { conversation_id: string; user_id: string; read_at: string }) => {
       if (e.conversation_id !== conversationId) return;
@@ -165,6 +167,7 @@ export default function ChatDetail() {
         const sent = res.data.data;
         setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [sent, ...prev]));
         setWarning(res.data.warning?.text ?? null);
+        setInfo((i) => (i ? { ...i, send_limit: res.data.send_limit } : i));
         setPhotos([]);
       }
     } catch (e: any) {
@@ -192,7 +195,7 @@ export default function ChatDetail() {
 
   const send = () => {
     const content = text.trim();
-    if ((!content && !photos.length) || sending || blocked) return;
+    if ((!content && !photos.length) || sending || blocked || limitReached) return;
     if (content && sharesContact(content)) {
       Alert.alert('Keep it in Vendly', CONTACT_WARNING, [
         { text: 'Edit message', style: 'cancel' },
@@ -309,6 +312,9 @@ export default function ChatDetail() {
   const title = isGroup ? info?.title ?? 'Event chat' : participantName;
   const memberLine = isGroup ? info?.participants.map((p) => (p.id === user?.id ? 'You' : p.name.split(' ')[0])).join(', ') : null;
   const isVendor = user?.type === 'VENDOR';
+  // customers: a few messages until the vendor replies (the server enforces it too)
+  const sendLimit = !isGroup ? info?.send_limit ?? null : null;
+  const limitReached = !!sendLimit && sendLimit.remaining <= 0;
 
   const Avatar = ({ uri, name }: { uri?: string; name: string }) => (
     <View style={s.avatar}>
@@ -428,6 +434,18 @@ export default function ChatDetail() {
         </View>
       ) : (
         <>
+          {limitReached ? (
+            <View style={s.limitNote} accessibilityLiveRegion="polite">
+              <Ionicons name="time-outline" size={16} color={DARK.muted} />
+              <Text style={s.limitText}>
+                You&apos;ve sent {sendLimit.limit} messages. You can send more once {sendLimit.vendor_name} replies.
+              </Text>
+            </View>
+          ) : sendLimit && sendLimit.used > 0 ? (
+            <Text style={s.limitHint} accessibilityLiveRegion="polite">
+              {sendLimit.remaining} {sendLimit.remaining === 1 ? 'message' : 'messages'} left until they reply
+            </Text>
+          ) : null}
           {photos.length > 0 && (
             <View style={s.previewBar}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.previewStrip} accessibilityLabel="Photos to send">
@@ -450,7 +468,7 @@ export default function ChatDetail() {
             </View>
           )}
           <View style={[s.inputBar, { marginBottom: insets.bottom + 12 }]}>
-            <Pressable onPress={pickPhotos} disabled={sending} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Attach photos (up to ${MAX_PHOTOS})`} style={s.plus}>
+            <Pressable onPress={pickPhotos} disabled={sending || limitReached} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Attach photos (up to ${MAX_PHOTOS})`} style={s.plus}>
               <Ionicons name="image-outline" size={22} color={DARK.accent} />
             </Pressable>
             {isVendor && (
@@ -468,12 +486,13 @@ export default function ChatDetail() {
               }}
               placeholder="Message"
               placeholderTextColor={DARK.muted}
+              editable={!limitReached}
               multiline
               onSubmitEditing={send}
               blurOnSubmit
             />
-            <Pressable onPress={send} disabled={(!text.trim() && !photos.length) || sending} accessibilityRole="button" accessibilityLabel="Send">
-              <BrandGradient style={[s.send, !text.trim() && !photos.length && { opacity: 0.5 }]}>
+            <Pressable onPress={send} disabled={(!text.trim() && !photos.length) || sending || limitReached} accessibilityRole="button" accessibilityLabel="Send">
+              <BrandGradient style={[s.send, ((!text.trim() && !photos.length) || limitReached) && { opacity: 0.5 }]}>
                 {sending ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="paper-plane-outline" size={22} color="#fff" />}
               </BrandGradient>
             </Pressable>
@@ -525,6 +544,9 @@ const s = StyleSheet.create({
   blocked: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 20, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 28, backgroundColor: DARK.field },
   blockedText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium, textAlign: 'center', flexShrink: 1 },
   blockedLink: { color: DARK.accent, fontFamily: FONTS.semibold },
+  limitNote: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: DARK.card },
+  limitText: { flex: 1, color: DARK.muted, fontSize: 13, lineHeight: 18, fontFamily: FONTS.medium },
+  limitHint: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular, marginHorizontal: 28, marginBottom: 6 },
   previewBar: { marginHorizontal: 20, marginBottom: 8 },
   previewStrip: { gap: 12, paddingTop: 8, paddingRight: 8, paddingLeft: 4 },
   previewCount: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular, marginTop: 4, marginLeft: 4 },

@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { MessageSquare, Search, Loader2, Plus, X, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { ChatService } from "@/service/chat/chat.service";
+import { ChatService, type InboxCounts, type InboxTab } from "@/service/chat/chat.service";
 import { CHAT_READ_EVENT } from "@/components/chat/presence";
+import InboxTabs from "@/components/chat/InboxTabs";
+import { whoAmI } from "@/lib/currentUser";
 import { cn } from "@/lib/utils";
 
 dayjs.extend(relativeTime);
@@ -42,6 +44,11 @@ interface ChatUser {
   type: string;
 }
 
+const EMPTY_TAB: Record<InboxTab, string> = {
+  clients: "No clients yet. Chats with customers who have booked you or sent a booking request show up here.",
+  inquiries: "No inquiries. Questions from customers who haven't booked yet show up here.",
+};
+
 // The contacts endpoint no longer returns emails, so show each person's role instead.
 const ROLE_LABEL: Record<string, string> = { VENDOR: "Vendor", CLIENT: "Customer", EVENT_PLANNER: "Event planner" };
 
@@ -57,27 +64,48 @@ export default function ConversationSidebar() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [userSearch, setUserSearch] = useState("");
   const [starting, setStarting] = useState<string | null>(null);
+  // vendors get their inbox in two tabs (null until we know who's signed in)
+  const [isVendor, setIsVendor] = useState<boolean | null>(null);
+  const [tab, setTab] = useState<InboxTab>("clients");
+  const [counts, setCounts] = useState<InboxCounts | null>(null);
+  const listRef = useRef(conversations);
+  listRef.current = conversations;
 
   useEffect(() => {
-    ChatService.getConversations()
-      .then((res) => {
-        if (res.data?.success) {
-          setConversations(res.data.conversations ?? []);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    whoAmI().then((me) => setIsVendor(me.type === "VENDOR"));
   }, []);
 
-  // the open chat marked itself read: drop its unread badge
+  useEffect(() => {
+    if (isVendor === null) return;
+    let stale = false;
+    setLoading(true);
+    (isVendor ? ChatService.getInboxTab(tab) : ChatService.getConversations())
+      .then((res) => {
+        if (stale || !res.data?.success) return;
+        setConversations(res.data.conversations ?? []);
+        if (isVendor) setCounts(res.data.counts ?? null);
+      })
+      .catch(() => {})
+      .finally(() => !stale && setLoading(false));
+    // a slow answer for a tab already left doesn't replace the new one
+    return () => {
+      stale = true;
+    };
+  }, [isVendor, tab]);
+
+  // the open chat marked itself read: drop its unread badge (and the tab's)
   useEffect(() => {
     const onRead = (e: Event) => {
       const id = (e as CustomEvent<{ conversation_id: string }>).detail?.conversation_id;
-      setConversations((list) => list.map((c) => (c.conversation_id === id && c.unread ? { ...c, unread: 0 } : c)));
+      const read = listRef.current.find((c) => c.conversation_id === id && c.unread);
+      if (!read) return;
+      setConversations((list) => list.map((c) => (c.conversation_id === id ? { ...c, unread: 0 } : c)));
+      const n = read.unread ?? 0;
+      setCounts((cs) => (cs ? { ...cs, [tab]: { ...cs[tab], unread: Math.max(0, cs[tab].unread - 1), unread_messages: Math.max(0, cs[tab].unread_messages - n) } } : cs));
     };
     window.addEventListener(CHAT_READ_EVENT, onRead);
     return () => window.removeEventListener(CHAT_READ_EVENT, onRead);
-  }, []);
+  }, [tab]);
 
   const openNewChat = () => {
     setShowNewChat(true);
@@ -143,6 +171,17 @@ export default function ConversationSidebar() {
             className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
           />
         </div>
+        {isVendor && (
+          <InboxTabs
+            tab={tab}
+            counts={counts}
+            onChange={(t) => {
+              if (t === tab) return;
+              setConversations([]);
+              setTab(t);
+            }}
+          />
+        )}
       </div>
 
       {/* Conversation list */}
@@ -163,7 +202,7 @@ export default function ConversationSidebar() {
           <div className="py-12 text-center px-4">
             <MessageSquare className="w-9 h-9 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
             <p className="text-gray-400 text-sm">
-              {search ? "No conversations match your search" : "No conversations yet"}
+              {search ? "No conversations match your search" : isVendor ? EMPTY_TAB[tab] : "No conversations yet"}
             </p>
             {!search && (
               <button

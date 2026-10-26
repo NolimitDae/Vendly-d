@@ -490,7 +490,8 @@ export class EventToolsService {
         select: { id: true },
       });
       if (!conv) conv = await this.prisma.conversation.create({ data: { participants: { create: [{ userId: plannerId }, { userId: vendorId }] } }, select: { id: true } });
-      const msg = await this.prisma.message.create({ data: { conversationId: conv.id, senderId: plannerId, text, status: 'SENT' }, include: messageInclude });
+      // an automatic invite: it doesn't count towards the planner's messages before the vendor replies
+      const msg = await this.prisma.message.create({ data: { conversationId: conv.id, senderId: plannerId, text, kind: 'invite', status: 'SENT' }, include: messageInclude });
       await this.prisma.conversation.update({ where: { id: conv.id }, data: { updatedAt: new Date() } });
       this.gateway.server?.to(conv.id).emit('message', { from: plannerId, data: formatMessage(msg) });
       void this.push.sendToUser(vendorId, { title: `${planner?.name ?? 'A planner'} invited you`, body: event.name, data: { type: 'chat', conversationId: conv.id } }, 'messages');

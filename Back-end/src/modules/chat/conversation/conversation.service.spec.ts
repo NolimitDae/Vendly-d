@@ -28,6 +28,7 @@ const mockPrisma = {
   },
   user: {
     findMany: jest.fn(),
+    findUnique: jest.fn(),
   },
   booking: {
     findMany: jest.fn(),
@@ -171,6 +172,66 @@ describe('ConversationService', () => {
 
       expect(result.success).toBe(true);
       expect(result.conversations).toHaveLength(0);
+    });
+
+    describe('vendor inbox tabs', () => {
+      const conv = (id: string, other: string, unread = 0) => ({ id, unread, updatedAt: new Date(), is_group: false, participants: [{ ...mockParticipant('vendor'), role: 'participant' }, { ...mockParticipant(other), role: 'participant' }], messages: [] });
+      // newest first, as the database returns them
+      const list = [conv('c-new-lead', 'lead'), conv('c-past', 'past'), conv('c-current', 'current'), conv('c-asker', 'asker')];
+      const unreadBy: Record<string, number> = { 'c-new-lead': 2, 'c-current': 1, 'c-asker': 4 };
+
+      beforeEach(() => {
+        mockPrisma.conversation.findMany.mockResolvedValue(list);
+        mockPrisma.message.count.mockImplementation(async ({ where }: any) => unreadBy[where.conversationId] ?? 0);
+        mockPrisma.user.findUnique.mockResolvedValue({ type: 'VENDOR' });
+        mockPrisma.booking.findMany.mockResolvedValue([
+          { customer_id: 'past', status: 'COMPLETED' },
+          { customer_id: 'current', status: 'CONFIRMED' },
+        ]);
+      });
+      afterEach(() => mockPrisma.message.count.mockReset().mockResolvedValue(0));
+
+      it('Clients: people with a booking with me, current bookings first; counts for both tabs', async () => {
+        const result: any = await service.findAll('vendor', { tab: 'clients' });
+        expect(result.conversations.map((c: any) => c.conversation_id)).toEqual(['c-current', 'c-past']);
+        expect(result.conversations[0]).toMatchObject({ tab: 'clients', current_booking: true });
+        expect(result.counts).toEqual({
+          clients: { total: 2, unread: 1, unread_messages: 1 },
+          inquiries: { total: 2, unread: 2, unread_messages: 6 },
+        });
+        // only bookings with me, and only the people in my chats
+        expect(mockPrisma.booking.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: expect.objectContaining({ vendor_id: 'vendor', customer_id: { in: ['lead', 'past', 'current', 'asker'] } }) }),
+        );
+      });
+
+      it('Inquiries: everyone else, newest first, with paging', async () => {
+        const result: any = await service.findAll('vendor', { tab: 'inquiries' });
+        expect(result.conversations.map((c: any) => c.conversation_id)).toEqual(['c-new-lead', 'c-asker']);
+
+        const page2: any = await service.findAll('vendor', { tab: 'inquiries', page: 2, perPage: 1 });
+        expect(page2.conversations.map((c: any) => c.conversation_id)).toEqual(['c-asker']);
+        expect(page2.pagination).toMatchObject({ total: 2, page: 2, perPage: 1, hasNextPage: false });
+      });
+
+      it('a booking request moves the chat to Clients', async () => {
+        mockPrisma.booking.findMany.mockResolvedValue([{ customer_id: 'lead', status: 'PENDING' }]);
+        const result: any = await service.findAll('vendor', { tab: 'clients' });
+        expect(result.conversations.map((c: any) => c.conversation_id)).toEqual(['c-new-lead']);
+      });
+
+      it('customers and planners keep a single list (the tab is ignored)', async () => {
+        mockPrisma.user.findUnique.mockResolvedValue({ type: 'CUSTOMER' });
+        const result: any = await service.findAll('vendor', { tab: 'clients' });
+        expect(result.conversations).toHaveLength(4);
+        expect(result.counts).toBeUndefined();
+      });
+
+      it('without a tab the response is as before', async () => {
+        const result: any = await service.findAll('vendor');
+        expect(Object.keys(result).sort()).toEqual(['conversations', 'message', 'success']);
+        expect(result.conversations[0].tab).toBeUndefined();
+      });
     });
   });
 

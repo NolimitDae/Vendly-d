@@ -63,6 +63,9 @@ const mockPrisma = {
     delete: jest.fn(),
   },
   userReport: { findMany: jest.fn().mockResolvedValue([]) },
+  // who is a customer / vendor, for the message limit (no users found: no limit)
+  user: { findMany: jest.fn().mockResolvedValue([]) },
+  booking: { count: jest.fn().mockResolvedValue(0) },
   $transaction: jest.fn(),
 };
 
@@ -128,6 +131,49 @@ describe('MessageService', () => {
           data: expect.objectContaining({ text: 'Hello', senderId: 'user-1' }),
         }),
       );
+    });
+
+    describe('customer message limit', () => {
+      const users = [
+        { id: 'user-1', name: 'Cara', type: 'CUSTOMER', roles: ['CUSTOMER'] },
+        { id: 'user-2', name: 'Bloom Florals', type: 'VENDOR', roles: ['VENDOR'] },
+      ];
+      beforeEach(() => {
+        mockPrisma.participant.findFirst.mockResolvedValue({ userId: 'user-1' });
+        mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+        mockPrisma.user.findMany.mockResolvedValue(users);
+        mockPrisma.message.create.mockResolvedValue(makeMessage());
+        mockPrisma.conversation.update.mockResolvedValue({});
+      });
+      afterEach(() => {
+        mockPrisma.user.findMany.mockResolvedValue([]);
+        mockPrisma.message.count.mockReset();
+      });
+      // vendor's replies, then the customer's typed messages
+      const counts = (replies: number, typed: number) =>
+        mockPrisma.message.count.mockImplementation(async ({ where }: any) => (where.senderId === 'user-2' ? replies : typed));
+
+      it('stops the 4th message before the vendor replies, before any photo is stored', async () => {
+        counts(0, 3);
+        const { TanvirStorage } = jest.requireMock('src/common/lib/Disk/TanvirStorage');
+        const photo = { buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]), originalname: 'a.jpg', mimetype: 'image/jpeg', size: 12 } as any;
+        await expect(service.create(dto, 'user-1', [photo])).rejects.toThrow("You can send 3 messages until Bloom Florals replies. They'll get back to you soon.");
+        expect(TanvirStorage.put).not.toHaveBeenCalled();
+        expect(mockPrisma.message.create).not.toHaveBeenCalled();
+      });
+
+      it('says how many are left after sending', async () => {
+        counts(0, 1);
+        const result: any = await service.create(dto, 'user-1');
+        expect(result.send_limit).toEqual({ limit: 3, used: 2, remaining: 1, vendor_name: 'Bloom Florals' });
+      });
+
+      it('has no limit once the vendor has replied', async () => {
+        counts(1, 5);
+        const result: any = await service.create(dto, 'user-1');
+        expect(result.success).toBe(true);
+        expect(result.send_limit).toBeNull();
+      });
     });
 
     it('should throw ForbiddenException (403, not a sign-in problem) when sender is not a participant', async () => {

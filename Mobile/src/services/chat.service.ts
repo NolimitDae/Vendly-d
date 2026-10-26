@@ -62,6 +62,22 @@ export interface Message {
   contact_flagged?: boolean;
 }
 
+/**
+ * A customer can send 3 messages to a vendor until the vendor replies or accepts a booking
+ * (Back-end/src/modules/chat/extras/send-limit.ts). Null when there's no limit.
+ */
+export interface SendLimit {
+  limit: number;
+  used: number;
+  remaining: number;
+  vendor_name: string;
+}
+
+/** Vendors' inbox tabs (Back-end/src/modules/chat/extras/inbox.ts). */
+export type InboxTab = 'clients' | 'inquiries';
+/** Per tab: chats in it, chats with something unread, unread messages. */
+export type InboxCounts = Record<InboxTab, { total: number; unread: number; unread_messages: number }>;
+
 /** Group info, pinned message and read positions that come with the message list. */
 export interface ConversationInfo {
   id: string;
@@ -73,6 +89,7 @@ export interface ConversationInfo {
   /** 1:1 chats only: I blocked them / they blocked me. Either way nobody can send. */
   blocked_by_me?: boolean;
   blocked_me?: boolean;
+  send_limit?: SendLimit | null;
 }
 
 /** A photo picked with expo-image-picker, ready for FormData. */
@@ -156,6 +173,7 @@ interface ApiConversationInfo {
   participants: { id: string; name: string; role?: string | null; avatar_url?: string | null; last_read_at?: string | null }[];
   blocked_by_me?: boolean;
   blocked_me?: boolean;
+  send_limit?: SendLimit | null;
 }
 
 /** Converts an API message (REST or socket `message` event) to the screens' shape. */
@@ -202,6 +220,7 @@ function toInfo(c: ApiConversationInfo | undefined, conversationId: string): Con
     participants: c.participants.map((p) => ({ id: p.id, name: p.name, role: p.role, avatar: p.avatar_url ?? undefined, last_read_at: p.last_read_at })),
     blocked_by_me: c.blocked_by_me,
     blocked_me: c.blocked_me,
+    send_limit: c.send_limit ?? null,
   };
 }
 
@@ -212,6 +231,16 @@ export const ChatService = {
   getConversations: async () => {
     const res = await api.get('/chat/conversation/conversation-list');
     return envelope(!!res.data?.success, ((res.data?.conversations ?? []) as ApiConversation[]).map(toConversation));
+  },
+
+  /** Vendors: one inbox tab, with both tabs' counts for the badges. */
+  getInboxTab: async (tab: InboxTab) => {
+    const res = await api.get('/chat/conversation/conversation-list', { params: { tab } });
+    return {
+      success: !!res.data?.success,
+      conversations: ((res.data?.conversations ?? []) as ApiConversation[]).map(toConversation),
+      counts: (res.data?.counts ?? null) as InboxCounts | null,
+    };
   },
 
   getMessages: async (conversationId: string, params?: MessageListParams) => {
@@ -237,7 +266,15 @@ export const ChatService = {
       body = form;
     }
     const res = await api.post('/chat/message/send-message', body, photos.length ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined);
-    return { data: { success: !!res.data?.success, data: toMessage(res.data?.data as ApiMessage, data.conversation_id), warning: res.data?.warning as { text: string } | null } };
+    return {
+      data: {
+        success: !!res.data?.success,
+        data: toMessage(res.data?.data as ApiMessage, data.conversation_id),
+        warning: res.data?.warning as { text: string } | null,
+        // messages left until the vendor replies (null: no limit)
+        send_limit: (res.data?.send_limit ?? null) as SendLimit | null,
+      },
+    };
   },
 
   /** Marks the other side's messages read; they get a `conversationRead` socket event ("Seen"). */

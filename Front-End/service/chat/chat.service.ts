@@ -37,6 +37,22 @@ export interface ChatMessage {
   sender: { id: string; name: string; avatar_url?: string | null; avatar?: string | null } | null;
 }
 
+/**
+ * A customer can send 3 messages to a vendor until the vendor replies or accepts a booking
+ * (Back-end/src/modules/chat/extras/send-limit.ts). Null when there's no limit.
+ */
+export interface SendLimit {
+  limit: number;
+  used: number;
+  remaining: number;
+  vendor_name: string;
+}
+
+/** Vendors' inbox tabs (Back-end/src/modules/chat/extras/inbox.ts). */
+export type InboxTab = "clients" | "inquiries";
+/** Per tab: chats in it, chats with something unread, unread messages. */
+export type InboxCounts = Record<InboxTab, { total: number; unread: number; unread_messages: number }>;
+
 export interface ConversationInfo {
   id: string;
   is_group: boolean;
@@ -47,6 +63,8 @@ export interface ConversationInfo {
   /** 1:1 chats only: I blocked them / they blocked me. Either way nobody can send. */
   blocked_by_me?: boolean;
   blocked_me?: boolean;
+  /** messages left until the vendor replies (customers writing to a vendor only) */
+  send_limit?: SendLimit | null;
 }
 
 export type ReportReason = "spam" | "harassment" | "scam" | "inappropriate" | "other";
@@ -92,6 +110,10 @@ export function acceptPhotos(alreadyChosen: number, picked: File[]): { files: Fi
 export const ChatService = {
   getConversations: async () =>
     Fetch.get("/chat/conversation/conversation-list", authHeaders()),
+
+  /** Vendors: one inbox tab, with `counts` for both tabs' badges. */
+  getInboxTab: async (tab: InboxTab) =>
+    Fetch.get(`/chat/conversation/conversation-list?tab=${tab}`, authHeaders()),
 
   getConversation: async (id: string) =>
     Fetch.get(`/chat/conversation/single-conversation/${id}`, authHeaders()),

@@ -14,6 +14,7 @@ import { useSocket } from "@/hooks/useSocket";
 import QuoteCard from "@/components/chat/QuoteCard";
 import SendQuoteModal from "@/components/chat/SendQuoteModal";
 import TypingIndicator from "@/components/chat/TypingIndicator";
+import SendLimitNote, { sendLimitReached } from "@/components/chat/SendLimitNote";
 import ChatSafetyMenu, { ReportMessageButton } from "@/components/chat/ChatSafetyMenu";
 import { CHAT_READ_EVENT, createTypingEmitter, readReceipt, useTypingUsers } from "@/components/chat/presence";
 import { cn } from "@/lib/utils";
@@ -115,6 +116,8 @@ export default function ConversationPage() {
       if (payload.data.conversation_id && payload.data.conversation_id !== conversationId) return;
       setMessages((prev) => (prev.some((m) => m.id === payload.data.id) ? prev : [...prev, payload.data]));
       if (payload.data.sender?.id !== me.id) markRead();
+      // the vendor replied: the customer can send freely again
+      if (payload.data.sender?.id !== me.id && payload.data.kind !== "system") setInfo((i) => (i?.send_limit ? { ...i, send_limit: null } : i));
     };
     const handleRead = (e: { conversation_id: string; user_id: string; read_at: string }) => {
       if (e.conversation_id !== conversationId) return;
@@ -162,6 +165,10 @@ export default function ConversationPage() {
   // 1:1 only: while either person has blocked the other nobody can send
   const blockedByMe = !isGroup && !!info?.blocked_by_me;
   const blocked = blockedByMe || (!isGroup && !!info?.blocked_me);
+  // customers: a few messages until the vendor replies (the server enforces it too)
+  const sendLimit = isGroup ? null : info?.send_limit ?? null;
+  const limitReached = sendLimitReached(sendLimit);
+  const cantSend = blocked || limitReached;
 
   // previews are freed when a photo is removed, the photos are sent, or the page goes away
   const clearPhotos = useCallback(() => {
@@ -187,7 +194,7 @@ export default function ConversationPage() {
 
   const send = async () => {
     const content = text.trim();
-    if ((!content && !photos.length) || sending || blocked) return;
+    if ((!content && !photos.length) || sending || cantSend) return;
     if (content && sharesContact(content) && !confirm(`${CONTACT_WARNING}\n\nSend anyway?`)) return;
     typing?.stop();
     setText("");
@@ -197,6 +204,7 @@ export default function ConversationPage() {
       if (res.data?.success) {
         setMessages((prev) => (prev.some((m) => m.id === res.data.data.id) ? prev : [...prev, res.data.data]));
         setWarning(res.data.warning?.text ?? null);
+        setInfo((i) => (i ? { ...i, send_limit: res.data.send_limit ?? null } : i));
         clearPhotos();
       }
     } catch (e) {
@@ -424,6 +432,8 @@ export default function ConversationPage() {
         </div>
       )}
 
+      {!blocked && <SendLimitNote limit={sendLimit} />}
+
       {photos.length > 0 && !blocked && (
         <div className="px-4 pt-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
           <ul aria-label="Photos to send" className="flex gap-3 overflow-x-auto pt-2 pb-1">
@@ -442,12 +452,12 @@ export default function ConversationPage() {
       )}
 
       {/* Input */}
-      <div className={cn("flex-shrink-0 bg-white dark:bg-gray-800 px-4 py-3", !photos.length && "border-t border-gray-100 dark:border-gray-700")}>
+      <div className={cn("flex-shrink-0 bg-white dark:bg-gray-800 px-4 py-3", !photos.length && !(sendLimit && sendLimit.used > 0) && "border-t border-gray-100 dark:border-gray-700")}>
         <div className="flex items-end gap-2">
-          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={pickPhotos} aria-label="Choose photos" disabled={blocked} />
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={pickPhotos} aria-label="Choose photos" disabled={cantSend} />
           <button
             onClick={() => fileRef.current?.click()}
-            disabled={blocked || sending || photos.length >= MAX_PHOTOS}
+            disabled={cantSend || sending || photos.length >= MAX_PHOTOS}
             aria-label={`Attach photos (up to ${MAX_PHOTOS})`}
             className="p-2.5 rounded-2xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
           >
@@ -467,9 +477,9 @@ export default function ConversationPage() {
                 send();
               }
             }}
-            placeholder={blocked ? "You can't send messages in this chat" : "Type a message... (Enter to send)"}
+            placeholder={blocked ? "You can't send messages in this chat" : limitReached ? `Waiting for ${sendLimit?.vendor_name ?? "them"} to reply` : "Type a message... (Enter to send)"}
             aria-label="Message"
-            disabled={blocked}
+            disabled={cantSend}
             rows={1}
             className="flex-1 resize-none px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 max-h-32 overflow-y-auto leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ height: "auto" }}
@@ -479,7 +489,7 @@ export default function ConversationPage() {
               t.style.height = `${Math.min(t.scrollHeight, 128)}px`;
             }}
           />
-          <button onClick={send} disabled={(!text.trim() && !photos.length) || sending || blocked} aria-label="Send" className="p-2.5 gradient-bg text-white rounded-2xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+          <button onClick={send} disabled={(!text.trim() && !photos.length) || sending || cantSend} aria-label="Send" className="p-2.5 gradient-bg text-white rounded-2xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
             {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>

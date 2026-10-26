@@ -20,6 +20,7 @@ import { avatarUrl, formatMessage, messageInclude } from "../extras/format";
 import { assertCanMessage, blockState } from "../safety/block";
 import { safeAttachmentNames } from "../safety/attachments";
 import { filesKeptForReports } from "../safety/evidence";
+import { afterSend, assertUnderSendLimit, sendLimitFor } from "../extras/send-limit";
 
 // Temporary enum until Prisma generates it
 enum MessageStatus {
@@ -72,6 +73,9 @@ export class MessageService {
       const recipient = conversation.participants.find((p) => p.userId !== sender);
       if (recipient) await assertCanMessage(this.prisma, sender, recipient.userId);
     }
+
+    // a customer can send a few messages until the vendor replies (checked before any upload is stored)
+    const limit = await assertUnderSendLimit(this.prisma, conversation, sender);
 
     const savedFileNames: string[] = [];
 
@@ -142,6 +146,8 @@ export class MessageService {
       data: formatted,
       // non-blocking: the apps show this as a reminder under the message
       warning: reasons.length ? { reasons, text: CONTACT_WARNING } : null,
+      // messages left until the vendor replies (null: no limit)
+      send_limit: afterSend(limit),
     };
   }
 
@@ -267,6 +273,8 @@ export class MessageService {
       pinned: pinned ? formatMessage(pinned) : null,
       // 1:1 only: lets the apps show "You blocked X" / "You can't reply" and turn off the composer
       ...(receiverParticipant ? await blockState(this.prisma, userId, receiverParticipant.userId) : {}),
+      // a customer's messages left until the vendor replies (null: no limit); the apps show it above the composer
+      send_limit: await sendLimitFor(this.prisma, conversation, userId),
       participants: conversation.participants.map((p) => ({
         id: p.user.id,
         name: p.user.name,
