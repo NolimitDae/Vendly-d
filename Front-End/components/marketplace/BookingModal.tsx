@@ -19,6 +19,7 @@ import { toast } from "react-toastify";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { packagePriceText, perUnit, quantityRangeText } from "@/lib/addons";
 import { firstBookableDay, noticeLine, tooSoonMessage } from "@/lib/package-details";
+import { choicesPayload, missingChoice, togglePick as toggleChoice, type ChosenCustomization, type Customization, type Picks } from "@/lib/package-options";
 import { dayKeyOf, endTimesOn, formatTime, hoursMessage, isOpenDay, otherZone, startTimesOn, summariseHours, withZone, type WorkingHours } from "@/lib/working-hours";
 
 interface Props {
@@ -32,6 +33,8 @@ interface Props {
     max_quantity?: number | null;
     add_ons?: AddOn[];
     fees?: AddOn[];
+    /** dropdowns the customer answers ("Style": Knotless…), some with an upcharge */
+    customizations?: Customization[];
     vendor?: { id: string; name: string };
     /** the vendor's weekly hours: closed days can't be picked and times stay inside the day's hours */
     working_hours?: WorkingHours | null;
@@ -67,6 +70,8 @@ interface Preview {
     quote?: { id: string; title: string; amount: number } | null;
     package?: { label: string; unit: string; quantity: number; unit_price: number; amount: number } | null;
     add_ons?: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[];
+    /** the customizations picked, priced by the server */
+    options?: ChosenCustomization[];
   };
 }
 
@@ -110,6 +115,8 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const [picked, setPicked] = useState<Record<string, number>>({});
   const addOns = listing.add_ons ?? [];
   const fees = listing.fees ?? [];
+  const customizations = listing.customizations ?? [];
+  const [choices, setChoices] = useState<Picks>({});
   // a quote is the agreed price, so the package isn't counted out by guests or hours
   const unit = quote ? null : perUnit(listing.price_unit);
   const minQ = listing.min_quantity && listing.min_quantity > 0 ? listing.min_quantity : null;
@@ -189,6 +196,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
       promo_code: promo.trim() || undefined,
       quote_id: quote?.id,
       add_ons: pickedList().length ? pickedList() : undefined,
+      options: choicesPayload(customizations, choices).length ? choicesPayload(customizations, choices) : undefined,
     };
   };
 
@@ -215,7 +223,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
     if (hours && !startTime) return toast.error("Choose a start time within the vendor's hours");
     const tooSoon = tooSoonMessage(notice, new Date(toIso(date, startTime)!));
     if (tooSoon) return toast.error(tooSoon);
-    const missing = missingForPrice();
+    const missing = missingForPrice() ?? missingChoice(customizations, choices);
     if (missing) return toast.error(missing);
     if (!card) return toast.error("Add a card first. It is only charged once the vendor accepts.");
     setLoading(true);
@@ -310,6 +318,14 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                 <span>{money(preview.pricing.package.amount)}</span>
               </div>
             )}
+            {preview.pricing.options?.map((g) => (
+              <div key={g.group_id} className="flex justify-between gap-3 text-gray-700 dark:text-gray-300">
+                <span>
+                  {g.title}: {g.options.map((o) => o.label).join(", ")}
+                </span>
+                <span>{g.amount > 0 ? `+${money(g.amount)}` : "Included"}</span>
+              </div>
+            ))}
             {preview.pricing.add_ons?.map((a) => (
               <div key={a.add_on_id} className="flex justify-between gap-3 text-gray-700 dark:text-gray-300">
                 <span>{a.label}</span>
@@ -451,6 +467,51 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
               />
               {unit === "person" && range && <p id="guests-hint" className="text-xs text-gray-500 dark:text-gray-400 mt-1">This package is for {range}.</p>}
             </div>
+            {customizations.map((g) => {
+              const picked = choices[g.id] ?? [];
+              const id = `custom-${g.id}`;
+              return g.max_select <= 1 ? (
+                <div key={g.id}>
+                  <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    {g.title}
+                    {g.required ? " (required)" : " (optional)"}
+                  </label>
+                  <select
+                    id={id}
+                    aria-required={g.required}
+                    value={picked[0] ?? ""}
+                    onChange={(e) => setChoices((c) => ({ ...c, [g.id]: e.target.value ? [e.target.value] : [] }))}
+                    className={inputCls}
+                  >
+                    <option value="">{g.required ? "Choose one" : "No preference"}</option>
+                    {g.options.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                        {o.price_text ? ` (${o.price_text})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <fieldset key={g.id} className="space-y-2" aria-required={g.required}>
+                  <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    {g.title} · Pick up to {g.max_select}
+                    {g.required ? " (required)" : " (optional)"}
+                  </legend>
+                  {g.options.map((o) => {
+                    const on = picked.includes(o.id);
+                    const full = !on && picked.length >= g.max_select;
+                    return (
+                      <label key={o.id} className={`flex items-center gap-3 p-2.5 rounded-xl border text-sm ${on ? "border-primary bg-primary/5" : "border-gray-200 dark:border-gray-700"} ${full ? "opacity-50" : "cursor-pointer"}`}>
+                        <input type="checkbox" checked={on} disabled={full} onChange={() => setChoices((c) => toggleChoice(c, g, o.id))} className="w-4 h-4 accent-primary" />
+                        <span className="flex-1 text-gray-900 dark:text-white">{o.label}</span>
+                        {o.price_text && <span className="text-gray-600 dark:text-gray-300 whitespace-nowrap">{o.price_text}</span>}
+                      </label>
+                    );
+                  })}
+                </fieldset>
+              );
+            })}
             {addOns.length > 0 && (
               <fieldset className="space-y-2">
                 <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Add-ons (optional)</legend>

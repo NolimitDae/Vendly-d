@@ -32,6 +32,8 @@ export interface BookingFields {
   timezone?: string;
   /** Add-ons picked when booking. Must be identical in the preview and the booking request (the contract covers them). */
   add_ons?: { add_on_id: string; quantity?: number }[];
+  /** What was picked for the package's customizations (checked and priced by the server). Same rule as add_ons. */
+  options?: { group_id: string; option_ids: string[] }[];
 }
 
 export interface AmendmentChanges {

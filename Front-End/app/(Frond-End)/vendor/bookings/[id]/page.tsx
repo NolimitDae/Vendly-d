@@ -28,6 +28,7 @@ import CancelBookingDialog from "@/components/bookings/CancelBookingDialog";
 import RefundCard from "@/components/bookings/RefundCard";
 import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceButton";
 import { InspirationPhotos } from "@/components/bookings/InspirationPhotos";
+import BookingChoices from "@/components/bookings/BookingChoices";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { closesIn } from "@/lib/requests";
@@ -269,6 +270,7 @@ export default function VendorBookingDetailPage() {
             </div>
           )}
         </div>
+        <BookingChoices booking={booking} />
         {(["CONFIRMED", "IN_PROGRESS"].includes(booking.status) || invoiceAvailable(booking)) && (
           <div className="flex flex-wrap gap-2 pt-1">
             {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}

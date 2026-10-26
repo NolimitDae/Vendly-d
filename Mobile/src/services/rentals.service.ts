@@ -16,6 +16,9 @@ export interface RentalItem {
   turnaround_hours: number;
   location?: string | null;
   status: RentalItemStatus;
+  /** the vendor's instructions for using the equipment */
+  dos?: string[] | null;
+  donts?: string[] | null;
   vendor?: { id: string; name: string; avatar_url?: string | null };
   /** Free units for the dates searched (browse with dates) */
   available?: number;

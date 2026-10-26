@@ -11,6 +11,7 @@ import BookingContractCard from '../../components/contracts/BookingContractCard'
 import { InspirationPhotos } from '../../components/booking/InspirationPhotos';
 import PaymentTimeline from '../../components/PaymentTimeline';
 import RentalReturnCard from '../../components/RentalReturnCard';
+import BookingChoices from '../../components/booking/BookingChoices';
 import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { api } from '../../services/api';
@@ -281,6 +282,8 @@ export default function BookingDetail() {
           )}
           {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
 
+          {/* the customizations picked, and the vendor's dos and don'ts */}
+          <BookingChoices booking={booking} />
           <RentalReturnCard booking={booking} role="CUSTOMER" onDone={load} />
 
           <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} startReporting={reporting} onChanged={() => { load(); extras.reload(); }} />

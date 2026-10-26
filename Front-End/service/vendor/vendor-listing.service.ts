@@ -48,4 +48,11 @@ export const VendorListingService = {
 
   unblockDates: async (blockId: string) =>
     Fetch.delete(`/vendor/listings/availability/${blockId}`, authHeaders()),
+
+  /** The package's customizations (dropdowns customers answer when booking). */
+  getCustomizations: async (id: string) => Fetch.get(`/vendor/listings/${id}/customizations`, authHeaders()),
+
+  /** Replaces the package's customizations, in order. Existing bookings keep what was chosen. */
+  setCustomizations: async (id: string, groups: unknown[]) =>
+    Fetch.put(`/vendor/listings/${id}/customizations`, { groups }, authHeaders()),
 };

@@ -15,6 +15,7 @@ import { summariseHours, withZone } from '../../utils/workingHours';
 import { noticeLine } from '../../utils/packageDetails';
 import { DEPOSIT_RULE_TEXT, isDepositPlan } from '../../utils/bookingStatus';
 import TestBadge from '../../components/TestBadge';
+import { DosDontsList } from '../../components/listing/DosDonts';
 
 export const toSummary = (l: Listing): ListingSummary => ({
   id: l.id,
@@ -153,6 +154,35 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
               <Ionicons name="calendar-outline" size={18} color={DARK.accent} />
               <Text style={s.muted}>{noticeLine(listing.min_notice_hours)}</Text>
             </View>
+          )}
+
+          {!!listing.customizations?.length && (
+            <Card style={{ gap: 12 }}>
+              <View style={{ gap: 2 }}>
+                <Text style={s.cardTitle}>Customizations available</Text>
+                <Text style={s.muted}>You choose these when you book.</Text>
+              </View>
+              {listing.customizations.map((g) => (
+                <View key={g.id} style={{ gap: 6 }}>
+                  <Text style={s.addOnName}>
+                    {g.title}
+                    <Text style={s.muted}>{`  ${g.max_select > 1 ? `Pick up to ${g.max_select}` : 'Pick one'}${g.required ? ' · Required' : ''}`}</Text>
+                  </Text>
+                  {g.options.map((o) => (
+                    <View key={o.id} style={s.rowBetween} accessible accessibilityLabel={o.price_text ? `${o.label}, ${o.price_text}` : o.label}>
+                      <Text style={[s.body, { flex: 1 }]}>{o.label}</Text>
+                      {!!o.price_text && <Text style={s.addOnPrice}>{o.price_text}</Text>}
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </Card>
+          )}
+
+          {(!!listing.dos?.length || !!listing.donts?.length) && (
+            <Card>
+              <DosDontsList dos={listing.dos} donts={listing.donts} />
+            </Card>
           )}
 
           {addOns.length > 0 && (

@@ -18,6 +18,9 @@ import { CheckRow } from '../../components/Sheet';
 import { AddOnsService, countedUnit, priceText, quantityWord, type AddOn, type AddOnKind } from '../../services/addons.service';
 import type { VendorDashboardStackParams } from '../../navigation/types';
 import { MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, noticeHours } from '../../utils/packageDetails';
+import CustomizationsEditor from '../../components/listing/CustomizationsEditor';
+import { DosDontsEditor } from '../../components/listing/DosDonts';
+import { appendDosDonts, customizationsError, dosDontsError, dosDontsFrom, draftsFrom, draftsToInput, emptyDosDonts, type CustomizationDraft, type DosDonts } from '../../utils/packageOptions';
 
 interface PickedImage { uri: string; type: string; name: string }
 /** A custom add-on or fee made in this form, created once the package is saved. */
@@ -70,6 +73,10 @@ export default function ListingForm() {
   const [addOnsReady, setAddOnsReady] = useState(false);
   const [addOnsTouched, setAddOnsTouched] = useState(false);
   const [newKind, setNewKind] = useState<AddOnKind | null>(null);
+  // customizations (dropdowns customers answer when booking); an edit only saves them once they've loaded
+  const [custom, setCustom] = useState<CustomizationDraft[]>([]);
+  const [customLoaded, setCustomLoaded] = useState(!isEdit);
+  const [dosDonts, setDosDonts] = useState<DosDonts>(emptyDosDonts());
 
   useEffect(() => {
     (async () => {
@@ -106,6 +113,9 @@ export default function ListingForm() {
             const days = h >= 24 && h % 24 === 0;
             setNotice(h ? String(days ? h / 24 : h) : '');
             setNoticeUnit(days || !h ? 'days' : 'hours');
+            setDosDonts(dosDontsFrom(l));
+            setCustom(draftsFrom(l.customizations));
+            setCustomLoaded(Array.isArray(l.customizations));
           }
         }
       } catch {
@@ -138,6 +148,10 @@ export default function ListingForm() {
     const noticeH = noticeHours(notice, noticeUnit);
     if (Number.isNaN(noticeH)) return Alert.alert('Minimum notice', 'Enter a whole number.');
     if (noticeH > MAX_MIN_NOTICE_HOURS) return Alert.alert('Minimum notice', 'Minimum notice can be up to 90 days.');
+    const dosProblem = dosDontsError(dosDonts);
+    if (dosProblem) return Alert.alert('Dos and don’ts', dosProblem);
+    const customProblem = customizationsError(custom);
+    if (customProblem) return Alert.alert('Customizations', customProblem);
     setSaving(true);
     try {
       const fd = new FormData();
@@ -164,6 +178,7 @@ export default function ListingForm() {
       // when editing, an empty list or notice clears what was there
       if (items.length || isEdit) fd.append('included_items', JSON.stringify(items));
       if (noticeH || isEdit) fd.append('min_notice_hours', noticeH ? String(noticeH) : '');
+      appendDosDonts(fd, dosDonts, isEdit);
       // the photos already on the package that the vendor kept; new ones are added after them
       if (isEdit) fd.append('keep_images', JSON.stringify(existing));
       images.forEach((img) => fd.append('images', img as unknown as Blob));
@@ -171,11 +186,11 @@ export default function ListingForm() {
       const res = isEdit ? await api.patch(`/vendor/listings/${listingId}`, fd, config) : await api.post('/vendor/listings', fd, config);
       if (res.data?.success === false) throw new Error(res.data?.message);
       const id: string | undefined = isEdit ? listingId : res.data?.data?.id;
-      const addOnProblem = id ? await saveAddOns(id) : null;
+      const addOnProblem = id ? [await saveAddOns(id), await saveCustomizations(id)].find(Boolean) ?? null : null;
       const done = isEdit ? 'Your changes are live.' : 'Publish it from the packages list when you’re ready.';
       Alert.alert(
         isEdit ? 'Package updated' : 'Package created',
-        addOnProblem ? `${done}\n\nThe add-ons and fees weren’t saved: ${addOnProblem} Edit the package to try again.` : done,
+        addOnProblem ? `${done}\n\nThe add-ons, fees or customizations weren’t saved: ${addOnProblem} Edit the package to try again.` : done,
         [{ text: 'OK', onPress: () => nav.goBack() }],
       );
     } catch (err) {
@@ -200,6 +215,17 @@ export default function ListingForm() {
       await AddOnsService.setForListing(id, final);
       setDrafts([]);
       setAddOnsTouched(false);
+      return null;
+    } catch (err) {
+      return apiMessage(err, 'Try again in a moment.');
+    }
+  };
+
+  /** After the package saves: its customizations, in order. Bookings already made keep what was chosen. Returns a problem, or null. */
+  const saveCustomizations = async (id: string): Promise<string | null> => {
+    if (!customLoaded || (!isEdit && !custom.length)) return null;
+    try {
+      await api.put(`/vendor/listings/${id}/customizations`, { groups: draftsToInput(custom, !!countedUnit(priceUnit)) });
       return null;
     } catch (err) {
       return apiMessage(err, 'Try again in a moment.');
@@ -366,6 +392,10 @@ export default function ListingForm() {
               </Pressable>
             )}
           </View>
+
+          {customLoaded && <CustomizationsEditor value={custom} onChange={setCustom} unit={counted} />}
+
+          <DosDontsEditor value={dosDonts} onChange={setDosDonts} />
 
           <View style={{ gap: 8 }}>
             <Field

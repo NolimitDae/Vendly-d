@@ -337,6 +337,79 @@ describe('BookingModal', () => {
     });
   });
 
+  describe('customizations', () => {
+    const braids = {
+      ...listing,
+      title: 'Party braids',
+      price_unit: 'person',
+      customizations: [
+        { id: 'g-style', title: 'Style', required: true, max_select: 1, options: [
+          { id: 'o-knot', label: 'Knotless', price: 20, price_mode: 'FLAT', price_text: '+$20.00' },
+          { id: 'o-box', label: 'Box braids', price: 0, price_mode: 'FLAT', price_text: '' },
+        ] },
+        { id: 'g-extras', title: 'Extras', required: false, max_select: 2, options: [
+          { id: 'o-beads', label: 'Beads', price: 5, price_mode: 'PER_UNIT', price_text: '+$5.00 / person' },
+          { id: 'o-curls', label: 'Curled ends', price: 10, price_mode: 'FLAT', price_text: '+$10.00' },
+          { id: 'o-wash', label: 'Wash', price: 15, price_mode: 'FLAT', price_text: '+$15.00' },
+        ] },
+      ],
+    } as any;
+    const optionsPreview = {
+      ...preview,
+      pricing: {
+        ...preview.pricing,
+        price: 1130,
+        options: [
+          { group_id: 'g-style', title: 'Style', amount: 20, options: [{ option_id: 'o-knot', label: 'Knotless', price: 20, price_mode: 'FLAT', quantity: 1, amount: 20, price_text: '+$20.00' }] },
+          { group_id: 'g-extras', title: 'Extras', amount: 610, options: [] },
+        ],
+      },
+    };
+
+    it('needs the required ones answered before the contract, and keeps to “pick up to N”', async () => {
+      const user = userEvent.setup();
+      render(<BookingModal listing={braids} onClose={onClose} />);
+      expect(screen.getByRole('option', { name: 'Knotless (+$20.00)' })).toBeInTheDocument();
+      expect(screen.getByText('+$5.00 / person')).toBeInTheDocument();
+      await fillDetails(user);
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+      expect(toast.error).toHaveBeenCalledWith('Choose an option for “Style”.');
+      expect(ContractsService.bookingPreview).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('checkbox', { name: /wash/i }));
+      await user.click(screen.getByRole('checkbox', { name: /beads/i }));
+      // two picked: the third can't be
+      expect(screen.getByRole('checkbox', { name: /curled ends/i })).toBeDisabled();
+    });
+
+    it('sends the choices in the vendor’s order with the preview and the request, and shows their upcharges', async () => {
+      (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: optionsPreview } });
+      (BookingService.create as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'booking-9' } } });
+      const user = userEvent.setup();
+      render(<BookingModal listing={braids} onClose={onClose} />);
+      await fillDetails(user);
+      await user.selectOptions(screen.getByLabelText(/style/i), 'o-knot');
+      await user.click(screen.getByRole('checkbox', { name: /wash/i }));
+      await user.click(screen.getByRole('checkbox', { name: /beads/i }));
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+
+      await waitFor(() => expect(ContractsService.bookingPreview).toHaveBeenCalled());
+      const sent = (ContractsService.bookingPreview as jest.Mock).mock.calls[0][0];
+      expect(sent.options).toEqual([
+        { group_id: 'g-style', option_ids: ['o-knot'] },
+        { group_id: 'g-extras', option_ids: ['o-beads', 'o-wash'] },
+      ]);
+      expect(await screen.findByText('Style: Knotless')).toBeInTheDocument();
+      expect(screen.getByText('+$20.00')).toBeInTheDocument();
+
+      await user.click(screen.getByLabelText(/sign electronically/i));
+      await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+      await user.click(screen.getByRole('button', { name: /sign & send request/i }));
+      await waitFor(() => expect(BookingService.create).toHaveBeenCalled());
+      expect((BookingService.create as jest.Mock).mock.calls[0][0].options).toEqual(sent.options);
+    });
+  });
+
   describe('vendor working hours', () => {
     const nineToFive = { open: '09:00', close: '17:00' };
     const hours = { mon: nineToFive, tue: nineToFive, wed: nineToFive, thu: nineToFive, fri: nineToFive, sat: { open: '10:00', close: '14:00' }, sun: null };

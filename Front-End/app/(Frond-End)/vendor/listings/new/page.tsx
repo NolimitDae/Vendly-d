@@ -15,6 +15,9 @@ import { SubscriptionService } from "@/service/subscription/subscription.service
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
 import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
+import PackageCustomizationsFields, { emptyCustomizations, saveCustomizations, type PackageCustomizationsValue } from "@/components/listing/PackageCustomizationsFields";
+import DosDontsFields from "@/components/listing/DosDontsFields";
+import { appendDosDonts, customizationsError, dosDontsError, emptyDosDonts, type DosDonts } from "@/lib/package-options";
 import { apiError } from "@/service/contracts/contracts.service";
 import LicenceNotice from "@/components/vendor/LicenceNotice";
 
@@ -45,6 +48,8 @@ export default function NewListingPage() {
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
   const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
+  const [customizations, setCustomizations] = useState<PackageCustomizationsValue>(emptyCustomizations());
+  const [dosDonts, setDosDonts] = useState<DosDonts>(emptyDosDonts());
 
   useEffect(() => {
     // vendor plans aren't required until subscriptions launch
@@ -110,7 +115,7 @@ export default function NewListingPage() {
       toast.error(limitProblem);
       return;
     }
-    const detailsProblem = packageDetailsError(details);
+    const detailsProblem = packageDetailsError(details) ?? dosDontsError(dosDonts) ?? customizationsError(customizations.drafts);
     if (detailsProblem) {
       toast.error(detailsProblem);
       return;
@@ -123,6 +128,7 @@ export default function NewListingPage() {
       appendPlace(fd, place, radius, false);
       appendLimits(fd, form.price_unit, limits, false);
       appendPackageDetails(fd, details, false);
+      appendDosDonts(fd, dosDonts, false);
       images.forEach((img) => fd.append("images", img));
 
       const res = await VendorListingService.create(fd);
@@ -134,6 +140,13 @@ export default function NewListingPage() {
           } catch (err) {
             // the package exists now: finish the add-ons on its edit page
             toast.error(`Listing created, but the add-ons weren't saved: ${apiError(err, (err as Error)?.message || "please try again")}`);
+            router.push(`/vendor/listings/${newId}/edit`);
+            return;
+          }
+          try {
+            await saveCustomizations(newId, customizations, form.price_unit, false);
+          } catch (err) {
+            toast.error(`Listing created, but the customizations weren't saved: ${apiError(err, "please try again")}`);
             router.push(`/vendor/listings/${newId}/edit`);
             return;
           }
@@ -315,7 +328,11 @@ export default function NewListingPage() {
 
           <PackageDetailsFields value={details} onChange={setDetails} />
 
+          <PackageCustomizationsFields value={customizations} onChange={setCustomizations} priceUnit={form.price_unit} />
+
           <PackageAddOns value={addOns} onChange={setAddOns} />
+
+          <DosDontsFields value={dosDonts} onChange={setDosDonts} />
 
           {/* Category */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm space-y-4">

@@ -28,6 +28,7 @@ import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { bookingStatusColor, bookingStatusLabel, cancellationLine, dueByText, paymentStateText } from "@/lib/booking-status";
 import SimilarVendors, { type SimilarVendorsData } from "@/components/bookings/SimilarVendors";
+import BookingChoices from "@/components/bookings/BookingChoices";
 
 interface Proof {
   id: string;
@@ -235,6 +236,7 @@ export default function CustomerBookingDetailPage() {
             </div>
           )}
         </div>
+        <BookingChoices booking={booking} />
         {(["PENDING", "CONFIRMED"].includes(booking.status) || invoiceAvailable(booking)) && (
           <div className="flex flex-wrap gap-2 pt-1">
             {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
