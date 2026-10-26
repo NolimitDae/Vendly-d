@@ -12,7 +12,7 @@ const prisma: any = {
   userBlock: { findMany: jest.fn().mockResolvedValue([]) },
   event: { findUnique: jest.fn() },
   conversation: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
-  participant: { create: jest.fn() },
+  participant: { create: jest.fn(), updateMany: jest.fn() },
   message: { create: jest.fn(), findFirst: jest.fn() },
   vendorListing: { findFirst: jest.fn() },
   quote: { create: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn() },
@@ -45,6 +45,12 @@ describe('ChatExtrasService', () => {
       expect(prisma.participant.create).toHaveBeenCalledTimes(2);
       expect(prisma.message.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: 'system', text: 'Nia Glam joined the event chat.' }) }));
       expect(push.sendToUser).toHaveBeenCalledWith('v2', expect.anything(), 'messages');
+    });
+
+    it('a system notice brings the chat back for anyone who archived it', async () => {
+      prisma.event.findUnique.mockResolvedValue(event({ conversation: { id: 'c1', participants: [{ userId: 'planner' }, { userId: 'v1' }] } }));
+      await service.syncEventChat('e1');
+      expect(prisma.participant.updateMany).toHaveBeenCalledWith({ where: { conversationId: 'c1', archivedAt: { not: null } }, data: { archivedAt: null } });
     });
 
     it('only adds vendors who are not in it yet', async () => {
@@ -93,6 +99,11 @@ describe('ChatExtrasService', () => {
       expect(data.expires_at.getTime()).toBeLessThanOrEqual(Date.now() + 30 * 86400000 + 1000); // capped at 30 days
       expect(prisma.message.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: 'quote', quote_id: 'q1' }) }));
       expect(push.sendToUser).toHaveBeenCalledWith('cust', expect.anything(), 'messages');
+      // a quote is a new message: the chat comes back for whoever archived it
+      expect(prisma.conversation.update).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: expect.objectContaining({ participants: { updateMany: { where: { archivedAt: { not: null } }, data: { archivedAt: null } } } }),
+      });
     });
 
     it('does not send a quote in a 1:1 chat while either person has blocked the other', async () => {

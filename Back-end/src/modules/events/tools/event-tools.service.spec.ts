@@ -249,6 +249,11 @@ describe('EventToolsService', () => {
       expect(res.data.invited).toBe(1);
       expect(prisma.message.create).toHaveBeenCalledTimes(1);
       expect(push.sendToUser).toHaveBeenCalledWith('v3', expect.anything(), 'messages');
+      // the invite brings an archived chat back for either of them
+      expect(prisma.conversation.update).toHaveBeenCalledWith({
+        where: { id: 'c3' },
+        data: expect.objectContaining({ participants: { updateMany: { where: { archivedAt: { not: null } }, data: { archivedAt: null } } } }),
+      });
     });
 
     it('sends one invite until the vendor replies, so inviting again can’t be used to keep messaging them', async () => {

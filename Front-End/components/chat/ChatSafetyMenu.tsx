@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Ban, Flag, Loader2, MoreVertical, X } from "lucide-react";
+import { Archive, ArchiveRestore, Ban, Flag, Loader2, MoreVertical, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { ChatService, REPORT_REASONS, type ReportReason } from "@/service/chat/chat.service";
 import { errorMessage } from "@/service/rentals/rentals.service";
 import { cn } from "@/lib/utils";
+import { setChatArchived } from "./ArchivedChats";
 
 interface Person {
   id: string;
@@ -145,19 +146,24 @@ export function ReportMessageButton({
 }
 
 /**
- * The ⋮ menu on a 1:1 chat: block / unblock and report. Blocking stops messages both ways;
- * bookings and contracts carry on.
+ * The ⋮ menu on a chat: archive / unarchive (any chat, when `onArchivedChange` is given), and on a 1:1
+ * chat block / unblock and report. Blocking stops messages both ways; bookings and contracts carry on.
  */
 export default function ChatSafetyMenu({
   person,
   conversationId,
-  blockedByMe,
+  blockedByMe = false,
   onBlockedChange,
+  archived = false,
+  onArchivedChange,
 }: {
-  person: Person;
+  /** the other person in a 1:1 chat (no block / report in an event group chat) */
+  person?: Person;
   conversationId: string;
-  blockedByMe: boolean;
-  onBlockedChange: (blocked: boolean) => void;
+  blockedByMe?: boolean;
+  onBlockedChange?: (blocked: boolean) => void;
+  archived?: boolean;
+  onArchivedChange?: (archived: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -178,14 +184,23 @@ export default function ChatSafetyMenu({
     };
   }, [open]);
 
+  const toggleArchive = async () => {
+    setOpen(false);
+    setBusy(true);
+    const ok = await setChatArchived(conversationId, !archived);
+    setBusy(false);
+    if (ok) onArchivedChange?.(!archived);
+  };
+
   const toggleBlock = async () => {
     setOpen(false);
+    if (!person) return;
     if (!blockedByMe && !confirm(`Block ${person.name}? Neither of you will be able to send messages in this chat. Bookings and contracts aren't affected. You can unblock anytime.`)) return;
     setBusy(true);
     try {
       if (blockedByMe) await ChatService.unblock(person.id);
       else await ChatService.block(person.id);
-      onBlockedChange(!blockedByMe);
+      onBlockedChange?.(!blockedByMe);
       toast.success(blockedByMe ? `${person.name} unblocked` : `${person.name} blocked`);
     } catch (err) {
       toast.error(errorMessage(err, blockedByMe ? "Could not unblock" : "Could not block"));
@@ -208,28 +223,37 @@ export default function ChatSafetyMenu({
       </button>
       {open && (
         <div role="menu" className="absolute right-0 mt-1 w-48 z-40 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1">
-          <button role="menuitem" onClick={toggleBlock} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
-            <Ban className="w-4 h-4" /> {blockedByMe ? "Unblock" : "Block"}
-          </button>
-          <button
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              setReporting(true);
-            }}
-            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            <Flag className="w-4 h-4" /> Report
-          </button>
+          {onArchivedChange && (
+            <button role="menuitem" onClick={toggleArchive} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
+              {archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />} {archived ? "Unarchive chat" : "Archive chat"}
+            </button>
+          )}
+          {person && (
+            <>
+              <button role="menuitem" onClick={toggleBlock} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
+                <Ban className="w-4 h-4" /> {blockedByMe ? "Unblock" : "Block"}
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  setReporting(true);
+                }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <Flag className="w-4 h-4" /> Report
+              </button>
+            </>
+          )}
         </div>
       )}
-      {reporting && (
+      {reporting && person && (
         <ReportDialog
           person={person}
           conversationId={conversationId}
           alreadyBlocked={blockedByMe}
           onClose={() => setReporting(false)}
-          onReported={(alsoBlocked) => alsoBlocked && onBlockedChange(true)}
+          onReported={(alsoBlocked) => alsoBlocked && onBlockedChange?.(true)}
         />
       )}
     </div>

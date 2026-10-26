@@ -32,6 +32,11 @@ const mockPrisma = {
   },
   booking: {
     findMany: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  participant: {
+    findFirst: jest.fn(),
+    update: jest.fn(),
   },
   message: {
     count: jest.fn().mockResolvedValue(0),
@@ -227,11 +232,131 @@ describe('ConversationService', () => {
         expect(result.counts).toBeUndefined();
       });
 
-      it('without a tab the response is as before', async () => {
+      it('without a tab the response is as before (plus the archived count)', async () => {
         const result: any = await service.findAll('vendor');
-        expect(Object.keys(result).sort()).toEqual(['conversations', 'message', 'success']);
+        expect(Object.keys(result).sort()).toEqual(['archived_count', 'conversations', 'message', 'success']);
         expect(result.conversations[0].tab).toBeUndefined();
       });
+
+      it('archived chats are out of both tabs and their counts and badges', async () => {
+        const archivedAsker = { ...conv('c-asker', 'asker'), participants: [{ ...mockParticipant('vendor'), role: 'participant', archivedAt: new Date() }, { ...mockParticipant('asker'), role: 'participant' }] };
+        const archivedPast = { ...conv('c-past', 'past'), participants: [{ ...mockParticipant('vendor'), role: 'participant', archivedAt: new Date() }, { ...mockParticipant('past'), role: 'participant' }] };
+        mockPrisma.conversation.findMany.mockResolvedValue([list[0], archivedPast, list[2], archivedAsker]);
+
+        const clients: any = await service.findAll('vendor', { tab: 'clients' });
+        expect(clients.conversations.map((c: any) => c.conversation_id)).toEqual(['c-current']);
+        expect(clients.counts).toEqual({
+          clients: { total: 1, unread: 1, unread_messages: 1 },
+          inquiries: { total: 1, unread: 1, unread_messages: 2 },
+        });
+        expect(clients.archived_count).toBe(2);
+
+        // the archived list is one list: the tab isn't used
+        const archived: any = await service.findAll('vendor', { tab: 'clients', archived: true });
+        expect(archived.conversations.map((c: any) => c.conversation_id)).toEqual(['c-past', 'c-asker']);
+        expect(archived.counts).toBeUndefined();
+        expect(archived.archived_count).toBe(2);
+      });
+    });
+
+    describe('archived chats', () => {
+      const mine = (id: string, archivedAt: Date | null) => ({
+        id, updatedAt: new Date(), is_group: false, messages: [],
+        participants: [{ ...mockParticipant('user-1'), archivedAt }, { ...mockParticipant(`other-${id}`), archivedAt: null }],
+      });
+      // the other person archived c-3: that doesn't touch my list
+      const theirs = { ...mine('c-3', null), participants: [{ ...mockParticipant('user-1'), archivedAt: null }, { ...mockParticipant('other'), archivedAt: new Date() }] };
+
+      beforeEach(() => {
+        mockPrisma.conversation.findMany.mockResolvedValue([mine('c-1', null), mine('c-2', new Date('2026-10-01')), theirs]);
+      });
+
+      it('leaves my archived chats out of my list and says how many there are', async () => {
+        const result: any = await service.findAll('user-1');
+        expect(result.conversations.map((c: any) => c.conversation_id)).toEqual(['c-1', 'c-3']);
+        expect(result.archived_count).toBe(1);
+        expect(result.conversations[0].archived_at).toBeNull();
+      });
+
+      it('archived=1 lists only my archived chats', async () => {
+        const result: any = await service.findAll('user-1', { archived: true });
+        expect(result.conversations.map((c: any) => c.conversation_id)).toEqual(['c-2']);
+        expect(result.conversations[0].archived_at).toEqual(new Date('2026-10-01'));
+        expect(result.archived_count).toBe(1);
+      });
+
+      it('does not count unread messages in archived chats', async () => {
+        await service.findAll('user-1');
+        const counted = mockPrisma.message.count.mock.calls.map((c: any) => c[0].where.conversationId);
+        expect(counted.sort()).toEqual(['c-1', 'c-3']);
+      });
+    });
+  });
+
+  describe('archive', () => {
+    const oneToOne = (archivedAt: Date | null = null) => ({
+      id: 'conv-1', is_group: false,
+      participants: [
+        { id: 'p-1', userId: 'user-1', archivedAt, user: { name: 'Cara' } },
+        { id: 'p-2', userId: 'vendor-1', archivedAt: null, user: { name: 'Bloom Florals' } },
+      ],
+    });
+
+    it('archives a 1:1 chat for me only once no booking is under way', async () => {
+      mockPrisma.conversation.findFirst.mockResolvedValue(oneToOne());
+      mockPrisma.booking.count.mockResolvedValueOnce(0);
+      const result: any = await service.archive('conv-1', 'user-1');
+      expect(result.success).toBe(true);
+      expect(mockPrisma.participant.update).toHaveBeenCalledWith({ where: { id: 'p-1' }, data: { archivedAt: expect.any(Date) } });
+      // a booking between us either way round, still under way
+      expect(mockPrisma.booking.count).toHaveBeenCalledWith({
+        where: {
+          deleted_at: null,
+          status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
+          OR: [{ customer_id: 'user-1', vendor_id: 'vendor-1' }, { customer_id: 'vendor-1', vendor_id: 'user-1' }],
+        },
+      });
+    });
+
+    it('refuses while we have a booking under way, naming the other person', async () => {
+      mockPrisma.conversation.findFirst.mockResolvedValue(oneToOne());
+      mockPrisma.booking.count.mockResolvedValueOnce(1);
+      await expect(service.archive('conv-1', 'user-1')).rejects.toThrow('You can archive this chat once your booking with Bloom Florals is finished.');
+      expect(mockPrisma.participant.update).not.toHaveBeenCalled();
+    });
+
+    it('lets an event group chat be archived any time', async () => {
+      mockPrisma.conversation.findFirst.mockResolvedValue({ ...oneToOne(), is_group: true });
+      await service.archive('conv-1', 'user-1');
+      expect(mockPrisma.booking.count).not.toHaveBeenCalled();
+      expect(mockPrisma.participant.update).toHaveBeenCalled();
+    });
+
+    it('is a no-op when already archived', async () => {
+      const at = new Date('2026-10-01');
+      mockPrisma.conversation.findFirst.mockResolvedValue(oneToOne(at));
+      const result: any = await service.archive('conv-1', 'user-1');
+      expect(result.data.archived_at).toBe(at);
+      expect(mockPrisma.participant.update).not.toHaveBeenCalled();
+    });
+
+    it('404s for someone not in the chat', async () => {
+      mockPrisma.conversation.findFirst.mockResolvedValue(null);
+      await expect(service.archive('conv-1', 'stranger')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('unarchive', () => {
+    it('moves the chat back to my list', async () => {
+      mockPrisma.participant.findFirst.mockResolvedValue({ id: 'p-1', archivedAt: new Date() });
+      const result: any = await service.unarchive('conv-1', 'user-1');
+      expect(result.data).toEqual({ conversation_id: 'conv-1', archived_at: null });
+      expect(mockPrisma.participant.update).toHaveBeenCalledWith({ where: { id: 'p-1' }, data: { archivedAt: null } });
+    });
+
+    it('404s for someone not in the chat', async () => {
+      mockPrisma.participant.findFirst.mockResolvedValue(null);
+      await expect(service.unarchive('conv-1', 'stranger')).rejects.toThrow(NotFoundException);
     });
   });
 

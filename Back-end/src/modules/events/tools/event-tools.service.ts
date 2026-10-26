@@ -12,6 +12,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { summariseBudget } from './budget-summary';
 import { assertNotCancelled } from '../event-rules';
 import { sendLimitFor } from 'src/modules/chat/extras/send-limit';
+import { UNARCHIVE_ALL } from 'src/modules/chat/extras/archive';
 
 export type EventRole = 'planner' | 'vendor' | 'client';
 /** Bookings that make a vendor part of the event. */
@@ -496,7 +497,8 @@ export class EventToolsService {
       const waiting = await sendLimitFor(this.prisma, { id: conv.id, is_group: false, vendor_replied_at: conv.vendor_replied_at, participants: [{ userId: plannerId }, { userId: vendorId }] }, plannerId);
       if (waiting && (await this.prisma.message.count({ where: { conversationId: conv.id, senderId: plannerId, kind: 'invite' } }))) continue;
       const msg = await this.prisma.message.create({ data: { conversationId: conv.id, senderId: plannerId, text, kind: 'invite', status: 'SENT' }, include: messageInclude });
-      await this.prisma.conversation.update({ where: { id: conv.id }, data: { updatedAt: new Date() } });
+      // brings the chat back for either of them if it was archived
+      await this.prisma.conversation.update({ where: { id: conv.id }, data: { updatedAt: new Date(), participants: UNARCHIVE_ALL } });
       this.gateway.server?.to(conv.id).emit('message', { from: plannerId, data: formatMessage(msg) });
       void this.push.sendToUser(vendorId, { title: `${planner?.name ?? 'A planner'} invited you`, body: event.name, data: { type: 'chat', conversationId: conv.id } }, 'messages');
       sent++;

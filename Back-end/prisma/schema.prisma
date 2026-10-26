@@ -517,6 +517,9 @@ model Participant {
   joinedAt DateTime @default(now())
 
   lastReadAt DateTime?
+  // set when this person archived the chat: it leaves their main list only (the other person and the
+  // messages are untouched) and comes back when a new message arrives
+  archivedAt DateTime?
 
   @@unique([conversationId, userId])
 }

@@ -16,6 +16,7 @@ import SendQuoteModal from "@/components/chat/SendQuoteModal";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import SendLimitNote, { sendLimitReached } from "@/components/chat/SendLimitNote";
 import ChatSafetyMenu, { ReportMessageButton } from "@/components/chat/ChatSafetyMenu";
+import { CHAT_ARCHIVE_EVENT, type ChatArchiveDetail } from "@/components/chat/ArchivedChats";
 import { CHAT_READ_EVENT, createTypingEmitter, readReceipt, useTypingUsers } from "@/components/chat/presence";
 import { cn } from "@/lib/utils";
 
@@ -103,6 +104,17 @@ export default function ConversationPage() {
     load().then(markRead);
   }, [conversationId, load, markRead]);
 
+  // a new message (anyone's) brings an archived chat back to my list: the server already has, so
+  // just catch up here and tell the sidebar
+  const archivedRef = useRef(false);
+  archivedRef.current = !!info?.archived_at;
+  const backInList = useCallback(() => {
+    if (!archivedRef.current) return;
+    archivedRef.current = false;
+    setInfo((i) => (i ? { ...i, archived_at: null } : i));
+    window.dispatchEvent(new CustomEvent<ChatArchiveDetail>(CHAT_ARCHIVE_EVENT, { detail: { conversation_id: conversationId, archived: false } }));
+  }, [conversationId]);
+
   // Socket: join room, live messages, read receipts, pins, quote updates
   useEffect(() => {
     if (!socket || !conversationId) return;
@@ -115,6 +127,7 @@ export default function ConversationPage() {
       // this socket may still be in rooms of chats opened earlier
       if (payload.data.conversation_id && payload.data.conversation_id !== conversationId) return;
       setMessages((prev) => (prev.some((m) => m.id === payload.data.id) ? prev : [...prev, payload.data]));
+      backInList();
       if (payload.data.sender?.id !== me.id) markRead();
       // the vendor replied: the customer can send freely again
       if (payload.data.sender?.id !== me.id && payload.data.kind !== "system") setInfo((i) => (i?.send_limit ? { ...i, send_limit: null } : i));
@@ -144,7 +157,7 @@ export default function ConversationPage() {
       socket.off("pinned", handlePinned);
       socket.off("quoteUpdated", handleQuote);
     };
-  }, [socket, conversationId, me.id, markRead]);
+  }, [socket, conversationId, me.id, markRead, backInList]);
 
   // Typing indicator: who else is typing, and throttled typing / stopTyping events from me
   const typers = useTypingUsers(socket, conversationId, me.id);
@@ -205,6 +218,7 @@ export default function ConversationPage() {
         setMessages((prev) => (prev.some((m) => m.id === res.data.data.id) ? prev : [...prev, res.data.data]));
         setWarning(res.data.warning?.text ?? null);
         setInfo((i) => (i ? { ...i, send_limit: res.data.send_limit ?? null } : i));
+        backInList();
         clearPhotos();
       }
     } catch (e) {
@@ -275,18 +289,21 @@ export default function ConversationPage() {
           {isGroup ? (
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{info?.participants.map((p) => (p.id === me.id ? "You" : p.name)).join(", ")}</p>
           ) : null}
+          {info?.archived_at && <p className="text-xs text-gray-500 dark:text-gray-400">Archived. A new message will bring it back to your list.</p>}
         </div>
         {me.type === "VENDOR" && !blocked && (
           <button onClick={() => setQuoting(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/40 text-primary text-sm font-medium hover:bg-primary/5">
             <Tags className="w-4 h-4" /> Send quote
           </button>
         )}
-        {!isGroup && opponent && (
+        {info && (isGroup || opponent) && (
           <ChatSafetyMenu
-            person={{ id: opponent.id, name: opponent.name }}
+            person={opponent ? { id: opponent.id, name: opponent.name } : undefined}
             conversationId={conversationId}
             blockedByMe={blockedByMe}
             onBlockedChange={(b) => setInfo((i) => (i ? { ...i, blocked_by_me: b } : i))}
+            archived={!!info.archived_at}
+            onArchivedChange={(a) => setInfo((i) => (i ? { ...i, archived_at: a ? new Date().toISOString() : null } : i))}
           />
         )}
       </div>

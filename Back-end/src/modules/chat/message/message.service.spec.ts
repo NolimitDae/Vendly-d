@@ -134,6 +134,21 @@ describe('MessageService', () => {
       );
     });
 
+    it('brings an archived chat back for the other person and for the sender', async () => {
+      mockPrisma.participant.findFirst.mockResolvedValue({ userId: 'user-1' });
+      mockPrisma.conversation.findUnique.mockResolvedValue(conversation);
+      mockPrisma.message.create.mockResolvedValue(makeMessage());
+      mockPrisma.conversation.update.mockResolvedValue({});
+
+      await service.create(dto, 'user-1');
+
+      // every participant's archive is cleared, whoever archived it (the recipient or the sender)
+      expect(mockPrisma.conversation.update).toHaveBeenCalledWith({
+        where: { id: 'conv-1' },
+        data: expect.objectContaining({ participants: { updateMany: { where: { archivedAt: { not: null } }, data: { archivedAt: null } } } }),
+      });
+    });
+
     describe('customer message limit', () => {
       const users = [
         { id: 'user-1', name: 'Cara', type: 'CUSTOMER', roles: ['CUSTOMER'] },

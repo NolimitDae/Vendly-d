@@ -121,6 +121,8 @@ export default function ChatDetail() {
       const incoming = raw?.id ? toMessage(raw, conversationId) : null;
       if (!incoming) return;
       setMessages((prev) => (prev.some((m) => m.id === incoming.id) ? prev : [incoming, ...prev]));
+      // any new message brings an archived chat back to my list (the server already has)
+      setInfo((i) => (i?.archived_at ? { ...i, archived_at: null } : i));
       if (incoming.sender_id !== user?.id) markRead();
       // the vendor replied: the customer can send freely again
       if (incoming.sender_id !== user?.id && incoming.kind !== 'system') setInfo((i) => (i?.send_limit ? { ...i, send_limit: null } : i));
@@ -167,7 +169,8 @@ export default function ChatDetail() {
         const sent = res.data.data;
         setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [sent, ...prev]));
         setWarning(res.data.warning?.text ?? null);
-        setInfo((i) => (i ? { ...i, send_limit: res.data.send_limit } : i));
+        // sending also brings an archived chat back to my list
+        setInfo((i) => (i ? { ...i, send_limit: res.data.send_limit, archived_at: null } : i));
         setPhotos([]);
       }
     } catch (e: any) {
@@ -236,11 +239,28 @@ export default function ChatDetail() {
     }
   };
 
-  // ⋯ in the header of a 1:1 chat
+  // Archive is for me only, and a new message brings the chat back. The server says when it can't be
+  // archived yet (a booking with them is under way).
+  const archived = !!info?.archived_at;
+  const toggleArchive = async () => {
+    try {
+      await (archived ? ChatService.unarchive(conversationId) : ChatService.archive(conversationId));
+      setInfo((i) => (i ? { ...i, archived_at: archived ? null : new Date().toISOString() } : i));
+    } catch (e) {
+      Alert.alert(archived ? 'Could not unarchive this chat' : 'Could not archive this chat', apiError(e));
+    }
+  };
+  const archiveItem = { text: archived ? 'Unarchive chat' : 'Archive chat', onPress: toggleArchive };
+
+  // ⋯ in the header: archive, and in a 1:1 chat block and report
   const openMenu = () => {
-    if (!opponent) return;
+    if (!opponent) {
+      Alert.alert(title, undefined, [archiveItem, { text: 'Cancel', style: 'cancel' }]);
+      return;
+    }
     const person = { id: opponent.id, name: opponent.name };
     Alert.alert(person.name, undefined, [
+      archiveItem,
       blockedByMe
         ? { text: 'Unblock', onPress: () => toggleBlock(person, true) }
         : {
@@ -329,7 +349,7 @@ export default function ChatDetail() {
           title={title}
           onBack={() => navigation.goBack()}
           right={
-            opponent ? (
+            opponent || isGroup ? (
               <Pressable onPress={openMenu} hitSlop={8} accessibilityRole="button" accessibilityLabel="Chat options" style={s.menuBtn}>
                 <Ionicons name="ellipsis-horizontal" size={22} color="#fff" />
               </Pressable>
@@ -337,6 +357,7 @@ export default function ChatDetail() {
           }
         />
         {!!memberLine && <Text style={s.members} numberOfLines={1}>{memberLine}</Text>}
+        {archived && <Text style={s.members} numberOfLines={2}>Archived. A new message will bring it back to your list.</Text>}
       </View>
 
       {info?.pinned && (

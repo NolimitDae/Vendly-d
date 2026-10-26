@@ -21,6 +21,7 @@ import { assertCanMessage, blockState } from "../safety/block";
 import { safeAttachmentNames } from "../safety/attachments";
 import { filesKeptForReports } from "../safety/evidence";
 import { afterSend, assertUnderSendLimit, sendLimitFor } from "../extras/send-limit";
+import { UNARCHIVE_ALL } from "../extras/archive";
 
 // Temporary enum until Prisma generates it
 enum MessageStatus {
@@ -115,7 +116,8 @@ export class MessageService {
 
     await this.prisma.conversation.update({
       where: { id: conversationId },
-      data: { updatedAt: new Date(), ...(firstVendorReply && { vendor_replied_at: new Date() }) },
+      // a new message brings the chat back for anyone who archived it, the sender included
+      data: { updatedAt: new Date(), participants: UNARCHIVE_ALL, ...(firstVendorReply && { vendor_replied_at: new Date() }) },
     });
 
     const formatted = formatMessage(message);
@@ -284,6 +286,8 @@ export class MessageService {
       ...(receiverParticipant ? await blockState(this.prisma, userId, receiverParticipant.userId) : {}),
       // a customer's messages left until the vendor replies (null: no limit); the apps show it above the composer
       send_limit: await sendLimitFor(this.prisma, conversation, userId),
+      // when I archived this chat (null: in my main list)
+      archived_at: conversation.participants.find((p) => p.userId === userId)?.archivedAt ?? null,
       participants: conversation.participants.map((p) => ({
         id: p.user.id,
         name: p.user.name,

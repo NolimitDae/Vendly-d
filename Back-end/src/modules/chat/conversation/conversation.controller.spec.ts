@@ -11,6 +11,8 @@ const mockConversationService = {
   findOne: jest.fn(),
   remove: jest.fn(),
   findAllUserInfo: jest.fn(),
+  archive: jest.fn(),
+  unarchive: jest.fn(),
 };
 
 const mockReq = (userId: string) => ({ user: { userId } });
@@ -89,6 +91,21 @@ describe('ConversationController', () => {
       const result = await controller.findAll(mockReq('lonely-user'));
 
       expect(result.conversations).toHaveLength(0);
+    });
+
+    it('archived=1 asks for the archived list (a tab is not used then)', async () => {
+      mockConversationService.findAll.mockResolvedValue({ success: true, conversations: [] });
+      await controller.findAll(mockReq('user-1'), 'clients', undefined, undefined, '1');
+      expect(mockConversationService.findAll).toHaveBeenCalledWith('user-1', { archived: true });
+    });
+  });
+
+  describe('archive / unarchive', () => {
+    it('acts for the signed-in user only', async () => {
+      await controller.archive('conv-1', mockReq('user-1'));
+      expect(mockConversationService.archive).toHaveBeenCalledWith('conv-1', 'user-1');
+      await controller.unarchive('conv-1', mockReq('user-1'));
+      expect(mockConversationService.unarchive).toHaveBeenCalledWith('conv-1', 'user-1');
     });
   });
 

@@ -19,6 +19,7 @@ import { Role } from '../../../common/guard/role/role.enum';
 import { Roles } from '../../../common/guard/role/roles.decorator';
 import { ApiExcludeController, ApiQuery } from '@nestjs/swagger';
 import { INBOX_TABS, InboxTab } from '../extras/inbox';
+import { wantsArchived } from '../extras/archive';
 
 
 @ApiTags('Conversation')
@@ -44,11 +45,13 @@ export class ConversationController {
   @ApiQuery({ name: 'tab', required: false, enum: INBOX_TABS, description: 'Vendors: one inbox tab, with counts for both' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'perPage', required: false })
-  async findAll(@Req() req, @Query('tab') tab?: string, @Query('page') page?: string, @Query('perPage') perPage?: string) { 
+  @ApiQuery({ name: 'archived', required: false, description: '1: only the chats I archived (tabs are not used then)' })
+  async findAll(@Req() req, @Query('tab') tab?: string, @Query('page') page?: string, @Query('perPage') perPage?: string, @Query('archived') archived?: string) { 
   
     const user = req.user.userId; 
 
-    // without a tab: the whole list, as before
+    if (wantsArchived(archived)) return this.conversationService.findAll(user, { archived: true });
+    // without a tab: the whole list (less archived chats), as before
     if (!tab) return this.conversationService.findAll(user);
     if (!INBOX_TABS.includes(tab as InboxTab)) throw new BadRequestException(`tab must be one of: ${INBOX_TABS.join(', ')}`);
     const num = (v: string | undefined, max: number) => {
@@ -66,6 +69,19 @@ export class ConversationController {
   asyncfindOne(@Param('id') id: string, @Req() req) {
     const user = req.user.userId;
     return this.conversationService.findOne(id, user);
+  }
+
+  // archive a chat for me only (not while we have a booking under way)
+  @Post(':id/archive')
+  @ApiOperation({ summary: 'Archive a conversation for the authenticated user' })
+  archive(@Param('id') id: string, @Req() req) {
+    return this.conversationService.archive(id, req.user.userId);
+  }
+
+  @Post(':id/unarchive')
+  @ApiOperation({ summary: 'Move an archived conversation back to the main list' })
+  unarchive(@Param('id') id: string, @Req() req) {
+    return this.conversationService.unarchive(id, req.user.userId);
   }
 
   // delete conversation
