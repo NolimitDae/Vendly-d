@@ -2,8 +2,30 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
 import { RentalItemStatus } from 'prisma/generated/enums';
+import { MAX_DOS, MAX_DO_LENGTH, readIncludedItems } from 'src/modules/vendor/listing/package-details';
 
-export class CreateRentalItemDto {
+/** Dos and don'ts on a rental item: short lines (a JSON array in multipart forms). */
+class RentalInstructionsDto {
+  @ApiPropertyOptional({ type: [String], description: 'Dos: how to use the equipment, one short line each' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readIncludedItems(obj[key]))
+  @IsArray()
+  @ArrayMaxSize(MAX_DOS, { message: `Add up to ${MAX_DOS} dos.` })
+  @IsString({ each: true })
+  @MaxLength(MAX_DO_LENGTH, { each: true, message: `Each do can be up to ${MAX_DO_LENGTH} characters.` })
+  dos?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: "Don'ts: what not to do with the equipment, one short line each" })
+  @IsOptional()
+  @Transform(({ obj, key }) => readIncludedItems(obj[key]))
+  @IsArray()
+  @ArrayMaxSize(MAX_DOS, { message: `Add up to ${MAX_DOS} don'ts.` })
+  @IsString({ each: true })
+  @MaxLength(MAX_DO_LENGTH, { each: true, message: `Each don't can be up to ${MAX_DO_LENGTH} characters.` })
+  donts?: string[];
+}
+
+export class CreateRentalItemDto extends RentalInstructionsDto {
   @ApiProperty() @IsString() @MaxLength(255) title: string;
   @ApiProperty() @IsString() description: string;
   @ApiProperty() @Type(() => Number) @IsNumber() @Min(0.5) daily_rate: number;
@@ -15,7 +37,7 @@ export class CreateRentalItemDto {
   @ApiPropertyOptional({ enum: RentalItemStatus }) @IsOptional() @IsEnum(RentalItemStatus) status?: RentalItemStatus;
 }
 
-export class UpdateRentalItemDto {
+export class UpdateRentalItemDto extends RentalInstructionsDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) title?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0.5) daily_rate?: number;

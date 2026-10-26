@@ -22,6 +22,8 @@ import {
   UpdateAddOnDto,
 } from './dto/add-ons.dto';
 import { RetryInstallmentDto } from 'src/modules/booking/dto/payments.dto';
+import { SetPackageOptionsDto } from './dto/package-options.dto';
+import { PackageOptionsService } from './package-options.service';
 
 const kindOf = (k?: string) => (k === AddOnKind.FEE || k === AddOnKind.ADD_ON ? k : undefined);
 
@@ -71,6 +73,25 @@ export class VendorAddOnsController {
   @Delete(':id')
   remove(@GetUser() user: any, @Param('id') id: string) {
     return this.addOns.remove(user.id, id);
+  }
+}
+
+/** A package's customizations (dropdowns like "Style" with the options customers pick from). */
+@ApiTags('vendor/listings')
+@ApiBearerAuth('vendor-token')
+@UseGuards(JwtAuthGuard)
+@Controller('vendor/listings')
+export class VendorPackageOptionsController {
+  constructor(private readonly options: PackageOptionsService) {}
+
+  @Get(':id/customizations')
+  list(@GetUser() user: any, @Param('id') id: string) {
+    return this.options.forListingAsVendor(user.id, id);
+  }
+
+  @Put(':id/customizations')
+  set(@GetUser() user: any, @Param('id') id: string, @Body() dto: SetPackageOptionsDto) {
+    return this.options.setForListing(user.id, id, dto.groups);
   }
 }
 

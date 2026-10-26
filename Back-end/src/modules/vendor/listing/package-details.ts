@@ -2,6 +2,9 @@
 
 export const MAX_INCLUDED_ITEMS = 20;
 export const MAX_INCLUDED_ITEM_LENGTH = 120;
+/** Dos and don'ts (instructions for using the equipment) on a package or rental item. */
+export const MAX_DOS = 15;
+export const MAX_DO_LENGTH = 200;
 // 90 days
 export const MAX_MIN_NOTICE_HOURS = 2160;
 

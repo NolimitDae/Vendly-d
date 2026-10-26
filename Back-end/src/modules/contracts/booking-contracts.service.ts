@@ -10,6 +10,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { withJobLock } from 'src/common/helper/job-lock';
@@ -60,6 +61,8 @@ import { PrivateStorage, SignedUrl } from './private-storage';
 import { ResolvedVendorContract, VendorContractsService } from './vendor-contracts.service';
 import { AddOnsService } from 'src/modules/add-ons/add-ons.service';
 import { PackageLine, PricingError, priceForPackage, round2 } from 'src/modules/add-ons/pricing';
+import { PackageOptionsService } from 'src/modules/add-ons/package-options.service';
+import { ChosenGroup, optionScheduleLines, UnitBasis } from 'src/modules/add-ons/package-options';
 import {
   AmendmentChangesDto,
   AmendmentPreviewDto,
@@ -147,6 +150,8 @@ export class BookingContractsService {
     private push: PushService,
     private promos: PromoService,
     private addOns: AddOnsService,
+    // optional only so unit tests can leave it out; Nest always provides it
+    @Optional() private packageOptions?: PackageOptionsService,
   ) {}
 
   // ─── Audit ──────────────────────────────────────────────────────────────
@@ -313,7 +318,9 @@ export class BookingContractsService {
       throw e;
     }
     const { lines: addOnLines, fees } = await this.addOns.priceSelection(ctx.listing.id, dto.add_ons, dto);
-    const subtotal = round2(pkg.amount + addOnLines.reduce((s, l) => s + l.amount, 0));
+    // customizations: per unit upcharges count the package's guests, hours or days (a quote's too)
+    const options = await this.packageOptions!.priceChoices(ctx.listing.id, dto.options, quote ? this.unitBasis(ctx.listing, dto) : { unit: pkg.unit, quantity: pkg.quantity });
+    const subtotal = round2(pkg.amount + addOnLines.reduce((s, l) => s + l.amount, 0) + options.amount);
     const priced = await this.priceAfterPromo(subtotal, dto.promo_code, userId);
     const data = buildMergeData({
       booking: {
@@ -341,6 +348,7 @@ export class BookingContractsService {
       packageLabel: quote || pkg.unit !== 'fixed' ? pkg.label : null,
       packageAmount: pkg.amount,
       addOns: addOnLines.map((l) => ({ label: l.label, amount: l.amount, description: l.description })),
+      options: optionScheduleLines(options.groups),
       discount: priced.discount,
       promoCode: priced.code,
       vendorPrice: priced.price,
@@ -348,7 +356,17 @@ export class BookingContractsService {
       customerRoleLabel: data.customer_role_label,
     });
     const rendered = this.renderFor(ctx.vc, data);
-    return { ...ctx, quote, pkg, addOnLines, fees, priced, data, rendered, missing: missingFields(rendered.required, data) };
+    return { ...ctx, quote, pkg, addOnLines, options, fees, priced, data, rendered, missing: missingFields(rendered.required, data) };
+  }
+
+  /** What per unit upcharges are counted on when a quote sets the price: the package's own count, else once. */
+  private unitBasis(listing: Parameters<typeof priceForPackage>[0], dto: BookingContractFieldsDto): UnitBasis {
+    try {
+      const line = priceForPackage(listing, dto);
+      return { unit: line.unit, quantity: line.quantity };
+    } catch {
+      return { unit: 'fixed', quantity: 1 };
+    }
   }
 
   private consentInfo() {
@@ -356,7 +374,7 @@ export class BookingContractsService {
   }
 
   /** Numbers (not the formatted strings the contract uses) plus the charge schedule the customer will be on. */
-  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null, promo?: { discount: number; code: string | null }, lines?: { pkg: PackageLine; addOns: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[]; fees: unknown[] }) {
+  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null, promo?: { discount: number; code: string | null }, lines?: { pkg: PackageLine; addOns: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[]; options?: { groups: ChosenGroup[]; amount: number }; fees: unknown[] }) {
     const l = await this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { payment_plan: true, category_id: true, category: { select: { default_payment_plan: true } } } });
     const fee = this.serviceFee(price, l?.category_id);
     const plan = l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
@@ -366,6 +384,9 @@ export class BookingContractsService {
       // how the price was reached, for the summary screen
       package: lines ? { label: lines.pkg.label, unit: lines.pkg.unit, quantity: lines.pkg.quantity, unit_price: lines.pkg.unit_price, amount: lines.pkg.amount } : null,
       add_ons: lines?.addOns.map((a) => ({ add_on_id: a.add_on_id, name: a.name, label: a.label, quantity: a.quantity, unit_price: a.unit_price, amount: a.amount })) ?? [],
+      // the customizations picked, priced by the server
+      options: lines?.options?.groups ?? [],
+      options_amount: lines?.options?.amount ?? 0,
       fees: lines?.fees ?? [],
     };
   }
@@ -384,7 +405,7 @@ export class BookingContractsService {
         vendor_contract_version: p.vc.version,
         missing_fields: p.missing,
         missing_message: p.missing.length ? missingFieldsMessage(p.missing) : null,
-        pricing: { ...(await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced, { pkg: p.pkg, addOns: p.addOnLines, fees: p.fees })), quote: p.quote ? { id: p.quote.id, title: p.quote.title, amount: Number(p.quote.amount) } : null },
+        pricing: { ...(await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced, { pkg: p.pkg, addOns: p.addOnLines, options: p.options, fees: p.fees })), quote: p.quote ? { id: p.quote.id, title: p.quote.title, amount: Number(p.quote.amount) } : null },
         preview_token: signPreview({ bid: bookingId, lid: dto.listing_id, uid: userId }),
         source_pdf_url: p.vc.file_key
           ? this.vendorContracts.downloadUrl(p.vc.file_key, userId, p.vc.id, p.vc.file_name || 'contract.pdf')
@@ -500,6 +521,8 @@ export class BookingContractsService {
           promo_code: p.priced.code,
           discount: p.priced.discount || null,
           request_photos: photoKeys,
+          // the customizations as they were chosen, frozen with the booking (their price is already in amount)
+          ...(p.options.groups.length ? { chosen_options: p.options.groups as unknown as Prisma.InputJsonValue, options_amount: p.options.amount } : {}),
           status: BookingStatus.PENDING,
         },
       });

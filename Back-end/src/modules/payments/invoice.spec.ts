@@ -85,6 +85,22 @@ describe('final invoice', () => {
     expect(inv.payout).toBeUndefined();
   });
 
+  it('lists the customizations picked at booking, as they were then, apart from the package', async () => {
+    // $1,000 package + $200 add-on + $60 of customizations ($20 flat, $5 × 8 guests), less $100 promo
+    const chosen_options = [
+      { group_id: 'g1', title: 'Style', amount: 20, options: [{ option_id: 'o1', label: 'Knotless', price: 20, price_mode: 'FLAT', quantity: 1, amount: 20 }] },
+      { group_id: 'g2', title: 'Extras', amount: 40, options: [{ option_id: 'o2', label: 'Beads', price: 5, price_mode: 'PER_UNIT', quantity: 8, amount: 40 }, { option_id: 'o3', label: 'Wash', price: 0, price_mode: 'FLAT', quantity: 1, amount: 0 }] },
+    ];
+    const inv = await setup(booking({ amount: 1160, chosen_options })).invoiceFor('x', { id: 'c1' });
+    expect(inv.price_lines.slice(0, 5)).toEqual([
+      { label: 'Package: Wedding Photography (8 hours coverage)', amount: 1000 },
+      { label: 'Customization: Style: Knotless', amount: 20 },
+      { label: 'Customization: Extras: Beads, Wash', amount: 40 },
+      { label: 'Add-on: Album', amount: 200 },
+      { label: 'Promo SPRING', amount: -100 },
+    ]);
+  });
+
   it("the vendor's copy adds their payout and Vendly's commission", async () => {
     const inv = await setup(booking()).invoiceFor('ckbooking12345678', { id: 'v1' });
     expect(inv.copy).toBe('vendor');
