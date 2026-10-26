@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { MAX_SERVICE_RADIUS, boundingBox, milesBetween, withoutPosition } from 'src/modules/geo/geo';
+import { MAX_SERVICE_RADIUS, boundingBox, geocode, milesBetween, withoutPosition } from 'src/modules/geo/geo';
 import { ListingStatus, VendorContractStatus } from 'prisma/generated/client';
 import { formatAddOn } from 'src/modules/add-ons/add-ons.service';
 import { formatOptionGroups, OPTION_GROUPS_INCLUDE } from 'src/modules/add-ons/package-options.service';
@@ -45,6 +45,44 @@ export function nearBoxWhere(near: { lat: number; lng: number }, radius: number)
   return { lat: { gte: box.minLat, lte: box.maxLat }, lng: { gte: box.minLng, lte: box.maxLng } };
 }
 
+/**
+ * The words of what a customer typed, for matching word by word: "makeup smyrna" finds a makeup
+ * package in Smyrna, "Smyrna, DE" matches a package in "Smyrna, Kent, DE". At most 6 words.
+ */
+export function searchWords(text: string): string[] {
+  return [...new Set(text.split(/[\s,]+/).map((w) => w.trim()).filter((w) => w.length >= 2))].slice(0, 6);
+}
+
+/** Listing filter: every typed word appears somewhere about the package (title, description, place, category, vendor, tags). */
+export function textSearchWhere(q: string) {
+  const has = (w: string) => ({ contains: w, mode: 'insensitive' as const });
+  return searchWords(q).map((w) => ({
+    OR: [
+      { title: has(w) },
+      { description: has(w) },
+      { location: has(w) },
+      { category: { name: has(w) } },
+      { sub_category: { name: has(w) } },
+      { vendor: { vendorProfile: { business_name: has(w) } } },
+      { tags: { has: w.toLowerCase() } },
+    ],
+  }));
+}
+
+/** Listing filter: every word of a typed place appears in the package's location ("Smyrna, DE" matches "Smyrna, Kent, DE"). */
+export function placeTextWhere(place: string) {
+  return searchWords(place).map((w) => ({ location: { contains: w, mode: 'insensitive' as const } }));
+}
+
+/** The point of a typed place, or null when it can't be found in time (search then matches the place by its words). */
+async function placePoint(place: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    return await geocode(place, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(2500) }));
+  } catch {
+    return null;
+  }
+}
+
 /** Near me: the listing is within the customer's distance, or the vendor travels that far to them. */
 export function withinReach(distanceMiles: number | null | undefined, radius: number, serviceRadiusMiles?: number | null) {
   return distanceMiles != null && (distanceMiles <= radius || (!!serviceRadiusMiles && distanceMiles <= serviceRadiusMiles));
@@ -77,19 +115,12 @@ export class MarketplaceService {
 
     const where: any = liveListingWhere();
 
-    if (query.q) {
-      where.OR = [
-        { title: { contains: query.q, mode: 'insensitive' } },
-        { description: { contains: query.q, mode: 'insensitive' } },
-        { tags: { has: query.q } },
-      ];
-    }
+    // conditions combined with AND (each typed word, the place)
+    const and: any[] = [];
+    if (query.q) and.push(...textSearchWhere(query.q));
 
     if (query.category_id) where.category_id = query.category_id;
     if (query.sub_category_id) where.sub_category_id = query.sub_category_id;
-    if (query.location) {
-      where.location = { contains: query.location, mode: 'insensitive' };
-    }
 
     if (query.min_price !== undefined || query.max_price !== undefined) {
       where.price = {};
@@ -101,11 +132,23 @@ export class MarketplaceService {
     if (query.date) Object.assign(where, availableOnDayWhere(query.date));
 
     // near me: a cheap box in the database, then the exact distance below
-    const near = query.near_lat !== undefined && query.near_lng !== undefined ? { lat: Number(query.near_lat), lng: Number(query.near_lng) } : null;
+    let near = query.near_lat !== undefined && query.near_lng !== undefined ? { lat: Number(query.near_lat), lng: Number(query.near_lng) } : null;
     const radius = Number(query.radius_miles ?? DEFAULT_RADIUS_MILES);
-    if (near) {
+    // a typed place is searched by distance like near me, so nearby towns count too; packages not
+    // placed on the map yet match by the place's words, and so does everything when the place can't be found
+    let byPlaceWords = false;
+    if (query.location && !near) {
+      near = await placePoint(query.location);
+      if (near) {
+        and.push({ OR: [nearBoxWhere(near, radius), { lat: null, AND: placeTextWhere(query.location) }] });
+        byPlaceWords = true;
+      } else {
+        and.push(...placeTextWhere(query.location));
+      }
+    } else if (near) {
       Object.assign(where, nearBoxWhere(near, radius));
     }
+    if (and.length) where.AND = and;
 
     const sortByRating = query.sort === 'rating';
     // ratings come from reviews and distances from coordinates, so those filters / sorts run after loading
@@ -166,7 +209,7 @@ export class MarketplaceService {
 
     let matched = total;
     // near me: listings within the customer's distance, or vendors who travel that far to them
-    if (near) formattedListings = formattedListings.filter((l) => withinReach(l.distance_miles, radius, l.service_radius_miles));
+    if (near) formattedListings = formattedListings.filter((l) => withinReach(l.distance_miles, radius, l.service_radius_miles) || (byPlaceWords && l.distance_miles == null));
     if (query.min_rating !== undefined) formattedListings = formattedListings.filter((l) => (l.avg_rating ?? 0) >= query.min_rating!);
     if (inMemory) matched = formattedListings.length;
     if (sortByRating) formattedListings.sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
