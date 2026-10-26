@@ -193,6 +193,8 @@ export interface PricingScheduleInput {
   packageLabel: string | null;
   packageAmount: number;
   addOns: { label: string; amount: number; description?: string | null }[];
+  /** fees charged with the booking (a vendor can add one when suggesting changes to a request) */
+  includedFees?: { label: string; amount: number; description?: string | null }[];
   /** package customizations the customer picked ("Style: Knotless"), with their upcharges */
   options?: { label: string; amount: number }[];
   discount: number;
@@ -210,13 +212,15 @@ export interface PricingScheduleInput {
  */
 export function buildPricingSchedule(p: PricingScheduleInput): string {
   const options = p.options ?? [];
-  if (!p.packageLabel && !p.addOns.length && !p.fees.length && !options.length) return '';
+  const charged = p.includedFees ?? [];
+  if (!p.packageLabel && !p.addOns.length && !p.fees.length && !options.length && !charged.length) return '';
   const m = (n: number) => fmtMoney(n, p.currency);
   // the price as worked out at booking; a later amendment changes the price in its own terms
   const lines = ['## Schedule A: Price at booking, add-ons and fees'];
   lines.push(`- Package: ${p.packageLabel ? `${p.packageLabel} = ${m(p.packageAmount)}` : m(p.packageAmount)}`);
   for (const o of options) lines.push(`- Customization: ${o.label}${o.amount > 0 ? ` = ${m(o.amount)}` : ''}`);
   for (const a of p.addOns) lines.push(`- Add-on: ${a.label} = ${m(a.amount)}${a.description ? ` (${a.description})` : ''}`);
+  for (const f of charged) lines.push(`- Fee: ${f.label} = ${m(f.amount)}${f.description ? ` (${f.description})` : ''}`);
   if (p.discount > 0) lines.push(`- Promo${p.promoCode ? ` ${p.promoCode}` : ''}: -${m(p.discount)}`);
   lines.push(`- Vendor price: ${m(p.vendorPrice)}`);
   if (p.fees.length) {

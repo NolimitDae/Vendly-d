@@ -65,6 +65,7 @@ import { AddOnsService } from 'src/modules/add-ons/add-ons.service';
 import { PackageLine, PricingError, eventDayCount, eventHours, packageUnit, priceForPackage, round2 } from 'src/modules/add-ons/pricing';
 import { PackageOptionsService } from 'src/modules/add-ons/package-options.service';
 import { ChosenGroup, optionScheduleLines, UnitBasis } from 'src/modules/add-ons/package-options';
+import { isProposal } from './request-changes';
 import {
   AmendmentChangesDto,
   AmendmentPreviewDto,
@@ -99,6 +100,13 @@ const PENDING_STATUSES: BookingContractStatus[] = [
 
 /** Sent when a signature arrives with a typed name but no drawn signature. */
 export const DRAW_SIGNATURE_MESSAGE = 'Please draw your signature to sign.';
+
+/** Accept & Sign while the vendor's suggested changes wait for the customer. */
+export const CHANGES_WAITING_MESSAGE =
+  'Your suggested changes are waiting for the customer. Withdraw them first if you want to accept the original request.';
+
+/** Signing or declining suggested changes goes through the booking, not the contract endpoints. */
+const PROPOSAL_ON_BOOKING = 'These are suggested changes to a booking request. Open the booking to approve or decline them.';
 
 /** Feature flag for the planner's client co-signing contracts (off unless an admin turns it on). */
 export const CLIENT_COSIGN_FLAG = 'client_cosign';
@@ -138,7 +146,7 @@ function verifyPreview(token: string): { bid: string; lid: string; uid: string }
   }
 }
 
-function verificationCode() {
+export function verificationCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = randomBytes(12);
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
@@ -242,7 +250,7 @@ export class BookingContractsService {
     return { listing, customer, event, vc };
   }
 
-  private renderFor(
+  renderFor(
     vc: ResolvedVendorContract,
     data: MergeData,
   ) {
@@ -378,7 +386,7 @@ export class BookingContractsService {
    * customer gave, without the package's own minimum or maximum (the quote replaces those). When they're
    * missing, picking a per unit upcharge asks for them instead of counting it once.
    */
-  private unitBasis(listing: Parameters<typeof priceForPackage>[0], dto: BookingContractFieldsDto): UnitBasis {
+  unitBasis(listing: Parameters<typeof priceForPackage>[0], dto: BookingContractFieldsDto): UnitBasis {
     const unit = packageUnit(listing.price_unit);
     if (unit === 'person') {
       const guests = Number(dto.guest_count ?? 0);
@@ -443,7 +451,7 @@ export class BookingContractsService {
   }
 
   /** The booking's customer signs as the planner when the booking belongs to one of their events. */
-  private async customerSignerRole(bookingId: string, userType?: string | null): Promise<ContractSignerRole> {
+  async customerSignerRole(bookingId: string, userType?: string | null): Promise<ContractSignerRole> {
     const forEvent = await this.prisma.eventBooking.findFirst({ where: { booking_id: bookingId }, select: { event_id: true } });
     return forEvent ? ContractSignerRole.PLANNER : this.signerRoleFor(userType);
   }
@@ -452,7 +460,7 @@ export class BookingContractsService {
    * Stores the drawn signature. Every signature needs one (owner's rule, Nov 2026): a typed name
    * alone is refused. Vendors may use their saved one instead (resolveVendorSignatureImage).
    */
-  private async storeSignatureImage(dataUrl: string | undefined, folder: string) {
+  async storeSignatureImage(dataUrl: string | undefined, folder: string) {
     let buf: Buffer | null;
     try {
       buf = decodeSignatureImage(dataUrl);
@@ -466,7 +474,7 @@ export class BookingContractsService {
     return key;
   }
 
-  private signatureRow(
+  signatureRow(
     contractId: string,
     userId: string,
     role: ContractSignerRole,
@@ -659,8 +667,9 @@ export class BookingContractsService {
 
   /** POST /contracts/:id/sign: the client's co-signature, or a party signing an amendment. */
   async signAsParty(contractId: string, user: AuthUser, sig: SignatureDto, meta: RequestMeta) {
-    const c = await this.prisma.bookingContract.findUnique({ where: { id: contractId }, select: { status: true } });
+    const c = await this.prisma.bookingContract.findUnique({ where: { id: contractId }, select: { status: true, merge_data: true } });
     if (c?.status === BookingContractStatus.AWAITING_CLIENT) return this.clientSign(contractId, user, sig, meta);
+    if (c && isProposal(c)) throw new BadRequestException(PROPOSAL_ON_BOOKING);
     return this.signAmendment(contractId, user, sig, meta);
   }
 
@@ -698,7 +707,7 @@ export class BookingContractsService {
 
   // ─── Vendor countersign / execute ───────────────────────────────────────
 
-  private async resolveVendorSignatureImage(vendorId: string, sig: SignatureDto) {
+  async resolveVendorSignatureImage(vendorId: string, sig: SignatureDto) {
     const profile = await this.prisma.vendorProfile.findUnique({
       where: { user_id: vendorId },
       select: { saved_signature_key: true },
@@ -734,7 +743,12 @@ export class BookingContractsService {
       orderBy: { version: 'desc' },
     });
     if (!contracts.length) return null;
-    const current = contracts.find((c) => c.status === BookingContractStatus.AWAITING_VENDOR && !c.supersedes_id);
+    // the vendor's own suggested changes are waiting for the customer: the old terms can't be accepted meanwhile
+    if (contracts.some((c) => c.status === BookingContractStatus.AWAITING_CUSTOMER && isProposal(c))) {
+      throw new ConflictException({ message: CHANGES_WAITING_MESSAGE, error: 'CHANGES_WAITING' });
+    }
+    // the request's contract, or the suggested changes the customer approved (request-changes.ts)
+    const current = contracts.find((c) => c.status === BookingContractStatus.AWAITING_VENDOR && (!c.supersedes_id || isProposal(c)));
     if (!current && contracts.some((c) => c.status === BookingContractStatus.AWAITING_CLIENT)) {
       throw new BadRequestException('The planner’s client hasn’t co-signed the contract yet. You can accept once they sign.');
     }
@@ -946,7 +960,9 @@ export class BookingContractsService {
       voided_at: c.voided_at,
       void_reason: c.void_reason,
       created_at: c.created_at,
-      is_amendment: !!c.supersedes_id,
+      // suggested changes to a request are a new version too, but not an amendment of a signed contract
+      is_amendment: !!c.supersedes_id && !isProposal(c),
+      is_proposal: isProposal(c),
       supersedes_id: c.supersedes_id,
       amendment_changes: md.amendment_changes ?? null,
       has_source_pdf: !!c.source_pdf_key,
@@ -1290,6 +1306,7 @@ export class BookingContractsService {
     if (!contract.supersedes_id) {
       throw new BadRequestException('Use Accept & Sign on the booking to countersign this contract.');
     }
+    if (isProposal(contract)) throw new BadRequestException(PROPOSAL_ON_BOOKING);
     const awaiting = this.awaitingRole(contract.status);
     const allowed = awaiting === role || (awaiting === 'CUSTOMER' && role === 'PLANNER');
     if (!awaiting || !allowed) throw new ForbiddenException('This contract is not waiting for your signature.');
@@ -1350,6 +1367,7 @@ export class BookingContractsService {
     if (!contract.supersedes_id || !PENDING_STATUSES.includes(contract.status)) {
       throw new BadRequestException('Only a pending amendment can be declined or withdrawn.');
     }
+    if (isProposal(contract)) throw new BadRequestException(PROPOSAL_ON_BOOKING);
     if (role === 'ADMIN' || role === 'CLIENT') throw new ForbiddenException('Access denied');
     await this.prisma.$transaction(async (tx) => {
       await tx.bookingContract.update({
@@ -1381,7 +1399,7 @@ export class BookingContractsService {
             status: true,
             listing: { select: { title: true } },
             vendor: { select: { id: true, name: true, vendorProfile: { select: { business_name: true } } } },
-            contracts: { orderBy: { version: 'desc' }, select: { id: true, status: true, version: true, executed_at: true, supersedes_id: true } },
+            contracts: { orderBy: { version: 'desc' }, select: { id: true, status: true, version: true, executed_at: true, supersedes_id: true, merge_data: true } },
           },
         },
       },
@@ -1396,8 +1414,8 @@ export class BookingContractsService {
         booking_status: booking.status,
         listing_title: booking.listing?.title ?? null,
         vendor_name: booking.vendor.vendorProfile?.business_name || booking.vendor.name,
-        contract: current,
-        pending_amendment: booking.contracts.some((c) => c.supersedes_id && PENDING_STATUSES.includes(c.status)),
+        contract: current && { id: current.id, status: current.status, version: current.version, executed_at: current.executed_at, supersedes_id: current.supersedes_id },
+        pending_amendment: booking.contracts.some((c) => c.supersedes_id && !isProposal(c) && PENDING_STATUSES.includes(c.status)),
       };
     });
     return { success: true, data, executed_count: data.filter((d) => d.contract?.status === BookingContractStatus.EXECUTED).length };
@@ -1641,8 +1659,19 @@ export class BookingContractsService {
       const signer = c.status === BookingContractStatus.AWAITING_VENDOR ? c.booking.vendor : c.booking.customer;
       const title = c.booking.listing?.title ?? 'your booking';
 
-      const amendmentNoticeDue = !!c.supersedes_id && age >= 48 * HOUR && last < c.created_at.getTime() + 48 * HOUR;
-      if (amendmentNoticeDue) {
+      const proposal = isProposal(c);
+      const amendmentNoticeDue = !!c.supersedes_id && !proposal && age >= 48 * HOUR && last < c.created_at.getTime() + 48 * HOUR;
+      if (proposal && !c.last_reminder_at && c.status === BookingContractStatus.AWAITING_CUSTOMER) {
+        // the vendor's suggested changes, still waiting for the customer (the request waits with them)
+        await this.notify(c.booking.customer_id, c.booking.customer.email, c.booking.customer.name, {
+          subject: `Suggested changes waiting for you: ${title}`,
+          message: `${c.booking.vendor.name ?? 'The vendor'} suggested changes to your request a day ago. Review them on the booking, then approve or decline.`,
+          bookingId: c.booking_id,
+          listingTitle: title,
+          ctaPath: `/bookings/${c.booking_id}`,
+          pushData: { type: 'booking', bookingId: c.booking_id },
+        });
+      } else if (amendmentNoticeDue) {
         for (const p of [c.booking.vendor, c.booking.customer]) {
           await this.notify(p.id, p.email, p.name, {
             subject: `Amendment still unsigned: ${title}`,
@@ -1661,7 +1690,7 @@ export class BookingContractsService {
           bookingId: c.booking_id,
           contractId: c.id,
           listingTitle: title,
-          ctaPath: c.status === BookingContractStatus.AWAITING_VENDOR && !c.supersedes_id ? `/vendor/bookings/${c.booking_id}` : undefined,
+          ctaPath: c.status === BookingContractStatus.AWAITING_VENDOR && (!c.supersedes_id || proposal) ? `/vendor/bookings/${c.booking_id}` : undefined,
         });
       } else {
         continue;

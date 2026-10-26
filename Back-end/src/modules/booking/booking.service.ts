@@ -5,7 +5,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { AddOnKind, BookingExtraStatus, BookingStatus, ListingStatus, Prisma } from 'prisma/generated/client';
+import { AddOnKind, BookingContractStatus, BookingExtraStatus, BookingStatus, ListingStatus, Prisma } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
@@ -1235,6 +1235,8 @@ export class BookingService {
       rental_return: true,
       // the planner event this booking is part of (vendors open its run of show and files)
       event_bookings: { select: { event: { select: { id: true, name: true, date: true } } } },
+      // on a request: the vendor's suggested changes waiting for the customer (request-changes.ts)
+      contracts: { where: { status: BookingContractStatus.AWAITING_CUSTOMER }, select: { id: true } },
     };
   }
 
@@ -1244,10 +1246,14 @@ export class BookingService {
         ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${avatar}`)
         : null;
 
+    // the vendor suggested changes and the customer is reviewing them: the request can't expire meanwhile
+    const changesWaiting = booking.status === BookingStatus.PENDING && !!booking.contracts?.length;
     return {
       ...booking,
+      contracts: undefined,
+      changes_waiting: changesWaiting,
       // an open request is declined automatically at this time if the vendor hasn't answered
-      request_expires_at: booking.status === BookingStatus.PENDING && booking.created_at ? requestExpiresAt(booking) : null,
+      request_expires_at: booking.status === BookingStatus.PENDING && booking.created_at && !changesWaiting ? requestExpiresAt(booking) : null,
       // a missed deposit or balance waiting to be paid by payment_due_by: the apps show this label as the status
       payment_state: paymentState(booking),
       payment_state_label: paymentState(booking) ? PAYMENT_STATE_LABELS[paymentState(booking)!] : null,

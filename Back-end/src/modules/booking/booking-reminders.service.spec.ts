@@ -1,5 +1,5 @@
 import { BookingStatus } from 'prisma/generated/client';
-import { BookingRemindersService, CLIENT_EXPIRED_REASON, EXPIRED_REASON } from './booking-reminders.service';
+import { BookingRemindersService, CHANGES_EXPIRED_REASON, CLIENT_EXPIRED_REASON, EXPIRED_REASON } from './booking-reminders.service';
 import { clientSignExpiresAt, requestExpiresAt } from './booking-requests';
 
 jest.mock('src/config/app.config', () => ({ __esModule: true, default: () => ({ app: { client_app_url: 'https://vendly.test' } }) }));
@@ -63,10 +63,13 @@ describe('BookingRemindersService', () => {
     await service.remindVendors(now);
     await service.expireRequests(now);
     const calls = prisma.booking.findMany.mock.calls.map(([args]: any) => args.where);
-    // two reminder queries, the vendor-expiry query, then the client-expiry query
-    expect(calls).toHaveLength(4);
+    // two reminder queries, the vendor-expiry query, the client-expiry query, then suggested changes nobody answered
+    expect(calls).toHaveLength(5);
     for (const where of calls.slice(0, 3)) expect(where).toMatchObject({ status: BookingStatus.PENDING, contracts: { none: { status: 'AWAITING_CLIENT' } } });
+    // nor ones whose suggested changes are with the customer (the clock is paused)
+    for (const where of calls.slice(0, 3)) expect(where.AND).toEqual([{ contracts: { none: { status: 'AWAITING_CUSTOMER' } } }]);
     expect(calls[3]).toMatchObject({ status: BookingStatus.PENDING, contracts: { some: { status: 'AWAITING_CLIENT' } } });
+    expect(calls[4]).toMatchObject({ status: BookingStatus.PENDING, contracts: { some: { status: 'AWAITING_CUSTOMER' } } });
   });
 
   it('works through a backlog bigger than one batch', async () => {
@@ -74,8 +77,8 @@ describe('BookingRemindersService', () => {
     const due = Array.from({ length: 200 }, (_, i) => booking({ id: `b${i}`, created_at: ago(100) }));
     prisma.booking.findMany.mockResolvedValueOnce(due).mockResolvedValueOnce([booking({ id: 'last', created_at: ago(100) })]);
     expect(await service.expireRequests(now)).toBe(201);
-    // two vendor batches, then the (empty) client queue
-    expect(prisma.booking.findMany).toHaveBeenCalledTimes(3);
+    // two vendor batches, then the (empty) client and suggested-changes queues
+    expect(prisma.booking.findMany).toHaveBeenCalledTimes(4);
   });
 
   it("closes a planner's request at the event start when the client never co-signed, and tells the planner and vendor", async () => {
@@ -94,6 +97,20 @@ describe('BookingRemindersService', () => {
     expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ body: expect.stringContaining('client didn’t co-sign') }), 'booking_updates');
     expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ body: expect.stringContaining('client didn’t co-sign') }), 'booking_updates');
     expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'ada@x.test', ctaUrl: 'https://vendly.test/bookings/b1' }));
+  });
+
+  it('closes a request at the event start when the customer never answered the suggested changes', async () => {
+    const { service, prisma, push, contracts } = setup();
+    // nothing for the vendor or client queues; suggested changes waiting on an event that started an hour ago
+    prisma.booking.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([booking({ created_at: ago(400), event_start_at: ago(1) }), booking({ id: 'b2', created_at: ago(400), event_start_at: ago(-5) })]);
+    expect(await service.expireRequests(now)).toBe(1);
+    expect(prisma.booking.updateMany).toHaveBeenCalledWith({
+      where: { id: 'b1', status: BookingStatus.PENDING },
+      data: { status: BookingStatus.REJECTED, reject_reason: CHANGES_EXPIRED_REASON, expired_at: now },
+    });
+    expect(contracts.voidPendingForBooking).toHaveBeenCalledWith('b1', expect.stringContaining('suggested changes'), null);
+    expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ body: expect.stringContaining('weren’t answered before the event') }), 'booking_updates');
+    expect(push.sendToUser).toHaveBeenCalledWith('v1', expect.objectContaining({ body: expect.stringContaining('didn’t answer your suggested changes') }), 'booking_updates');
   });
 
   it("closes a planner's undated request 14 days after it was made", async () => {
@@ -162,6 +179,6 @@ describe('BookingRemindersService', () => {
     const { service, prisma } = setup();
     prisma.booking.findMany.mockRejectedValueOnce(new Error('db blip'));
     await expect(service.hourly()).resolves.toBeUndefined();
-    expect(prisma.booking.findMany).toHaveBeenCalledTimes(4); // the next jobs still ran (expire for vendors and clients, reviews)
+    expect(prisma.booking.findMany).toHaveBeenCalledTimes(5); // the next jobs still ran (expire for vendors, clients and suggested changes, reviews)
   });
 });

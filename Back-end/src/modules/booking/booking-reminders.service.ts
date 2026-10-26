@@ -10,12 +10,23 @@ import { CLIENT_SIGN_DAYS, EXPIRY_REMINDER_HOURS, REQUEST_EXPIRY_HOURS, REVIEW_R
 
 export const EXPIRED_REASON = 'The vendor didn’t respond in time, so the request was closed. You haven’t been charged.';
 export const CLIENT_EXPIRED_REASON = 'The client didn’t co-sign the contract in time, so the request was closed. Nothing was charged.';
+export const CHANGES_EXPIRED_REASON = 'The suggested changes weren’t answered before the event, so the request was closed. Nothing was charged.';
 
 const people = { select: { id: true, name: true, email: true } };
 const titled = { listing: { select: { title: true } }, customer: people, vendor: people };
 const titleOf = (b: { listing?: { title: string } | null }) => b.listing?.title ?? 'your booking';
-/** Open requests the vendor can answer: not ones still waiting for a planner's client to co-sign. */
-const answerable = { status: BookingStatus.PENDING, deleted_at: null, contracts: { none: { status: BookingContractStatus.AWAITING_CLIENT } } };
+/**
+ * Open requests the vendor can answer: not ones still waiting for a planner's client to co-sign, nor ones
+ * whose suggested changes are with the customer (the request's clock is paused then: request-changes.ts).
+ */
+const answerable = {
+  status: BookingStatus.PENDING,
+  deleted_at: null,
+  contracts: { none: { status: BookingContractStatus.AWAITING_CLIENT } },
+  AND: [{ contracts: { none: { status: BookingContractStatus.AWAITING_CUSTOMER } } }],
+};
+/** Open requests whose suggested changes are waiting for the customer (on a request, only those wait for them). */
+const awaitingCustomer = { status: BookingStatus.PENDING, deleted_at: null, contracts: { some: { status: BookingContractStatus.AWAITING_CUSTOMER } } };
 /** Open requests still waiting for the planner's client to co-sign (the vendor can't answer them yet). */
 const awaitingClient = { status: BookingStatus.PENDING, deleted_at: null, contracts: { some: { status: BookingContractStatus.AWAITING_CLIENT } } };
 const BATCH = 200;
@@ -102,7 +113,7 @@ export class BookingRemindersService {
    */
   async expireRequests(now = new Date()) {
     let expired = 0;
-    for (const kind of ['vendor', 'client'] as const) {
+    for (const kind of ['vendor', 'client', 'changes'] as const) {
       // a backlog is worked through in batches so nothing stays open past its time
       for (let round = 0; round < 20; round++) {
         const closed = await this.expireBatch(now, kind);
@@ -114,7 +125,7 @@ export class BookingRemindersService {
     return expired;
   }
 
-  private async expireBatch(now: Date, kind: 'vendor' | 'client' = 'vendor') {
+  private async expireBatch(now: Date, kind: 'vendor' | 'client' | 'changes' = 'vendor') {
     const due = hoursFromNow(-REQUEST_EXPIRY_HOURS, now);
     const candidates = await this.prisma.booking.findMany({
       where:
@@ -124,7 +135,8 @@ export class BookingRemindersService {
               // checked precisely below; this just narrows to requests that could be due
               OR: [{ request_opened_at: { lte: due } }, { request_opened_at: null, created_at: { lte: due } }, { event_start_at: { lte: now } }],
             }
-          : { ...awaitingClient, OR: [{ event_start_at: { lte: now } }, { event_start_at: null, created_at: { lte: hoursFromNow(-CLIENT_SIGN_DAYS * 24, now) } }] },
+          : // suggested changes nobody answered close the request on the same terms as a missing co-signature
+            { ...(kind === 'client' ? awaitingClient : awaitingCustomer), OR: [{ event_start_at: { lte: now } }, { event_start_at: null, created_at: { lte: hoursFromNow(-CLIENT_SIGN_DAYS * 24, now) } }] },
       include: titled,
       orderBy: { created_at: 'asc' },
       take: BATCH,
@@ -135,16 +147,21 @@ export class BookingRemindersService {
       // only if the vendor hasn't answered in the meantime
       const closed = await this.prisma.booking.updateMany({
         where: { id: b.id, status: BookingStatus.PENDING },
-        data: { status: BookingStatus.REJECTED, reject_reason: kind === 'vendor' ? EXPIRED_REASON : CLIENT_EXPIRED_REASON, expired_at: now },
+        data: { status: BookingStatus.REJECTED, reject_reason: kind === 'vendor' ? EXPIRED_REASON : kind === 'client' ? CLIENT_EXPIRED_REASON : CHANGES_EXPIRED_REASON, expired_at: now },
       });
       if (!closed.count) continue;
       expired++;
-      const voidReason = kind === 'vendor' ? 'Request expired: the vendor didn’t respond in time' : 'Request expired: the client didn’t co-sign in time';
+      const voidReason =
+        kind === 'vendor' ? 'Request expired: the vendor didn’t respond in time' : kind === 'client' ? 'Request expired: the client didn’t co-sign in time' : 'Request expired: the suggested changes weren’t answered before the event';
       await this.contracts.voidPendingForBooking(b.id, voidReason, null).catch((err) =>
         this.logger.error(`Voiding contracts for expired ${b.id} failed: ${(err as Error).message}`),
       );
       if (kind === 'client') {
         await this.tellClientExpired(b);
+        continue;
+      }
+      if (kind === 'changes') {
+        this.tellChangesExpired(b);
         continue;
       }
       const title = titleOf(b);
@@ -203,6 +220,21 @@ export class BookingRemindersService {
         })
         .catch(() => null);
     }
+  }
+
+  /** Both sides hear that a request closed while the vendor's suggested changes waited for the customer. */
+  private tellChangesExpired(b: { id: string; customer_id: string; vendor_id: string; listing?: { title: string } | null; vendor?: { name: string | null } | null; customer?: { name: string | null } | null }) {
+    const title = titleOf(b);
+    void this.push.sendToUser(b.customer_id, {
+      title: 'Request closed',
+      body: `The changes ${b.vendor?.name ?? 'the vendor'} suggested for ${title} weren’t answered before the event, so the request was closed. You haven’t been charged.`,
+      data: { type: 'booking', bookingId: b.id },
+    }, 'booking_updates');
+    void this.push.sendToUser(b.vendor_id, {
+      title: 'Request closed',
+      body: `${b.customer?.name ?? 'The customer'} didn’t answer your suggested changes for ${title} before the event, so the request was closed.`,
+      data: { type: 'booking', bookingId: b.id },
+    }, 'booking_updates');
   }
 
   /** One "how was it?" a couple of days after a booking is done, if there's no review yet. */

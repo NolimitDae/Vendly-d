@@ -5,7 +5,7 @@ import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { formatMessage, formatQuote, messageInclude } from './format';
 import { track } from 'src/common/analytics';
-import { assertCanMessage } from '../safety/block';
+import { assertCanMessage, blockState } from '../safety/block';
 import { UNARCHIVE_ALL, unarchiveChat } from './archive';
 
 const DAY = 24 * 3600 * 1000;
@@ -81,6 +81,26 @@ export class ChatExtrasService {
     if (!isPlanner && !event.conversation?.participants.length) throw new ForbiddenException('You are not part of this event chat');
     const id = await this.syncEventChat(eventId, { createEmpty: isPlanner });
     return { success: true, data: { conversation_id: id } };
+  }
+
+  // ─── Booking notices ──────────────────────────────────────────────────────
+
+  /**
+   * A system notice about a booking in the 1:1 chat between `senderId` and `otherId` (made if they never
+   * chatted). Skipped while either has blocked the other: the booking carries on, the chat stays quiet.
+   * Returns the chat id, or null when nothing was posted.
+   */
+  async bookingNotice(senderId: string, otherId: string, text: string) {
+    const blocks = await blockState(this.prisma, senderId, otherId);
+    if (blocks.blocked_by_me || blocks.blocked_me) return null;
+    let conv = await this.prisma.conversation.findFirst({
+      where: { is_group: false, AND: [{ participants: { some: { userId: senderId } } }, { participants: { some: { userId: otherId } } }] },
+      select: { id: true },
+    });
+    if (!conv) conv = await this.prisma.conversation.create({ data: { participants: { create: [{ userId: senderId }, { userId: otherId }] } }, select: { id: true } });
+    await this.systemMessage(conv.id, senderId, text);
+    await this.prisma.conversation.update({ where: { id: conv.id }, data: { updatedAt: new Date() } });
+    return conv.id;
   }
 
   // ─── Pinned messages ──────────────────────────────────────────────────────
