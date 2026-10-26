@@ -3,9 +3,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DARK, FONTS } from '../constants/colors';
-import { BrandGradient } from '../components/brand';
+import { DARK } from '../constants/colors';
+import GlassTabBar from '../components/GlassTabBar';
 
 import VendorDashboard from '../screens/vendor/Dashboard';
 import VendorListings from '../screens/vendor/Listings';
@@ -124,27 +123,14 @@ const ROOTS: Record<string, string> = {
 };
 
 export default function VendorTabs() {
-  const insets = useSafeAreaInsets();
-  const tabBarStyle = {
-    backgroundColor: DARK.card,
-    borderTopWidth: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    height: 64 + insets.bottom,
-    paddingTop: 8,
-  };
   return (
     <Tab.Navigator
+      // the floating glass bar draws the active tab with its own sliding lens
+      tabBar={(props) => <GlassTabBar {...props} />}
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: '#fff',
-        tabBarInactiveTintColor: DARK.muted,
-        tabBarStyle: [tabBarStyle, { display: [ROOTS[route.name], undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' }],
-        tabBarLabelStyle: { fontSize: 12, fontFamily: FONTS.medium, marginTop: 4 },
-        tabBarIcon: ({ color, focused }) => {
-          const icon = <Ionicons name={TAB_ICONS[route.name] ?? 'ellipse'} size={22} color={color} />;
-          return focused ? <BrandGradient style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }}>{icon}</BrandGradient> : icon;
-        },
+        tabBarStyle: { display: [ROOTS[route.name], undefined].includes(getFocusedRouteNameFromRoute(route)) ? 'flex' : 'none' },
+        tabBarIcon: ({ color }) => <Ionicons name={TAB_ICONS[route.name] ?? 'ellipse'} size={22} color={color} />,
       })}
     >
       <Tab.Screen name="DashboardTab" component={DashboardNavigator} options={{ title: 'Home' }} />
