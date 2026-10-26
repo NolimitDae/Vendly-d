@@ -6,6 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { StripePayment } from './common/lib/Payment/stripe/StripePayment';
 import { join, resolve } from 'path';
 // internal imports
 import { AppModule } from './app.module';
@@ -111,6 +112,11 @@ async function bootstrap() {
   if (process.env.NODE_ENV !== 'production' || process.env.API_DOCS === 'on') setUpDocs(app);
 
   await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
+
+  // say which Stripe account this server charges through, so a key mix-up with the apps is easy to spot
+  StripePayment.accountSummary()
+    .then((summary) => console.log(`Stripe account: ${summary}`))
+    .catch((err) => console.warn(`Stripe account check failed: ${err?.message ?? err}`));
 }
 
 function setUpDocs(app: NestExpressApplication) {

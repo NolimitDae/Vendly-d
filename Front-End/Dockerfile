@@ -13,6 +13,12 @@ ENV NEXT_PUBLIC_API_ENDPOINT=$NEXT_PUBLIC_API_ENDPOINT
 # where the /api rewrite forwards to (the API's Railway address, see next.config.ts)
 ARG API_PROXY_ORIGIN
 ENV API_PROXY_ORIGIN=$API_PROXY_ORIGIN
+# Stripe's card form (saved cards) and the media domain for images: without these the build has no
+# Stripe key, so cards can't be saved on the website
+ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+ARG NEXT_PUBLIC_MEDIA_URL
+ENV NEXT_PUBLIC_MEDIA_URL=$NEXT_PUBLIC_MEDIA_URL
 
 RUN npm run build
 

@@ -32,6 +32,7 @@ export const toSummary = (l: Listing): ListingSummary => ({
 export default function ListingDetail({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'ListingDetail'>) {
   const { listingId, eventId } = route.params;
   const insets = useSafeAreaInsets();
+  const [footerHeight, setFooterHeight] = useState(0);
   const { width } = useWindowDimensions();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,7 +67,8 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}>
+      {/* room for the whole bottom bar (question bubble + Book button), so nothing hides behind it */}
+      <ScrollView contentContainerStyle={{ paddingBottom: (footerHeight || insets.bottom + 170) + 16 }}>
         <View style={s.hero}>
           {images.length > 0 ? (
             <FlatList
@@ -217,7 +219,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
         </View>
       </ScrollView>
 
-      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]} onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
         {isMine ? (
           // one login, several roles: your own package, seen from your customer side
           <View style={s.mine}>

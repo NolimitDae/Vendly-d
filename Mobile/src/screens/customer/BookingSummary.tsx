@@ -361,7 +361,8 @@ const s = StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   rowLabel: { color: DARK.muted, fontSize: 16, fontFamily: FONTS.regular },
-  rowValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium, flex: 1, textAlign: 'right' },
+  // the value keeps its own width (amounts never get squeezed); a long label wraps instead
+  rowValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium, flexShrink: 1, textAlign: 'right' },
   rowBold: { color: '#fff', fontFamily: FONTS.semibold },
   dashed: { borderTopWidth: 1, borderStyle: 'dashed', borderColor: DARK.field, marginVertical: 4 },
   line: { height: 1, backgroundColor: DARK.field },

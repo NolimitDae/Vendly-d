@@ -448,7 +448,8 @@ const s = StyleSheet.create({
   msgText: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
   detailRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
   rowLabel: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.regular, flexShrink: 1 },
-  rowValue: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium, flex: 1, textAlign: 'right' },
+  // the value keeps its own width (amounts never get squeezed); a long label wraps instead
+  rowValue: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium, flexShrink: 1, marginLeft: 'auto', textAlign: 'right' },
   rowBold: { color: '#fff', fontFamily: FONTS.semibold, fontSize: 16 },
   dashed: { borderTopWidth: 1, borderStyle: 'dashed', borderColor: DARK.field, marginVertical: 4 },
   line: { height: 1, backgroundColor: DARK.field },

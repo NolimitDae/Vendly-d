@@ -15,6 +15,17 @@ function getStripe(): stripe {
 }
 
 export class StripePayment {
+  /**
+   * Which Stripe account the server's secret key belongs to (an id, not a secret). The apps' publishable
+   * key must come from the same account (its characters after "pk_test_51" match the id after "acct_1"),
+   * or saving a card fails with "No such setupintent".
+   */
+  static async accountSummary(): Promise<string> {
+    const key = appConfig().payment.stripe.secret_key ?? '';
+    const mode = key.startsWith('sk_live_') ? 'live' : key.startsWith('sk_test_') ? 'test' : 'unknown';
+    const account = await getStripe().accounts.retrieve();
+    return `${account.id} (${mode} mode)`;
+  }
 
 
   /*-----------------------------------------
