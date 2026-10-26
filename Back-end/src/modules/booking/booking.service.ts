@@ -1228,7 +1228,8 @@ export class BookingService {
       customer: { select: { id: true, name: true, avatar: true, email: true } },
       vendor: { select: { id: true, name: true, avatar: true, email: true } },
       // service_at: where it happens; location: the package's public, city-level place; dos and don'ts: the vendor's instructions for using the equipment
-      listing: { select: { id: true, title: true, price: true, images: true, category_id: true, service_at: true, location: true, dos: true, donts: true } },
+      // category name: a venue counts as the vendor's place (booking-place.ts)
+      listing: { select: { id: true, title: true, price: true, images: true, category_id: true, service_at: true, location: true, dos: true, donts: true, category: { select: { name: true } } } },
       review: { select: { id: true, rating: true, comment: true } },
       rental_reservations: { select: { id: true, quantity: true, start_date: true, end_date: true, daily_rate: true, status: true, item: { select: { id: true, title: true, images: true, dos: true, donts: true } } } },
       rental_return: true,

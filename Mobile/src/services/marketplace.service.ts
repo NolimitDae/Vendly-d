@@ -29,6 +29,10 @@ export interface Listing {
   /** "What's included" lines, and how many hours ahead it must be booked */
   included_items?: string[] | null;
   min_notice_hours?: number | null;
+  /** false for venues and packages at the vendor's place: no service address is asked when booking */
+  needs_service_address?: boolean;
+  /** venues: a guest count is needed to book */
+  needs_guest_count?: boolean;
   /** the vendor's weekly hours (null = any day, any time) and a short line like "Mon–Fri 9am–5pm" */
   working_hours?: WorkingHours | null;
   working_hours_summary?: string | null;

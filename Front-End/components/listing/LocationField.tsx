@@ -63,6 +63,7 @@ export default function LocationField({
   const near = useRef<{ lat: number; lng: number } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latest = useRef("");
+  const focused = useRef(false);
 
   // bias suggestions to where the vendor is, only if the browser already allows location (never prompts here)
   useEffect(() => {
@@ -78,7 +79,8 @@ export default function LocationField({
   }, []);
 
   const type = (text: string) => {
-    onChange({ label: text }); // typed text: position unknown until picked
+    // typed text is kept as it is (a full address needn't be picked): its position is found when it's saved
+    onChange({ label: text });
     setError("");
     latest.current = text;
     setActive(-1);
@@ -86,13 +88,15 @@ export default function LocationField({
     if (text.trim().length < 2) return setSuggestions([]);
     timer.current = setTimeout(async () => {
       try {
-        const res = await GeoService.suggest(text, near.current);
+        const res = await GeoService.suggest(text, near.current, street);
+        // an answer for older text (typed over, picked or cleared since) is dropped
         if (latest.current === text) {
           setSuggestions(res.data?.data ?? []);
-          setOpen(true);
+          // and it doesn't reopen the list once the field is left
+          if (focused.current) setOpen(true);
         }
       } catch {
-        setSuggestions([]);
+        if (latest.current === text) setSuggestions([]);
       }
     }, 300);
   };
@@ -165,8 +169,14 @@ export default function LocationField({
           aria-label={inputId ? undefined : label}
           value={value.label}
           onChange={(e) => type(e.target.value)}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
+          onFocus={() => {
+            focused.current = true;
+            setOpen(true);
+          }}
+          onBlur={() => {
+            focused.current = false;
+            setOpen(false);
+          }}
           onKeyDown={onKeyDown}
           placeholder={placeholder ?? (street ? "Start typing the street address" : "Start typing a city or address")}
           autoComplete={street ? "street-address" : "off"}
@@ -178,6 +188,9 @@ export default function LocationField({
           <button
             type="button"
             onClick={() => {
+              // an answer still on its way for the cleared text mustn't bring the list back
+              clearTimeout(timer.current);
+              latest.current = "";
               onChange({ label: "" });
               setSuggestions([]);
             }}
@@ -209,7 +222,8 @@ export default function LocationField({
                 )}
               >
                 <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <span className="truncate">{p.label}</span>
+                {/* full street addresses can be long: two lines so the house number and ZIP both show */}
+                <span className={street ? "line-clamp-2" : "truncate"}>{p.label}</span>
               </li>
             ))}
           </ul>

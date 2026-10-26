@@ -63,16 +63,19 @@ export default function LocationPicker({
   }, []);
 
   const type = (text: string) => {
-    onChange({ label: text }); // typed text: position unknown until picked
+    // typed text is kept as it is (a full address needn't be picked): its position is found when it's saved
+    onChange({ label: text });
     latest.current = text;
     clearTimeout(timer.current);
     if (text.trim().length < 2) return setSuggestions([]);
     timer.current = setTimeout(async () => {
       try {
-        const res = await api.get('/geo/suggest', { params: { q: text, ...(near.current ?? {}) } });
+        // street=1: full street addresses with street and ZIP; otherwise towns and areas ("Smyrna, DE")
+        const res = await api.get('/geo/suggest', { params: { q: text, ...(near.current ?? {}), ...(street ? { street: 1 } : {}) } });
+        // an answer for older text (typed over, picked or cleared since) is dropped
         if (latest.current === text) setSuggestions(res.data?.data ?? []);
       } catch {
-        setSuggestions([]);
+        if (latest.current === text) setSuggestions([]);
       }
     }, 300);
   };
@@ -126,7 +129,17 @@ export default function LocationPicker({
           {...(street && { textContentType: 'fullStreetAddress' as const, autoComplete: 'street-address' as const })}
         />
         {!!value.label && (
-          <Pressable onPress={() => { onChange({ label: '' }); setSuggestions([]); }} hitSlop={8} accessibilityLabel="Clear location">
+          <Pressable
+            onPress={() => {
+              // an answer still on its way for the cleared text mustn't bring the list back
+              clearTimeout(timer.current);
+              latest.current = '';
+              onChange({ label: '' });
+              setSuggestions([]);
+            }}
+            hitSlop={8}
+            accessibilityLabel="Clear location"
+          >
             <Ionicons name="close-circle" size={20} color={DARK.muted} />
           </Pressable>
         )}
@@ -142,7 +155,7 @@ export default function LocationPicker({
               accessibilityRole="button"
             >
               <Ionicons name="location-outline" size={16} color={DARK.muted} />
-              <Text style={s.itemText} numberOfLines={1}>{p.label}</Text>
+              <Text style={s.itemText} numberOfLines={street ? 2 : 1}>{p.label}</Text>
             </Pressable>
           ))}
         </View>

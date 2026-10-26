@@ -19,6 +19,7 @@ import { buildSchedule, eventLinkedDueAt, rebasedAmounts, securityHoldAt } from 
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { PromoService } from 'src/modules/platform/promo.service';
 import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
+import { GUEST_COUNT_NEEDED, needsGuestCount, needsServiceAddress, vendorPlaceVenueText } from 'src/modules/booking/booking-place';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
@@ -205,7 +206,8 @@ export class BookingContractsService {
   private async loadBookingContext(userId: string, dto: BookingContractFieldsDto) {
     const listing = await this.prisma.vendorListing.findFirst({
       where: { id: dto.listing_id, status: ListingStatus.ACTIVE, deleted_at: null },
-      include: { vendor: { select: { ...vendorSelect, status: true, deleted_at: true } } },
+      // the category decides what the request asks for (venues: guests, not an address)
+      include: { vendor: { select: { ...vendorSelect, status: true, deleted_at: true } }, category: { select: { name: true } } },
     });
     if (!listing) throw new NotFoundException('Listing not found or not active');
     if (listing.vendor_id !== dto.vendor_id) throw new BadRequestException('Vendor ID does not match listing');
@@ -308,6 +310,10 @@ export class BookingContractsService {
 
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {
     const ctx = await this.loadBookingContext(userId, dto);
+    // a venue takes its booking on how many guests are coming (an event's own count does too)
+    if (needsGuestCount(ctx.listing) && !(Number(dto.guest_count ?? ctx.event?.guest_count ?? 0) >= 1)) {
+      throw new BadRequestException({ message: GUEST_COUNT_NEEDED, error: 'GUEST_COUNT_REQUIRED' });
+    }
     await this.assertDateOpen(ctx.listing.id, ctx.listing.vendor_id, dto);
     // the package's minimum notice (quotes too: a quote agrees the price, not the date)
     const tooSoon = tooSoonMessage(ctx.listing.min_notice_hours, dto.event_start_at ?? dto.scheduled_at);
@@ -334,7 +340,9 @@ export class BookingContractsService {
         scheduled_at: dto.scheduled_at ?? dto.event_start_at,
         event_start_at: dto.event_start_at,
         event_end_at: dto.event_end_at,
-        venue_address: dto.venue_address,
+        // venues and packages at the vendor's place: the customer gives no address and the contract names the
+        // vendor's place by its public town only (the full address is shown once the vendor accepts)
+        venue_address: needsServiceAddress(ctx.listing) ? dto.venue_address : vendorPlaceVenueText(ctx.listing.location),
         guest_count: dto.guest_count,
         message: dto.message,
         amount: priced.price,
@@ -530,7 +538,8 @@ export class BookingContractsService {
           scheduled_at: dto.scheduled_at ?? dto.event_start_at,
           event_start_at: dto.event_start_at,
           event_end_at: dto.event_end_at,
-          venue_address: dto.venue_address,
+          // at the vendor's place: the package's public location (an address the customer sent anyway isn't used)
+          venue_address: needsServiceAddress(p.listing) ? dto.venue_address : p.listing.location ?? null,
           guest_count: dto.guest_count,
           message: dto.message,
           amount: p.priced.price,

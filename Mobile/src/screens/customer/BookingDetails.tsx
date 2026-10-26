@@ -38,7 +38,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const [guests, setGuests] = useState('');
   const [notes, setNotes] = useState('');
   // the package's limits and add-ons come from the listing itself (the summary passed in doesn't carry them)
-  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null } | null>(null);
+  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null; needs_service_address?: boolean; needs_guest_count?: boolean } | null>(null);
   const [picks, setPicks] = useState<Record<string, number>>({});
   // the package's customizations: what was picked for each
   const [choices, setChoices] = useState<Picks>({});
@@ -47,7 +47,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
     MarketplaceService.getListing(listing.id)
       .then((r) => {
         const l = r.data?.data;
-        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null });
+        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null, needs_service_address: l.needs_service_address, needs_guest_count: l.needs_guest_count });
       })
       .catch(() => {});
   }, [listing.id]);
@@ -80,7 +80,11 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const closedDay = hours ? (zoned ? times.length === 0 : dayHours === null) : false;
   const addOns = pkg?.add_ons ?? [];
   const picked = addOns.filter((a) => picks[a.id] != null).map((a) => ({ addOn: a, quantity: picks[a.id] }));
-  const needsGuests = unit === 'person' || picked.some((p) => p.addOn.price_unit === 'PER_PERSON');
+  // venues and packages at the vendor's place happen there: no address to give
+  const asksAddress = (pkg?.needs_service_address ?? listing.needsServiceAddress) !== false;
+  // a venue needs the guest count (for an event, the event's own count is used when none is typed)
+  const venueGuests = !!(pkg?.needs_guest_count ?? listing.needsGuestCount) && !listing.eventId;
+  const needsGuests = venueGuests || unit === 'person' || picked.some((p) => p.addOn.price_unit === 'PER_PERSON');
   const guestCount = guests ? Number(guests) : undefined;
 
   // keep the chosen duration valid for an hourly package's maximum
@@ -122,9 +126,16 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
     if (hours && (closedDay || !durations.some((d) => d.label === duration.label))) {
       return Alert.alert('Working hours', `${hoursMessage(hours, dayKeyOf(date))} Pick a time and length inside those hours.`);
     }
-    if (!venue.trim()) return Alert.alert('Service address', 'Tell the vendor where the service happens.');
+    if (asksAddress && !venue.trim()) return Alert.alert('Service address', 'Tell the vendor where the service happens.');
     if (needsGuests && !(guestCount && guestCount >= 1)) {
-      return Alert.alert('Guest count', unit === 'person' ? 'This package is priced per person. Enter how many guests are coming.' : 'Some add-ons you picked are priced per person. Enter how many guests are coming.');
+      return Alert.alert(
+        'Guest count',
+        venueGuests
+          ? 'Enter how many guests are coming. The venue needs a guest count to take the booking.'
+          : unit === 'person'
+            ? 'This package is priced per person. Enter how many guests are coming.'
+            : 'Some add-ons you picked are priced per person. Enter how many guests are coming.',
+      );
     }
     if (unit === 'person' && guestCount && min && guestCount < min) return Alert.alert('Guest count', `This package is for at least ${plural(min, 'guest')}.`);
     if (unit === 'person' && guestCount && max && guestCount > max) return Alert.alert('Guest count', `This package is for up to ${plural(max, 'guest')}. Message the vendor about a bigger event.`);
@@ -138,7 +149,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
         durationLabel: duration.label,
-        venue: venue.trim(),
+        venue: asksAddress ? venue.trim() : '',
         guests: guests ? Number(guests) : undefined,
         notes: notes.trim() || undefined,
         addOns: picked.length ? picked.map(({ addOn, quantity }) => (addOn.price_unit === 'PER_ITEM' ? { add_on_id: addOn.id, quantity } : { add_on_id: addOn.id })) : undefined,
@@ -197,10 +208,17 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
             )}
           </View>
 
-          <View style={{ gap: 8 }}>
-            <Text style={ui.label}>Service Address</Text>
-            <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Service address" placeholder="Where should the vendor come?" street />
-          </View>
+          {asksAddress ? (
+            <View style={{ gap: 8 }}>
+              <Text style={ui.label}>Service Address</Text>
+              <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Service address" placeholder="Where should the vendor come?" street />
+            </View>
+          ) : (
+            <View style={{ gap: 8 }}>
+              <Text style={ui.label}>Where</Text>
+              <Text style={s.hint}>{`This happens at ${listing.vendorName}'s place, so there's no address to add. You'll see the full address once they accept.`}</Text>
+            </View>
+          )}
 
           <View style={{ gap: 8 }}>
             <Field

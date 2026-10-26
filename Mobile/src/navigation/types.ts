@@ -45,6 +45,9 @@ export type ListingSummary = {
   quoteTitle?: string;
   /** hours ahead the package must be booked: earlier days are greyed out */
   minNoticeHours?: number | null;
+  /** false for venues and packages at the vendor's place (no service address); venues need a guest count */
+  needsServiceAddress?: boolean;
+  needsGuestCount?: boolean;
 };
 
 export type BookingDraft = {

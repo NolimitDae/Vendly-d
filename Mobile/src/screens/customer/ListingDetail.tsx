@@ -29,6 +29,8 @@ export const toSummary = (l: Listing): ListingSummary => ({
   rating: l.avg_rating ?? null,
   reviewCount: l._count?.reviews ?? l.reviews?.length ?? 0,
   minNoticeHours: l.min_notice_hours ?? null,
+  needsServiceAddress: l.needs_service_address,
+  needsGuestCount: l.needs_guest_count,
 });
 
 export default function ListingDetail({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'ListingDetail'>) {

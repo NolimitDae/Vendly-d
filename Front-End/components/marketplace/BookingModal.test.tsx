@@ -579,6 +579,38 @@ describe('BookingModal', () => {
     expect(photos.map((f: File) => f.name)).toEqual(['cake.jpg']);
   });
 
+  describe('venues', () => {
+    const venue = { ...listing, title: 'Garden Hall', vendor: { id: 'vendor-3', name: 'Garden Hall Co' }, needs_service_address: false, needs_guest_count: true };
+
+    it("doesn't ask where (it happens at the venue) and needs the guest count", async () => {
+      (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
+      const user = userEvent.setup();
+      render(<BookingModal listing={venue} onClose={onClose} />);
+      expect(screen.queryByLabelText(/venue address/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/happens at Garden Hall Co's place, so there's no address to add/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/guest count/i)).toHaveAttribute('aria-required', 'true');
+
+      await user.type(screen.getByLabelText(/event date/i), '2030-06-01');
+      await user.type(screen.getByLabelText(/start time/i), '18:00');
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+      expect(toast.error).toHaveBeenCalledWith('Enter how many guests are coming. The venue needs a guest count to take the booking.');
+      expect(ContractsService.bookingPreview).not.toHaveBeenCalled();
+
+      await user.type(screen.getByLabelText(/guest count/i), '80');
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+      await waitFor(() => expect(ContractsService.bookingPreview).toHaveBeenCalledTimes(1));
+      const sent = (ContractsService.bookingPreview as jest.Mock).mock.calls[0][0];
+      expect(sent).toMatchObject({ listing_id: 'listing-1', guest_count: 80 });
+      expect(sent.venue_address).toBeUndefined();
+    });
+
+    it("other packages still ask for the address, with guests optional", () => {
+      render(<BookingModal listing={{ ...listing, needs_service_address: true, needs_guest_count: false }} onClose={onClose} />);
+      expect(screen.getByLabelText(/venue address/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/guest count/i)).toHaveAttribute('aria-required', 'false');
+    });
+  });
+
   describe('minimum notice', () => {
     beforeAll(() => jest.useFakeTimers({ now: new Date('2030-06-01T12:00:00'), advanceTimers: true }));
     afterAll(() => jest.useRealTimers());

@@ -43,7 +43,7 @@ run('Booking tracker (e2e)', () => {
   const T = Object.fromEntries(
     Object.entries(U).map(([k, sub]) => [k, jwt.sign({ sub, email: `${sub}@t.test`, type: types[k] }, SECRET)]),
   ) as Record<keyof typeof U, string>;
-  const L = { visit: `btl1-${id}`, studio: `btl2-${id}` };
+  const L = { visit: `btl1-${id}`, studio: `btl2-${id}`, venue: `btl3-${id}` };
 
   const api = () => request(app.getHttpServer());
   const msg = (res: request.Response) => res.body?.message?.message ?? res.body?.message;
@@ -96,6 +96,11 @@ run('Booking tracker (e2e)', () => {
         { id: L.visit, vendor_id: U.vendor, title: 'Party DJ', description: '4 hours', price: 400, status: 'ACTIVE', location: 'Austin, TX' },
         { id: L.studio, vendor_id: U.vendor, title: 'Studio recording', description: '2 hours', price: 200, status: 'ACTIVE', location: 'Austin, TX', service_at: 'VENDOR_LOCATION' },
       ],
+    });
+    // a venue package (the seeded Venues category), booked without a service address
+    const venues = await prisma.serviceCategory.upsert({ where: { name: 'Venues' }, update: {}, create: { name: 'Venues' } });
+    await prisma.vendorListing.create({
+      data: { id: L.venue, vendor_id: U.vendor, title: 'Garden hall', description: 'Evening hire', price: 1500, status: 'ACTIVE', location: 'Austin, TX', category_id: venues.id },
     });
     const vc = await api().post('/api/vendor/contracts/default').auth(T.vendor, { type: 'bearer' }).send({
       category: 'PHOTO_VIDEO',
@@ -249,6 +254,61 @@ run('Booking tracker (e2e)', () => {
 
     await prisma.booking.update({ where: { id: b.id }, data: { status: 'CANCELLED', cancelled_at: new Date() } });
     expect((await get(b.id, T.cust)).body.data).toMatchObject({ vendor_place: null, contact_phone: null });
+  });
+
+  it('a venue is booked without a service address but with a guest count, and its address stays private until accepted', async () => {
+    // the venue's own (private) address, distinct from anything else in this run
+    await prisma.vendorProfile.update({ where: { user_id: U.vendor }, data: { business_address: '77 Hall Rd, Austin, TX', business_lat: 30.25, business_lng: -97.75, business_geocoded_at: new Date() } });
+    const listing = (await api().get(`/api/marketplace/listings/${L.venue}`)).body.data;
+    expect(listing).toMatchObject({ needs_service_address: false, needs_guest_count: true });
+    expect((await api().get(`/api/marketplace/listings/${L.visit}`)).body.data).toMatchObject({ needs_service_address: true, needs_guest_count: false });
+
+    const start = new Date(Date.now() + 6 * 3600e3);
+    const body = { listing_id: L.venue, vendor_id: U.vendor, timezone: 'America/Chicago', event_start_at: start, event_end_at: new Date(start.getTime() + 4 * 3600e3) };
+    const preview = (extra: Record<string, unknown>) => api().post('/api/contracts/booking-preview').auth(T.cust, { type: 'bearer' }).send({ ...body, ...extra });
+
+    // no guests: refused with a clear message
+    const noGuests = await preview({});
+    expect(noGuests.status).toBe(400);
+    expect(msg(noGuests)).toBe('Enter how many guests are coming. The venue needs a guest count to take the booking.');
+
+    // guests and no address: the contract's venue (required by this vendor's contract) is the venue's town only
+    const pv = await preview({ guest_count: 80 });
+    expect(pv.status).toBe(201);
+    expect(pv.body.data).toMatchObject({ missing_fields: [], missing_message: null });
+    expect(pv.body.data.body).toContain("- Venue: At the Vendor's place in Austin, TX. The full address is shared through Vendly once the booking is accepted.");
+    expect(pv.body.data.body).toContain('- Guest count: 80');
+    expect(JSON.stringify(pv.body)).not.toContain('Hall Rd');
+
+    // the signed request is checked the same way
+    await signing();
+    const token = pv.body.data.preview_token;
+    const hash = pv.body.data.content_sha256;
+    const refused = await api().post('/api/bookings').auth(T.cust, { type: 'bearer' }).send({ ...body, preview_token: token, signature: sig('Cara Customer', hash) });
+    expect(refused.status).toBe(400);
+    expect(msg(refused)).toBe('Enter how many guests are coming. The venue needs a guest count to take the booking.');
+
+    // an address sent anyway (an older app) isn't used: the contract stays the one reviewed
+    await signing();
+    const sent = await api().post('/api/bookings').auth(T.cust, { type: 'bearer' })
+      .send({ ...body, guest_count: 80, venue_address: '9 Other Pl, Austin, TX', preview_token: token, signature: sig('Cara Customer', hash) });
+    expect(sent.status).toBe(201);
+    const venueBooking = sent.body.data.id;
+    expect(await prisma.booking.findUnique({ where: { id: venueBooking }, select: { venue_address: true, guest_count: true } })).toEqual({ venue_address: 'Austin, TX', guest_count: 80 });
+
+    const pending = (await get(venueBooking, T.cust)).body.data;
+    expect(pending).toMatchObject({ status: 'PENDING', service_at: 'VENDOR_LOCATION', vendor_place: null });
+    expect(JSON.stringify(pending)).not.toContain('Hall Rd');
+    const list = await api().get('/api/bookings/my/customer').auth(T.cust, { type: 'bearer' });
+    expect(JSON.stringify(list.body)).not.toContain('Hall Rd');
+
+    await signing();
+    const confirmed = await api().patch(`/api/bookings/${venueBooking}/confirm`).auth(T.vendor, { type: 'bearer' })
+      .send({ signature: sig('Sam Vendor', hash, { signature_image: `data:image/png;base64,${PNG_B64}` }) });
+    expect(confirmed.status).toBe(200);
+    // accepted: the customer sees where to go, and the customer arriving is the venue's day-of step
+    expect((await get(venueBooking, T.cust)).body.data.vendor_place).toEqual({ address: '77 Hall Rd, Austin, TX', lat: 30.25, lng: -97.75 });
+    expect((await step(venueBooking, 'en-route')).status).toBe(400);
   });
 
   it('serves map tiles to signed-in users through the cache, and only the booking map zooms', async () => {

@@ -1,6 +1,7 @@
 import { BookingStatus } from 'prisma/generated/client';
 import { localDay } from 'src/modules/calendar-sync/busy-days';
 import type { PrismaService } from 'src/prisma/prisma.service';
+import { needsServiceAddress, type PlaceRulesListing } from './booking-place';
 
 /**
  * The "Upcoming booking" tracker: who can see whose phone number and address, and the vendor's day-of
@@ -27,9 +28,12 @@ export function contactRevealed(b: { status: BookingStatus | string; completed_a
   return now.getTime() - new Date(b.completed_at).getTime() <= CONTACT_WINDOW_DAYS * DAY;
 }
 
-/** Where a booking happens (rentals and older packages: at the customer's venue). */
-export function serviceAtOf(b: { listing?: { service_at?: string | null } | null }): ServiceAt {
-  return b.listing?.service_at === 'VENDOR_LOCATION' ? 'VENDOR_LOCATION' : 'CUSTOMER_LOCATION';
+/**
+ * Where a booking happens (rentals and older packages: at the customer's venue). A venue is booked for
+ * its own place, so it counts as the vendor's place whatever the package says.
+ */
+export function serviceAtOf(b: { listing?: PlaceRulesListing | null }): ServiceAt {
+  return needsServiceAddress(b.listing) ? 'CUSTOMER_LOCATION' : 'VENDOR_LOCATION';
 }
 
 export type TrackerStep = 'en_route' | 'arrived' | 'check_in';
@@ -43,7 +47,7 @@ export function stepsOpen(start: Date | null | undefined, now = new Date(), time
 
 interface StepBooking {
   status: BookingStatus | string;
-  listing?: { service_at?: string | null } | null;
+  listing?: PlaceRulesListing | null;
   rental_reservations?: unknown[] | null;
   event_start_at?: Date | null;
   scheduled_at?: Date | null;
@@ -82,7 +86,7 @@ export async function bookingTimeZone(prisma: PrismaService, bookingId: string):
  */
 export async function trackerDetails(
   prisma: PrismaService,
-  booking: { id: string; status: BookingStatus | string; completed_at?: Date | null; customer_id: string; vendor_id: string; listing?: { service_at?: string | null } | null; event_start_at?: Date | null; scheduled_at?: Date | null; rental_reservations?: unknown[] | null },
+  booking: { id: string; status: BookingStatus | string; completed_at?: Date | null; customer_id: string; vendor_id: string; listing?: PlaceRulesListing | null; event_start_at?: Date | null; scheduled_at?: Date | null; rental_reservations?: unknown[] | null },
   viewerId: string,
   now = new Date(),
 ) {
