@@ -3,7 +3,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { PDFDocument } from 'pdf-lib';
 import { ContractCategory } from 'prisma/generated/client';
 import { BookingContractsService } from './booking-contracts.service';
-import { DEPOSIT_CLAUSE, withDepositClause, withProtectionFeeWording } from './contract-templates';
+import { DEPOSIT_CLAUSE, hasDepositClause, withDepositClause, withProtectionFeeWording } from './contract-templates';
 import { VendorContractsService } from './vendor-contracts.service';
 import {
   buildMergeData,
@@ -135,7 +135,7 @@ describe('contract merge fields', () => {
     expect(body).toContain('Total: $1,575.00');
     expect(body).toContain(PLATFORM_TERMS_CLAUSE);
     expect(body).toContain('No flash during the ceremony.');
-    expect(body).toMatch(/\[LAWYER REVIEW\]/);
+    expect(body).not.toContain('[LAWYER REVIEW]');
     expect(body).toContain('Saturday, December 5, 2026');
     expect(body).toMatch(/4:00 PM CST/);
     for (const f of vendorFieldsFor(category).filter((f) => f.required && f.type !== 'select')) {
@@ -489,8 +489,8 @@ describe('the deposit clause (Oct 2026) as a new template version', () => {
   const general = () => defaultTemplates().find((t) => t.category === ContractCategory.GENERAL)!;
   const oldBody = () => general().body.replace(`\n${DEPOSIT_CLAUSE}`, '');
 
-  it('new templates have it in section 5, marked for the lawyer, and the uploaded-PDF addendum too', () => {
-    expect(general().body).toMatch(/## 5\. Cancellation and rescheduling[^\n]*\n[^\n]+\nDeposits \[LAWYER REVIEW\]: on a booking paid with a deposit, the deposit is non-refundable/);
+  it('new templates have it in section 5, and the uploaded-PDF addendum too', () => {
+    expect(general().body).toMatch(/## 5\. Cancellation and rescheduling\n[^\n]+\nDeposits: on a booking paid with a deposit, the deposit is non-refundable/);
     expect(UPLOADED_ADDENDUM_BODY).toContain(DEPOSIT_CLAUSE);
   });
 
@@ -499,6 +499,16 @@ describe('the deposit clause (Oct 2026) as a new template version', () => {
     expect(body).toBe(general().body);
     expect(withDepositClause(body)).toBeNull();
     expect(withDepositClause('# A template with no section 5')).toBeNull();
+  });
+
+  it('still sees the clause in a body written with the old [LAWYER REVIEW] markers', () => {
+    const marked = general().body.replace('## 5. Cancellation and rescheduling', '## 5. Cancellation and rescheduling [LAWYER REVIEW]').replace('Deposits:', 'Deposits [LAWYER REVIEW]:');
+    expect(hasDepositClause(marked)).toBe(true);
+    expect(withDepositClause(marked)).toBeNull();
+    expect(hasDepositClause(oldBody())).toBe(false);
+    // a marked heading without the clause still gets it, once
+    const markedOld = oldBody().replace('## 5. Cancellation and rescheduling', '## 5. Cancellation and rescheduling [LAWYER REVIEW]');
+    expect(withDepositClause(markedOld)!.match(/Deposits:/g)).toHaveLength(1);
   });
 
   it('publishes the next version of the active template once; earlier versions are kept, retired', async () => {
@@ -517,6 +527,22 @@ describe('the deposit clause (Oct 2026) as a new template version', () => {
     expect(prisma.contractTemplate.update).toHaveBeenCalledWith({ where: { id: 't1' }, data: { status: 'RETIRED' } });
     expect(prisma.contractTemplate.create).toHaveBeenCalledWith({ data: expect.objectContaining({ category: ContractCategory.GENERAL, version: 2, status: 'ACTIVE', body: general().body }) });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes nothing when the stored versions have the clause with the old marker', async () => {
+    const marked = { id: 't2', category: ContractCategory.GENERAL, title: 'T', body: general().body.replace('Deposits:', 'Deposits [LAWYER REVIEW]:'), required_fields: [], version: 2, status: 'ACTIVE' };
+    const prisma: any = {
+      contractTemplate: {
+        findFirst: jest.fn().mockResolvedValue(marked),
+        findMany: jest.fn().mockImplementation(({ where }: any) => Promise.resolve([{ ...marked, category: where.category }])),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+      $transaction: jest.fn(),
+    };
+    await new VendorContractsService(prisma).ensureDefaultTemplates();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.contractTemplate.create).not.toHaveBeenCalled();
   });
 });
 

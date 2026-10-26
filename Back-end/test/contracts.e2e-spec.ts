@@ -66,8 +66,9 @@ run('Contracts (e2e)', () => {
     business_legal_name: 'Vera Photo LLC', business_address: '1 Lens Way', cancellation_policy: 'moderate',
     governing_law: 'Texas, USA', delivery_time_days: '30', revisions_included: '2', usage_rights: 'personal',
   };
+  // a drawn signature is required to sign (vendors may use their saved one instead)
   const sig = (name: string, hash: string, extra: Record<string, unknown> = {}) => ({
-    legal_name: name, consent: true, content_sha256: hash, device_platform: 'web', ...extra,
+    legal_name: name, consent: true, content_sha256: hash, device_platform: 'web', signature_image: PNG, ...extra,
   });
 
   const http = () => request(app.getHttpServer());
@@ -158,6 +159,14 @@ run('Contracts (e2e)', () => {
     const pv = await http().post('/api/contracts/booking-preview').auth(T.cust, { type: 'bearer' }).send(full);
     expect(pv.body.data.missing_fields).toEqual([]);
     await signing();
+    // a typed name alone isn't a signature
+    const typedOnly = await http().post('/api/bookings').auth(T.cust, { type: 'bearer' }).send({
+      ...full, preview_token: pv.body.data.preview_token,
+      signature: sig('Carl Customer', pv.body.data.content_sha256, { signature_image: undefined }),
+    });
+    expect(typedOnly.status).toBe(400);
+    expect(msg(typedOnly)).toBe('Please draw your signature to sign.');
+    await signing();
     const created = await http().post('/api/bookings').auth(T.cust, { type: 'bearer' }).send({
       ...full, preview_token: pv.body.data.preview_token,
       signature: sig('Carl Customer', pv.body.data.content_sha256, { signature_image: PNG }),
@@ -182,6 +191,11 @@ run('Contracts (e2e)', () => {
     await signing();
     const noSig = await http().patch(`/api/bookings/${bookingId}/confirm`).auth(T.vendor, { type: 'bearer' }).send({});
     expect(noSig.status).toBe(400);
+    await signing();
+    // nothing drawn and no saved signature yet
+    const undrawn = await http().patch(`/api/bookings/${bookingId}/confirm`).auth(T.vendor, { type: 'bearer' })
+      .send({ signature: sig('Vera Vendor', pv.body.data.content_sha256, { signature_image: undefined }) });
+    expect(msg(undrawn)).toBe('Please draw your signature to sign.');
 
     await signing();
     const confirmed = await http().patch(`/api/bookings/${bookingId}/confirm`).auth(T.vendor, { type: 'bearer' })

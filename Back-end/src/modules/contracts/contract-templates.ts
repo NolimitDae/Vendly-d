@@ -129,27 +129,33 @@ export const CATEGORY_LABELS: Record<ContractCategory, string> = {
   BEAUTY: 'Beauty and glam',
 };
 
-const R = '[LAWYER REVIEW]';
-
 /**
  * The deposit rule of Oct 2026 (docs/PAYMENTS.md), in section 5. Template versions published before
  * it get it through a new version (VendorContractsService.ensureDefaultTemplates, withDepositClause).
  */
-export const DEPOSIT_CLAUSE_MARK = `Deposits ${R}:`;
+export const DEPOSIT_CLAUSE_MARK = 'Deposits:';
+// how the clause started while the templates still carried "[LAWYER REVIEW]" markers (until Nov 2026)
+const LEGACY_DEPOSIT_CLAUSE_MARK = 'Deposits [LAWYER REVIEW]:';
+
+/** Whether a template body already has the deposit clause, with or without the old marker. */
+export function hasDepositClause(body: string) {
+  return body.includes(DEPOSIT_CLAUSE_MARK) || body.includes(LEGACY_DEPOSIT_CLAUSE_MARK);
+}
+
 export const DEPOSIT_CLAUSE = `${DEPOSIT_CLAUSE_MARK} on a booking paid with a deposit, the deposit is non-refundable if the {{customer_role_label}} cancels, or if the booking is cancelled because a deposit or balance payment wasn't made within 12 hours of failing. Anything paid beyond the deposit is refunded under the cancellation policy above. The Vendly Protection fee is not refunded in either case.`;
 
 const GENERAL_SECTIONS = `# Service Agreement
 
 Booking ID: {{booking_id}} · Contract version {{contract_version}}
 
-## 1. Parties ${R}
+## 1. Parties
 This agreement is between {{vendor_business_name}} ("Vendor"), {{vendor_business_address}}, contact {{vendor_contact}}, and {{customer_name}} ("{{customer_role_label}}"){{#client_name}}, acting on behalf of {{client_name}}{{/client_name}}. Vendly provides the marketplace through which this booking was made. Vendly is a platform only and is not a party to this agreement.
 
-## 2. Services ${R}
+## 2. Services
 The Vendor will provide: {{package_name}}.
 {{package_description}}
 
-## 3. Event details ${R}
+## 3. Event details
 - Event: {{event_name}}
 - Date: {{event_date}}
 - Start time: {{event_start_time}}
@@ -158,62 +164,62 @@ The Vendor will provide: {{package_name}}.
 - Guest count: {{guest_count}}
 - Booking comments: {{booking_comments}}
 
-## 4. Price and payment ${R}
+## 4. Price and payment
 - Vendor price: {{vendor_price}}
 - Vendly Protection fee: {{service_fee}}
 - Total: {{total_price}}
 {{payment_schedule}} All payments are made through Vendly. The Vendly Protection fee is paid to Vendly.
 
-## 5. Cancellation and rescheduling ${R}
+## 5. Cancellation and rescheduling
 Cancellation policy: {{cancellation_policy_name}}. {{cancellation_policy_text}} Rescheduling requires both parties to sign an amended contract. Refunds are processed by Vendly under the Vendly Terms of Service.
 ${DEPOSIT_CLAUSE}
 
-## 6. Vendor responsibilities ${R}
+## 6. Vendor responsibilities
 The Vendor will arrive on time, provide the services described above with reasonable skill and care, and upload proof-of-service photos through Vendly.
 
-## 7. Customer responsibilities ${R}
+## 7. Customer responsibilities
 The {{customer_role_label}} will provide venue access and any permissions needed, give accurate event details, and provide safe working conditions for the Vendor.
 
-## 8. Overtime and travel ${R}
+## 8. Overtime and travel
 - Overtime rate: {{overtime_rate}}
 - Travel fee: {{travel_fee}}
 - Setup: {{setup_time}}
 - Teardown: {{teardown_time}}
 Overtime must be agreed by both parties at the event and is paid through Vendly.
 
-## 9. Weather, emergencies and events outside either party's control ${R}
+## 9. Weather, emergencies and events outside either party's control
 Neither party is liable for failure to perform caused by events outside its reasonable control, including severe weather, natural disasters, public health orders or government action. The parties will first try to reschedule in good faith; if that is not possible, refunds follow the Vendly Terms of Service.
 
-## 10. Limitation of liability ${R}
+## 10. Limitation of liability
 Except for gross negligence or willful misconduct, each party's liability to the other under this agreement is limited to the total price of this booking. Neither party is liable for indirect or consequential losses.
 
-## 11. Independent business ${R}
+## 11. Independent business
 The Vendor is an independent business. The Vendor is not an employee, agent or partner of Vendly or of the {{customer_role_label}}.
 
-## 12. Disputes ${R}
+## 12. Disputes
 The parties will first use Vendly's dispute process. If a dispute is not resolved there, it is governed by the laws of {{governing_law}}.
 
-## 13. Platform terms ${R}
+## 13. Platform terms
 {{platform_terms_clause}}
 `;
 
 const GENERAL_TAIL = `
 {{#additional_terms}}
-## Additional terms from the Vendor ${R}
+## Additional terms from the Vendor
 {{additional_terms}}
 {{/additional_terms}}
 
-## Electronic signature consent ${R}
+## Electronic signature consent
 Each party agrees to sign this agreement electronically and to receive it electronically. Electronic signatures have the same effect as handwritten signatures.
 
-## Entire agreement ${R}
+## Entire agreement
 This agreement, together with the Vendly Terms of Service, is the entire agreement between the parties about this booking. Changes to the date, time, venue, services, price, quantities or cancellation terms require an amended agreement signed by both parties.
 `;
 
 const ADDENDA: Record<ContractCategory, string> = {
   GENERAL: '',
   PHOTO_VIDEO: `
-## Photography and video addendum ${R}
+## Photography and video addendum
 - Delivery time: {{delivery_time_days}} days after the event
 - Edited images: {{edited_images_count}}
 - Video: {{video_length}}
@@ -223,7 +229,7 @@ const ADDENDA: Record<ContractCategory, string> = {
 - Equipment failure: the Vendor carries backup equipment. If equipment failure prevents delivery of part of the services, the price is reduced in proportion under the Vendly Terms of Service.
 `,
   RENTALS: `
-## Rentals addendum ${R}
+## Rentals addendum
 Items and quantities:
 {{rental_items}}
 - Delivery and pickup: {{delivery_pickup_window}}
@@ -234,7 +240,7 @@ Items and quantities:
 - Late return fee: {{late_fee_per_day}} per day.
 `,
   CATERING: `
-## Catering addendum ${R}
+## Catering addendum
 Menu:
 {{menu}}
 - Final headcount deadline: {{headcount_deadline}}
@@ -244,7 +250,7 @@ Menu:
 - Service staff hours: {{service_staff_hours}}
 `,
   ENTERTAINMENT: `
-## Entertainment addendum ${R}
+## Entertainment addendum
 - Performance length: {{performance_length}}
 - Breaks: {{breaks}}
 - Equipment and power needs: {{equipment_power_needs}}
@@ -252,7 +258,7 @@ Menu:
 - Song requests: {{song_requests_policy}}
 `,
   VENUE: `
-## Venue addendum ${R}
+## Venue addendum
 - Capacity: {{capacity}}
 - Access hours: {{access_hours}}
 - Outside vendors: {{outside_vendor_rules}}
@@ -261,7 +267,7 @@ Menu:
 - Noise curfew: {{noise_curfew}}
 `,
   BEAUTY: `
-## Beauty and glam addendum ${R}
+## Beauty and glam addendum
 - Number of people: {{guest_count}}
 - Allergy and sensitivity disclosures from the booking: {{booking_comments}}
 - Patch test: {{patch_test_option}}
@@ -333,7 +339,7 @@ export const UPLOADED_REQUIRED_FIELDS = ['event_date', 'vendor_business_name', '
  * section 5. Null when it already has it or has no section 5 to add it to.
  */
 export function withDepositClause(body: string): string | null {
-  if (body.includes(DEPOSIT_CLAUSE_MARK)) return null;
+  if (hasDepositClause(body)) return null;
   const section = /(## 5\. Cancellation and rescheduling[^\n]*\n[^\n]+)/;
   if (!section.test(body)) return null;
   return body.replace(section, `$1\n${DEPOSIT_CLAUSE}`);

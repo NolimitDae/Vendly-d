@@ -25,6 +25,9 @@ if (DB) {
 }
 
 jest.setTimeout(240_000);
+
+const SIGNATURE_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const DAY = 86400e3;
 
@@ -43,7 +46,8 @@ run('Package customizations and dos and don’ts (e2e)', () => {
   start.setUTCHours(16, 0, 0, 0);
   const end = new Date(start.getTime() + 4 * 3600e3);
   const fields = { listing_id: L.braids, vendor_id: U.vendor, timezone: 'America/Chicago', event_start_at: start, event_end_at: end, venue_address: '12 Salon Row, Austin TX', guest_count: 10 };
-  const sig = (name: string, hash: string) => ({ legal_name: name, consent: true, content_sha256: hash, device_platform: 'web' });
+  // a drawn signature (1x1 PNG) is required to sign
+  const sig = (name: string, hash: string) => ({ legal_name: name, consent: true, content_sha256: hash, device_platform: 'web', signature_image: SIGNATURE_PNG });
   const http = () => request(app.getHttpServer());
   const as = (who: keyof typeof U, r: request.Test) => r.auth(T[who], { type: 'bearer' });
   const msg = (res: request.Response) => res.body?.message?.message ?? res.body?.message;

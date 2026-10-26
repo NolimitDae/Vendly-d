@@ -58,8 +58,7 @@ function TemplatesTab() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        Each change creates a new version. Contracts already signed never change. Remove the [LAWYER REVIEW] markers only after a
-        lawyer approves the text.
+        Each change creates a new version. Contracts already signed never change.
       </p>
       {editing ? (
         <div className="space-y-3 bg-white rounded-xl p-5 border dark:bg-gray-800">

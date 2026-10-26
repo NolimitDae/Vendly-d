@@ -1,11 +1,12 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Linking,
-  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,11 +16,11 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
-import { COLORS, DARK, FONTS } from '../../constants/colors';
+import { DARK, FONTS } from '../../constants/colors';
 import { GradientButton } from '../brand';
 import { SignaturePayload, signerDevice } from '../../services/contracts.service';
 import ContractBody from './ContractBody';
+import SignaturePadModal from './SignaturePadModal';
 
 interface Props {
   title: string;
@@ -37,7 +38,8 @@ interface Props {
 
 /**
  * Full-screen contract review and signing. Sign unlocks only after the end of the
- * contract has been scrolled into view, consent is ticked and a legal name typed.
+ * contract has been scrolled into view, consent is ticked, a legal name typed and a
+ * signature drawn and confirmed (a vendor may use their saved one instead).
  */
 export default function SignContractView({
   title,
@@ -61,7 +63,19 @@ export default function SignContractView({
   const [saveForLater, setSaveForLater] = useState(true);
   const endY = useRef<number | null>(null);
   const viewport = useRef(0);
-  const padRef = useRef<SignatureViewRef>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const controlsY = useRef(0);
+  const nameY = useRef(0);
+  const nameFocused = useRef(false);
+
+  // keeps the name field (and, when there's room, the sign button below it) above the keyboard
+  const scrollToName = () => scrollRef.current?.scrollTo({ y: Math.max(0, controlsY.current + nameY.current - 16), animated: true });
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      if (nameFocused.current) setTimeout(scrollToName, 50);
+    });
+    return () => sub.remove();
+  }, []);
 
   const markReadIfVisible = (scrollY: number) => {
     if (endY.current !== null && scrollY + viewport.current >= endY.current - 8) setReadToEnd(true);
@@ -72,8 +86,9 @@ export default function SignContractView({
     markReadIfVisible(e.nativeEvent.contentOffset.y);
   };
 
-  const canSign = readToEnd && consent && name.trim().length >= 2 && !busy;
-  const usingSaved = !!vendor && useSaved;
+  const usingSaved = !!vendor?.hasSavedSignature && useSaved;
+  const signed = usingSaved || !!image;
+  const canSign = readToEnd && consent && name.trim().length >= 2 && signed && !busy;
 
   const submit = () => {
     if (!canSign) return;
@@ -82,9 +97,8 @@ export default function SignContractView({
       consent: true,
       content_sha256: contentSha256,
       ...signerDevice(),
-      ...(usingSaved ? { use_saved_signature: true } : {}),
-      ...(image && !usingSaved ? { signature_image: image } : {}),
-      ...(vendor && image && !usingSaved && saveForLater ? { save_signature: true } : {}),
+      ...(usingSaved ? { use_saved_signature: true } : { signature_image: image! }),
+      ...(vendor && !usingSaved && saveForLater ? { save_signature: true } : {}),
     });
   };
 
@@ -100,109 +114,113 @@ export default function SignContractView({
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        onScroll={onScroll}
-        scrollEventThrottle={64}
-        onLayout={(e) => {
-          viewport.current = e.nativeEvent.layout.height;
-          markReadIfVisible(0);
-        }}
-      >
-        {sourcePdfUrl ? (
-          <TouchableOpacity style={s.pdfBtn} onPress={() => Linking.openURL(sourcePdfUrl)}>
-            <Ionicons name="document-text-outline" size={18} color={DARK.accent} />
-            <Text style={s.pdfBtnText}>Open the vendor&apos;s contract (PDF)</Text>
-          </TouchableOpacity>
-        ) : null}
-        {sourcePdfUrl ? <Text style={s.addendumLabel}>BOOKING ADDENDUM</Text> : null}
-
-        <ContractBody body={body} />
-        <View
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={s.scroll}
+          onScroll={onScroll}
+          scrollEventThrottle={64}
+          keyboardShouldPersistTaps="handled"
           onLayout={(e) => {
-            endY.current = e.nativeEvent.layout.y;
+            viewport.current = e.nativeEvent.layout.height;
             markReadIfVisible(0);
           }}
-        />
+        >
+          {sourcePdfUrl ? (
+            <TouchableOpacity style={s.pdfBtn} onPress={() => Linking.openURL(sourcePdfUrl)}>
+              <Ionicons name="document-text-outline" size={18} color={DARK.accent} />
+              <Text style={s.pdfBtnText}>Open the vendor&apos;s contract (PDF)</Text>
+            </TouchableOpacity>
+          ) : null}
+          {sourcePdfUrl ? <Text style={s.addendumLabel}>BOOKING ADDENDUM</Text> : null}
 
-        <View style={s.controls}>
-          {!readToEnd && <Text style={s.hint}>Scroll to the end of the contract to sign.</Text>}
-
-          <Pressable style={s.checkRow} onPress={() => setConsent(!consent)} accessibilityRole="checkbox" accessibilityState={{ checked: consent }}>
-            <Ionicons name={consent ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
-            <Text style={s.checkText}>{consentText}</Text>
-          </Pressable>
-
-          <Text style={s.label}>Full legal name</Text>
-          <TextInput
-            style={s.input}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-            autoComplete="name"
-            placeholder="Type your full legal name"
-            placeholderTextColor={DARK.muted}
+          <ContractBody body={body} />
+          <View
+            onLayout={(e) => {
+              endY.current = e.nativeEvent.layout.y;
+              markReadIfVisible(0);
+            }}
           />
 
-          {vendor?.hasSavedSignature && (
-            <Pressable style={s.checkRow} onPress={() => setUseSaved(!useSaved)}>
-              <Ionicons name={useSaved ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
-              <Text style={s.checkText}>Use my saved signature</Text>
+          <View style={s.controls} onLayout={(e) => (controlsY.current = e.nativeEvent.layout.y)}>
+            {!readToEnd && <Text style={s.hint}>Scroll to the end of the contract to sign.</Text>}
+
+            <Pressable style={s.checkRow} onPress={() => setConsent(!consent)} accessibilityRole="checkbox" accessibilityState={{ checked: consent }}>
+              <Ionicons name={consent ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
+              <Text style={s.checkText}>{consentText}</Text>
             </Pressable>
-          )}
 
-          {!usingSaved && (
-            <>
-              {image ? (
-                <View style={s.sigPreview}>
-                  <Image source={{ uri: image }} style={s.sigImage} resizeMode="contain" />
-                  <TouchableOpacity onPress={() => setImage(null)}>
-                    <Text style={s.link}>Clear</Text>
+            <View style={s.nameField} onLayout={(e) => (nameY.current = e.nativeEvent.layout.y)}>
+              <Text style={s.label}>Full legal name</Text>
+              <TextInput
+                style={s.input}
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                autoComplete="name"
+                returnKeyType="done"
+                placeholder="Type your full legal name"
+                placeholderTextColor={DARK.muted}
+                onFocus={() => {
+                  nameFocused.current = true;
+                  // the keyboard may already be up (keyboardDidShow won't fire again)
+                  setTimeout(scrollToName, 300);
+                }}
+                onBlur={() => (nameFocused.current = false)}
+              />
+            </View>
+
+            {vendor?.hasSavedSignature && (
+              <Pressable style={s.checkRow} onPress={() => setUseSaved(!useSaved)}>
+                <Ionicons name={useSaved ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
+                <Text style={s.checkText}>Use my saved signature</Text>
+              </Pressable>
+            )}
+
+            {!usingSaved && (
+              <>
+                {image ? (
+                  <View style={s.sigPreview}>
+                    <Image source={{ uri: image }} style={s.sigImage} resizeMode="contain" accessibilityLabel="Your signature" />
+                    <View style={s.sigActions}>
+                      <TouchableOpacity onPress={() => setPadOpen(true)} hitSlop={8}>
+                        <Text style={s.sigLink}>Redo</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setImage(null)} hitSlop={8}>
+                        <Text style={s.sigLink}>Clear</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={s.drawBtn} onPress={() => setPadOpen(true)} accessibilityRole="button">
+                    <Ionicons name="create-outline" size={28} color="#fff" />
+                    <Text style={s.drawText}>Tap to sign here</Text>
+                    <Text style={s.drawSub}>Draw your signature with your finger</Text>
                   </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity style={s.drawBtn} onPress={() => setPadOpen(true)}>
-                  <Ionicons name="create-outline" size={28} color="#fff" />
-                  <Text style={s.drawText}>Tap to sign here</Text>
-                  <Text style={s.drawSub}>Use your finger (optional)</Text>
-                </TouchableOpacity>
-              )}
-              {vendor && !vendor.hasSavedSignature && image && (
-                <Pressable style={s.checkRow} onPress={() => setSaveForLater(!saveForLater)}>
-                  <Ionicons name={saveForLater ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
-                  <Text style={s.checkText}>Save this signature for future bookings</Text>
-                </Pressable>
-              )}
-            </>
-          )}
+                )}
+                {vendor && !vendor.hasSavedSignature && image && (
+                  <Pressable style={s.checkRow} onPress={() => setSaveForLater(!saveForLater)}>
+                    <Ionicons name={saveForLater ? 'checkbox' : 'square-outline'} size={22} color={DARK.accent} />
+                    <Text style={s.checkText}>Save this signature for future bookings</Text>
+                  </Pressable>
+                )}
+              </>
+            )}
 
-          <GradientButton title={submitLabel} onPress={submit} disabled={!canSign} loading={busy} />
-        </View>
-      </ScrollView>
-
-      <Modal visible={padOpen} animationType="slide" onRequestClose={() => setPadOpen(false)}>
-        <View style={s.padRoot}>
-          <Text style={s.padTitle}>Draw your signature</Text>
-          <View style={s.padBox}>
-            <SignatureScreen
-              ref={padRef}
-              onOK={(sig) => {
-                setImage(sig);
-                setPadOpen(false);
-              }}
-              onEmpty={() => setPadOpen(false)}
-              descriptionText=""
-              clearText="Clear"
-              confirmText="Use signature"
-              imageType="image/png"
-              webStyle={`.m-signature-pad { box-shadow: none; border: 0; } .m-signature-pad--footer .button { background-color: ${COLORS.primary}; color: #fff; border-radius: 12px; }`}
-            />
+            {!signed && <Text style={s.hint}>Draw your signature to sign.</Text>}
+            <GradientButton title={submitLabel} onPress={submit} disabled={!canSign} loading={busy} />
           </View>
-          <TouchableOpacity onPress={() => setPadOpen(false)} style={s.padCancel}>
-            <Text style={s.link}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <SignaturePadModal
+        visible={padOpen}
+        onConfirm={(sig) => {
+          setImage(sig);
+          setPadOpen(false);
+        }}
+        onCancel={() => setPadOpen(false)}
+      />
     </View>
   );
 }
@@ -221,6 +239,7 @@ const s = StyleSheet.create({
   hint: { color: '#F5B700', fontSize: 13, fontFamily: FONTS.medium },
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   checkText: { flex: 1, fontSize: 14, color: '#fff', lineHeight: 20, fontFamily: FONTS.medium },
+  nameField: { gap: 14 },
   label: { fontSize: 16, color: '#fff', fontFamily: FONTS.medium },
   input: { height: 56, borderRadius: 24, paddingHorizontal: 16, fontSize: 16, color: '#fff', backgroundColor: DARK.field, fontFamily: FONTS.regular },
   drawBtn: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 36, borderRadius: 20, backgroundColor: DARK.field, borderWidth: 1, borderColor: DARK.border },
@@ -228,9 +247,7 @@ const s = StyleSheet.create({
   drawSub: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular },
   sigPreview: { alignItems: 'center', gap: 6, padding: 8, borderRadius: 20, backgroundColor: '#fff' },
   sigImage: { width: '100%', height: 90 },
-  link: { color: DARK.accent, fontFamily: FONTS.semibold },
-  padRoot: { flex: 1, paddingTop: 60, paddingHorizontal: 20, backgroundColor: DARK.bg },
-  padTitle: { fontSize: 20, fontFamily: FONTS.semibold, marginBottom: 12, color: '#fff' },
-  padBox: { height: 320, borderRadius: 20, overflow: 'hidden', backgroundColor: '#fff' },
-  padCancel: { alignItems: 'center', padding: 20 },
+  sigActions: { flexDirection: 'row', gap: 24 },
+  // on the white signature box
+  sigLink: { color: '#7A2A82', fontFamily: FONTS.semibold },
 });

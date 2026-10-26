@@ -48,7 +48,8 @@ run('Booking tracker (e2e)', () => {
   const api = () => request(app.getHttpServer());
   const msg = (res: request.Response) => res.body?.message?.message ?? res.body?.message;
   const signing = () => sleep(2100); // signing endpoints are rate limited per IP
-  const sig = (name: string, hash: string, extra: Record<string, unknown> = {}) => ({ legal_name: name, consent: true, content_sha256: hash, device_platform: 'web', ...extra });
+  // a drawn signature is required to sign
+  const sig = (name: string, hash: string, extra: Record<string, unknown> = {}) => ({ legal_name: name, consent: true, content_sha256: hash, device_platform: 'web', signature_image: `data:image/png;base64,${PNG_B64}`, ...extra });
   const get = (bookingId: string, token: string) => api().get(`/api/bookings/${bookingId}`).auth(token, { type: 'bearer' });
   const step = (bookingId: string, path: string, token = T.vendor) => api().post(`/api/bookings/${bookingId}/${path}`).auth(token, { type: 'bearer' });
   const updateProfile = (token: string, fields: Record<string, string>) => {

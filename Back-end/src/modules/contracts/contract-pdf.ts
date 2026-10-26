@@ -285,6 +285,14 @@ export function decodeSignatureImage(input?: string | null): Buffer | null {
   const base64 = input.replace(/^data:image\/png;base64,/, '');
   const buf = Buffer.from(base64, 'base64');
   if (buf.length > 512 * 1024) throw new PdfValidationError('Signature image is too large.');
-  if (!buf.subarray(0, 8).equals(PNG_MAGIC)) throw new PdfValidationError('Signature image must be a PNG.');
+  if (!isWholePng(buf)) throw new PdfValidationError('Signature image must be a PNG.');
   return buf;
+}
+
+/** The PNG signature, a header with a real size and the end chunk: a cut-off or made-up file is refused. */
+function isWholePng(buf: Buffer) {
+  if (buf.length < 57 || !buf.subarray(0, 8).equals(PNG_MAGIC)) return false;
+  if (buf.toString('latin1', 12, 16) !== 'IHDR') return false;
+  if (buf.readUInt32BE(16) === 0 || buf.readUInt32BE(20) === 0) return false;
+  return buf.toString('latin1', buf.length - 8, buf.length - 4) === 'IEND';
 }

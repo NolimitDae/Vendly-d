@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BookingModal from './BookingModal';
 
@@ -70,6 +70,24 @@ async function fillDetails(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/guest count/i), '120');
 }
 
+
+const SIGNATURE = 'data:image/png;base64,iVBORw0KGgo=';
+// jsdom has no canvas: a stand-in 2D context and a fixed PNG, so the signature pad can be drawn on
+beforeAll(() => {
+  const ctx = { scale: jest.fn(), beginPath: jest.fn(), moveTo: jest.fn(), lineTo: jest.fn(), stroke: jest.fn(), clearRect: jest.fn() };
+  jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ctx as any);
+  jest.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(() => SIGNATURE);
+});
+
+/** Draws on the pad and confirms it (a drawn signature is required to sign). */
+const drawSignature = () => {
+  const pad = screen.getByLabelText('Draw your signature');
+  fireEvent.pointerDown(pad, { clientX: 5, clientY: 5 });
+  fireEvent.pointerMove(pad, { clientX: 40, clientY: 20 });
+  fireEvent.pointerUp(pad);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm signature' }));
+};
+
 describe('BookingModal', () => {
   const onClose = jest.fn();
 
@@ -118,7 +136,7 @@ describe('BookingModal', () => {
     expect(screen.queryByText(/sign & send request/i)).not.toBeInTheDocument();
   });
 
-  it('only enables signing after consent and a typed name', async () => {
+  it('only enables signing after consent, a typed name and a confirmed signature', async () => {
     (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
     const user = userEvent.setup();
     render(<BookingModal listing={listing} onClose={onClose} />);
@@ -131,6 +149,8 @@ describe('BookingModal', () => {
     await user.click(screen.getByLabelText(/sign electronically/i));
     expect(sign).toBeDisabled();
     await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+    expect(sign).toBeDisabled();
+    drawSignature();
     expect(sign).toBeEnabled();
   });
 
@@ -144,6 +164,7 @@ describe('BookingModal', () => {
     await user.click(screen.getByRole('button', { name: /review contract/i }));
     await user.click(await screen.findByLabelText(/sign electronically/i));
     await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+    drawSignature();
     await user.click(screen.getByRole('button', { name: /sign & send request/i }));
 
     await waitFor(() => expect(BookingService.create).toHaveBeenCalled());
@@ -156,7 +177,7 @@ describe('BookingModal', () => {
       event_id: 'event-1',
       payment_method_id: 'pm_default',
       preview_token: 'token-1',
-      signature: { legal_name: 'Jane Customer', consent: true, content_sha256: preview.content_sha256 },
+      signature: { legal_name: 'Jane Customer', consent: true, content_sha256: preview.content_sha256, signature_image: SIGNATURE },
     });
     expect(ContractsService.bookingPreview).toHaveBeenCalledWith(expect.objectContaining({ event_id: 'event-1' }));
     expect(onBookingCreated).toHaveBeenCalledWith('booking-1');
@@ -175,6 +196,7 @@ describe('BookingModal', () => {
     await user.click(screen.getByRole('button', { name: /review contract/i }));
     await user.click(await screen.findByLabelText(/sign electronically/i));
     await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+    drawSignature();
     await user.click(screen.getByRole('button', { name: /sign & send request/i }));
 
     await waitFor(() => expect(toast.info).toHaveBeenCalled());
@@ -190,6 +212,7 @@ describe('BookingModal', () => {
     await user.click(screen.getByRole('button', { name: /review contract/i }));
     await user.click(await screen.findByLabelText(/sign electronically/i));
     await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+    drawSignature();
     await user.click(screen.getByRole('button', { name: /sign & send request/i }));
     await waitFor(() => expect(BookingService.create).toHaveBeenCalled());
   };
@@ -313,6 +336,7 @@ describe('BookingModal', () => {
 
       await user.click(screen.getByLabelText(/sign electronically/i));
       await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+      drawSignature();
       await user.click(screen.getByRole('button', { name: /sign & send request/i }));
       await waitFor(() => expect(BookingService.create).toHaveBeenCalled());
       expect((BookingService.create as jest.Mock).mock.calls[0][0].add_ons).toEqual(previewed.add_ons);
@@ -404,6 +428,7 @@ describe('BookingModal', () => {
 
       await user.click(screen.getByLabelText(/sign electronically/i));
       await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+      drawSignature();
       await user.click(screen.getByRole('button', { name: /sign & send request/i }));
       await waitFor(() => expect(BookingService.create).toHaveBeenCalled());
       expect((BookingService.create as jest.Mock).mock.calls[0][0].options).toEqual(sent.options);
@@ -547,6 +572,7 @@ describe('BookingModal', () => {
     await user.click(screen.getByRole('button', { name: /review contract/i }));
     await user.click(await screen.findByLabelText(/sign electronically/i));
     await user.type(screen.getByLabelText(/full legal name/i), 'Jane Customer');
+    drawSignature();
     await user.click(screen.getByRole('button', { name: /sign & send request/i }));
     await waitFor(() => expect(BookingService.create).toHaveBeenCalled());
     const [, photos] = (BookingService.create as jest.Mock).mock.calls[0];

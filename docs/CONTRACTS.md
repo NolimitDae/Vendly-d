@@ -31,7 +31,7 @@ Propose exact models before writing migrations. Expected shape:
 - **ContractTemplate**: Vendly default templates managed by admins. Fields: category (general, photography/video, rentals, catering, entertainment, venue, beauty), version, title, body with merge fields, status (draft, active, retired), timestamps. A new version never changes contracts already signed.
 - **VendorContract**: a vendor's contract setup. Fields: vendor, type (DEFAULT or UPLOADED), the base template version (if DEFAULT), the vendor's custom field values and additional clauses, the uploaded PDF file and its SHA-256 hash (if UPLOADED), version number, status (active, archived, disabled by admin), which packages it applies to (all, selected ones, or every package in chosen categories), timestamps.
 - **BookingContract**: one per booking, a frozen snapshot. Fields: booking, the vendor contract version used, rendered content with merge fields filled, status (draft, awaiting customer signature, awaiting vendor signature, executed, void, superseded), the executed PDF file key, final PDF SHA-256 hash, version number, and a link to the contract it replaced if it's an amendment.
-- **ContractSignature**: one per signer. Fields: booking contract, user, role (customer, planner, vendor), typed legal name, drawn signature image (optional), consent text version, signed at, IP address, user agent, app version, device platform, document hash at signing.
+- **ContractSignature**: one per signer. Fields: booking contract, user, role (customer, planner, vendor), typed legal name, drawn signature image (required since Nov 2026; a vendor may use their saved one), consent text version, signed at, IP address, user agent, app version, device platform, document hash at signing.
 - **ContractAuditEvent**: an append-only log. Events: created, viewed, signed, countersigned, executed, emailed, downloaded, voided, superseded, admin viewed. Each records who, when, IP and details. Never updated or deleted.
 
 ## Vendor setup
@@ -58,12 +58,12 @@ New screen in the vendor dashboard: **Contracts**.
 - Which contract a booking uses: a contract naming the package wins over one for the package's category, which wins over one for all packages. Within the same rule the newest version wins. The same choice decides the cancellation policy shown on the package page (`Back-end/src/modules/contracts/contract-scope.ts`).
 - Saving a contract for packages or categories takes them over from older contracts; an older contract left covering nothing is archived. A contract for all packages stays as the fallback.
 - Editing creates a new version. It applies only to future bookings; existing bookings keep the version that was signed.
-- Vendly default templates change the same way: a new version is published and earlier ones are retired, never edited. The deposit clause of Oct 2026 (`DEPOSIT_CLAUSE` in `contract-templates.ts`, section 5, marked `[LAWYER REVIEW]`) is published by `VendorContractsService.ensureDefaultTemplates` at start-up: once per category, the active version gets a next version with the clause added to section 5 (everything else kept), unless some version already has it. Vendor contracts stay on the template version they were set up with; vendors pick up the new one when they set up or update their default contract. The Terms of Service carry the same rule for every booking. The uploaded-PDF booking addendum lists it too.
+- Vendly default templates change the same way: a new version is published and earlier ones are retired, never edited. The deposit clause of Oct 2026 (`DEPOSIT_CLAUSE` in `contract-templates.ts`, section 5) is published by `VendorContractsService.ensureDefaultTemplates` at start-up: once per category, the active version gets a next version with the clause added to section 5 (everything else kept), unless some version already has it. Vendor contracts stay on the template version they were set up with; vendors pick up the new one when they set up or update their default contract. The Terms of Service carry the same rule for every booking. The uploaded-PDF booking addendum lists it too.
 - Vendors must have an active contract before accepting paid bookings, or they can choose "Use Vendly default" with one tap.
 
 ## Default contract template content
 
-Draft these as templates. Mark every clause `[LAWYER REVIEW]` until a lawyer approves it.
+Draft these as templates. (The `[LAWYER REVIEW]` markers they carried at first were removed in Nov 2026, from stored template versions too; contracts already rendered for a booking keep their text.)
 
 **General sections (every category)**
 
@@ -104,7 +104,7 @@ A missing required field blocks sending, with a clear message saying what's miss
 - The contract opens full-screen with readable text (no zooming a PDF on a phone). Uploaded PDFs show in a PDF viewer with the addendum below.
 - The **Sign** button activates only after the signer scrolls to the end.
 - Required checkbox: "I agree to sign electronically and receive this contract electronically."
-- Typed full legal name (required), plus an optional drawn signature (for example react-native-signature-canvas).
+- Typed full legal name and a drawn signature, both required (react-native-signature-canvas in the app). The signer confirms the drawing, sees it in the signature box, and only then can sign. Vendors may use their saved signature instead. The server refuses any signature without a drawn PNG image ("Please draw your signature to sign.").
 - After signing: a confirmation screen and a "View contract" link on the booking.
 - Vendor side: **Accept & Sign** on the request screen, with the same scroll, consent and name steps. The first time only, offer to save the vendor's signature for future bookings; still record a fresh signing event each time.
 

@@ -19,7 +19,7 @@ import appConfig from 'src/config/app.config';
 import {
   CANCELLATION_PRESETS,
   CATEGORY_LABELS,
-  DEPOSIT_CLAUSE_MARK,
+  hasDepositClause,
   CONSENT_TEXT,
   CONSENT_TEXT_VERSION,
   MAX_ADDITIONAL_TERMS,
@@ -70,7 +70,7 @@ export class VendorContractsService implements OnModuleInit {
       }
       // already published (or an admin wrote it into a version of their own): never again
       const versions = await this.prisma.contractTemplate.findMany({ where: { category: t.category }, orderBy: { version: 'desc' } });
-      if (versions.some((v) => v.body.includes(DEPOSIT_CLAUSE_MARK))) continue;
+      if (versions.some((v) => hasDepositClause(v.body))) continue;
       const active = versions.find((v) => v.status === ContractTemplateStatus.ACTIVE);
       const body = active ? withDepositClause(active.body) : null;
       if (!active || !body) continue;
