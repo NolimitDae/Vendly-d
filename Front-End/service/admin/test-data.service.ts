@@ -35,7 +35,9 @@ export interface TestDataRemoved {
   kept: { email: string | null; reason: string }[];
   cancelled: { booking_id: string; package: string | null; status: string; refunded: number }[];
   not_cancelled: { booking_id: string; package: string | null; reason: string }[];
-  counts: { removed: number; kept: number; cancelled: number; not_cancelled: number };
+  /** leftover Vendly balances set to 0 (never paid out) */
+  wiped?: { email: string | null; amount: number }[];
+  counts: { removed: number; kept: number; cancelled: number; not_cancelled: number; wiped?: number };
 }
 
 /** Admin → Settings → Test vendors. */

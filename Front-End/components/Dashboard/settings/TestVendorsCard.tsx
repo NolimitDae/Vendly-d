@@ -53,7 +53,7 @@ export default function TestVendorsCard() {
   };
 
   const remove = async () => {
-    if (!confirm("Remove every test vendor? Their open bookings are cancelled and refunded, their packages are taken down and the accounts are deleted.")) return;
+    if (!confirm("Remove every test vendor? Their open bookings are cancelled and refunded, their packages are taken down, any leftover balance is wiped and the accounts are deleted.")) return;
     setBusy("remove");
     setCreated(null);
     try {
@@ -179,6 +179,11 @@ export default function TestVendorsCard() {
           {removed.cancelled.map((c) => (
             <p key={c.booking_id} className="text-xs text-gray-500 dark:text-gray-400">
               Cancelled {c.package ?? "a booking"} ({c.booking_id}){c.refunded ? `: $${c.refunded.toFixed(2)} refunded` : ""}
+            </p>
+          ))}
+          {removed.wiped?.map((w) => (
+            <p key={w.email ?? w.amount} className="text-xs text-gray-500 dark:text-gray-400">
+              Wiped {w.email}&apos;s balance of ${w.amount.toFixed(2)}
             </p>
           ))}
           {removed.not_cancelled.map((c) => (

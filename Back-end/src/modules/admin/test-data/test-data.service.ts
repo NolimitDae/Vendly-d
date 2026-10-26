@@ -345,6 +345,7 @@ export class TestDataService {
     const notCancelled: { booking_id: string; package: string | null; reason: string }[] = [];
     const removed: string[] = [];
     const kept: { email: string | null; reason: string }[] = [];
+    const wiped: { email: string | null; amount: number }[] = [];
 
     for (const u of users) {
       // unfinished bookings are cancelled first, through the normal path (refunds go out as usual)
@@ -372,6 +373,10 @@ export class TestDataService {
       const items = await this.prisma.rentalItem.findMany({ where: { vendor_id: u.id, deleted_at: null }, select: { id: true } });
       for (const i of items) await this.rentals.removeItem(i.id, u.id).catch((err) => this.logger.warn(`Removing rental item ${i.id}: ${(err as Error).message}`));
 
+      // money left in (or owed to) a test vendor's Vendly balance is wiped, never paid out
+      const amount = await this.wipeBalance(u.id);
+      if (amount) wiped.push({ email: u.email, amount });
+
       // the normal account deletion: anonymised when bookings or contracts refer to it
       const res = await this.auth.deleteAccount(u.id).catch((err) => ({ success: false, message: (err as Error).message }));
       if (res.success) removed.push(u.email!);
@@ -386,8 +391,23 @@ export class TestDataService {
         kept,
         cancelled,
         not_cancelled: notCancelled,
-        counts: { removed: removed.length, kept: kept.length, cancelled: cancelled.length, not_cancelled: notCancelled.length },
+        wiped,
+        counts: { removed: removed.length, kept: kept.length, cancelled: cancelled.length, not_cancelled: notCancelled.length, wiped: wiped.length },
       },
     };
+  }
+
+  /** Sets a test account's Vendly balance to 0, recording the amount wiped. Returns it (0 when there was none). */
+  private async wipeBalance(userId: string): Promise<number> {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { balance: true } });
+      const amount = Math.round(Number(user?.balance ?? 0) * 100) / 100;
+      if (!amount) return 0;
+      // only if the balance hasn't moved since it was read
+      const { count } = await tx.user.updateMany({ where: { id: userId, balance: user!.balance! }, data: { balance: 0 } });
+      if (!count) return 0;
+      await tx.paymentTransaction.create({ data: { user_id: userId, type: 'test_balance_wiped', provider: 'vendly', reference_number: userId, status: 'succeeded', amount, currency: 'usd' } });
+      return amount;
+    });
   }
 }

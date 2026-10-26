@@ -1,7 +1,7 @@
 /**
  * Admin -> Settings -> Test vendors against a real Postgres + Redis: create them, find them in
  * marketplace search with the "Test" flag, sign in as one with the shared password, run it again
- * (nothing new), then remove them (an open booking is cancelled first).
+ * (nothing new), then remove them (an open booking is cancelled first, leftover balances wiped).
  *   CONTRACTS_E2E_DATABASE_URL=postgresql://... REDIS_URL=redis://... yarn test:e2e test-vendors
  */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -135,9 +135,17 @@ run('Test vendors (e2e)', () => {
     const vendor = await prisma.user.findFirst({ where: { email: 'test-catering-food-1@vendly.test' } });
     const listing = await prisma.vendorListing.findFirst({ where: { vendor_id: vendor.id } });
     const booking = await prisma.booking.create({ data: { customer_id: U.customer, vendor_id: vendor.id, listing_id: listing.id, status: 'PENDING', amount: 950 } });
+    // leftover balances (money in, or owed) would otherwise block deleting the accounts
+    const owed = await prisma.user.findFirst({ where: { is_test: true, deleted_at: null, id: { not: vendor.id } } });
+    await prisma.user.update({ where: { id: vendor.id }, data: { balance: 120.5 } });
+    if (owed) await prisma.user.update({ where: { id: owed.id }, data: { balance: -40 } });
     const count = await prisma.user.count({ where: { is_test: true, deleted_at: null } });
 
     const res = await asAdmin(http().delete('/api/admin/test-data')).expect(200);
+    expect(res.body.data.wiped).toEqual(
+      expect.arrayContaining([{ email: 'test-catering-food-1@vendly.test', amount: 120.5 }, ...(owed ? [{ email: owed.email, amount: -40 }] : [])]),
+    );
+    expect(await prisma.paymentTransaction.count({ where: { user_id: vendor.id, type: 'test_balance_wiped', amount: 120.5 } })).toBe(1);
     expect(res.body.data.cancelled).toEqual([expect.objectContaining({ booking_id: booking.id, status: 'PENDING' })]);
     expect(res.body.data.kept).toEqual([]);
     expect(res.body.data.removed).toHaveLength(count);
