@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import DeleteAccountButton from '../../components/contracts/DeleteAccountButton'
 import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { EventPlannerService, type EventPlannerProfile } from '../../services/eventplanner.service';
+import { useSlideUp } from '../../components/useSlideUp';
 
 type Item = { icon: keyof typeof Ionicons.glyphMap; label: string; onPress?: () => void; note?: string; noteColor?: string };
 
@@ -24,6 +25,7 @@ export default function EPProfile() {
   const { user, logout } = useAuth();
   const [profile, setProfile] = useState<EventPlannerProfile | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const slide = useSlideUp(confirm);
   const firstName = (user?.name ?? '').split(' ')[0];
 
   useFocusEffect(
@@ -90,8 +92,9 @@ export default function EPProfile() {
         </View>
       </ScrollView>
 
-      <Modal visible={confirm} transparent animationType="slide" onRequestClose={() => setConfirm(false)}>
+      <Modal visible={confirm} transparent animationType="fade" onRequestClose={() => setConfirm(false)}>
         <Pressable style={s.overlay} onPress={() => setConfirm(false)}>
+          <Animated.View style={slide}>
           <Pressable style={[s.sheet, { paddingBottom: insets.bottom + 24 }]} onPress={() => {}}>
             <Pressable onPress={() => setConfirm(false)} style={{ alignSelf: 'flex-end' }} accessibilityLabel="Close" hitSlop={10}><Ionicons name="close" size={26} color="#fff" /></Pressable>
             <Text style={s.sheetTitle}>Are you sure you want to log out?</Text>
@@ -101,6 +104,7 @@ export default function EPProfile() {
               <GradientButton title="Yes, Log Out" onPress={() => { setConfirm(false); logout(); }} style={{ flex: 1.4 }} />
             </View>
           </Pressable>
+          </Animated.View>
         </Pressable>
       </Modal>
     </View>

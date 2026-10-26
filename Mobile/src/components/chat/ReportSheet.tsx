@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Chip, GradientButton, ui } from '../brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { ChatService, REPORT_REASONS, type ReportReason } from '../../services/chat.service';
 import { apiError } from '../../services/contracts.service';
+import { useSlideUp } from '../useSlideUp';
 
 /** Report a person (or one of their messages) to Vendly: reason chips, optional details, optional block. */
 export default function ReportSheet({
@@ -28,6 +29,7 @@ export default function ReportSheet({
   const [details, setDetails] = useState('');
   const [alsoBlock, setAlsoBlock] = useState(true);
   const [busy, setBusy] = useState(false);
+  const slide = useSlideUp(visible);
 
   // fresh form each time it opens
   useEffect(() => {
@@ -63,9 +65,9 @@ export default function ReportSheet({
 
   const name = person?.name ?? 'this person';
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={s.sheet}>
+        <Animated.View style={[s.sheet, slide]}>
           <View style={s.head}>
             <Text style={s.h2}>{messageId ? 'Report message' : `Report ${name}`}</Text>
             <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close"><Ionicons name="close" size={24} color="#fff" /></Pressable>
@@ -97,7 +99,7 @@ export default function ReportSheet({
             )}
             <GradientButton title="Send report" onPress={send} loading={busy} disabled={!reason} style={{ marginTop: 6 }} />
           </ScrollView>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );

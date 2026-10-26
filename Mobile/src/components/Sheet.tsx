@@ -1,8 +1,9 @@
 import React from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { DARK, FONTS } from '../constants/colors';
+import { useSlideUp } from './useSlideUp';
 
 /**
  * Bottom sheet in the AddCardSheet style: dimmed backdrop (tap to close), handle, title, and a scrolling
@@ -24,8 +25,9 @@ export default function Sheet({
   footer?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const slide = useSlideUp(visible);
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={s.overlay}>
           {/* the backdrop is a sibling, not a wrapper, so VoiceOver still reaches each control in the sheet */}
@@ -35,7 +37,7 @@ export default function Sheet({
             accessibilityRole="button"
             accessibilityLabel="Close"
           />
-          <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <Animated.View style={[s.sheet, { paddingBottom: insets.bottom + 16 }, slide]}>
             <View style={s.handle} />
             <Text style={s.title} accessibilityRole="header">{title}</Text>
             {!!subtitle && <Text style={s.subtitle}>{subtitle}</Text>}
@@ -49,7 +51,7 @@ export default function Sheet({
               {children}
             </ScrollView>
             {footer}
-          </View>
+          </Animated.View>
         </View>
       </KeyboardAvoidingView>
     </Modal>

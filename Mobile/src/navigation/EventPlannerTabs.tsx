@@ -46,7 +46,8 @@ const BookStack = createNativeStackNavigator<any>();
 const MsgStack = createNativeStackNavigator<any>();
 const ProfileStack = createNativeStackNavigator<any>();
 
-const STACK = { headerShown: false, contentStyle: { backgroundColor: DARK.bg } };
+// every page slides in from the right, the same on iPhone and Android (Android's default rises from the bottom)
+const STACK = { headerShown: false, contentStyle: { backgroundColor: DARK.bg }, animation: 'slide_from_right' as const };
 
 function HomeNavigator() {
   return (

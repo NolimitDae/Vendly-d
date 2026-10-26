@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,6 +11,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { useSaved } from '../../hooks/useSaved';
 import { MarketplaceService, vendorName, type Category, type Listing } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
+import { useSlideUp } from '../../components/useSlideUp';
 
 export default function SearchResults({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'SearchResults'>) {
   const { categoryId, categoryName, location, eventId } = route.params;
@@ -23,6 +24,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<Filters>(route.params.filters ?? {});
   const [sheet, setSheet] = useState(false);
+  const slide = useSlideUp(sheet);
   const saved = useSaved();
   const nFilters = activeFilters(filters);
 
@@ -120,9 +122,9 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
           />
         )}
       />
-      <Modal visible={sheet} transparent animationType="slide" onRequestClose={() => setSheet(false)}>
+      <Modal visible={sheet} transparent animationType="fade" onRequestClose={() => setSheet(false)}>
         <View style={s.overlay}>
-          <View style={[s.sheet, { paddingBottom: insets.bottom + 20 }]}>
+          <Animated.View style={[s.sheet, { paddingBottom: insets.bottom + 20 }, slide]}>
             <View style={s.sheetHead}>
               <Text style={s.sheetTitle}>Filters</Text>
               <Pressable onPress={() => setFilters({})} hitSlop={8} accessibilityRole="button"><Text style={s.clear}>Reset</Text></Pressable>
@@ -131,7 +133,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
               <SearchFilters value={filters} onChange={setFilters} />
             </ScrollView>
             <GradientButton title="Show results" onPress={() => setSheet(false)} />
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </View>

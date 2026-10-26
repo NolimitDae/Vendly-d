@@ -59,10 +59,12 @@ const HEADER = {
   headerTintColor: COLORS.white,
   headerTitleStyle: { fontWeight: '700' as const },
 };
+// every page slides in from the right, the same on iPhone and Android (Android's default rises from the bottom)
+const SLIDE = { animation: 'slide_from_right' as const };
 
 function HomeNavigator() {
   return (
-    <HomeStack.Navigator screenOptions={{ ...HEADER, contentStyle: { backgroundColor: DARK.bg } }}>
+    <HomeStack.Navigator screenOptions={{ ...HEADER, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
       <HomeStack.Screen name="CustomerHome" component={CustomerHome} options={{ headerShown: false }} />
       <HomeStack.Screen name="Notifications" component={Inbox} options={{ headerShown: false }} />
       <HomeStack.Screen name="FindVendors" component={FindVendors} options={{ headerShown: false }} />
@@ -83,7 +85,7 @@ function HomeNavigator() {
 
 function BookingsNavigator() {
   return (
-    <BookingsStack.Navigator screenOptions={{ ...HEADER, contentStyle: { backgroundColor: DARK.bg } }}>
+    <BookingsStack.Navigator screenOptions={{ ...HEADER, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
       <BookingsStack.Screen name="CustomerBookings" component={CustomerBookings} options={{ headerShown: false }} />
       <BookingsStack.Screen name="BookingDetail" component={BookingDetail} options={{ headerShown: false }} />
       <BookingsStack.Screen name="Payment" component={PaymentScreen} options={{ title: 'Secure Payment' }} />
@@ -93,7 +95,7 @@ function BookingsNavigator() {
 
 function MessagesNavigator() {
   return (
-    <MessagesStack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: DARK.bg } }}>
+    <MessagesStack.Navigator screenOptions={{ headerShown: false, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
       <MessagesStack.Screen name="ChatList" component={ChatList} />
       <MessagesStack.Screen name="ChatDetail" component={ChatDetail} />
     </MessagesStack.Navigator>
@@ -102,7 +104,7 @@ function MessagesNavigator() {
 
 function ProfileNavigator() {
   return (
-    <ProfileStack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: DARK.bg } }}>
+    <ProfileStack.Navigator screenOptions={{ headerShown: false, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
       <ProfileStack.Screen name="CustomerProfile" component={CustomerProfile} />
       <ProfileStack.Screen name="EditProfile" component={EditProfile} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />

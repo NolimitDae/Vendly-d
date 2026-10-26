@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { GradientButton } from './brand';
 import { DARK, FONTS } from '../constants/colors';
 import { PaymentsService } from '../services/payments.service';
 import { apiMessage } from '../screens/auth/SignIn';
+import { useSlideUp } from './useSlideUp';
 
 // Stripe's native module isn't available in Expo Go or on web; the sheet then explains instead of crashing.
 let CardField: React.ComponentType<any> | null = null;
@@ -23,6 +24,7 @@ export default function AddCardSheet({ visible, onClose, onSaved }: { visible: b
   const { confirmSetupIntent } = useStripe();
   const [complete, setComplete] = useState(false);
   const [saving, setSaving] = useState(false);
+  const slide = useSlideUp(visible);
   const supported = !!CardField && !!confirmSetupIntent && Platform.OS !== 'web';
 
   const save = async () => {
@@ -53,10 +55,11 @@ export default function AddCardSheet({ visible, onClose, onSaved }: { visible: b
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       {/* the sheet rides up with the keyboard so Save card stays visible */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable style={s.overlay} onPress={() => (Keyboard.isVisible() ? Keyboard.dismiss() : onClose())}>
+        <Animated.View style={slide}>
         <Pressable style={[s.sheet, { paddingBottom: insets.bottom + 24 }]} onPress={Keyboard.dismiss}>
           <View style={s.handle} />
           <Text style={s.title}>Add Your Payment Information</Text>
@@ -77,6 +80,7 @@ export default function AddCardSheet({ visible, onClose, onSaved }: { visible: b
           )}
           <GradientButton title="Save card" onPress={save} loading={saving} disabled={!supported || !complete} />
         </Pressable>
+        </Animated.View>
       </Pressable>
       </KeyboardAvoidingView>
     </Modal>

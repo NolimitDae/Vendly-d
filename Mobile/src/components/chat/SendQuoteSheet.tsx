@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Chip, GradientButton, ui } from '../brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { ChatService } from '../../services/chat.service';
 import { apiError } from '../../services/contracts.service';
+import { useSlideUp } from '../useSlideUp';
 
 interface Pkg { id: string; title: string; price: number }
 
@@ -18,6 +19,7 @@ export default function SendQuoteSheet({ visible, conversationId, onClose, onSen
   const [description, setDescription] = useState('');
   const [days, setDays] = useState(7);
   const [busy, setBusy] = useState(false);
+  const slide = useSlideUp(visible);
 
   useEffect(() => {
     if (!visible || packages) return;
@@ -54,9 +56,9 @@ export default function SendQuoteSheet({ visible, conversationId, onClose, onSen
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={s.sheet}>
+        <Animated.View style={[s.sheet, slide]}>
           <View style={s.head}>
             <Text style={s.h2}>Send a quote</Text>
             <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close"><Ionicons name="close" size={24} color="#fff" /></Pressable>
@@ -87,7 +89,7 @@ export default function SendQuoteSheet({ visible, conversationId, onClose, onSen
               <GradientButton title="Send quote" onPress={send} loading={busy} style={{ marginTop: 6 }} />
             </ScrollView>
           )}
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
