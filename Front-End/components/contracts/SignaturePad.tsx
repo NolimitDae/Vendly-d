@@ -97,7 +97,8 @@ export default function SignaturePad({ onChange }: { onChange: (dataUrl: string 
 
   return (
     <div>
-      <div className="relative rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800">
+      {/* white in dark mode too: the ink is dark */}
+      <div className="relative rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-white">
         <canvas
           ref={canvasRef}
           className="w-full h-32 touch-none cursor-crosshair rounded-xl"

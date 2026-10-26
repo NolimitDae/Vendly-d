@@ -30,7 +30,7 @@ jest.setTimeout(240_000);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // 1x1 transparent PNG
-const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAAiElEQVR42u2XWwrAMAgEc/9L2xOEYh67G5iBfFbHVMSMAQAAAHCfmhy3k61w9yVIclfjuLpRVrxVxpGvk0QlFVm8Ui62eIXgNHaFtdjpTviNdypZvRor/a9JvHaS3Rxe0nmyUkjq5F726nyoXGCkO0X69ibxSt/fJV7JLziZV+IbPtkLAADgJT6abb9BSgfpowAAAABJRU5ErkJggg==';
 
 run('Booking tracker (e2e)', () => {
   let app: INestApplication;
@@ -309,6 +309,15 @@ run('Booking tracker (e2e)', () => {
     // accepted: the customer sees where to go, and the customer arriving is the venue's day-of step
     expect((await get(venueBooking, T.cust)).body.data.vendor_place).toEqual({ address: '77 Hall Rd, Austin, TX', lat: 30.25, lng: -97.75 });
     expect((await step(venueBooking, 'en-route')).status).toBe(400);
+
+    // rescheduling keeps the contract's venue line, even for a venue package without a location
+    await prisma.vendorListing.update({ where: { id: L.venue }, data: { location: null } });
+    const later = new Date(start.getTime() + 24 * 3600e3);
+    const amend = await api().post(`/api/contracts/booking/${venueBooking}/amendments/preview`).auth(T.cust, { type: 'bearer' })
+      .send({ changes: { event_start_at: later, event_end_at: new Date(later.getTime() + 4 * 3600e3) } });
+    expect(amend.status).toBe(201);
+    expect(amend.body.data.missing_fields ?? []).toEqual([]);
+    expect(amend.body.data.body).toContain("- Venue: At the Vendor's place in Austin, TX.");
   });
 
   it('serves map tiles to signed-in users through the cache, and only the booking map zooms', async () => {

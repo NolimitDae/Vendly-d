@@ -339,7 +339,16 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
             <Text style={s.sentBody}>
               {listing.vendorName} will review your request. Once they accept and sign, you'll be asked to pay and the booking is locked in.
             </Text>
-            <GradientButton title="Go Back to Home" onPress={() => { setSent(false); navigation.popToTop(); }} style={{ alignSelf: 'stretch' }} />
+            <GradientButton
+              title="Go Back to Home"
+              onPress={() => {
+                setSent(false);
+                navigation.popToTop();
+                // a quote booked from a chat runs on the Messages tab: Home is the other tab
+                (navigation.getParent() as any)?.navigate('HomeTab');
+              }}
+              style={{ alignSelf: 'stretch' }}
+            />
             <Pressable
               style={s.outline}
               onPress={() => { setSent(false); navigation.popToTop(); openChatWith(navigation, listing.vendorId, listing.vendorName); }}

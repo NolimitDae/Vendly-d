@@ -162,6 +162,14 @@ describe('street address suggestions', () => {
     expect(looksLikeStreetAddress('100 S Main')).toBe(false);
   });
 
+  it('does not remember a failed Census lookup as "no exact match"', async () => {
+    const census = [{ matchedAddress: '100 S MAIN ST, SMYRNA, DE, 19977', coordinates: { x: -75.6047, y: 39.2998 } }];
+    const first = await suggestPlaces('100 S Main St Smyrna DE', near, mockFetch([], 'fail') as any, true);
+    expect(first).toEqual([]);
+    const again = await suggestPlaces('100 S Main St Smyrna DE', near, mockFetch([], census) as any, true);
+    expect(again.map((p) => p.label)).toEqual(['100 S Main St, Smyrna, DE 19977']);
+  });
+
   it('puts exact Census matches first and keeps the typed house number on a bare street', async () => {
     const fetchMock = mockFetch(
       [

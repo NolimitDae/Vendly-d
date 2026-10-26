@@ -11,7 +11,7 @@ jest.mock('./private-storage', () => ({
 
 const SHA = 'a'.repeat(64);
 // 1x1 transparent PNG
-const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAAiElEQVR42u2XWwrAMAgEc/9L2xOEYh67G5iBfFbHVMSMAQAAAHCfmhy3k61w9yVIclfjuLpRVrxVxpGvk0QlFVm8Ui62eIXgNHaFtdjpTviNdypZvRor/a9JvHaS3Rxe0nmyUkjq5F726nyoXGCkO0X69ibxSt/fJV7JLziZV+IbPtkLAADgJT6abb9BSgfpowAAAABJRU5ErkJggg==';
 const PNG = `data:image/png;base64,${PNG_B64}`;
 const typedOnly = { legal_name: 'Cara Customer', consent: true, content_sha256: SHA } as any;
 const drawn = { ...typedOnly, signature_image: PNG } as any;
@@ -131,6 +131,11 @@ describe('signature image check', () => {
     const empty = Buffer.from(png);
     empty.writeUInt32BE(0, 16);
     expect(() => decodeSignatureImage(empty.toString('base64'))).toThrow('PNG');
+    // a tiny image (e.g. a 1x1 blank) isn't a drawn signature
+    const tiny = Buffer.from(png);
+    tiny.writeUInt32BE(1, 16);
+    tiny.writeUInt32BE(1, 20);
+    expect(() => decodeSignatureImage(tiny.toString('base64'))).toThrow('PNG');
     const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(100)]);
     expect(() => decodeSignatureImage(`data:image/jpeg;base64,${jpeg.toString('base64')}`)).toThrow('PNG');
     expect(() => decodeSignatureImage('data:image/png;base64,' + Buffer.alloc(600 * 1024).toString('base64'))).toThrow('too large');

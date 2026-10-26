@@ -1166,19 +1166,22 @@ export class BookingContractsService {
     const full = await this.prisma.booking.findUniqueOrThrow({
       where: { id: bookingId },
       include: {
-        listing: true,
+        listing: { include: { category: { select: { name: true } } } },
         vendor: { select: vendorSelect },
         customer: { select: { id: true, name: true, email: true, type: true } },
         event_bookings: { include: { event: { select: { id: true, name: true, venue: true, guest_count: true } } } },
       },
     });
     const prevData = current.merge_data as MergeData;
+    // a venue / package at the vendor's place keeps its contract venue line ("At the Vendor's place in …"),
+    // even when the package has no location (the booking row then has no venue)
+    const placeVenue = needsServiceAddress(full.listing) ? null : prevData?.venue_address || vendorPlaceVenueText(full.listing?.location);
     const nextBooking = {
       id: full.id,
       scheduled_at: changes.scheduled_at ?? changes.event_start_at ?? full.scheduled_at,
       event_start_at: changes.event_start_at ?? full.event_start_at,
       event_end_at: changes.event_end_at ?? full.event_end_at,
-      venue_address: changes.venue_address ?? full.venue_address,
+      venue_address: changes.venue_address ?? placeVenue ?? full.venue_address,
       guest_count: changes.guest_count ?? full.guest_count,
       message: full.message,
       amount: changes.amount ?? full.amount,

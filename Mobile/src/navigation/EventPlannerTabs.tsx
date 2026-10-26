@@ -84,6 +84,10 @@ function MessagesNavigator() {
     <MsgStack.Navigator screenOptions={STACK}>
       <MsgStack.Screen name="ChatList" component={ChatList} />
       <MsgStack.Screen name="ChatDetail" component={ChatDetail} />
+      {/* booking a quote from a chat stays on this tab, so Back returns to the chat */}
+      <MsgStack.Screen name="SelectDate" component={SelectDate as React.ComponentType<any>} />
+      <MsgStack.Screen name="BookingDetails" component={BookingDetails as React.ComponentType<any>} />
+      <MsgStack.Screen name="BookingSummary" component={BookingSummary as React.ComponentType<any>} />
     </MsgStack.Navigator>
   );
 }

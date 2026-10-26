@@ -205,17 +205,17 @@ function distinct(places: Place[]): Place[] {
 }
 
 /**
- * Exact US street address matches from the free Census geocoder (no key). Short timeout; any failure just
- * means no matches, so Photon's suggestions still go out. Answers are cached.
+ * Exact US street address matches from the free Census geocoder (no key). Short timeout; a failure (null)
+ * just means no matches this time, so Photon's suggestions still go out. Answers are cached, failures aren't.
  */
-export async function censusMatches(text: string, near: { lat: number; lng: number } | null | undefined, fetchImpl: typeof fetch = fetch): Promise<Place[]> {
+export async function censusMatches(text: string, near: { lat: number; lng: number } | null | undefined, fetchImpl: typeof fetch = fetch): Promise<Place[] | null> {
   const key = text.trim().toLowerCase();
   let places = censusCache.get(key);
   if (!places) {
     try {
       const params = new URLSearchParams({ address: text.trim(), benchmark: 'Public_AR_Current', format: 'json' });
       const res = await fetchImpl(`${CENSUS}?${params}`, { headers: headers(), signal: AbortSignal.timeout(CENSUS_TIMEOUT_MS) });
-      if (!res.ok) return [];
+      if (!res.ok) return null;
       const body = await res.json();
       const found: Place[] = [];
       for (const m of body?.result?.addressMatches ?? []) {
@@ -228,7 +228,7 @@ export async function censusMatches(text: string, near: { lat: number; lng: numb
       censusCache.set(key, found);
       places = found;
     } catch {
-      return [];
+      return null;
     }
   }
   // the same street can be in several towns: the one nearest the person first
@@ -293,10 +293,12 @@ export async function suggestPlaces(q: string, near?: { lat: number; lng: number
     ]);
     if (photon instanceof Error) {
       // the Census matches alone are still worth showing (not cached: the next keystroke asks Photon again)
-      if (census.length) return census.slice(0, MAX_SUGGESTIONS);
+      if (census?.length) return census.slice(0, MAX_SUGGESTIONS);
       throw photon;
     }
-    places = distinct([...census, ...streetPlaces(photon, text)]);
+    places = distinct([...(census ?? []), ...streetPlaces(photon, text)]);
+    // a slow or failed Census lookup isn't remembered as "no exact match": the next time asks again
+    if (census === null) return places;
   }
   if (placeCache.size > 2000) placeCache.clear();
   placeCache.set(key, places);

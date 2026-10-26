@@ -280,11 +280,8 @@ export default function ChatDetail() {
   const acceptQuote = (m: Message) => {
     const q = m.quote;
     if (!q?.listing) return;
-    // the normal booking flow (date, details, contract) at the quoted price
-    navigation.navigate('HomeTab', {
-      screen: 'SelectDate',
-      initial: false,
-      params: {
+    // the normal booking flow (date, details, contract) at the quoted price, on this tab so Back returns here
+    (navigation as any).navigate('SelectDate', {
         listing: {
           id: q.listing.id,
           title: q.listing.title,
@@ -296,7 +293,6 @@ export default function ChatDetail() {
           quoteTitle: q.title,
           eventId: q.event_id ?? undefined,
         },
-      },
     });
   };
 

@@ -290,9 +290,13 @@ export function decodeSignatureImage(input?: string | null): Buffer | null {
 }
 
 /** The PNG signature, a header with a real size and the end chunk: a cut-off or made-up file is refused. */
+const MIN_SIGNATURE_WIDTH = 50;
+const MIN_SIGNATURE_HEIGHT = 20;
+
 function isWholePng(buf: Buffer) {
   if (buf.length < 57 || !buf.subarray(0, 8).equals(PNG_MAGIC)) return false;
   if (buf.toString('latin1', 12, 16) !== 'IHDR') return false;
-  if (buf.readUInt32BE(16) === 0 || buf.readUInt32BE(20) === 0) return false;
+  // a drawn signature comes from a pad at least this big; a tiny (e.g. 1x1 blank) image isn't a signature
+  if (buf.readUInt32BE(16) < MIN_SIGNATURE_WIDTH || buf.readUInt32BE(20) < MIN_SIGNATURE_HEIGHT) return false;
   return buf.toString('latin1', buf.length - 8, buf.length - 4) === 'IEND';
 }

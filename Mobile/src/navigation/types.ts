@@ -116,6 +116,10 @@ export type CustomerProfileStackParams = {
 export type CustomerMessagesStackParams = {
   ChatList: undefined;
   ChatDetail: { conversationId: string; participantName: string; avatar?: string };
+  // booking a quote from a chat happens on this tab, so Back returns to the chat
+  SelectDate: { listing: ListingSummary };
+  BookingDetails: { listing: ListingSummary; date: string };
+  BookingSummary: { listing: ListingSummary; draft: BookingDraft };
 };
 
 export type CustomerTabParams = {
