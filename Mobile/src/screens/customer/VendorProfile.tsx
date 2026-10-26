@@ -14,6 +14,7 @@ import TestBadge from '../../components/TestBadge';
 import SocialLinks from '../../components/SocialLinks';
 import { EventToolsService, MAX_TEAM_SIZE, type TeamVendor, type VendorTeam } from '../../services/eventTools.service';
 import { apiError } from '../../services/contracts.service';
+import { shareLink, vendorLink } from '../../utils/share';
 
 export default function VendorProfile({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'VendorProfile'>) {
   const { vendorId } = route.params;
@@ -55,7 +56,16 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
         <View style={[s.cover, { paddingTop: insets.top + 12 }]}>
           {cover && <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.25)' }]} />
-          <ScreenHeader title="Details" onBack={() => navigation.goBack()} light />
+          <ScreenHeader
+            title="Details"
+            onBack={() => navigation.goBack()}
+            light
+            right={
+              <Pressable onPress={() => shareLink(`Check out ${name} on Vendly`, vendorLink(vendor))} style={s.share} accessibilityRole="button" accessibilityLabel={`Share ${name}`}>
+                <Ionicons name="share-outline" size={20} color={DARK.bg} />
+              </Pressable>
+            }
+          />
         </View>
 
         <View style={s.body20}>
@@ -241,6 +251,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 const s = StyleSheet.create({
+  share: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   root: { flex: 1, backgroundColor: DARK.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
   cover: { height: 315, backgroundColor: DARK.card, justifyContent: 'flex-start' },

@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Star, Package, Loader2, Link2, Store } from "lucide-react";
-import { toast } from "react-toastify";
+import { ArrowLeft, Star, Package, Loader2, Store } from "lucide-react";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import ReviewList from "@/components/marketplace/ReviewList";
 import { AddToTeamButton } from "@/components/events/VendorTeams";
 import TestBadge from "@/components/marketplace/TestBadge";
+import ShareButton from "@/components/marketplace/ShareButton";
 import SocialLinks, { type SocialLinksData } from "@/components/marketplace/SocialLinks";
 
 export interface VendorShopData {
@@ -90,16 +90,6 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
   const activeServices = vendor._count?.vendorListings ?? listings.length;
   const mark = vendor.logo_url || vendor.avatar_url;
 
-  const copyLink = async () => {
-    if (!vendor.handle) return;
-    try {
-      await navigator.clipboard.writeText(shopUrl(vendor.handle));
-      toast.success("Shop link copied");
-    } catch {
-      toast.info(shopUrl(vendor.handle));
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 md:px-8">
       <div className="max-w-5xl mx-auto">
@@ -148,16 +138,14 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
 
               <AddToTeamButton vendor={{ id: vendor.id, name: displayName, avatar_url: mark ?? null, category: listings[0]?.category?.name ?? null }} />
 
-              {vendor.handle && (
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-full border border-gray-200 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  <Link2 className="w-4 h-4" />
-                  Copy shop link
-                </button>
-              )}
+              {/* the shop link (vendlymarketplace.com/v/<handle>, or the vendor's id without one) */}
+              <ShareButton
+                path={`/v/${encodeURIComponent(vendor.handle || vendor.id)}`}
+                title={displayName}
+                text={`Check out ${displayName} on Vendly`}
+                label="Share shop"
+                className="self-start sm:self-auto"
+              />
             </div>
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 text-sm">

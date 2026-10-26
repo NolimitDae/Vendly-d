@@ -16,6 +16,7 @@ import { noticeLine } from '../../utils/packageDetails';
 import { DEPOSIT_RULE_TEXT, isDepositPlan } from '../../utils/bookingStatus';
 import TestBadge from '../../components/TestBadge';
 import { DosDontsList } from '../../components/listing/DosDonts';
+import { listingLink, shareLink } from '../../utils/share';
 
 export const toSummary = (l: Listing): ListingSummary => ({
   id: l.id,
@@ -92,9 +93,19 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
               onBack={() => navigation.goBack()}
               light
               right={
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Pressable
+                  onPress={() => shareLink(`${listing.title} on Vendly`, listingLink(listing.id))}
+                  style={s.heart}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share this service"
+                >
+                  <Ionicons name="share-outline" size={20} color={DARK.bg} />
+                </Pressable>
                 <Pressable onPress={() => saved.toggle(listing.id)} style={s.heart} accessibilityRole="button" accessibilityLabel="Save">
                   <Ionicons name={saved.has(listing.id) ? 'heart' : 'heart-outline'} size={20} color={saved.has(listing.id) ? '#E0479E' : DARK.bg} />
                 </Pressable>
+                </View>
               }
             />
           </View>

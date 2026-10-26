@@ -38,7 +38,7 @@ describe('VendorShop', () => {
     expect(screen.getByText('4.7')).toBeInTheDocument();
     expect(screen.getByText('(3 reviews)')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Wedding buffet/ })).toHaveAttribute('href', '/marketplace/l1');
-    expect(screen.getByRole('button', { name: /Copy shop link/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Share shop/ })).toBeInTheDocument();
     // reviews are loaded by vendor id, not by the handle in the address
     expect(screen.getByText('reviews for user-1')).toBeInTheDocument();
   });

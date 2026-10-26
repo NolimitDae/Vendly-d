@@ -296,7 +296,8 @@ export function ScreenHeader({
         <Ionicons name="arrow-back" size={22} color={light ? DARK.bg : '#fff'} />
       </Pressable>
       <Text style={ui.headerTitle} numberOfLines={1}>{title}</Text>
-      <View style={{ width: 48, alignItems: 'flex-end' }}>{right}</View>
+      {/* at least the back button's width, so the title stays centred; wider for two buttons */}
+      <View style={{ minWidth: 48, alignItems: 'flex-end' }}>{right}</View>
     </View>
   );
 }

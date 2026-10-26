@@ -34,6 +34,7 @@ import { noticeLine } from "@/lib/package-details";
 import { dateOnly } from "@/lib/date-only";
 import { DEPOSIT_RULE_TEXT, isDepositPlan } from "@/service/payments/payments.service";
 import TestBadge from "@/components/marketplace/TestBadge";
+import ShareButton from "@/components/marketplace/ShareButton";
 import DosDontsList from "@/components/listing/DosDontsList";
 import type { Customization } from "@/lib/package-options";
 
@@ -316,6 +317,14 @@ export default function ListingDetailPage() {
                   {listing.title}
                   {listing.is_test && <TestBadge className="ml-2 align-middle" />}
                 </h1>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                <ShareButton
+                  icon
+                  path={`/marketplace/${listing.id}`}
+                  title={listing.title}
+                  text={`${listing.title} on Vendly`}
+                  label="Share this service"
+                />
                 <button
                   onClick={toggleSave}
                   disabled={savingToggle}
@@ -329,6 +338,7 @@ export default function ListingDetailPage() {
                 >
                   <Heart className={cn("w-5 h-5", isSaved && "fill-current")} />
                 </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-gray-500 dark:text-gray-400">
