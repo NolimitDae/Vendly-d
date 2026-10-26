@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { AddOnKind, BookingExtraStatus, BookingStatus, ListingStatus, Prisma } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -36,6 +37,8 @@ import { TRACK_THRESHOLD, TRACK_WINDOW_DAYS, trackWindowStart, vendorCancellatio
 import { deadlineText, isDepositPlan, paymentState, PAYMENT_STATE_LABELS } from 'src/modules/payments/payment-due';
 import { depositShareOf } from 'src/modules/payments/payment-schedule';
 import { MarketplaceService } from 'src/modules/marketplace/marketplace.service';
+import { GeocodeService } from 'src/modules/geo/geocode.service';
+import { trackerDetails } from './booking-tracker';
 
 /** Extra tabs on the vendor's bookings list. */
 export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
@@ -109,6 +112,8 @@ export class BookingService {
     private eventTools: EventToolsService,
     private payments: PaymentsService,
     private marketplace: MarketplaceService,
+    // puts the venue on the booking map in the background (missing in tests that don't load it)
+    @Optional() private geocoder?: GeocodeService,
   ) {}
 
   private pushBooking(userId: string, bookingId: string, title: string, body: string) {
@@ -148,6 +153,8 @@ export class BookingService {
     }).catch(() => null);
     this.pushBooking(booking.vendor_id, booking.id, 'New signed booking request', `${customer.name} requested ${listing.title}`);
     if (created.awaiting_client) await this.contracts.notifyClientToSign(booking.id).catch(() => null);
+    // the venue's map position, filled in the background so the request never waits on the geocoder
+    if (booking.venue_address) void this.geocoder?.booking(booking.id);
 
     return { success: true, data: this.formatBooking(booking) };
   }
@@ -168,11 +175,11 @@ export class BookingService {
     const stillOpen = () => new BadRequestException('This request closed because it wasn’t answered in time.');
     // Accept & Sign: the vendor's countersignature executes the contract and confirms the booking together
     const executed = await this.contracts.countersignForBooking(bookingId, vendorId, dto.signature, meta, async (tx) => {
-      const res = await tx.booking.updateMany({ where: { id: bookingId, status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED } });
+      const res = await tx.booking.updateMany({ where: { id: bookingId, status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED, confirmed_at: new Date() } });
       if (!res.count) throw stillOpen();
     });
     if (!executed) {
-      const res = await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED } });
+      const res = await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED, confirmed_at: new Date() } });
       if (!res.count) throw stillOpen();
     }
     // Phase B: snapshot the payment plan and charge the customer's saved card for what is due now
@@ -246,7 +253,7 @@ export class BookingService {
       throw new BadRequestException(`Cannot start work on a booking in ${booking.status} status`);
 
     // only from CONFIRMED: a cancellation that landed since it was loaded must not be overwritten
-    const moved = await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.IN_PROGRESS } });
+    const moved = await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.IN_PROGRESS, started_at: new Date() } });
     if (moved.count !== 1) throw new BadRequestException('This booking changed in the meantime. Refresh and try again.');
     const updated = await this.getBookingOrFail(bookingId);
     this.pushBooking(booking.customer_id, bookingId, 'Work started', `The vendor has started on ${titleOf(booking) ?? 'your booking'}`);
@@ -959,6 +966,8 @@ export class BookingService {
     if (booking.vendor_id === userId && booking.status === BookingStatus.PENDING) {
       data.same_day_bookings = await this.sameDayBookings(booking).catch(() => []);
     }
+    // where it happens, and the other side's phone (and the vendor's address) once it's accepted
+    Object.assign(data, await trackerDetails(this.prisma, booking, userId));
     return { success: true, data };
   }
 
@@ -1215,7 +1224,8 @@ export class BookingService {
     return {
       customer: { select: { id: true, name: true, avatar: true, email: true } },
       vendor: { select: { id: true, name: true, avatar: true, email: true } },
-      listing: { select: { id: true, title: true, price: true, images: true, category_id: true } },
+      // service_at: where it happens; location: the package's public, city-level place
+      listing: { select: { id: true, title: true, price: true, images: true, category_id: true, service_at: true, location: true } },
       review: { select: { id: true, rating: true, comment: true } },
       rental_reservations: { select: { id: true, quantity: true, start_date: true, end_date: true, daily_rate: true, status: true, item: { select: { id: true, title: true, images: true } } } },
       rental_return: true,

@@ -10,6 +10,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { withJobLock } from 'src/common/helper/job-lock';
@@ -18,6 +19,7 @@ import { buildSchedule, eventLinkedDueAt, rebasedAmounts, securityHoldAt } from 
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { PromoService } from 'src/modules/platform/promo.service';
 import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
+import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
 import {
@@ -147,6 +149,8 @@ export class BookingContractsService {
     private push: PushService,
     private promos: PromoService,
     private addOns: AddOnsService,
+    // a changed venue is put back on the booking map in the background (missing in tests that don't load it)
+    @Optional() private geocoder?: GeocodeService,
   ) {}
 
   // ─── Audit ──────────────────────────────────────────────────────────────
@@ -1268,7 +1272,11 @@ export class BookingContractsService {
         if (!changes.scheduled_at) bookingUpdate.scheduled_at = new Date(changes.event_start_at);
       }
       if (changes.event_end_at) bookingUpdate.event_end_at = new Date(changes.event_end_at);
-      if (changes.venue_address) bookingUpdate.venue_address = changes.venue_address;
+      if (changes.venue_address) {
+        bookingUpdate.venue_address = changes.venue_address;
+        // the old map position no longer applies; geocoded again below (or by the hourly backfill)
+        Object.assign(bookingUpdate, { venue_lat: null, venue_lng: null, venue_geocoded_at: null });
+      }
       if (changes.guest_count) bookingUpdate.guest_count = Number(changes.guest_count);
       // a new price re-prices the unpaid charges (and the fee, at the package's category rate)
       let price: { amount: number; service_fee: number } | null = null;
@@ -1283,6 +1291,7 @@ export class BookingContractsService {
       if (price) await this.assertPriceChangeable(tx, contract.booking_id);
       await this.applyAmendmentToCharges(tx, contract.booking_id, price, !!(changes.event_start_at || changes.scheduled_at));
     });
+    if (executed && changes.venue_address) void this.geocoder?.booking(contract.booking_id);
     return { success: true, data: this.summary({ ...executed, signatures: [] }, role) };
   }
 

@@ -201,7 +201,7 @@ describe('BookingService', () => {
 
       const result = await service.confirm('booking-1', 'vendor-1');
       expect(result.success).toBe(true);
-      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED } });
+      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED, confirmed_at: expect.any(Date) } });
     });
 
     it("won't confirm a request that expired after it was loaded", async () => {
@@ -238,7 +238,7 @@ describe('BookingService', () => {
       await service.confirm('booking-1', 'vendor-1', { signature });
 
       expect(mockContracts.countersignForBooking).toHaveBeenCalledWith('booking-1', 'vendor-1', signature, {}, expect.any(Function));
-      expect(tx.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED } });
+      expect(tx.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.PENDING }, data: { status: BookingStatus.CONFIRMED, confirmed_at: expect.any(Date) } });
       expect(mockPrisma.booking.updateMany).not.toHaveBeenCalled();
     });
 
@@ -643,7 +643,7 @@ describe('BookingService', () => {
       const soon = new Date(Date.now() + 2 * 3600 * 1000);
       mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED, event_start_at: soon });
       await service.startWork('booking-1', 'vendor-1');
-      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.IN_PROGRESS } });
+      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'booking-1', status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.IN_PROGRESS, started_at: expect.any(Date) } });
 
       mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.IN_PROGRESS, event_start_at: soon });
       await expect(service.complete('booking-1', 'vendor-1')).rejects.toThrow('once the event has started');

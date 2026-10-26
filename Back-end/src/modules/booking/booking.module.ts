@@ -12,11 +12,13 @@ import { BookingService } from './booking.service';
 import { BookingRemindersService } from './booking-reminders.service';
 import { RequestPhotosController } from './request-photos.controller';
 import { PaymentDeadlinesService } from './payment-deadlines.service';
+import { BookingTrackerController } from './booking-tracker.controller';
+import { BookingTrackerService } from './booking-tracker.service';
 
 @Module({
   imports: [PrismaModule, MailModule, PushModule, ContractsModule, PaymentsModule, ChatExtrasModule, EventToolsModule, MarketplaceModule],
-  controllers: [BookingController, RequestPhotosController],
-  providers: [BookingService, BookingRemindersService, PaymentDeadlinesService],
+  controllers: [BookingController, RequestPhotosController, BookingTrackerController],
+  providers: [BookingService, BookingRemindersService, PaymentDeadlinesService, BookingTrackerService],
   exports: [BookingService],
 })
 export class BookingModule {}

@@ -1,6 +1,8 @@
 // external imports
 import { InjectRedis } from '@nestjs-modules/ioredis';
-import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Optional, UnauthorizedException } from '@nestjs/common';
+import { GeocodeService } from 'src/modules/geo/geocode.service';
+import { normalizePhone } from 'src/common/helper/phone';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
@@ -92,6 +94,8 @@ export class AuthService {
     private ucodeRepository: UcodeRepository,
     @InjectRedis() private readonly redis: Redis,
     private identity: IdentityService,
+    // puts a vendor's business address on the map in the background (missing in tests that don't load it)
+    @Optional() private geocoder?: GeocodeService,
   ) { }
 
   //
@@ -113,8 +117,10 @@ export class AuthService {
           first_name: true,
           last_name: true,
           bio: true,
+          // their own number, for Edit profile (others only see it on an accepted booking)
+          phone_number: true,
           // vendors: business details and where their licence check stands
-          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true, handle: true, banner: true, logo: true, working_hours: true, ...SOCIALS_SELECT } },
+          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true, handle: true, banner: true, logo: true, working_hours: true, business_address: true, ...SOCIALS_SELECT } },
         },
       });
 
@@ -153,6 +159,8 @@ export class AuthService {
               working_hours: readWorkingHours(vendorProfile.working_hours),
               // social accounts shown on the shop page (full links)
               socials: readSocials(vendorProfile),
+              // private: where customers come for packages at the vendor's place, shown on accepted bookings only
+              business_address: vendorProfile.business_address,
             }),
           },
         };
@@ -417,6 +425,13 @@ export class AuthService {
 
       if (updateUserDto.about_me !== undefined) data.bio = updateUserDto.about_me;
 
+      // empty clears it; only shown to the other side of an accepted booking
+      if (updateUserDto.phone_number !== undefined) {
+        const phone = normalizePhone(updateUserDto.phone_number);
+        if ('error' in phone) return { success: false, message: phone.error };
+        data.phone_number = phone.phone;
+      }
+
       const user = await this.userRepository.getUserDetails(userId);
       if (user) {
         let handle: string | null | undefined;
@@ -474,6 +489,14 @@ export class AuthService {
           if (updateUserDto.address !== undefined)
             vendorProfilePatch.address = updateUserDto.address;
           if (handle !== undefined) vendorProfilePatch.handle = handle;
+          let businessMoved = false;
+          if (updateUserDto.business_address !== undefined) {
+            const address = updateUserDto.business_address.trim().slice(0, 500) || null;
+            const old = await this.prisma.vendorProfile.findUnique({ where: { user_id: userId }, select: { business_address: true } });
+            businessMoved = address !== (old?.business_address ?? null);
+            // the old map position no longer applies; geocoded again once saved
+            if (businessMoved) Object.assign(vendorProfilePatch, { business_address: address, business_lat: null, business_lng: null, business_geocoded_at: null });
+          }
           if (workingHours !== undefined) vendorProfilePatch.working_hours = workingHours ?? Prisma.DbNull;
           Object.assign(vendorProfilePatch, socials);
           if (shop.banner || shop.logo) {
@@ -492,6 +515,7 @@ export class AuthService {
               update: vendorProfilePatch,
             });
           }
+          if (businessMoved && vendorProfilePatch.business_address) void this.geocoder?.businessAddress(userId);
         }
 
         return {
