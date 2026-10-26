@@ -446,6 +446,16 @@ describe('WithdrawService', () => {
       expect(result.data.payouts_enabled).toBeUndefined();
     });
 
+    it('forgets a payout account Stripe no longer has, so the vendor can set payouts up again', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_old', email: 'jane@test.com', name: 'Jane Doe' });
+      (StripePayment.retrieveAccount as jest.Mock).mockRejectedValue({ code: 'resource_missing' });
+
+      const result: any = await service.getConnectedAccountInfo('user-1');
+
+      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'user-1', stripe_connect_id: 'acct_old' }, data: { stripe_connect_id: null } });
+      expect(result.data).toMatchObject({ hasConnectedAccount: false, accountId: null });
+    });
+
     it('should return hasConnectedAccount false when stripe_connect_id is null', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         stripe_connect_id: null,

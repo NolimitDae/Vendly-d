@@ -737,6 +737,35 @@ describe('PaymentsService', () => {
       expect(res.data.client_secret).toBe('seti_secret');
     });
 
+    it('replaces a billing profile Stripe no longer has (e.g. made with other Stripe keys)', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'c1', email: 'a@x.com', name: 'Amara', billing_id: 'cus_old' });
+      (StripePayment.getCustomerByID as jest.Mock).mockRejectedValue({ code: 'resource_missing' });
+      (StripePayment.createCustomer as jest.Mock).mockResolvedValue({ id: 'cus_new' });
+      (StripePayment.createSetupIntent as jest.Mock).mockResolvedValue({ client_secret: 'seti_secret' });
+      await service.createSetupIntent('c1');
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { billing_id: 'cus_new' } });
+      expect(StripePayment.createSetupIntent).toHaveBeenCalledWith('cus_new');
+    });
+
+    it('keeps a live billing profile, and passes other Stripe errors on', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'c1', email: 'a@x.com', name: 'Amara', billing_id: 'cus_live' });
+      (StripePayment.getCustomerByID as jest.Mock).mockResolvedValue({ id: 'cus_live' });
+      (StripePayment.createSetupIntent as jest.Mock).mockResolvedValue({ client_secret: 'seti_secret' });
+      await service.createSetupIntent('c1');
+      expect(StripePayment.createCustomer).not.toHaveBeenCalled();
+      expect(StripePayment.createSetupIntent).toHaveBeenCalledWith('cus_live');
+
+      (StripePayment.getCustomerByID as jest.Mock).mockRejectedValue(new Error('Stripe is down'));
+      await expect(service.createSetupIntent('c1')).rejects.toThrow('Stripe is down');
+    });
+
+    it('lists no cards for a billing profile Stripe no longer has', async () => {
+      prisma.user.findUnique.mockResolvedValue({ billing_id: 'cus_old' });
+      (StripePayment.listCards as jest.Mock).mockRejectedValue({ raw: { code: 'resource_missing' } });
+      (StripePayment.getCustomerByID as jest.Mock).mockRejectedValue({ raw: { code: 'resource_missing' } });
+      expect(await service.listCards('c1')).toEqual({ success: true, data: [] });
+    });
+
     it('will not remove a card an active booking still needs', async () => {
       prisma.user.findUnique.mockResolvedValue({ billing_id: 'cus_1' });
       (StripePayment.retrievePaymentMethod as jest.Mock).mockResolvedValue({ customer: 'cus_1' });

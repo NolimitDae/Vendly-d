@@ -15,6 +15,7 @@ import { withJobLock } from 'src/common/helper/job-lock';
 import { PushService } from 'src/modules/push/push.service';
 import { TEST_ACCOUNT_NO_PAYOUTS } from 'src/common/helper/test-accounts';
 import * as Sentry from '@sentry/nestjs';
+import { isStripeMissing } from 'src/common/lib/Payment/stripe/stripe-errors';
 
 /** Smallest withdrawal in dollars (the website says the same). */
 export const MIN_WITHDRAW = 20;
@@ -453,7 +454,14 @@ export class WithdrawService {
           charges_enabled: !!account.charges_enabled,
         };
       } catch (error) {
-        console.error('Connected account lookup error:', error);
+        if (isStripeMissing(error)) {
+          // the payout account is gone (deleted in Stripe, or made with other Stripe keys): forget it so
+          // the vendor can set payouts up again
+          await this.prisma.user.updateMany({ where: { id: userId, stripe_connect_id: user.stripe_connect_id }, data: { stripe_connect_id: null } });
+          user.stripe_connect_id = null;
+        } else {
+          console.error('Connected account lookup error:', error);
+        }
       }
     }
 

@@ -18,6 +18,7 @@ import { autoRetryAt, deadlineText, dueKindFor, PAYMENT_DUE_REMINDER_HOURS, PAYM
 import { checkDisputePhotos, describeDisputeAsk, disputePhotoUrls, removeDisputePhotos, storeDisputePhotos } from './dispute-files';
 import { requestPhotoUrls } from 'src/modules/booking/request-photos';
 import { NOT_STARTED_FLAG_HOURS, notStartedWindow, pastStartNotStarted } from 'src/modules/booking/no-show';
+import { isStripeMissing } from 'src/common/lib/Payment/stripe/stripe-errors';
 
 /** A customer's report: the reason, and from newer apps what kind of problem and what they ask for. */
 export interface DisputeInput {
@@ -88,7 +89,17 @@ export class PaymentsService {
   private async customerIdFor(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, billing_id: true } });
     if (!user) throw new NotFoundException('User not found');
-    if (user.billing_id) return user.billing_id;
+    if (user.billing_id) {
+      // a stale profile (deleted in Stripe, or from other Stripe keys) is replaced with a new one
+      const live = await StripePayment.getCustomerByID(user.billing_id).then(
+        (c) => !(c as unknown as { deleted?: boolean }).deleted,
+        (err) => {
+          if (isStripeMissing(err)) return false;
+          throw err;
+        },
+      );
+      if (live) return user.billing_id;
+    }
     const customer = await StripePayment.createCustomer({ user_id: user.id, email: user.email ?? '', name: user.name ?? '' });
     if (!customer?.id) throw new BadRequestException('Could not create a billing profile');
     await this.prisma.user.update({ where: { id: userId }, data: { billing_id: customer.id } });
@@ -104,7 +115,15 @@ export class PaymentsService {
   async listCards(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { billing_id: true } });
     if (!user?.billing_id) return { success: true, data: [] };
-    const [cards, customer] = await Promise.all([StripePayment.listCards(user.billing_id), StripePayment.getCustomerByID(user.billing_id)]);
+    let cards: Awaited<ReturnType<typeof StripePayment.listCards>>;
+    let customer: Awaited<ReturnType<typeof StripePayment.getCustomerByID>>;
+    try {
+      [cards, customer] = await Promise.all([StripePayment.listCards(user.billing_id), StripePayment.getCustomerByID(user.billing_id)]);
+    } catch (err) {
+      if (!isStripeMissing(err)) throw err;
+      // a stale profile has no cards here; it's replaced when the next card is added
+      return { success: true, data: [] };
+    }
     const defaultId = (customer as any)?.invoice_settings?.default_payment_method ?? null;
     return {
       success: true,
