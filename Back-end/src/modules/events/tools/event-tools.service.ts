@@ -11,6 +11,7 @@ import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { summariseBudget } from './budget-summary';
 import { assertNotCancelled } from '../event-rules';
+import { sendLimitFor } from 'src/modules/chat/extras/send-limit';
 
 export type EventRole = 'planner' | 'vendor' | 'client';
 /** Bookings that make a vendor part of the event. */
@@ -487,10 +488,13 @@ export class EventToolsService {
       if (blocks.blockedByMe.has(vendorId) || blocks.blockedMe.has(vendorId)) continue;
       let conv = await this.prisma.conversation.findFirst({
         where: { is_group: false, AND: [{ participants: { some: { userId: plannerId } } }, { participants: { some: { userId: vendorId } } }] },
-        select: { id: true },
+        select: { id: true, vendor_replied_at: true },
       });
-      if (!conv) conv = await this.prisma.conversation.create({ data: { participants: { create: [{ userId: plannerId }, { userId: vendorId }] } }, select: { id: true } });
-      // an automatic invite: it doesn't count towards the planner's messages before the vendor replies
+      if (!conv) conv = await this.prisma.conversation.create({ data: { participants: { create: [{ userId: plannerId }, { userId: vendorId }] } }, select: { id: true, vendor_replied_at: true } });
+      // an automatic invite: it doesn't count towards the planner's messages before the vendor replies, but
+      // only one goes out until they do (inviting again can't be used to keep messaging them)
+      const waiting = await sendLimitFor(this.prisma, { id: conv.id, is_group: false, vendor_replied_at: conv.vendor_replied_at, participants: [{ userId: plannerId }, { userId: vendorId }] }, plannerId);
+      if (waiting && (await this.prisma.message.count({ where: { conversationId: conv.id, senderId: plannerId, kind: 'invite' } }))) continue;
       const msg = await this.prisma.message.create({ data: { conversationId: conv.id, senderId: plannerId, text, kind: 'invite', status: 'SENT' }, include: messageInclude });
       await this.prisma.conversation.update({ where: { id: conv.id }, data: { updatedAt: new Date() } });
       this.gateway.server?.to(conv.id).emit('message', { from: plannerId, data: formatMessage(msg) });

@@ -1,4 +1,4 @@
-import { loadTile, parseTile, tileKey, tileUrl } from './tiles';
+import { loadTile, MemoryTileCache, parseTile, tileKey, tileUrl } from './tiles';
 import { GeocodeService } from './geocode.service';
 import { __clearGeocodeCache } from './geo';
 
@@ -6,15 +6,30 @@ describe('map tile proxy', () => {
   it('accepts only tiles that exist at their zoom', () => {
     expect(parseTile('15', '7559', '13529')).toEqual({ z: 15, x: 7559, y: 13529 });
     expect(parseTile('15', '7559', '13529.png')).toEqual({ z: 15, x: 7559, y: 13529 });
-    expect(parseTile('0', '0', '0')).toEqual({ z: 0, x: 0, y: 0 });
-    expect(parseTile('0', '1', '0')).toBeNull(); // only one tile at zoom 0
-    expect(parseTile('2', '3', '4')).toBeNull();
-    expect(parseTile('20', '0', '0')).toBeNull(); // deeper than OpenStreetMap goes
+    expect(parseTile('15', '32768', '0')).toBeNull(); // only 32768 tiles across at zoom 15
+    // only the zooms the booking map uses, so the proxy can't be used to copy the map in bulk
+    expect(parseTile('0', '0', '0')).toBeNull();
+    expect(parseTile('12', '0', '0')).toBeNull();
+    expect(parseTile('18', '0', '0')).toBeNull();
+    expect(parseTile('13', '0', '0')).toEqual({ z: 13, x: 0, y: 0 });
     expect(parseTile('-1', '0', '0')).toBeNull();
     expect(parseTile('3', '1.5', '2')).toBeNull();
     expect(parseTile('3', '1', '../2')).toBeNull();
     expect(parseTile('3', '1', '2.jpg')).toBeNull();
     expect(parseTile('3', 'abc', '2')).toBeNull();
+  });
+
+  it('keeps recent tiles in memory and forgets the oldest once full', async () => {
+    const cache = new MemoryTileCache(2);
+    await cache.set('a', Buffer.from('a'), 'EX', 60);
+    await cache.set('b', Buffer.from('b'), 'EX', 60);
+    await cache.getBuffer('a'); // a was used, so b is the oldest
+    await cache.set('c', Buffer.from('c'), 'EX', 60);
+    expect(cache.size).toBe(2);
+    expect(await cache.getBuffer('b')).toBeNull();
+    expect((await cache.getBuffer('a'))?.toString()).toBe('a');
+    await cache.set('old', Buffer.from('x'), 'EX', -1);
+    expect(await cache.getBuffer('old')).toBeNull();
   });
 
   it('builds the tile server address from MAP_TILE_URL', () => {

@@ -1,7 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { afterSend, assertUnderSendLimit, CUSTOMER_MESSAGE_LIMIT, sendLimitFor, sendLimitMessage } from './send-limit';
 
-type U = { id: string; name: string | null; type: string | null; roles: string[] };
+type U = { id: string; name: string | null; type: string | null; roles: string[]; vendorProfile?: { license_status: string } };
 type M = { senderId: string; kind: string };
 
 /** A tiny in-memory stand-in for the three queries the limit makes. */
@@ -24,7 +24,7 @@ function fakeDb(users: U[], messages: M[] = [], accepted = 0) {
 
 const customer: U = { id: 'c1', name: 'Cara', type: 'CUSTOMER', roles: ['CUSTOMER'] };
 const planner: U = { id: 'p1', name: 'Pat', type: 'EVENT_PLANNER', roles: ['EVENT_PLANNER'] };
-const vendor: U = { id: 'v1', name: 'Bloom Florals', type: 'VENDOR', roles: ['VENDOR'] };
+const vendor: U = { id: 'v1', name: 'Bloom Florals', type: 'VENDOR', roles: ['VENDOR'], vendorProfile: { license_status: 'APPROVED' } };
 const admin: U = { id: 'a1', name: 'Vendly Support', type: 'ADMIN', roles: ['ADMIN'] };
 const conv = (a: string, b: string, is_group = false) => ({ id: 'conv', is_group, participants: [{ userId: a }, { userId: b }] });
 
@@ -84,8 +84,19 @@ describe('customer message limit', () => {
     const db = fakeDb([customer, vendor], [1, 2, 3, 4].map(() => ({ senderId: 'v1', kind: 'text' })));
     expect(await sendLimitFor(db, conv('v1', 'c1'), 'v1')).toBeNull();
     // nor one vendor writing to another
-    const other: U = { id: 'v2', name: 'Other', type: 'VENDOR', roles: ['VENDOR'] };
+    const other: U = { id: 'v2', name: 'Other', type: 'VENDOR', roles: ['VENDOR'], vendorProfile: { license_status: 'APPROVED' } };
     expect(await sendLimitFor(fakeDb([vendor, other]), conv('v1', 'v2'), 'v1')).toBeNull();
+  });
+
+  it('switching to the vendor role is not enough: a vendor not yet approved is limited like a customer', async () => {
+    const switched: U = { id: 'c9', name: 'Cara', type: 'VENDOR', roles: ['CUSTOMER', 'VENDOR'], vendorProfile: { license_status: 'PENDING' } };
+    const db = fakeDb([switched, vendor], [1, 2, 3].map(() => ({ senderId: 'c9', kind: 'text' })));
+    await expect(assertUnderSendLimit(db, conv('c9', 'v1'), 'c9')).rejects.toThrow(ForbiddenException);
+  });
+
+  it('stays lifted once the vendor has replied, even if that reply was deleted', async () => {
+    const db = fakeDb([customer, vendor], [1, 2, 3, 4].map(() => ({ senderId: 'c1', kind: 'text' })));
+    expect(await sendLimitFor(db, { ...conv('c1', 'v1'), vendor_replied_at: new Date() }, 'c1')).toBeNull();
   });
 
   it('never limits admins, chats with support, chats with non-vendors or group chats', async () => {

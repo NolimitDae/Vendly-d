@@ -24,7 +24,9 @@ export type SendLimit = {
 };
 
 type LimitReader = {
-  user: { findMany: (args: any) => Promise<{ id: string; name: string | null; type: UserType | null; roles: UserType[] | null }[]> };
+  user: {
+    findMany: (args: any) => Promise<{ id: string; name: string | null; type: UserType | null; roles: UserType[] | null; vendorProfile?: { license_status: string | null } | null }[]>;
+  };
   message: { count: (args: any) => Promise<number> };
   booking: { count: (args: any) => Promise<number> };
 };
@@ -40,19 +42,23 @@ export const sendLimitMessage = (vendorName: string) =>
  */
 export async function sendLimitFor(
   prisma: LimitReader,
-  conversation: { id: string; is_group?: boolean | null; participants: { userId: string }[] },
+  conversation: { id: string; is_group?: boolean | null; vendor_replied_at?: Date | null; participants: { userId: string }[] },
   senderId: string,
 ): Promise<SendLimit | null> {
-  if (conversation.is_group) return null;
+  if (conversation.is_group || conversation.vendor_replied_at) return null;
   const otherId = conversation.participants.find((p) => p.userId !== senderId)?.userId;
   if (!otherId) return null;
 
-  const users = await prisma.user.findMany({ where: { id: { in: [senderId, otherId] } }, select: { id: true, name: true, type: true, roles: true } });
+  const users = await prisma.user.findMany({
+    where: { id: { in: [senderId, otherId] } },
+    select: { id: true, name: true, type: true, roles: true, vendorProfile: { select: { license_status: true } } },
+  });
   const sender = users.find((u) => u.id === senderId);
   const vendor = users.find((u) => u.id === otherId);
   if (!sender || !vendor) return null;
-  // only someone writing to a vendor as a customer; anyone acting as a vendor, admins and support never
-  if (sender.type === UserType.VENDOR || has(sender, UserType.ADMIN)) return null;
+  // only someone writing to a vendor as a customer; approved vendors, admins and support never. Switching
+  // to the vendor role isn't enough: a vendor whose licence isn't approved yet is limited like a customer
+  if ((sender.type === UserType.VENDOR && sender.vendorProfile?.license_status === 'APPROVED') || has(sender, UserType.ADMIN)) return null;
   if (!has(vendor, UserType.VENDOR) || has(vendor, UserType.ADMIN)) return null;
 
   const [replies, accepted] = await Promise.all([
@@ -68,7 +74,7 @@ export async function sendLimitFor(
 /** Refuses a typed message once the customer has used their messages. Returns the limit before sending. */
 export async function assertUnderSendLimit(
   prisma: LimitReader,
-  conversation: { id: string; is_group?: boolean | null; participants: { userId: string }[] },
+  conversation: { id: string; is_group?: boolean | null; vendor_replied_at?: Date | null; participants: { userId: string }[] },
   senderId: string,
 ) {
   const limit = await sendLimitFor(prisma, conversation, senderId);

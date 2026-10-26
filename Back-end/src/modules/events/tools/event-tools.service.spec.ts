@@ -10,7 +10,7 @@ jest.mock('src/modules/contracts/private-storage', () => ({
 
 const prisma: any = {
   event: { findUnique: jest.fn(), update: jest.fn() },
-  user: { findUnique: jest.fn(), findMany: jest.fn() },
+  user: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   eventTimelineItem: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), deleteMany: jest.fn() },
   eventFile: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn(), delete: jest.fn(), count: jest.fn().mockResolvedValue(0) },
   eventBooking: { findMany: jest.fn().mockResolvedValue([]) },
@@ -18,7 +18,7 @@ const prisma: any = {
   booking: { findUnique: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
   vendorTeam: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn() },
   conversation: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-  message: { create: jest.fn() },
+  message: { create: jest.fn(), count: jest.fn().mockResolvedValue(0) },
   userBlock: { findMany: jest.fn().mockResolvedValue([]) },
   bookingContract: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
 };
@@ -249,6 +249,25 @@ describe('EventToolsService', () => {
       expect(res.data.invited).toBe(1);
       expect(prisma.message.create).toHaveBeenCalledTimes(1);
       expect(push.sendToUser).toHaveBeenCalledWith('v3', expect.anything(), 'messages');
+    });
+
+    it('sends one invite until the vendor replies, so inviting again can’t be used to keep messaging them', async () => {
+      prisma.vendorTeam.findFirst.mockResolvedValue({ id: 't1', vendor_ids: ['v1'] });
+      prisma.user.findUnique.mockResolvedValue({ name: 'Amara' });
+      prisma.user.findMany
+        .mockResolvedValueOnce([{ id: 'v1' }])
+        .mockResolvedValueOnce([
+          { id: 'planner', name: 'Amara', type: 'EVENT_PLANNER', roles: ['EVENT_PLANNER'] },
+          { id: 'v1', name: 'Bloom Florals', type: 'VENDOR', roles: ['VENDOR'] },
+        ]);
+      prisma.conversation.findFirst.mockResolvedValue({ id: 'c1', vendor_replied_at: null });
+      prisma.booking.count = jest.fn().mockResolvedValue(0);
+      // the vendor hasn't replied; one invite is already there
+      prisma.message.count.mockImplementation(async ({ where }: any) => (where.kind === 'invite' ? 1 : 0));
+      const res = await service.inviteTeam('e1', 'planner', 't1', 'Hello again');
+      expect(res.data.invited).toBe(0);
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      prisma.message.count.mockResolvedValue(0);
     });
   });
 

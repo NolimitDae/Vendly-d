@@ -250,18 +250,21 @@ run('Booking tracker (e2e)', () => {
     expect((await get(b.id, T.cust)).body.data).toMatchObject({ vendor_place: null, contact_phone: null });
   });
 
-  it('serves map tiles through the cache, and only valid tiles', async () => {
-    // a tile this run hasn't cached before (Redis keeps tiles for days)
+  it('serves map tiles to signed-in users through the cache, and only the booking map zooms', async () => {
+    const tile = (path: string) => api().get(`/api/geo/tile/${path}`).auth(T.cust, { type: 'bearer' });
+    // a tile this run hasn't cached before
     const x = parseInt(id, 16) % 32768;
     const before = stubHits.filter((h) => h.includes('/tiles/')).length;
-    const tile = await api().get(`/api/geo/tile/15/${x}/13529`);
-    expect(tile.status).toBe(200);
-    expect(tile.headers['content-type']).toBe('image/png');
-    expect(tile.headers['cache-control']).toContain('max-age=');
-    await api().get(`/api/geo/tile/15/${x}/13529.png`).expect(200);
+    expect((await api().get(`/api/geo/tile/15/${x}/13529`)).status).toBe(401);
+    const first = await tile(`15/${x}/13529`);
+    expect(first.status).toBe(200);
+    expect(first.headers['content-type']).toBe('image/png');
+    expect(first.headers['cache-control']).toMatch(/^private, max-age=/);
+    await tile(`15/${x}/13529.png`).expect(200);
     expect(stubHits.filter((h) => h.includes('/tiles/')).length).toBe(before + 1);
-    expect((await api().get('/api/geo/tile/2/9/0')).status).toBe(404);
-    expect((await api().get('/api/geo/tile/25/0/0')).status).toBe(404);
-    expect(msg(await api().get('/api/geo/tile/2/a/0'))).toBe('No such map tile.');
+    expect((await tile('2/1/0')).status).toBe(404);
+    expect((await tile('19/0/0')).status).toBe(404);
+    expect((await tile('25/0/0')).status).toBe(404);
+    expect(msg(await tile('15/a/0'))).toBe('No such map tile.');
   });
 });

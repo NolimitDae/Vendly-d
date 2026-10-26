@@ -120,7 +120,10 @@ export interface OptionChoice {
 /** The basis a per unit upcharge is counted on: the package's guests, hours or days. */
 export interface UnitBasis {
   unit: PackageUnit;
-  quantity: number;
+  /** null when the customer hasn't given it yet (a quote booking without guests or an end time) */
+  quantity: number | null;
+  /** what to ask for when a per unit upcharge is picked and quantity is null */
+  missing?: string;
 }
 
 export interface ChosenOption {
@@ -145,7 +148,12 @@ export interface ChosenGroup {
 export const NO_LONGER_OFFERED = 'One of the customizations you picked is no longer offered. Please review your choices.';
 
 /** The quantity a per unit upcharge is multiplied by (flat priced packages count once). */
-const unitsFor = (mode: OptionPriceMode, basis: UnitBasis) => (mode === 'PER_UNIT' && basis.unit !== 'fixed' ? basis.quantity : 1);
+function unitsFor(mode: OptionPriceMode, basis: UnitBasis): number {
+  if (mode !== 'PER_UNIT' || basis.unit === 'fixed') return 1;
+  // never fall back to counting once: a per person upcharge needs the guests
+  if (basis.quantity == null) throw new PricingError(basis.missing ?? 'Add the details your choices are priced on.');
+  return basis.quantity;
+}
 
 function chosenPriceText(price: number, quantity: number, amount: number, mode: OptionPriceMode, basis: UnitBasis) {
   if (!(amount > 0)) return '';

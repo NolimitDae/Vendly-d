@@ -61,7 +61,7 @@ import { CONSENT_TEXT, CONSENT_TEXT_VERSION } from './contract-templates';
 import { PrivateStorage, SignedUrl } from './private-storage';
 import { ResolvedVendorContract, VendorContractsService } from './vendor-contracts.service';
 import { AddOnsService } from 'src/modules/add-ons/add-ons.service';
-import { PackageLine, PricingError, priceForPackage, round2 } from 'src/modules/add-ons/pricing';
+import { PackageLine, PricingError, eventDayCount, eventHours, packageUnit, priceForPackage, round2 } from 'src/modules/add-ons/pricing';
 import { PackageOptionsService } from 'src/modules/add-ons/package-options.service';
 import { ChosenGroup, optionScheduleLines, UnitBasis } from 'src/modules/add-ons/package-options';
 import {
@@ -106,7 +106,7 @@ const vendorSelect = {
   id: true,
   name: true,
   email: true,
-  phone_number: true,
+  // no phone: contracts are previewed before a booking exists, and phones are only shared once it's accepted
   vendorProfile: { select: { business_name: true, address: true, saved_signature_key: true } },
 } as const;
 
@@ -362,14 +362,23 @@ export class BookingContractsService {
     return { ...ctx, quote, pkg, addOnLines, options, fees, priced, data, rendered, missing: missingFields(rendered.required, data) };
   }
 
-  /** What per unit upcharges are counted on when a quote sets the price: the package's own count, else once. */
+  /**
+   * What per unit upcharges are counted on when a quote sets the price: the guests, hours or days the
+   * customer gave, without the package's own minimum or maximum (the quote replaces those). When they're
+   * missing, picking a per unit upcharge asks for them instead of counting it once.
+   */
   private unitBasis(listing: Parameters<typeof priceForPackage>[0], dto: BookingContractFieldsDto): UnitBasis {
-    try {
-      const line = priceForPackage(listing, dto);
-      return { unit: line.unit, quantity: line.quantity };
-    } catch {
-      return { unit: 'fixed', quantity: 1 };
+    const unit = packageUnit(listing.price_unit);
+    if (unit === 'person') {
+      const guests = Number(dto.guest_count ?? 0);
+      return guests >= 1 ? { unit, quantity: guests } : { unit, quantity: null, missing: 'Enter how many guests are coming. Some of your choices are priced per person.' };
     }
+    if (unit === 'hour') {
+      const hours = eventHours(dto.event_start_at, dto.event_end_at);
+      return hours != null ? { unit, quantity: hours } : { unit, quantity: null, missing: 'Add an end time. Some of your choices are priced by the hour.' };
+    }
+    if (unit === 'day') return { unit, quantity: eventDayCount(dto.event_start_at, dto.event_end_at) };
+    return { unit: 'fixed', quantity: 1 };
   }
 
   private consentInfo() {

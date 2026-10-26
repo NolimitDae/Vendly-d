@@ -1,13 +1,18 @@
 /**
  * Map tiles for the small booking map, fetched through the API so the apps never call the tile server
- * directly: the answer is cached in Redis for days and every request carries Vendly's User-Agent, as the
- * OpenStreetMap tile policy asks. MAP_TILE_URL switches the source (e.g. Mapbox or Google) later.
+ * directly: every request carries Vendly's User-Agent, as the OpenStreetMap tile policy asks, and recent
+ * tiles are kept in memory. MAP_TILE_URL switches the source (e.g. Mapbox or Google) later.
+ * Only signed-in users get tiles, and only at the zooms the booking map uses, so this can't be used to
+ * copy the map in bulk.
  */
 
-/** Deepest zoom we serve: OpenStreetMap's standard tiles stop at 19. */
-export const MAX_TILE_ZOOM = 19;
-/** How long a tile is kept (Redis) and may be cached by the app or browser. */
+/** The booking map is drawn at zoom 15; a little either side is allowed. */
+export const MIN_TILE_ZOOM = 13;
+export const MAX_TILE_ZOOM = 17;
+/** How long a tile may be cached by the app or browser (and in memory here). */
 export const TILE_CACHE_SECONDS = 7 * 24 * 3600;
+/** Tiles kept in memory: a few hundred bookings' worth, a few MB (never in the shared Redis). */
+const MEMORY_TILES = 600;
 /** Anything bigger is not a map tile. */
 const MAX_TILE_BYTES = 512 * 1024;
 
@@ -24,7 +29,7 @@ export function parseTile(z: string, x: string, y: string): Tile | null {
   const yy = String(y).replace(/\.png$/i, '');
   if (![z, x, yy].every((v) => INT.test(String(v)))) return null;
   const t = { z: Number(z), x: Number(x), y: Number(yy) };
-  if (t.z > MAX_TILE_ZOOM) return null;
+  if (t.z < MIN_TILE_ZOOM || t.z > MAX_TILE_ZOOM) return null;
   const n = 2 ** t.z;
   return t.x < n && t.y < n ? t : null;
 }
@@ -43,6 +48,31 @@ export const tileKey = (t: Tile) => `map-tile:${t.z}/${t.x}/${t.y}`;
 export interface TileCache {
   getBuffer(key: string): Promise<Buffer | null>;
   set(key: string, value: Buffer, mode: 'EX', seconds: number): Promise<unknown>;
+}
+
+/** A small in-memory cache that forgets the least recently used tile once it is full. */
+export class MemoryTileCache implements TileCache {
+  private items = new Map<string, { value: Buffer; until: number }>();
+  constructor(private readonly max = MEMORY_TILES) {}
+
+  async getBuffer(key: string) {
+    const hit = this.items.get(key);
+    if (!hit) return null;
+    this.items.delete(key);
+    if (hit.until < Date.now()) return null;
+    this.items.set(key, hit);
+    return hit.value;
+  }
+
+  async set(key: string, value: Buffer, _mode: 'EX', seconds: number) {
+    this.items.delete(key);
+    this.items.set(key, { value, until: Date.now() + seconds * 1000 });
+    while (this.items.size > this.max) this.items.delete(this.items.keys().next().value!);
+  }
+
+  get size() {
+    return this.items.size;
+  }
 }
 
 export class TileError extends Error {}

@@ -166,6 +166,13 @@ describe('package customizations: upcharge math', () => {
     expect(res.groups[1].options[0]).toMatchObject({ quantity: 3, amount: 15, price_text: '+$15.00 ($5.00 × 3 hours)' });
   });
 
+  it('asks for the missing count instead of counting a per unit upcharge once (quote bookings)', () => {
+    const missing = { unit: 'person' as const, quantity: null, missing: 'Enter how many guests are coming.' };
+    expect(() => priceOptionChoices(offered(), choose(['o-beads']), missing)).toThrow('Enter how many guests are coming.');
+    // flat choices don't need it
+    expect(priceOptionChoices(offered(), choose(['o-curls']), missing).amount).toBe(30);
+  });
+
   it('a per unit upcharge on a flat priced package is counted once', () => {
     expect(priceOptionChoices(offered(), choose(['o-beads']), fixed).groups[1].options[0]).toMatchObject({ quantity: 1, amount: 5, price_text: '+$5.00' });
   });

@@ -67,6 +67,7 @@ const mockPrisma = {
   user: { findMany: jest.fn().mockResolvedValue([]) },
   booking: { count: jest.fn().mockResolvedValue(0) },
   $transaction: jest.fn(),
+  $queryRaw: jest.fn().mockResolvedValue([]),
 };
 
 // who is in a conversation's room right now (the chat is open on their screen)
@@ -144,10 +145,13 @@ describe('MessageService', () => {
         mockPrisma.user.findMany.mockResolvedValue(users);
         mockPrisma.message.create.mockResolvedValue(makeMessage());
         mockPrisma.conversation.update.mockResolvedValue({});
+        // a limited customer's send runs in a short locked transaction
+        mockPrisma.$transaction.mockImplementation(async (fn: any) => (typeof fn === 'function' ? fn(mockPrisma) : fn));
       });
       afterEach(() => {
         mockPrisma.user.findMany.mockResolvedValue([]);
         mockPrisma.message.count.mockReset();
+        mockPrisma.$transaction.mockReset();
       });
       // vendor's replies, then the customer's typed messages
       const counts = (replies: number, typed: number) =>

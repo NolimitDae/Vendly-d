@@ -76,6 +76,9 @@ export class MessageService {
 
     // a customer can send a few messages until the vendor replies (checked before any upload is stored)
     const limit = await assertUnderSendLimit(this.prisma, conversation, sender);
+    // this message is the vendor's first reply when the other person is waiting on it
+    const recipientId = conversation.is_group ? null : conversation.participants.find((p) => p.userId !== sender)?.userId;
+    const firstVendorReply = !!recipientId && !conversation.vendor_replied_at && !!(await sendLimitFor(this.prisma, conversation, recipientId));
 
     const savedFileNames: string[] = [];
 
@@ -92,21 +95,27 @@ export class MessageService {
     }
 
     const reasons = contactReasons(text);
-    const message = await this.prisma.message.create({
-      data: {
-        text,
-        conversationId,
-        senderId: sender,
-        status: MessageStatus.SENT,
-        attachments: savedFileNames.length > 0 ? savedFileNames : [],
-        contact_flagged: reasons.length > 0,
-      },
-      include: messageInclude,
-    });
+    const data = {
+      text,
+      conversationId,
+      senderId: sender,
+      status: MessageStatus.SENT,
+      attachments: savedFileNames.length > 0 ? savedFileNames : [],
+      contact_flagged: reasons.length > 0,
+    };
+    // a limited customer's sends are counted and saved one at a time, so a burst of sends can't pass the
+    // check together (the lock is per chat and sender, held only for this short transaction)
+    const message = limit
+      ? await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`send-limit:${conversationId}:${sender}`}))::text`;
+          await assertUnderSendLimit(tx, conversation, sender);
+          return tx.message.create({ data, include: messageInclude });
+        })
+      : await this.prisma.message.create({ data, include: messageInclude });
 
     await this.prisma.conversation.update({
       where: { id: conversationId },
-      data: { updatedAt: new Date() },
+      data: { updatedAt: new Date(), ...(firstVendorReply && { vendor_replied_at: new Date() }) },
     });
 
     const formatted = formatMessage(message);

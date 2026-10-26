@@ -23,7 +23,6 @@ export interface MergeInput {
   vendor: {
     name?: string | null;
     email?: string | null;
-    phone_number?: string | null;
     vendorProfile?: { business_name?: string | null; address?: string | null } | null;
   };
   customer: { name?: string | null; email?: string | null; type?: string | null };
@@ -110,7 +109,8 @@ export function buildMergeData(input: MergeInput): MergeData {
     vendor_business_name:
       fv.business_legal_name || str(input.vendor.vendorProfile?.business_name) || str(input.vendor.name),
     vendor_business_address: fv.business_address || str(input.vendor.vendorProfile?.address),
-    vendor_contact: [str(input.vendor.email), str(input.vendor.phone_number)].filter(Boolean).join(', '),
+    // email only: the vendor's phone is shared through the booking once it's accepted, never in contract text
+    vendor_contact: str(input.vendor.email),
     customer_name: str(input.customer.name),
     customer_role_label: isPlanner ? 'Event Planner' : 'Customer',
     client_name: str(input.clientName),

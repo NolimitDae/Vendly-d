@@ -500,6 +500,9 @@ model Conversation {
   event             Event?  @relation(fields: [event_id], references: [id], onDelete: SetNull)
   pinned_message_id String?
   quotes            Quote[]
+  // 1:1 chats with a vendor: when the vendor first replied (lifts the customer's message limit for good,
+  // even if that reply is deleted later)
+  vendor_replied_at DateTime?
 }
 
 model Participant {

@@ -1,11 +1,10 @@
-import { BadRequestException, Controller, Get, Logger, NotFoundException, Optional, Param, Query, Res, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Logger, NotFoundException, Param, Query, Res, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { InjectRedis } from '@nestjs-modules/ioredis';
-import type Redis from 'ioredis';
 import type { Response } from 'express';
 import { reversePlace, suggestPlaces } from './geo';
-import { loadTile, parseTile, TILE_CACHE_SECONDS } from './tiles';
+import { loadTile, MemoryTileCache, parseTile, TILE_CACHE_SECONDS } from './tiles';
+import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 
 const num = (v: unknown) => (v === undefined || v === '' ? undefined : Number(v));
 
@@ -14,8 +13,8 @@ const num = (v: unknown) => (v === undefined || v === '' ? undefined : Number(v)
 export class GeoController {
   private readonly logger = new Logger(GeoController.name);
 
-  // tiles are cached here (missing in tests that don't load Redis: then they're fetched each time)
-  constructor(@Optional() @InjectRedis() private readonly redis?: Redis) {}
+  // recent tiles, in memory (the shared Redis holds sessions and queues, so it never holds tiles)
+  private readonly tiles = new MemoryTileCache();
 
   @ApiOperation({ summary: 'Address suggestions while typing a location (optionally biased to lat/lng)' })
   @Throttle({ short: { limit: 10, ttl: 1000 } })
@@ -52,20 +51,23 @@ export class GeoController {
 
   @ApiOperation({ summary: 'One map tile (PNG) for the booking map, cached; only tile images are passed through' })
   // a map is about a dozen tiles; most come from the cache
-  @Throttle({ short: { limit: 40, ttl: 1000 }, medium: { limit: 200, ttl: 10_000 }, long: { limit: 600, ttl: 60_000 } })
+  @Throttle({ short: { limit: 40, ttl: 1000 }, medium: { limit: 120, ttl: 10_000 }, long: { limit: 240, ttl: 60_000 } })
+  // signed in only (the website's cookie or the app's token): the map is shown on bookings
+  @UseGuards(JwtAuthGuard)
   @Get('tile/:z/:x/:y')
   async tile(@Param('z') z: string, @Param('x') x: string, @Param('y') y: string, @Res() res: Response) {
     const t = parseTile(z, x, y);
     if (!t) throw new NotFoundException('No such map tile.');
     let tile: { body: Buffer; type: string };
     try {
-      tile = await loadTile(t, this.redis ?? null);
+      tile = await loadTile(t, this.tiles);
     } catch (err) {
       this.logger.warn(`Map tile ${z}/${x}/${y} failed: ${(err as Error).message}`);
       throw new ServiceUnavailableException('The map is unavailable right now.');
     }
     res.setHeader('Content-Type', tile.type);
-    res.setHeader('Cache-Control', `public, max-age=${TILE_CACHE_SECONDS}`);
+    // private: kept by the app or browser, never by a shared cache that would serve it without sign-in
+    res.setHeader('Cache-Control', `private, max-age=${TILE_CACHE_SECONDS}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // shown as <img> on the website's own origin and in the app
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');

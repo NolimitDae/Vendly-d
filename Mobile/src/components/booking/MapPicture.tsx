@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { api } from '../../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { api, TOKEN_KEY } from '../../services/api';
 import { DARK, FONTS } from '../../constants/colors';
 import { openDirections } from '../../utils/bookingTracker';
 
@@ -56,6 +57,11 @@ export default function MapPicture({
   label?: string;
 }) {
   const [width, setWidth] = useState(0);
+  // tiles are served to signed-in users only, so each one carries the sign-in token
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(TOKEN_KEY).then(setToken).catch(() => {});
+  }, []);
   const known = lat != null && lng != null;
   if (!known && !directions) return null;
 
@@ -64,8 +70,9 @@ export default function MapPicture({
       {known && (
         <View style={[s.map, { height }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessible accessibilityRole="image" accessibilityLabel={address ? `${label}: ${address}` : label}>
           {width > 0 &&
+            !!token &&
             tilesAround(lat!, lng!, width, height).map((t) => (
-              <Image key={t.key} source={{ uri: t.url }} style={[s.tile, { left: t.left, top: t.top }]} />
+              <Image key={t.key} source={{ uri: t.url, headers: { Authorization: `Bearer ${token}` } }} style={[s.tile, { left: t.left, top: t.top }]} />
             ))}
           {/* the pin's tip sits on the place */}
           <View pointerEvents="none" style={[s.pin, { left: width / 2 - 18, top: height / 2 - 36 }]}>
