@@ -4,7 +4,8 @@ import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { BrandGradient, Chip, GradientButton, ScreenHeader } from '../../components/brand';
+import { Chip, GradientButton, ScreenHeader } from '../../components/brand';
+import SegmentedTabs from '../../components/SegmentedTabs';
 import AddOnSheet, { type AddOnDraft } from '../../components/AddOnSheet';
 import Sheet, { CheckRow } from '../../components/Sheet';
 import { DARK, FONTS } from '../../constants/colors';
@@ -164,29 +165,19 @@ export default function AddOns() {
         }
       />
       <View style={{ paddingHorizontal: 20, gap: 14 }}>
-        <View style={s.tabs} accessibilityRole="tablist">
-          {TABS.map((t) => {
-            const on = tab === t.value;
-            return (
-              <Pressable
-                key={t.value}
-                style={{ flex: 1 }}
-                onPress={() => {
-                  haptic.select();
-                  switchTab(t.value);
-                }}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: on }}
-              >
-                {on ? (
-                  <BrandGradient style={s.tab}><Text style={[s.tabText, { color: '#fff' }]}>{t.label}</Text></BrandGradient>
-                ) : (
-                  <View style={s.tab}><Text style={s.tabText}>{t.label}</Text></View>
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
+        <SegmentedTabs
+          fill
+          items={TABS.map((t) => ({ key: t.value, label: t.label }))}
+          value={tab}
+          onChange={(t) => {
+            haptic.select();
+            switchTab(t);
+          }}
+          style={s.tabs}
+          itemStyle={s.tab}
+          textStyle={s.tabText}
+          activeTextStyle={{ color: '#fff' }}
+        />
         <Text style={s.body}>
           {tab === 'FEE'
             ? 'Fees are only requested after a job, and the customer approves each one before it’s charged. Listing them on a package shows customers up front.'

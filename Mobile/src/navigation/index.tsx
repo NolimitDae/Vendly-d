@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, DARK } from '../constants/colors';
-import { LogoMark } from '../components/brand';
+import { AnimatedLogoMark } from '../components/brand';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { navigationRef } from './navigationRef';
 import { OnboardingProvider } from '../context/OnboardingContext';
@@ -21,7 +21,8 @@ export default function RootNavigator() {
   if (loading) {
     return (
       <View style={s.splash}>
-        <LogoMark size={84} />
+        {/* same size and spot as the native splash's logo, which it then redraws */}
+        <AnimatedLogoMark size={84} />
       </View>
     );
   }
