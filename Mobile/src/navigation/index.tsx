@@ -17,12 +17,19 @@ import EventPlannerTabs from './EventPlannerTabs';
 export default function RootNavigator() {
   const { user, loading } = useAuth();
   usePushNotifications(user?.type);
+  // at launch the logo finishes drawing before the app opens (about 1.3s); a timer makes sure a
+  // stalled animation can never keep the app on this screen
+  const [logoDone, setLogoDone] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setLogoDone(true), 2500);
+    return () => clearTimeout(t);
+  }, []);
 
-  if (loading) {
+  if (loading || !logoDone) {
     return (
       <View style={s.splash}>
         {/* same size and spot as the native splash's logo, which it then redraws */}
-        <AnimatedLogoMark size={84} />
+        <AnimatedLogoMark size={84} onDrawn={() => setLogoDone(true)} />
       </View>
     );
   }

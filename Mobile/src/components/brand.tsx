@@ -55,11 +55,15 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 /**
  * The loading screen's logo. It opens as the full mark (the same picture as the native splash),
  * dims to a faint outline, and a bright stroke draws over it starting from the V; then it breathes
- * gently until loading ends. With Reduce Motion on it is just the still logo.
+ * gently until loading ends. With Reduce Motion on it is just the still logo. onDrawn fires once the
+ * drawing is complete (straight away with Reduce Motion).
  */
-export function AnimatedLogoMark({ size = 40 }: { size?: number }) {
+export function AnimatedLogoMark({ size = 40, onDrawn }: { size?: number; onDrawn?: () => void }) {
   const id = useId().replace(/:/g, '');
   const reduceMotion = useReduceMotion();
+  // kept in a ref so a new callback each render doesn't restart the drawing
+  const drawn = React.useRef(onDrawn);
+  drawn.current = onDrawn;
   const track = React.useRef(new Animated.Value(1)).current;
   // starts a little past the full length: a dash ending exactly at the path's start can leave a round-cap dot
   const offset = React.useRef(new Animated.Value(LOGO_LENGTH + 30)).current;
@@ -70,23 +74,29 @@ export function AnimatedLogoMark({ size = 40 }: { size?: number }) {
       track.setValue(1);
       offset.setValue(0);
       glow.setValue(1);
+      drawn.current?.();
       return;
     }
-    const anim = Animated.sequence([
-      Animated.parallel([
-        Animated.timing(track, { toValue: 0.16, duration: 280, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        // SVG props can't use the native driver; the JS thread is mostly idle while the app loads
-        Animated.timing(offset, { toValue: 0, duration: 1150, delay: 120, easing: Easing.bezier(0.65, 0, 0.35, 1), useNativeDriver: false }),
-      ]),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glow, { toValue: 0.7, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(glow, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ]),
-      ),
+    const draw = Animated.parallel([
+      Animated.timing(track, { toValue: 0.16, duration: 280, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      // SVG props can't use the native driver; the JS thread is mostly idle while the app loads
+      Animated.timing(offset, { toValue: 0, duration: 1150, delay: 120, easing: Easing.bezier(0.65, 0, 0.35, 1), useNativeDriver: false }),
     ]);
-    anim.start();
-    return () => anim.stop();
+    const breathe = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 0.7, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    draw.start(({ finished }) => {
+      if (!finished) return;
+      drawn.current?.();
+      breathe.start();
+    });
+    return () => {
+      draw.stop();
+      breathe.stop();
+    };
   }, [reduceMotion, track, offset, glow]);
 
   const width = (size * 360) / 220;
