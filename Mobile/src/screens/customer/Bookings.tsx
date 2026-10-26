@@ -11,7 +11,6 @@ import { DARK, FONTS } from '../../constants/colors';
 import { BookingService, type Booking, type BookingStatus } from '../../services/booking.service';
 import type { CustomerBookingsStackParams } from '../../navigation/types';
 import CancelBookingSheet from '../../components/booking/CancelBookingSheet';
-import SegmentedTabs from '../../components/SegmentedTabs';
 import { customerTabOf, type CustomerTab } from '../../utils/bookingTabs';
 import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
 
@@ -90,20 +89,22 @@ export default function CustomerBookings() {
         ListHeaderComponent={
           <View style={{ gap: 24 }}>
             <Text style={s.title}>Booking</Text>
-            <SegmentedTabs
-              fill
-              items={TABS.map((t) => {
+            <View style={s.segment}>
+              {TABS.map((t) => {
+                const on = t.key === tab;
                 const count = all.filter((b) => customerTabOf(b, now) === t.key).length;
-                return { key: t.key, label: `${t.label}${count && t.key !== 'complete' ? ` (${count})` : ''}` };
+                const label = (
+                  <Text style={[s.segmentText, on && { color: '#fff' }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {t.label}{count && t.key !== 'complete' ? ` (${count})` : ''}
+                  </Text>
+                );
+                return (
+                  <Pressable key={t.key} onPress={() => setTab(t.key)} style={{ flex: 1 }} accessibilityRole="tab" accessibilityState={{ selected: on }}>
+                    {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
+                  </Pressable>
+                );
               })}
-              value={tab}
-              onChange={setTab}
-              style={s.segment}
-              itemStyle={s.segmentItem}
-              textStyle={s.segmentText}
-              activeTextStyle={{ color: '#fff' }}
-              textProps={{ numberOfLines: 1, adjustsFontSizeToFit: true }}
-            />
+            </View>
           </View>
         }
         ListEmptyComponent={

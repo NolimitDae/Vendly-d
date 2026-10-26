@@ -8,7 +8,6 @@ import { Card, ScreenHeader } from '../../components/brand';
 import RunOfShow from '../../components/events/RunOfShow';
 import EventFiles from '../../components/events/EventFiles';
 import ClientContractsCard from '../../components/contracts/ClientContractsCard';
-import SegmentedTabs from '../../components/SegmentedTabs';
 import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { EventToolsService, type EventOverview } from '../../services/eventTools.service';
@@ -82,20 +81,13 @@ export default function EventShared() {
           )}
         </Card>
 
-        <SegmentedTabs
-          fill
-          items={((ev.role === 'client' ? ['schedule', 'vendors', 'files', 'contracts'] : ['schedule', 'vendors', 'files']) as Section[]).map((k) => ({
-            key: k,
-            label: k === 'schedule' ? 'Run of show' : k === 'vendors' ? `Vendors (${ev.vendors.length})` : k === 'files' ? `Files (${ev.file_count})` : 'Contracts',
-          }))}
-          value={section}
-          onChange={setSection}
-          style={s.tabs}
-          itemStyle={s.tab}
-          textStyle={s.tabText}
-          activeTextStyle={s.tabTextOn}
-          indicatorColor={DARK.border}
-        />
+        <View style={s.tabs}>
+          {((ev.role === 'client' ? ['schedule', 'vendors', 'files', 'contracts'] : ['schedule', 'vendors', 'files']) as Section[]).map((k) => (
+            <Pressable key={k} style={[s.tab, section === k && s.tabOn]} onPress={() => setSection(k)} accessibilityRole="tab" accessibilityState={{ selected: section === k }}>
+              <Text style={[s.tabText, section === k && s.tabTextOn]}>{k === 'schedule' ? 'Run of show' : k === 'vendors' ? `Vendors (${ev.vendors.length})` : k === 'files' ? `Files (${ev.file_count})` : 'Contracts'}</Text>
+            </Pressable>
+          ))}
+        </View>
 
         {section === 'schedule' && <RunOfShow eventId={ev.id} eventDate={ev.date} role={ev.role} userId={user?.id} items={ev.timeline} vendors={[]} onChanged={load} readOnly={ev.status === 'CANCELLED'} />}
         {section === 'vendors' &&
@@ -137,7 +129,8 @@ const s = StyleSheet.create({
   chatBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1, borderColor: DARK.border },
   chatText: { color: '#fff', fontSize: 14, fontFamily: FONTS.semibold },
   tabs: { flexDirection: 'row', backgroundColor: DARK.card, borderRadius: 100, padding: 4 },
-  tab: { height: 40, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  tab: { flex: 1, height: 40, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  tabOn: { backgroundColor: DARK.border },
   tabText: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium },
   tabTextOn: { color: '#fff' },
   vendorRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

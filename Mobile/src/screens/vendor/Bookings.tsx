@@ -1,11 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient } from '../../components/brand';
-import SegmentedTabs from '../../components/SegmentedTabs';
 import { DARK, FONTS } from '../../constants/colors';
 import { BookingService, type Booking, type BookingStatus } from '../../services/booking.service';
 import type { VendorBookingsStackParams } from '../../navigation/types';
@@ -91,19 +90,18 @@ export default function VendorBookings() {
         ListHeaderComponent={
           <View style={{ gap: 24 }}>
             <Text style={s.title}>Booking</Text>
-            <SegmentedTabs
-              scroll
-              items={TABS.map((t) => {
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.segment} accessibilityRole="tablist">
+              {TABS.map((t) => {
+                const on = t.key === tab;
                 const count = t.statuses ? all.filter((b) => t.statuses!.includes(b.status)).length : 0;
-                return { key: t.key, label: `${t.label}${count && t.key !== 'completed' ? ` (${count})` : ''}` };
+                const label = <Text style={[s.segmentText, on && { color: '#fff' }]}>{t.label}{count && t.key !== 'completed' ? ` (${count})` : ''}</Text>;
+                return (
+                  <Pressable key={t.key} onPress={() => setTab(t.key)} accessibilityRole="tab" accessibilityState={{ selected: on }}>
+                    {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
+                  </Pressable>
+                );
               })}
-              value={tab}
-              onChange={setTab}
-              style={s.segment}
-              itemStyle={s.segmentItem}
-              textStyle={s.segmentText}
-              activeTextStyle={{ color: '#fff' }}
-            />
+            </ScrollView>
           </View>
         }
         ListEmptyComponent={

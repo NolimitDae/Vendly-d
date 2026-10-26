@@ -20,7 +20,6 @@ import { GradientButton } from '../../components/brand';
 import EventContractsCard from '../../components/contracts/EventContractsCard';
 import RunOfShow from '../../components/events/RunOfShow';
 import EventFiles from '../../components/events/EventFiles';
-import SegmentedTabs from '../../components/SegmentedTabs';
 import { BookingsBudget, ClientShareCard, TeamsCard } from '../../components/events/PlannerExtras';
 import { SuggestedServicesCard } from '../../components/planning/PlanItems';
 import { searchParamsFor } from '../../services/planning.service';
@@ -146,17 +145,16 @@ export default function EventDetail() {
 
       {/* Tabs */}
       <View>
-        <SegmentedTabs
-          scroll
-          items={TABS.map(({ key: t, label }) => ({ key: t, label: `${label}${t === 'tasks' && totalTasks > 0 ? ` (${completedTasks}/${totalTasks})` : ''}` }))}
-          value={tab}
-          onChange={setTab}
-          style={s.tabBar}
-          itemStyle={s.tabBtn}
-          textStyle={s.tabText}
-          activeTextStyle={s.tabTextActive}
-          indicatorColor={COLORS.primary}
-        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabBar}>
+          {TABS.map(({ key: t, label }) => (
+            <TouchableOpacity key={t} style={[s.tabBtn, tab === t && s.tabBtnActive]} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: tab === t }}>
+              <Text style={[s.tabText, tab === t && s.tabTextActive]}>
+                {label}
+                {t === 'tasks' && totalTasks > 0 ? ` (${completedTasks}/${totalTasks})` : ''}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -589,6 +587,7 @@ const s = StyleSheet.create({
   tabBar: { flexDirection: 'row', marginHorizontal: 16, padding: 4, borderRadius: 100, backgroundColor: DARK.card, marginBottom: 16 },
   sectionNote: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
   tabBtn: { height: 40, paddingHorizontal: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  tabBtnActive: { backgroundColor: COLORS.primary },
   tabText: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium },
   tabTextActive: { color: '#fff' },
   infoCard: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 10, marginBottom: 12 },
