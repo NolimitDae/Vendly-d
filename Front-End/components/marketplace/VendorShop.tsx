@@ -9,6 +9,7 @@ import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import ReviewList from "@/components/marketplace/ReviewList";
 import { AddToTeamButton } from "@/components/events/VendorTeams";
 import TestBadge from "@/components/marketplace/TestBadge";
+import SocialLinks, { type SocialLinksData } from "@/components/marketplace/SocialLinks";
 
 export interface VendorShopData {
   id: string;
@@ -21,6 +22,8 @@ export interface VendorShopData {
   vendorProfile?: { business_name?: string | null; about_me?: string | null } | null;
   /** a test vendor (Admin → Settings → Test vendors) */
   is_test?: boolean;
+  /** social accounts as full links */
+  socials?: SocialLinksData | null;
   vendorListings?: {
     id: string;
     title: string;
@@ -172,6 +175,8 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
                 {activeServices} active service{activeServices !== 1 ? "s" : ""}
               </span>
             </div>
+
+            <SocialLinks socials={vendor.socials} className="mt-4" />
 
             {profile?.about_me && (
               <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">

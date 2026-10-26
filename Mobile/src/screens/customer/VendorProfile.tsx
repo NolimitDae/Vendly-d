@@ -11,6 +11,7 @@ import type { CustomerHomeStackParams } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import Sheet from '../../components/Sheet';
 import TestBadge from '../../components/TestBadge';
+import SocialLinks from '../../components/SocialLinks';
 import { EventToolsService, MAX_TEAM_SIZE, type TeamVendor, type VendorTeam } from '../../services/eventTools.service';
 import { apiError } from '../../services/contracts.service';
 
@@ -77,6 +78,8 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
               </View>
             )}
           </View>
+
+          <SocialLinks socials={vendor.socials} />
 
           {/* planners can save any vendor to a team, booked before or not */}
           {user?.type === 'EVENT_PLANNER' && vendor.id !== user.id && (

@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import Image from "next/image";
 import { Camera, Loader2, Upload, X, BadgeCheck, Clock, ImagePlus } from "lucide-react";
 import { shopUrl } from "@/components/marketplace/VendorShop";
+import { SOCIALS, type SocialKey, type SocialLinksData } from "@/components/marketplace/SocialLinks";
 
 /** Same rule as the server: 3–30 lower-case letters or numbers, single dashes between. */
 const HANDLE_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -22,6 +23,7 @@ interface ProfileData {
   handle?: string | null;
   banner_url?: string | null;
   logo_url?: string | null;
+  socials?: SocialLinksData | null;
   vendorProfile?: {
     business_name?: string;
     about_me?: string;
@@ -50,6 +52,8 @@ export default function VendorProfilePage() {
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  // social accounts as typed; the server turns handles into links and says when one isn't right
+  const [socials, setSocials] = useState<Record<SocialKey, string>>(() => Object.fromEntries(SOCIALS.map(({ key }) => [key, ""])) as Record<SocialKey, string>);
 
   const avatarRef = useRef<HTMLInputElement>(null);
   const licenseRef = useRef<HTMLInputElement>(null);
@@ -71,6 +75,7 @@ export default function VendorProfilePage() {
         setSavedHandle(d.handle ?? "");
         setBannerUrl(d.banner_url ?? null);
         setLogoUrl(d.logo_url ?? null);
+        setSocials((cur) => Object.fromEntries(SOCIALS.map(({ key }) => [key, d.socials?.[key] ?? cur[key]])) as Record<SocialKey, string>);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -111,6 +116,8 @@ export default function VendorProfilePage() {
       if (cleanHandle !== savedHandle) fd.append("handle", cleanHandle);
       if (bannerFile) fd.append("banner", bannerFile);
       if (logoFile) fd.append("logo", logoFile);
+      // always sent, so clearing a field removes that link
+      SOCIALS.forEach(({ key }) => fd.append(key, socials[key].trim()));
 
       const res = await AuthService.updateProfile(fd);
       if (res.data?.success) {
@@ -119,6 +126,13 @@ export default function VendorProfilePage() {
         setBannerFile(null);
         setLogoFile(null);
         setSavedHandle(cleanHandle);
+        // show the social links as saved (handles become full links)
+        AuthService.me()
+          .then((r) => {
+            const saved: SocialLinksData | undefined = (r.data?.data ?? r.data)?.socials;
+            if (saved) setSocials(Object.fromEntries(SOCIALS.map(({ key }) => [key, saved[key] ?? ""])) as Record<SocialKey, string>);
+          })
+          .catch(() => {});
       } else {
         toast.error(res.data?.message || "Failed to save profile");
       }
@@ -355,6 +369,39 @@ export default function VendorProfilePage() {
               </div>
               <input ref={logoRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => pickImage(e.target.files?.[0], setLogoFile, setLogoUrl)} />
             </div>
+          </div>
+
+          {/* Social accounts: shown as links on the shop page */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
+            <div>
+              <h2 className="font-semibold text-gray-900 dark:text-white">Social accounts</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Add your @handle or paste a link. Customers can tap them on your shop page.
+              </p>
+            </div>
+            {SOCIALS.map(({ key, label, placeholder, Icon }) => (
+              <div key={key}>
+                <label htmlFor={`social-${key}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {label}
+                </label>
+                <div className="flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-primary">
+                  <Icon className="ml-4 w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <input
+                    id={`social-${key}`}
+                    type="text"
+                    inputMode="url"
+                    value={socials[key]}
+                    onChange={(e) => setSocials((cur) => ({ ...cur, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    maxLength={255}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="flex-1 min-w-0 px-3 py-2.5 bg-transparent focus:outline-none text-sm"
+                  />
+                </div>
+              </div>
+            ))}
           </div>
 
           <button

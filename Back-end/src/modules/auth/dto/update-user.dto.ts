@@ -46,6 +46,36 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   handle?: string;
 
   @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ example: 'bellascatering.com', description: 'Vendors: website. Empty clears it.' })
+  website?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ example: '@bellascatering', description: 'Vendors: Instagram @handle or link. Empty clears it.' })
+  instagram?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ example: '@bellascatering', description: 'Vendors: TikTok @handle or link. Empty clears it.' })
+  tiktok?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ example: 'facebook.com/bellascatering', description: 'Vendors: Facebook page name or link. Empty clears it.' })
+  facebook?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ example: '@bellascatering', description: 'Vendors: YouTube @handle or link. Empty clears it.' })
+  youtube?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ example: '@bellascatering', description: 'Vendors: X (Twitter) @handle or link. Empty clears it.' })
+  x?: string;
+
+  @IsOptional()
   @ApiPropertyOptional({
     description:
       'Vendors: weekly working hours. An object (or a JSON string in multipart) with all 7 days mon..sun, each { open: "09:00", close: "17:00" } or null when closed. null clears the hours (bookable any time).',

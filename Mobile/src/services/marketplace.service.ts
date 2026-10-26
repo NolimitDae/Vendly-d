@@ -1,6 +1,7 @@
 import { api } from './api';
 import type { AddOn } from './addons.service';
 import type { WorkingHours } from '../utils/workingHours';
+import type { SocialLinksData } from '../components/SocialLinks';
 
 export interface Listing {
   id: string;
@@ -72,6 +73,8 @@ export interface VendorProfile {
   avg_rating?: number | null;
   /** a test vendor (Admin → Settings → Test vendors) */
   is_test?: boolean;
+  /** social accounts as full links */
+  socials?: SocialLinksData | null;
   _count?: { vendorListings: number; receivedReviews: number };
 }
 

@@ -56,6 +56,19 @@ describe('VendorShop', () => {
     expect(screen.queryByText('Test')).not.toBeInTheDocument();
   });
 
+  it('links the vendor’s social accounts, skipping empty and non-https ones', async () => {
+    getVendorProfile.mockResolvedValue({
+      data: { success: true, data: { ...vendor, socials: { website: 'https://bellas.com/', instagram: 'https://www.instagram.com/bella', tiktok: null, x: 'javascript:alert(1)' } } },
+    });
+    render(<VendorShop idOrHandle="bellas-catering" />);
+    const insta = await screen.findByRole('link', { name: 'Instagram' });
+    expect(insta).toHaveAttribute('href', 'https://www.instagram.com/bella');
+    expect(insta).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: 'Website' })).toHaveAttribute('href', 'https://bellas.com/');
+    expect(screen.queryByRole('link', { name: 'TikTok' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'X' })).not.toBeInTheDocument();
+  });
+
   it('says the shop was not found for an unknown handle', async () => {
     getVendorProfile.mockRejectedValue(new Error('404'));
     render(<VendorShop idOrHandle="nobody" />);

@@ -21,6 +21,7 @@ import { Prisma, UserType } from 'prisma/generated/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { track } from 'src/common/analytics';
 import { normalizeHandle, shopImageUrl } from '../../common/helper/handle';
+import { normalizeSocial, readSocials, SOCIAL_KEYS, SOCIALS_SELECT } from '../../common/helper/social-links';
 import { IdentityService } from '../identity/identity.service';
 import { parseWorkingHours, readWorkingHours, type WorkingHours } from '../vendor/working-hours';
 import { NOTIFICATION_PREF_KEYS, NotificationPrefKey, readPrefs } from '../../common/helper/notification-prefs';
@@ -113,7 +114,7 @@ export class AuthService {
           last_name: true,
           bio: true,
           // vendors: business details and where their licence check stands
-          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true, handle: true, banner: true, logo: true, working_hours: true } },
+          vendorProfile: { select: { business_name: true, about_me: true, license_status: true, license_photo: true, handle: true, banner: true, logo: true, working_hours: true, ...SOCIALS_SELECT } },
         },
       });
 
@@ -150,6 +151,8 @@ export class AuthService {
               logo_url: shopImageUrl(vendorProfile.logo),
               // weekly hours customers can book in; null = not set (any time)
               working_hours: readWorkingHours(vendorProfile.working_hours),
+              // social accounts shown on the shop page (full links)
+              socials: readSocials(vendorProfile),
             }),
           },
         };
@@ -438,6 +441,17 @@ export class AuthService {
           workingHours = parsed.hours;
         }
 
+        // vendors' social links: each turned into a full link, or refused with a message
+        const socials: Record<string, string | null> = {};
+        if (user.type === UserType.VENDOR) {
+          for (const key of SOCIAL_KEYS) {
+            if (updateUserDto[key] === undefined) continue;
+            const result = normalizeSocial(key, updateUserDto[key]);
+            if ('error' in result) return { success: false, message: result.error };
+            socials[key] = result.link;
+          }
+        }
+
         if (image) {
           const oldImage = await this.prisma.user.findFirst({
             where: { id: userId },
@@ -461,6 +475,7 @@ export class AuthService {
             vendorProfilePatch.address = updateUserDto.address;
           if (handle !== undefined) vendorProfilePatch.handle = handle;
           if (workingHours !== undefined) vendorProfilePatch.working_hours = workingHours ?? Prisma.DbNull;
+          Object.assign(vendorProfilePatch, socials);
           if (shop.banner || shop.logo) {
             const old = await this.prisma.vendorProfile.findUnique({
               where: { user_id: userId },

@@ -312,6 +312,13 @@ model VendorProfile {
   saved_signature_key     String?
   // weekly hours customers can book, e.g. {"mon":{"open":"09:00","close":"17:00"},"sun":null}; null = not set (any day)
   working_hours           Json?
+  // social accounts shown on the shop page, stored as full links (built from a handle or a pasted link)
+  website                 String?                  @db.VarChar(255)
+  instagram               String?                  @db.VarChar(255)
+  tiktok                  String?                  @db.VarChar(255)
+  facebook                String?                  @db.VarChar(255)
+  youtube                 String?                  @db.VarChar(255)
+  x                       String?                  @db.VarChar(255)
 
   @@map("vendor_profiles")
 }

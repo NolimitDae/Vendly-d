@@ -8,6 +8,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { shopImageUrl } from 'src/common/helper/handle';
+import { readSocials, SOCIALS_SELECT } from 'src/common/helper/social-links';
 import { mergeDayRanges, todayUtc } from 'src/modules/calendar-sync/busy-days';
 import { readWorkingHours, summariseWorkingHours } from 'src/modules/vendor/working-hours';
 import { ACTIVE_VENDOR_WHERE } from 'src/common/helper/active-vendor';
@@ -298,6 +299,7 @@ export class MarketplaceService {
             handle: true,
             banner: true,
             logo: true,
+            ...SOCIALS_SELECT,
           },
         },
         vendorListings: {
@@ -331,6 +333,8 @@ export class MarketplaceService {
         handle: vendor.vendorProfile?.handle ?? null,
         banner_url: shopImageUrl(vendor.vendorProfile?.banner),
         logo_url: shopImageUrl(vendor.vendorProfile?.logo),
+        // social accounts as full links (checked when saved)
+        socials: readSocials(vendor.vendorProfile),
         avatar_url: vendor.avatar
           ? TanvirStorage.url(
               `${appConfig().storageUrl.avatar}/${vendor.avatar}`,

@@ -9,6 +9,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
+import { SOCIALS, type SocialKey } from '../../components/SocialLinks';
 
 export default function EditProfile({ navigation }: { navigation: NativeStackNavigationProp<any> }) {
   const insets = useSafeAreaInsets();
@@ -19,6 +20,8 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [logo, setLogo] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [saving, setSaving] = useState(false);
+  // social accounts as typed; the server turns handles into links and says when one isn't right
+  const [socials, setSocials] = useState<Record<SocialKey, string>>(() => Object.fromEntries(SOCIALS.map(({ key }) => [key, ''])) as Record<SocialKey, string>);
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
@@ -26,6 +29,7 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
     const u = user as any;
     const [first = '', ...rest] = (u?.name ?? '').split(' ');
     setForm({ first_name: u?.first_name ?? first, last_name: u?.last_name ?? rest.join(' '), address: u?.address ?? '', business_name: u?.business_name ?? '', about_me: u?.about_me ?? u?.bio ?? '', handle: u?.handle ?? '' });
+    setSocials(Object.fromEntries(SOCIALS.map(({ key }) => [key, u?.socials?.[key] ?? ''])) as Record<SocialKey, string>);
   }, [user]);
 
   const pick = async (aspect: [number, number], done: (a: ImagePicker.ImagePickerAsset) => void) => {
@@ -47,6 +51,8 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
         body.append('business_name', form.business_name.trim());
         body.append('about_me', form.about_me.trim());
         body.append('handle', form.handle.trim());
+        // always sent, so clearing a field removes that link
+        SOCIALS.forEach(({ key }) => body.append(key, socials[key].trim()));
         if (banner) body.append('banner', file(banner, 'banner'));
         if (logo) body.append('logo', file(logo, 'logo'));
       }
@@ -144,6 +150,29 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
                 </View>
                 <Text style={s.hint}>3–30 letters, numbers or dashes. Leave empty for no link.</Text>
               </View>
+
+              <Text style={[ui.label, { fontSize: 16, marginTop: 8 }]}>Social accounts</Text>
+              <Text style={[s.hint, { marginTop: -8 }]}>Add your @handle or paste a link. Customers can tap them on your profile.</Text>
+              {SOCIALS.map(({ key, label, placeholder, icon }) => (
+                <View key={key} style={{ gap: 8 }}>
+                  <Text style={ui.label}>{label}</Text>
+                  <View style={ui.field}>
+                    <Ionicons name={icon} size={20} color={DARK.muted} />
+                    <TextInput
+                      style={ui.input}
+                      placeholder={placeholder}
+                      placeholderTextColor={DARK.muted}
+                      value={socials[key]}
+                      onChangeText={(v) => setSocials((cur) => ({ ...cur, [key]: v }))}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      maxLength={255}
+                      accessibilityLabel={label}
+                    />
+                  </View>
+                </View>
+              ))}
             </>
           )}
           <GradientButton title="Save Changes" onPress={save} loading={saving} style={{ marginTop: 12 }} />
