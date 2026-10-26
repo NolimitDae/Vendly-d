@@ -16,15 +16,16 @@ export class GeoController {
   // recent tiles, in memory (the shared Redis holds sessions and queues, so it never holds tiles)
   private readonly tiles = new MemoryTileCache();
 
-  @ApiOperation({ summary: 'Address suggestions while typing a location (optionally biased to lat/lng)' })
+  @ApiOperation({ summary: 'Address suggestions while typing a location (optionally biased to lat/lng; street=1 for a full street address)' })
   @Throttle({ short: { limit: 10, ttl: 1000 } })
   @Get('suggest')
-  async suggest(@Query('q') q = '', @Query('lat') lat?: string, @Query('lng') lng?: string) {
+  async suggest(@Query('q') q = '', @Query('lat') lat?: string, @Query('lng') lng?: string, @Query('street') street?: string) {
     const la = num(lat);
     const ln = num(lng);
     const near = la !== undefined && ln !== undefined && Math.abs(la) <= 90 && Math.abs(ln) <= 180 ? { lat: la, lng: ln } : null;
     try {
-      return { success: true, data: await suggestPlaces(String(q), near) };
+      // street addresses (a venue, a business address) get exact matches with street and ZIP; anything else stays town level
+      return { success: true, data: await suggestPlaces(String(q), near, fetch, street === '1' || street === 'true') };
     } catch (err) {
       this.logger.warn(`Place suggestions failed: ${(err as Error).message}`);
       // typing still works; the location is geocoded when the package is saved

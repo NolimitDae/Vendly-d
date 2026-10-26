@@ -90,7 +90,7 @@ describe('LocationField', () => {
     expect(spy).toHaveBeenLastCalledWith({ label: 'Brooklyn, New York, NY', lat: 40.65, lng: -73.95 }, null);
     // debounced: one lookup for the whole word, not one per letter
     expect(GeoService.suggest).toHaveBeenCalledTimes(1);
-    expect(GeoService.suggest).toHaveBeenCalledWith('Brook', null);
+    expect(GeoService.suggest).toHaveBeenCalledWith('Brook', null, false);
   });
 
   it("a lookup still running when a place is picked doesn't reopen the list", async () => {
@@ -106,6 +106,58 @@ describe('LocationField', () => {
     await new Promise((r) => setTimeout(r, 350)); // the second lookup starts
     await userEvent.click(option.isConnected ? option : await screen.findByRole('option', { name: 'Austin, Texas, TX' }));
     await act(async () => answer({ data: { data: [{ label: 'Austin, Texas, TX', lat: 30.27, lng: -97.74 }] } }));
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('street addresses: asks for street suggestions, fills the full label, and keeps a typed address', async () => {
+    const full = '100 S Main St, Smyrna, DE 19977';
+    (GeoService.suggest as jest.Mock).mockResolvedValue({ data: { data: [{ label: full, lat: 39.29981, lng: -75.60473 }] } });
+    const spy = jest.fn();
+    function Street() {
+      const [place, setPlace] = useState<PickedPlace>({ label: '' });
+      spy(place);
+      return <LocationField value={place} onChange={setPlace} label="Service address" street />;
+    }
+    render(<Street />);
+    const box = screen.getByRole('combobox', { name: 'Service address' });
+    await userEvent.type(box, '100 S Main');
+    await userEvent.click(await screen.findByRole('option', { name: full }));
+    expect(GeoService.suggest).toHaveBeenLastCalledWith('100 S Main', null, true);
+    expect(box).toHaveValue(full);
+    expect(spy).toHaveBeenLastCalledWith({ label: full, lat: 39.29981, lng: -75.60473 });
+    // typed in full and not picked: kept as typed, without a position (it is geocoded when saved)
+    await userEvent.clear(box);
+    await userEvent.type(box, '12 Oak Ln, Dover, DE');
+    await userEvent.tab();
+    expect(box).toHaveValue('12 Oak Ln, Dover, DE');
+    expect(spy).toHaveBeenLastCalledWith({ label: '12 Oak Ln, Dover, DE' });
+  });
+
+  it('a slow answer for older text never replaces the newer list, nor reopens it after leaving the field', async () => {
+    let older: (v: any) => void = () => {};
+    (GeoService.suggest as jest.Mock)
+      .mockImplementationOnce(() => new Promise((r) => { older = r; }))
+      .mockResolvedValueOnce({ data: { data: [{ label: 'Dover, DE', lat: 39.16, lng: -75.52 }] } });
+    render(<LocationHarness spy={jest.fn()} />);
+    const box = screen.getByRole('combobox', { name: 'Package location' });
+    await userEvent.type(box, 'Do');
+    await new Promise((r) => setTimeout(r, 350)); // the first lookup starts and hangs
+    await userEvent.type(box, 'ver');
+    expect(await screen.findByRole('option', { name: 'Dover, DE' })).toBeInTheDocument();
+    await act(async () => older({ data: { data: [{ label: 'Douglas, GA', lat: 31.5, lng: -82.85 }] } }));
+    expect(screen.queryByRole('option', { name: 'Douglas, GA' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Dover, DE' })).toBeInTheDocument();
+  });
+
+  it("an answer that arrives after leaving the field doesn't reopen the list", async () => {
+    let answer: (v: any) => void = () => {};
+    (GeoService.suggest as jest.Mock).mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+    render(<LocationHarness spy={jest.fn()} />);
+    const box = screen.getByRole('combobox', { name: 'Package location' });
+    await userEvent.type(box, 'Dover');
+    await new Promise((r) => setTimeout(r, 350));
+    await userEvent.tab();
+    await act(async () => answer({ data: { data: [{ label: 'Dover, DE', lat: 39.16, lng: -75.52 }] } }));
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
