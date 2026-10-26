@@ -16,6 +16,7 @@ import { BookingService, type Booking } from '../../services/booking.service';
 import { PaymentsService } from '../../services/payments.service';
 import RentalReturnCard from '../../components/RentalReturnCard';
 import BookingChoices from '../../components/booking/BookingChoices';
+import RequestChangesCard from '../../components/booking/RequestChangesCard';
 import VendorExtras from '../../components/extras/VendorExtras';
 import VendorDisputeCard from '../../components/VendorDisputeCard';
 import type { VendorBookingsStackParams } from '../../navigation/types';
@@ -52,6 +53,8 @@ export default function VendorBookingDetail() {
   const [delivTitle, setDelivTitle] = useState('');
   const [delivMsg, setDelivMsg] = useState('');
   const [delivLink, setDelivLink] = useState('');
+  // bumped when suggested changes are sent or withdrawn, so the contract card shows the right version
+  const [contractKey, setContractKey] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -169,8 +172,10 @@ export default function VendorBookingDetail() {
           body: `${customer}'s payment didn't go through. They have until ${dueByText(booking.payment_due_by)} to pay; if they don't, the booking is cancelled automatically and you keep what the cancellation terms give you. You can also cancel now with "Customer didn't pay".`,
           icon: 'hourglass-outline' as const,
         }
+      : st === 'PENDING' && booking.changes_waiting
+      ? { title: 'Changes sent', body: `Your suggested changes are waiting for ${customer}. You can accept once they answer.`, icon: 'hourglass-outline' as const }
       : st === 'PENDING'
-      ? { title: 'New Booking Request', body: `${customer} signed the contract. Review the details, then Accept & Sign or decline.`, icon: 'document-text-outline' as const }
+      ? { title: 'New Booking Request', body: `${customer} signed the contract. Review the details, then Accept & Sign, suggest changes, or decline.`, icon: 'document-text-outline' as const }
       : st === 'CONFIRMED' && !paid
         ? { title: 'Accepted — awaiting payment', body: `${customer} has been asked to pay. The date is locked in once they do.`, icon: 'hourglass-outline' as const }
         : st === 'CONFIRMED'
@@ -330,7 +335,18 @@ export default function VendorBookingDetail() {
             </Pressable>
           )}
 
-          <BookingContractCard bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={load} />
+          <RequestChangesCard
+            bookingId={booking.id}
+            role="VENDOR"
+            bookingStatus={booking.status}
+            otherName={customer}
+            onChanged={() => {
+              setContractKey((k) => k + 1);
+              load();
+            }}
+          />
+
+          <BookingContractCard key={contractKey} bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={load} />
 
           {(st === 'CONFIRMED' || st === 'IN_PROGRESS') && (
             <Pressable style={s.outline} onPress={cancelBooking} disabled={busy} accessibilityRole="button" accessibilityLabel="Cancel booking">
@@ -443,7 +459,7 @@ export default function VendorBookingDetail() {
           {st === 'PENDING' && (
             <>
               <Text style={s.footerHint}>
-                Accept & Sign is in the Contract card above
+                {booking.changes_waiting ? 'Waiting for the customer to answer your suggested changes' : 'Accept & Sign is in the Contract card above'}
                 {closesIn(booking.request_expires_at) ? `. ${closesIn(booking.request_expires_at)}, then it closes on its own.` : ''}
               </Text>
               <Pressable style={s.decline} onPress={decline} disabled={busy} accessibilityRole="button">

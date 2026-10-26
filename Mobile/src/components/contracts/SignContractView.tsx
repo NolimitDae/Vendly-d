@@ -34,6 +34,10 @@ interface Props {
   busy?: boolean;
   onSubmit: (signature: SignaturePayload) => void;
   onCancel: () => void;
+  /** shown above the contract (suggested changes show what changed) */
+  intro?: React.ReactNode;
+  /** replaces the line under the title */
+  subtitle?: string;
 }
 
 /**
@@ -53,6 +57,8 @@ export default function SignContractView({
   busy,
   onSubmit,
   onCancel,
+  intro,
+  subtitle,
 }: Props) {
   const [readToEnd, setReadToEnd] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -110,7 +116,7 @@ export default function SignContractView({
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={s.headerTitle} numberOfLines={1}>{title}</Text>
-          <Text style={s.headerSub}>Please review and accept the contract to continue your booking</Text>
+          <Text style={s.headerSub}>{subtitle ?? 'Please review and accept the contract to continue your booking'}</Text>
         </View>
       </View>
 
@@ -126,6 +132,7 @@ export default function SignContractView({
             markReadIfVisible(0);
           }}
         >
+          {intro ? <View style={{ marginBottom: 20 }}>{intro}</View> : null}
           {sourcePdfUrl ? (
             <TouchableOpacity style={s.pdfBtn} onPress={() => Linking.openURL(sourcePdfUrl)}>
               <Ionicons name="document-text-outline" size={18} color={DARK.accent} />

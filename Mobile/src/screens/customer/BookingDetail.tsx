@@ -12,6 +12,7 @@ import { InspirationPhotos } from '../../components/booking/InspirationPhotos';
 import PaymentTimeline from '../../components/PaymentTimeline';
 import RentalReturnCard from '../../components/RentalReturnCard';
 import BookingChoices from '../../components/booking/BookingChoices';
+import RequestChangesCard from '../../components/booking/RequestChangesCard';
 import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { api } from '../../services/api';
@@ -57,6 +58,8 @@ export default function BookingDetail() {
   const extrasY = useRef(0);
   // bumped when an add-on or fee is paid, so the payments card shows the new charge
   const [paymentsKey, setPaymentsKey] = useState(0);
+  // bumped when the customer answers suggested changes, so the contract card shows the right version
+  const [contractKey, setContractKey] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -139,6 +142,8 @@ export default function BookingDetail() {
           body: `Your payment didn't go through. Pay by ${dueByText(booking.payment_due_by)} with your card or another card (Payments, below), or the booking is cancelled${booking.payment_state === 'pending_balance' ? ' and your deposit isn’t refunded' : ''}.`,
           icon: 'card-outline' as const,
         }
+      : st === 'PENDING' && booking.changes_waiting
+      ? { title: 'Changes suggested', body: `${vendor} suggested changes to your request. Review them below, then approve or decline.`, icon: 'create-outline' as const }
       : st === 'PENDING'
       ? { title: 'Pending Confirmation', body: `We have sent your request to ${vendor}. You'll be told as soon as they accept.`, icon: 'spinner' as const }
       : st === 'CONFIRMED' && !paid
@@ -197,6 +202,18 @@ export default function BookingDetail() {
             <Text style={s.heroTitle}>{hero.title}</Text>
             <Text style={s.heroBody}>{hero.body}</Text>
           </Card>
+
+          <RequestChangesCard
+            bookingId={booking.id}
+            role="CUSTOMER"
+            bookingStatus={booking.status}
+            otherName={vendor}
+            onChanged={() => {
+              setContractKey((k) => k + 1);
+              load();
+              extras.reload();
+            }}
+          />
 
           <Card style={{ gap: 16 }}>
             <View style={s.row}>
@@ -331,7 +348,7 @@ export default function BookingDetail() {
 
           <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} startReporting={reporting} onChanged={() => { load(); extras.reload(); }} />
 
-          <BookingContractCard bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
+          <BookingContractCard key={contractKey} bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
 
           {proofs.length > 0 && (
             <Card>

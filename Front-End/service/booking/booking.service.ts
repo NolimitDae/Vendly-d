@@ -93,6 +93,28 @@ export const BookingService = {
   getDeliverables: async (id: string) =>
     Fetch.get(`/bookings/${id}/deliverables`, authHeaders()),
 
+  // ─── Suggested changes to a request (vendor suggests, customer approves or declines) ──────────
+
+  /** The suggestion on a request, and for the vendor what the editor starts from. */
+  changes: async (id: string) => Fetch.get(`/bookings/${id}/changes`, authHeaders()),
+
+  /** Vendor: the new total and the updated contract to sign, for the terms in `body`. */
+  previewChanges: async (id: string, body: Record<string, unknown>) =>
+    Fetch.post(`/bookings/${id}/changes/preview`, body, authHeaders()),
+
+  /** Vendor: sign and send the suggestion. */
+  sendChanges: async (id: string, body: Record<string, unknown>, signature: SignaturePayload) =>
+    Fetch.post(`/bookings/${id}/changes`, { ...body, signature }, authHeaders()),
+
+  withdrawChanges: async (id: string) => Fetch.post(`/bookings/${id}/changes/withdraw`, {}, authHeaders()),
+
+  /** Customer: approve and sign the suggested changes. */
+  approveChanges: async (id: string, signature: SignaturePayload) =>
+    Fetch.post(`/bookings/${id}/changes/approve`, { signature }, authHeaders()),
+
+  declineChanges: async (id: string, reason?: string) =>
+    Fetch.post(`/bookings/${id}/changes/decline`, reason ? { reason } : {}, authHeaders()),
+
   /** Vendor's side of an open dispute, read by Vendly. */
   replyToDispute: async (id: string, reply: string) =>
     Fetch.post(`/bookings/${id}/dispute/reply`, { reply }, authHeaders()),

@@ -13,6 +13,8 @@ export type BookingStatus =
 export interface Booking {
   /** an open request closes on its own at this time */
   request_expires_at?: string | null;
+  /** on a request: the vendor's suggested changes are waiting for the customer (the request can't close meanwhile) */
+  changes_waiting?: boolean;
   id: string;
   status: BookingStatus;
   scheduled_at?: string;
@@ -165,6 +167,18 @@ export const BookingService = {
 
   rejectBooking: (id: string) =>
     api.patch<{ success: boolean; data: Booking }>(`/bookings/${id}/reject`),
+
+  // ─── Suggested changes to a request (vendor suggests, customer approves or declines) ──────────
+
+  /** The suggestion on a request, and for the vendor what the editor starts from. */
+  changes: (id: string) => api.get(`/bookings/${id}/changes`),
+  /** Vendor: the new total and the updated contract to sign. */
+  previewChanges: (id: string, body: Record<string, unknown>) => api.post(`/bookings/${id}/changes/preview`, body),
+  sendChanges: (id: string, body: Record<string, unknown>, signature: SignaturePayload) => api.post(`/bookings/${id}/changes`, { ...body, signature }),
+  withdrawChanges: (id: string) => api.post(`/bookings/${id}/changes/withdraw`),
+  /** Customer: approve and sign the suggested changes. */
+  approveChanges: (id: string, signature: SignaturePayload) => api.post(`/bookings/${id}/changes/approve`, { signature }),
+  declineChanges: (id: string, reason?: string) => api.post(`/bookings/${id}/changes/decline`, reason ? { reason } : {}),
 
   startWork: (id: string) =>
     api.patch<{ success: boolean; data: Booking }>(`/bookings/${id}/start`),

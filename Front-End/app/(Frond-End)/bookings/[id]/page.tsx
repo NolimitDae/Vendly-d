@@ -34,6 +34,7 @@ import MapPicture from "@/components/bookings/MapPicture";
 import { showsTracker, type TrackerFields } from "@/lib/booking-tracker";
 import { useBookingRefresh } from "@/hooks/useBookingRefresh";
 import BookingChoices from "@/components/bookings/BookingChoices";
+import RequestChangesCard from "@/components/bookings/RequestChangesCard";
 
 interface Proof {
   id: string;
@@ -96,6 +97,8 @@ export default function CustomerBookingDetailPage() {
   const [paymentsKey, setPaymentsKey] = useState(0);
 
   const [cancelling, setCancelling] = useState(false);
+  // bumped when the customer answers suggested changes, so the contract card shows the right version
+  const [contractKey, setContractKey] = useState(0);
   // open the report form (from the cancel dialog's no-show hint, here or on the bookings list)
   const [reporting, setReporting] = useState(false);
   useEffect(() => {
@@ -260,6 +263,17 @@ export default function CustomerBookingDetailPage() {
         )}
       </div>
 
+      <RequestChangesCard
+        bookingId={booking.id}
+        role="CUSTOMER"
+        bookingStatus={booking.status}
+        otherName={booking.vendor?.name ?? "The vendor"}
+        onChanged={() => {
+          setContractKey((k) => k + 1);
+          reloadBooking();
+        }}
+      />
+
       {booking.vendor && <BookingContact person={booking.vendor} role="Vendor" phone={booking.contact_phone} />}
 
       {showsTracker(booking) && <BookingProgress booking={booking} />}
@@ -336,7 +350,7 @@ export default function CustomerBookingDetailPage() {
         </div>
       )}
 
-      <BookingContractSection bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
+      <BookingContractSection key={contractKey} bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
 
       {/* Photo Proof */}
       <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-4">

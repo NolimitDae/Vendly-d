@@ -29,6 +29,7 @@ import RefundCard from "@/components/bookings/RefundCard";
 import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceButton";
 import { InspirationPhotos } from "@/components/bookings/InspirationPhotos";
 import BookingChoices from "@/components/bookings/BookingChoices";
+import RequestChangesCard from "@/components/bookings/RequestChangesCard";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { closesIn } from "@/lib/requests";
@@ -110,6 +111,8 @@ export default function VendorBookingDetailPage() {
   const delivInputRef = useRef<HTMLInputElement>(null);
 
   const [cancelling, setCancelling] = useState(false);
+  // bumped when suggested changes are sent or withdrawn, so the contract card shows the right version
+  const [contractKey, setContractKey] = useState(0);
 
   const fetchAll = async () => {
     try {
@@ -340,7 +343,18 @@ export default function VendorBookingDetailPage() {
 
       <RentalReturnPanel booking={booking} role="VENDOR" onChanged={fetchAll} />
 
-      <BookingContractSection bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={fetchAll} />
+      <RequestChangesCard
+        bookingId={booking.id}
+        role="VENDOR"
+        bookingStatus={booking.status}
+        otherName={booking.customer?.name ?? "The customer"}
+        onChanged={() => {
+          setContractKey((k) => k + 1);
+          fetchAll();
+        }}
+      />
+
+      <BookingContractSection key={contractKey} bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={fetchAll} />
 
       {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
         <BookingExtrasSection bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} />
