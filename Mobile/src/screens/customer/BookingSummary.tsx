@@ -52,6 +52,8 @@ const money = (n: number | undefined) => (n == null ? '—' : `$${Number(n).toFi
 export default function BookingSummary({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'BookingSummary'>) {
   const { listing, draft } = route.params;
   const insets = useSafeAreaInsets();
+  // the bottom buttons float over the page; it scrolls far enough to clear them
+  const [footerH, setFooterH] = useState(0);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);
@@ -170,7 +172,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20, paddingHorizontal: 20 }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20, paddingHorizontal: 20 }}>
         <View style={{ marginHorizontal: -20 }}>
           <ScreenHeader title="Booking Information" onBack={() => navigation.goBack()} />
         </View>
@@ -293,7 +295,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
         <AddCardSheet visible={addingCard} onClose={() => setAddingCard(false)} onSaved={(id) => { setCard(id); PaymentsService.cards().then((r) => setCards(r.data?.data ?? [])).catch(() => {}); }} />
       </ScrollView>
 
-      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none" onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
         <GradientButton title="Review Contract" onPress={review} loading={loading} />
       </View>
 
@@ -375,7 +377,7 @@ const s = StyleSheet.create({
   promoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 52, paddingHorizontal: 16, borderRadius: 26, backgroundColor: DARK.field },
   promoInput: { flex: 1, color: '#fff', fontSize: 16, fontFamily: FONTS.medium, paddingVertical: 0 },
   addCardText: { color: DARK.accent, fontSize: 15, fontFamily: FONTS.semibold },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
   sheet: { backgroundColor: DARK.card, borderRadius: 24, padding: 32, alignItems: 'center', gap: 16 },
   checkRing: { width: 116, height: 116, borderRadius: 58, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },

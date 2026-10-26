@@ -35,6 +35,8 @@ export default function VendorBookingDetail() {
   const { bookingId } = useRoute<RouteProp<VendorBookingsStackParams, 'VendorBookingDetail'>>().params;
   const nav = useNavigation<NativeStackNavigationProp<any>>();
   const insets = useSafeAreaInsets();
+  // the bottom buttons float over the page; it scrolls far enough to clear them
+  const [footerH, setFooterH] = useState(0);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -182,7 +184,7 @@ export default function VendorBookingDetail() {
     <View style={s.root}>
       <CancelBookingSheet bookingId={cancelling ? booking.id : null} role="VENDOR" onClose={() => setCancelling(false)} onCancelled={() => load()} />
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20 }}
+        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       >
@@ -396,7 +398,7 @@ export default function VendorBookingDetail() {
       </ScrollView>
 
       {(st === 'PENDING' || (st === 'CONFIRMED' && paid) || st === 'IN_PROGRESS') && (
-        <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none" onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
           {st === 'PENDING' && (
             <>
               <Text style={s.footerHint}>
@@ -458,8 +460,8 @@ const s = StyleSheet.create({
   outline: { height: 50, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   outlineText: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
   link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg, gap: 10 },
-  footerHint: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium, textAlign: 'center' },
-  decline: { height: 56, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, gap: 10 },
+  footerHint: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium, textAlign: 'center', backgroundColor: DARK.card, borderRadius: 12, overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 8 },
+  decline: { height: 56, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
   declineText: { color: DARK.accent, fontSize: 16, fontFamily: FONTS.medium },
 });

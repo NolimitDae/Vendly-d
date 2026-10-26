@@ -26,6 +26,8 @@ export default function AddOns() {
   const nav = useNavigation<NativeStackNavigationProp<VendorDashboardStackParams>>();
   const route = useRoute<RouteProp<VendorDashboardStackParams, 'AddOns'>>();
   const insets = useSafeAreaInsets();
+  // the bottom buttons float over the page; it scrolls far enough to clear them
+  const [footerH, setFooterH] = useState(0);
   const [tab, setTab] = useState<AddOnKind>(route.params?.tab ?? 'ADD_ON');
   const [items, setItems] = useState<AddOn[]>([]);
   const [ideas, setIdeas] = useState<Record<AddOnKind, AddOnSuggestion[]>>({ ADD_ON: [], FEE: [] });
@@ -216,7 +218,7 @@ export default function AddOns() {
       <FlatList
         data={list}
         keyExtractor={(a) => a.id}
-        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 120, gap: 12 }}
+        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 120) + 16, gap: 12 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
         ListHeaderComponent={header}
         ListHeaderComponentStyle={{ marginBottom: 8 }}
@@ -267,7 +269,7 @@ export default function AddOns() {
         }}
       />
 
-      <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none" onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
         {selecting ? (
           <View style={{ gap: 10 }}>
             <Text style={s.footerHint}>{selected.length ? `${selected.length} selected` : `Tap ${word}s to select them`}</Text>
@@ -346,9 +348,9 @@ const s = StyleSheet.create({
   price: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
   muted: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular },
   iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.field },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 10, backgroundColor: DARK.bg },
-  footerHint: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium, textAlign: 'center' },
-  outline: { flex: 1, height: 56, borderRadius: 24, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 10 },
+  footerHint: { alignSelf: 'center', color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium, textAlign: 'center', backgroundColor: DARK.card, borderRadius: 12, overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 6 },
+  outline: { flex: 1, height: 56, borderRadius: 24, borderWidth: 1, borderColor: DARK.border, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   outlineText: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium, textAlign: 'center' },
   divider: { height: 1, backgroundColor: DARK.field },
 });

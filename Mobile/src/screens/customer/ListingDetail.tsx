@@ -219,7 +219,12 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
         </View>
       </ScrollView>
 
-      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]} onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
+      {/* nothing behind the buttons: the page shows through and scrolls under them; taps between them reach the page */}
+      <View
+        style={[s.footer, { paddingBottom: insets.bottom + 20 }]}
+        pointerEvents="box-none"
+        onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+      >
         {isMine ? (
           // one login, several roles: your own package, seen from your customer side
           <View style={s.mine}>
@@ -228,7 +233,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
           </View>
         ) : (
           <>
-            <View style={{ alignItems: 'flex-end', marginBottom: 14 }}>
+            <View style={{ alignItems: 'flex-end', marginBottom: 14 }} pointerEvents="box-none">
               <ChatBubble onPress={() => openChatWith(navigation, listing.vendor.id, vendor)} />
             </View>
             <GradientButton title={eventId ? 'Book for this event' : 'Book Service'} onPress={() => navigation.navigate('SelectDate', { listing: { ...toSummary(listing), eventId } })} />
@@ -287,7 +292,7 @@ const s = StyleSheet.create({
   avatar: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
   vendorName: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8 },
   mine: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 16, backgroundColor: DARK.card, borderWidth: 1, borderColor: DARK.border },
   mineText: { flex: 1, color: '#fff', fontSize: 13, lineHeight: 19, fontFamily: FONTS.medium },
 });

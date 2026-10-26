@@ -16,6 +16,8 @@ const money = (n: number) => `$${Number(n).toFixed(2)}`;
 
 export default function RentalItem({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'RentalItem'>) {
   const insets = useSafeAreaInsets();
+  // the bottom buttons float over the page; it scrolls far enough to clear them
+  const [footerH, setFooterH] = useState(0);
   const [item, setItem] = useState<Item | null>(null);
   const [start, setStart] = useState<Date | null>(null);
   const [end, setEnd] = useState<Date | null>(null);
@@ -66,7 +68,7 @@ export default function RentalItem({ navigation, route }: NativeStackScreenProps
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: (footerH || insets.bottom + 110) + 16 }}>
         <View style={s.hero}>
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setPhoto(Math.round(e.nativeEvent.contentOffset.x / W))}>
             {item.images.length ? (
@@ -140,7 +142,7 @@ export default function RentalItem({ navigation, route }: NativeStackScreenProps
         </View>
       </ScrollView>
 
-      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none" onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
         <GradientButton
           title={!start ? 'Pick dates' : maxQty < 1 ? 'Sold out for these dates' : 'Continue'}
           onPress={() => {
@@ -208,5 +210,5 @@ const s = StyleSheet.create({
   stepValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold, minWidth: 22, textAlign: 'center' },
   estimate: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 },
   estimateValue: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8 },
 });

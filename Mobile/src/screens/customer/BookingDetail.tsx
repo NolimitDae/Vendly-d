@@ -34,6 +34,8 @@ export default function BookingDetail() {
   const { bookingId } = useRoute<RouteProp<CustomerBookingsStackParams, 'BookingDetail'>>().params;
   const nav = useNavigation<NativeStackNavigationProp<any>>();
   const insets = useSafeAreaInsets();
+  // the bottom buttons float over the page; it scrolls far enough to clear them
+  const [footerH, setFooterH] = useState(0);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -159,7 +161,7 @@ export default function BookingDetail() {
       />
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20 }}
+        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); extras.reload(); }} tintColor={DARK.accent} />}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -365,7 +367,7 @@ export default function BookingDetail() {
       </ScrollView>
 
       {(st === 'PENDING' || st === 'CONFIRMED' || st === 'COMPLETED') && (
-        <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none" onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
           {st === 'PENDING' && (
             <Pressable style={s.outline} onPress={cancel} disabled={busy} accessibilityRole="button">
               <Text style={s.outlineText}>Cancel Request</Text>
@@ -434,7 +436,7 @@ const s = StyleSheet.create({
   thumb: { width: 88, height: 88, borderRadius: 10, backgroundColor: DARK.field },
   link: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.medium },
   reviewInput: { alignSelf: 'stretch', minHeight: 110, borderRadius: 16, backgroundColor: DARK.field, padding: 14, color: '#fff', fontSize: 15, fontFamily: FONTS.regular, textAlignVertical: 'top' },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8 },
   outline: { height: 56, borderRadius: 100, borderWidth: 1, borderColor: DARK.border, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
   outlineText: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
 });

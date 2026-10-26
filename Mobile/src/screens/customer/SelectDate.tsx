@@ -19,6 +19,8 @@ const BOOKED = '#F7B1B8';
 export default function SelectDate({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'SelectDate'>) {
   const { listing } = route.params;
   const insets = useSafeAreaInsets();
+  // the bottom buttons float over the page; it scrolls far enough to clear them
+  const [footerH, setFooterH] = useState(0);
   const today = startOfDay(new Date());
   // the package's minimum notice: days before this can't be picked (a quote is the vendor agreeing to the date)
   const notice = listing.minNoticeHours ?? null;
@@ -50,7 +52,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 110, gap: 20 }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20 }}>
         <ScreenHeader title="Select Date" onBack={() => navigation.goBack()} />
 
         <View style={s.note}>
@@ -155,7 +157,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
         </View>
       </ScrollView>
 
-      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none" onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
         <GradientButton
           title="Continue"
           disabled={!selected}
@@ -190,5 +192,5 @@ const s = StyleSheet.create({
   body: { color: '#fff', fontSize: 14, fontFamily: FONTS.regular },
   summaryValue: { color: '#fff', fontSize: 16, fontFamily: FONTS.medium },
   divider: { width: 1, height: 44, backgroundColor: DARK.field },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8, backgroundColor: DARK.bg },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 20, paddingTop: 8 },
 });
