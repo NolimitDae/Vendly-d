@@ -6,6 +6,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { formatMessage, formatQuote, messageInclude } from './format';
 import { track } from 'src/common/analytics';
 import { assertCanMessage } from '../safety/block';
+import { UNARCHIVE_ALL, unarchiveChat } from './archive';
 
 const DAY = 24 * 3600 * 1000;
 /** Bookings that put a vendor in the event chat. */
@@ -25,6 +26,8 @@ export class ChatExtrasService {
 
   private async systemMessage(conversationId: string, senderId: string, text: string) {
     const msg = await this.prisma.message.create({ data: { conversationId, senderId, text, kind: 'system', status: 'SENT' }, include: messageInclude });
+    // a booking notice matters: the chat comes back for anyone who archived it
+    await unarchiveChat(this.prisma, conversationId);
     this.emit(conversationId, formatMessage(msg));
     return msg;
   }
@@ -126,7 +129,7 @@ export class ChatExtrasService {
       data: { conversationId, senderId: vendorId, text: `Quote: ${quote.title}`, kind: 'quote', quote_id: quote.id, status: 'SENT' },
       include: messageInclude,
     });
-    await this.prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+    await this.prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date(), participants: UNARCHIVE_ALL } });
     const formatted = formatMessage(msg);
     track('quote_sent', vendorId, { quote_id: quote.id, amount, group: conv.is_group });
     this.gateway.server?.to(conversationId).emit('message', { from: vendorId, data: formatted });

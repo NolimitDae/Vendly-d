@@ -65,6 +65,8 @@ export interface ConversationInfo {
   blocked_me?: boolean;
   /** messages left until the vendor replies (customers writing to a vendor only) */
   send_limit?: SendLimit | null;
+  /** when I archived this chat (null: it's in my main list) */
+  archived_at?: string | null;
 }
 
 export type ReportReason = "spam" | "harassment" | "scam" | "inappropriate" | "other";
@@ -114,6 +116,16 @@ export const ChatService = {
   /** Vendors: one inbox tab, with `counts` for both tabs' badges. */
   getInboxTab: async (tab: InboxTab) =>
     Fetch.get(`/chat/conversation/conversation-list?tab=${tab}`, authHeaders()),
+
+  /**
+   * Chats I archived (Back-end/src/modules/chat/extras/archive.ts). Every list answer carries
+   * `archived_count` for the "Archived (n)" link; archived chats are left out of the main list and tabs.
+   */
+  getArchived: async () =>
+    Fetch.get("/chat/conversation/conversation-list?archived=1", authHeaders()),
+  /** For me only. Refused (400, with the reason) while a 1:1 chat's booking is under way. */
+  archive: (conversationId: string) => Fetch.post(`/chat/conversation/${conversationId}/archive`, {}, authHeaders()),
+  unarchive: (conversationId: string) => Fetch.post(`/chat/conversation/${conversationId}/unarchive`, {}, authHeaders()),
 
   getConversation: async (id: string) =>
     Fetch.get(`/chat/conversation/single-conversation/${id}`, authHeaders()),

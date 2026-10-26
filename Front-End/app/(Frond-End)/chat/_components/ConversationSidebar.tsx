@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { MessageSquare, Search, Loader2, Plus, X, Users } from "lucide-react";
+import { Archive, MessageSquare, Search, Loader2, Plus, X, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { ChatService, type InboxCounts, type InboxTab } from "@/service/chat/chat.service";
 import { CHAT_READ_EVENT } from "@/components/chat/presence";
 import InboxTabs from "@/components/chat/InboxTabs";
+import ArchivedChatList, { ArchivedLink, CHAT_ARCHIVE_EVENT, setChatArchived, type ArchivedConversation, type ChatArchiveDetail } from "@/components/chat/ArchivedChats";
 import { whoAmI } from "@/lib/currentUser";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +69,13 @@ export default function ConversationSidebar() {
   const [isVendor, setIsVendor] = useState<boolean | null>(null);
   const [tab, setTab] = useState<InboxTab>("clients");
   const [counts, setCounts] = useState<InboxCounts | null>(null);
+  // chats I archived: a count for the "Archived (n)" link, and their own list when it's open
+  const [archivedCount, setArchivedCount] = useState(0);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archived, setArchived] = useState<ArchivedConversation[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  // bumped when a chat is archived or comes back, to fetch the list (and tab counts) again
+  const [reload, setReload] = useState(0);
   const listRef = useRef(conversations);
   listRef.current = conversations;
 
@@ -78,12 +86,14 @@ export default function ConversationSidebar() {
   useEffect(() => {
     if (isVendor === null) return;
     let stale = false;
-    setLoading(true);
+    // a refresh after archiving keeps the list on screen
+    if (!listRef.current.length) setLoading(true);
     (isVendor ? ChatService.getInboxTab(tab) : ChatService.getConversations())
       .then((res) => {
         if (stale || !res.data?.success) return;
         setConversations(res.data.conversations ?? []);
         if (isVendor) setCounts(res.data.counts ?? null);
+        setArchivedCount(res.data.archived_count ?? 0);
       })
       .catch(() => {})
       .finally(() => !stale && setLoading(false));
@@ -91,7 +101,37 @@ export default function ConversationSidebar() {
     return () => {
       stale = true;
     };
-  }, [isVendor, tab]);
+  }, [isVendor, tab, reload]);
+
+  useEffect(() => {
+    if (!showArchived) return;
+    let stale = false;
+    setArchivedLoading(true);
+    ChatService.getArchived()
+      .then((res) => {
+        if (stale || !res.data?.success) return;
+        setArchived(res.data.conversations ?? []);
+        setArchivedCount(res.data.archived_count ?? 0);
+      })
+      .catch(() => {})
+      .finally(() => !stale && setArchivedLoading(false));
+    return () => {
+      stale = true;
+    };
+  }, [showArchived]);
+
+  // archived or brought back here or on the chat page: drop it from the open list, then refresh
+  useEffect(() => {
+    const onArchive = (e: Event) => {
+      const d = (e as CustomEvent<ChatArchiveDetail>).detail;
+      if (!d) return;
+      if (d.archived) setConversations((list) => list.filter((c) => c.conversation_id !== d.conversation_id));
+      else setArchived((list) => list.filter((c) => c.conversation_id !== d.conversation_id));
+      setReload((n) => n + 1);
+    };
+    window.addEventListener(CHAT_ARCHIVE_EVENT, onArchive);
+    return () => window.removeEventListener(CHAT_ARCHIVE_EVENT, onArchive);
+  }, []);
 
   // the open chat marked itself read: drop its unread badge (and the tab's)
   useEffect(() => {
@@ -139,7 +179,7 @@ export default function ConversationSidebar() {
     }
   };
 
-  const nameOf = (c: Conversation) => (c.is_group ? c.title ?? "Event chat" : c.opponent?.name ?? "Unknown");
+  const nameOf = (c: Pick<Conversation, "is_group" | "title"> & { opponent: { name: string } | null }) => (c.is_group ? c.title ?? "Event chat" : c.opponent?.name ?? "Unknown");
   const filtered = conversations.filter((c) =>
     nameOf(c).toLowerCase().includes(search.toLowerCase()),
   );
@@ -171,7 +211,7 @@ export default function ConversationSidebar() {
             className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
           />
         </div>
-        {isVendor && (
+        {isVendor && !showArchived && (
           <InboxTabs
             tab={tab}
             counts={counts}
@@ -186,7 +226,13 @@ export default function ConversationSidebar() {
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
+        {showArchived ? (
+          <ArchivedChatList
+            conversations={archived.filter((c) => nameOf(c).toLowerCase().includes(search.toLowerCase()))}
+            loading={archivedLoading}
+            onBack={() => setShowArchived(false)}
+          />
+        ) : loading ? (
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="flex items-center gap-3 p-4 animate-pulse">
@@ -229,7 +275,7 @@ export default function ConversationSidebar() {
                 : "";
 
               return (
-                <li key={conv.conversation_id}>
+                <li key={conv.conversation_id} className="relative group">
                   <Link
                     href={`/chat/${conv.conversation_id}`}
                     className={cn(
@@ -286,11 +332,22 @@ export default function ConversationSidebar() {
                       </div>
                     </div>
                   </Link>
+                  {/* row action, on hover or keyboard focus (touch screens use the chat's menu) */}
+                  <button
+                    type="button"
+                    onClick={() => setChatArchived(conv.conversation_id, true)}
+                    aria-label={`Archive chat with ${name}`}
+                    title="Archive chat"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-900 dark:hover:text-white opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [@media(hover:none)]:hidden transition"
+                  >
+                    <Archive className="w-4 h-4" />
+                  </button>
                 </li>
               );
             })}
           </ul>
         )}
+        {!showArchived && !loading && <ArchivedLink count={archivedCount} onOpen={() => setShowArchived(true)} />}
       </div>
 
       {/* New Chat Modal */}

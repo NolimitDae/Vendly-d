@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { BrandGradient } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { ChatService, type Conversation, type InboxCounts, type InboxTab } from '../../services/chat.service';
 import { SocketService } from '../../services/socket.service';
+import { apiError } from '../../services/contracts.service';
 import { useAuth } from '../../context/AuthContext';
 
 // Vendors' inbox is split so booking clients aren't buried under first questions (sorted on the server)
@@ -30,6 +31,9 @@ export default function ChatList() {
   const isVendor = user?.type === 'VENDOR';
   const [tab, setTab] = useState<InboxTab>('clients');
   const [counts, setCounts] = useState<InboxCounts | null>(null);
+  // chats I archived: the "Archived (n)" row opens them here, in place of the main list
+  const [archivedCount, setArchivedCount] = useState(0);
+  const [showArchived, setShowArchived] = useState(false);
   // a slow answer for the tab just left must not replace the new tab's list
   const latest = useRef(0);
   const listRef = useRef(conversations);
@@ -38,23 +42,62 @@ export default function ChatList() {
   const load = useCallback(async () => {
     const call = ++latest.current;
     try {
-      if (isVendor) {
+      if (showArchived) {
+        const res = await ChatService.getArchived();
+        if (call !== latest.current) return;
+        if (res.success) {
+          setConversations(res.conversations);
+          setArchivedCount(res.archived_count);
+        }
+      } else if (isVendor) {
         const res = await ChatService.getInboxTab(tab);
         if (call !== latest.current) return;
         if (res.success) {
           setConversations(res.conversations);
           setCounts(res.counts);
+          setArchivedCount(res.archived_count);
         }
       } else {
         const res = await ChatService.getConversations();
-        if (res.data?.success) setConversations(res.data.data);
+        if (call !== latest.current) return;
+        if (res.data?.success) {
+          setConversations(res.data.data);
+          setArchivedCount(res.archived_count);
+        }
       }
     } catch {
       // keep what we have
     } finally {
       if (call === latest.current) setLoading(false);
     }
-  }, [isVendor, tab]);
+  }, [isVendor, tab, showArchived]);
+
+  const openArchived = (open: boolean) => {
+    setConversations([]);
+    setLoading(true);
+    setShowArchived(open);
+  };
+
+  // Archiving is for me only, and a new message brings the chat back. The server says when it can't be
+  // archived yet (a booking with them is under way).
+  const setArchived = async (c: Conversation, archive: boolean) => {
+    try {
+      await (archive ? ChatService.archive(c.id) : ChatService.unarchive(c.id));
+    } catch (e) {
+      Alert.alert(archive ? 'Could not archive this chat' : 'Could not unarchive this chat', apiError(e));
+      return;
+    }
+    setConversations((list) => list.filter((x) => x.id !== c.id));
+    setArchivedCount((n) => Math.max(0, n + (archive ? 1 : -1)));
+    // fresh tab counts
+    load();
+  };
+
+  const rowOptions = (c: Conversation) =>
+    Alert.alert(nameOf(c), undefined, [
+      { text: showArchived ? 'Unarchive chat' : 'Archive chat', onPress: () => setArchived(c, !showArchived) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
 
   const pickTab = (t: InboxTab) => {
     if (t === tab) return;
@@ -98,8 +141,20 @@ export default function ChatList() {
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
         ListHeaderComponent={
           <View style={{ gap: 24, marginBottom: 12 }}>
-            <Text style={s.title}>Message</Text>
-            {isVendor && (
+            {showArchived ? (
+              <View style={s.archivedHead}>
+                <Pressable onPress={() => openArchived(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back to all chats" style={s.backBtn}>
+                  <Ionicons name="chevron-back" size={24} color="#fff" />
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.title, { textAlign: 'left' }]}>Archived chats</Text>
+                  <Text style={s.archivedHint}>Only hidden for you. A new message brings a chat back.</Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={s.title}>Message</Text>
+            )}
+            {isVendor && !showArchived && (
               <View style={s.segment} accessibilityRole="tablist">
                 {TABS.map((t) => {
                   const on = t.key === tab;
@@ -141,18 +196,35 @@ export default function ChatList() {
           ) : (
             <View style={s.empty}>
               <Ionicons name="chatbubbles-outline" size={48} color={DARK.muted} />
-              <Text style={s.emptyTitle}>{q ? 'No one by that name' : isVendor ? EMPTY[tab][0] : 'No conversations yet'}</Text>
-              <Text style={s.emptyText}>{q ? '' : isVendor ? EMPTY[tab][1] : 'Message a vendor from their profile or a booking and it shows up here.'}</Text>
+              <Text style={s.emptyTitle}>{q ? 'No one by that name' : showArchived ? 'No archived chats' : isVendor ? EMPTY[tab][0] : 'No conversations yet'}</Text>
+              <Text style={s.emptyText}>
+                {q ? '' : showArchived ? 'Long press a chat to archive it.' : isVendor ? EMPTY[tab][1] : 'Message a vendor from their profile or a booking and it shows up here.'}
+              </Text>
             </View>
           )
         }
+        ListFooterComponent={
+          !showArchived && !loading && archivedCount > 0 ? (
+            <Pressable style={s.archivedRow} onPress={() => openArchived(true)} accessibilityRole="button" accessibilityLabel={`Archived chats, ${archivedCount}`}>
+              <Ionicons name="archive-outline" size={20} color={DARK.muted} />
+              <Text style={s.archivedText}>Archived ({archivedCount})</Text>
+              <Ionicons name="chevron-forward" size={18} color={DARK.muted} />
+            </Pressable>
+          ) : null
+        }
         renderItem={({ item }) => {
           const o = other(item);
+          const action = showArchived ? 'Unarchive chat' : 'Archive chat';
           return (
             <Pressable
               style={s.row}
               onPress={() => navigation.navigate('ChatDetail', { conversationId: item.id, participantName: nameOf(item), avatar: item.is_group ? undefined : o?.avatar })}
+              onLongPress={() => rowOptions(item)}
               accessibilityRole="button"
+              accessibilityLabel={nameOf(item)}
+              accessibilityHint={`Long press to ${action.toLowerCase()}`}
+              accessibilityActions={[{ name: 'archive', label: action }]}
+              onAccessibilityAction={(e) => e.nativeEvent.actionName === 'archive' && setArchived(item, !showArchived)}
             >
               <View style={[s.avatar, item.is_group && s.groupAvatar]}>
                 {item.is_group ? (
@@ -170,14 +242,20 @@ export default function ChatList() {
                   {item.last_message?.content || (item.is_group ? `${item.member_count ?? 0} members` : 'No messages yet')}
                 </Text>
               </View>
-              <View style={{ alignItems: 'flex-end', gap: 8, alignSelf: 'flex-start', paddingTop: 4 }}>
-                <Text style={[s.time, { paddingTop: 0 }]}>{when(item.updated_at)}</Text>
-                {!!item.unread && (
-                  <View style={s.badge}>
-                    <Text style={s.badgeText}>{item.unread > 99 ? '99+' : item.unread}</Text>
-                  </View>
-                )}
-              </View>
+              {showArchived ? (
+                <Pressable onPress={() => setArchived(item, false)} hitSlop={6} style={s.unarchiveBtn} accessibilityRole="button" accessibilityLabel={`Unarchive chat with ${nameOf(item)}`}>
+                  <Text style={s.unarchiveText}>Unarchive</Text>
+                </Pressable>
+              ) : (
+                <View style={{ alignItems: 'flex-end', gap: 8, alignSelf: 'flex-start', paddingTop: 4 }}>
+                  <Text style={[s.time, { paddingTop: 0 }]}>{when(item.updated_at)}</Text>
+                  {!!item.unread && (
+                    <View style={s.badge}>
+                      <Text style={s.badgeText}>{item.unread > 99 ? '99+' : item.unread}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
             </Pressable>
           );
         }}
@@ -210,4 +288,12 @@ const s = StyleSheet.create({
   segmentText: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.medium },
   segmentBadge: { minWidth: 20, height: 20, borderRadius: 10 },
   segmentBadgeOn: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  // archived chats
+  archivedHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
+  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  archivedHint: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.regular, marginTop: 2 },
+  archivedRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginTop: 8, paddingVertical: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: DARK.border },
+  archivedText: { flex: 1, color: DARK.muted, fontSize: 16, fontFamily: FONTS.medium },
+  unarchiveBtn: { paddingHorizontal: 14, height: 34, borderRadius: 17, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
+  unarchiveText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },
 });

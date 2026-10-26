@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -13,7 +14,7 @@ import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { paginateResponse } from 'src/common/pagination';
 import { assertCanMessage, blockSets, blockState } from '../safety/block';
 import { BookingStatus, UserType } from 'prisma/generated/client';
-import { classifyConversation, clientBookingWhere, InboxTab } from '../extras/inbox';
+import { classifyConversation, clientBookingWhere, CURRENT_BOOKING_STATUSES, InboxTab } from '../extras/inbox';
 
 @Injectable()
 export class ConversationService {
@@ -121,10 +122,11 @@ export class ConversationService {
     };
   }
 
-  //  *conversation list of user (vendors can ask for one inbox tab: extras/inbox.ts)
-  async findAll(userId: string, opts: { tab?: InboxTab; page?: number; perPage?: number } = {}) {
+  //  *conversation list of user (vendors can ask for one inbox tab: extras/inbox.ts). Chats this user
+  // archived are left out (and out of the tab counts); `archived` lists only those (extras/archive.ts)
+  async findAll(userId: string, opts: { tab?: InboxTab; page?: number; perPage?: number; archived?: boolean } = {}) {
 
-    const conversations = await this.prisma.conversation.findMany({
+    const all = await this.prisma.conversation.findMany({
       where: {
         participants: {
           some: {
@@ -163,6 +165,10 @@ export class ConversationService {
         updatedAt: 'desc',
       },
     });
+
+    const isArchived = (conv: (typeof all)[number]) => !!conv.participants.find((p) => p.userId === userId)?.archivedAt;
+    const archivedCount = all.filter(isArchived).length;
+    const conversations = all.filter((conv) => isArchived(conv) === !!opts.archived);
 
     // unread = messages from others since this user last read the chat
     const unread = new Map<string, number>();
@@ -208,6 +214,7 @@ export class ConversationService {
           : undefined,
         unread: unread.get(conv.id) ?? 0,
         last_read_at: me?.lastReadAt ?? null,
+        archived_at: me?.archivedAt ?? null,
         opponent: opponentData,
         // 1:1 only
         ...(opponentParticipant
@@ -231,16 +238,58 @@ export class ConversationService {
       };
     });
 
-    if (opts.tab) {
+    // the archived list is a single list (no tabs)
+    if (opts.tab && !opts.archived) {
       const tabbed = await this.inboxTab(userId, conversations, formattedConversations, opts as { tab: InboxTab; page?: number; perPage?: number });
-      if (tabbed) return { message: 'Conversations retrieved successfully', success: true, ...tabbed };
+      if (tabbed) return { message: 'Conversations retrieved successfully', success: true, ...tabbed, archived_count: archivedCount };
     }
 
     return {
       message: 'Conversations retrieved successfully',
       success: true,
       conversations: formattedConversations,
+      // for the "Archived (n)" link
+      archived_count: archivedCount,
     };
+  }
+
+  /**
+   * Archive a chat for this user only. A 1:1 chat waits until the two people have no booking under way
+   * (either one as the customer), so an active booking's chat can't be tucked away by mistake. Event
+   * group chats can be archived any time.
+   */
+  async archive(id: string, userId: string) {
+    const conv = await this.prisma.conversation.findFirst({
+      where: { id, participants: { some: { userId } } },
+      select: { id: true, is_group: true, participants: { select: { id: true, userId: true, archivedAt: true, user: { select: { name: true } } } } },
+    });
+    if (!conv) throw new NotFoundException('Conversation not found or you are not a participant.');
+    const me = conv.participants.find((p) => p.userId === userId)!;
+    const other = conv.is_group ? null : conv.participants.find((p) => p.userId !== userId);
+    if (other) {
+      const open = await this.prisma.booking.count({
+        where: {
+          deleted_at: null,
+          status: { in: CURRENT_BOOKING_STATUSES },
+          OR: [
+            { customer_id: userId, vendor_id: other.userId },
+            { customer_id: other.userId, vendor_id: userId },
+          ],
+        },
+      });
+      if (open) throw new BadRequestException(`You can archive this chat once your booking with ${other.user.name || 'them'} is finished.`);
+    }
+    const archivedAt = me.archivedAt ?? new Date();
+    if (!me.archivedAt) await this.prisma.participant.update({ where: { id: me.id }, data: { archivedAt } });
+    return { message: 'Chat archived', success: true, data: { conversation_id: conv.id, archived_at: archivedAt } };
+  }
+
+  /** Back to this user's main list. */
+  async unarchive(id: string, userId: string) {
+    const me = await this.prisma.participant.findFirst({ where: { conversationId: id, userId }, select: { id: true, archivedAt: true } });
+    if (!me) throw new NotFoundException('Conversation not found or you are not a participant.');
+    if (me.archivedAt) await this.prisma.participant.update({ where: { id: me.id }, data: { archivedAt: null } });
+    return { message: 'Chat moved back to your messages', success: true, data: { conversation_id: id, archived_at: null } };
   }
 
   /**

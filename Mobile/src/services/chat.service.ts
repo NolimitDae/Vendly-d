@@ -90,6 +90,8 @@ export interface ConversationInfo {
   blocked_by_me?: boolean;
   blocked_me?: boolean;
   send_limit?: SendLimit | null;
+  /** when I archived this chat (null: it's in my main list) */
+  archived_at?: string | null;
 }
 
 /** A photo picked with expo-image-picker, ready for FormData. */
@@ -174,6 +176,7 @@ interface ApiConversationInfo {
   blocked_by_me?: boolean;
   blocked_me?: boolean;
   send_limit?: SendLimit | null;
+  archived_at?: string | null;
 }
 
 /** Converts an API message (REST or socket `message` event) to the screens' shape. */
@@ -221,6 +224,7 @@ function toInfo(c: ApiConversationInfo | undefined, conversationId: string): Con
     blocked_by_me: c.blocked_by_me,
     blocked_me: c.blocked_me,
     send_limit: c.send_limit ?? null,
+    archived_at: c.archived_at ?? null,
   };
 }
 
@@ -228,9 +232,13 @@ function toInfo(c: ApiConversationInfo | undefined, conversationId: string): Con
 const envelope = <T,>(success: boolean, data: T) => ({ data: { success, data } });
 
 export const ChatService = {
+  /** My chats, less the ones I archived; `archived_count` is for the "Archived (n)" row. */
   getConversations: async () => {
     const res = await api.get('/chat/conversation/conversation-list');
-    return envelope(!!res.data?.success, ((res.data?.conversations ?? []) as ApiConversation[]).map(toConversation));
+    return {
+      ...envelope(!!res.data?.success, ((res.data?.conversations ?? []) as ApiConversation[]).map(toConversation)),
+      archived_count: (res.data?.archived_count ?? 0) as number,
+    };
   },
 
   /** Vendors: one inbox tab, with both tabs' counts for the badges. */
@@ -240,8 +248,22 @@ export const ChatService = {
       success: !!res.data?.success,
       conversations: ((res.data?.conversations ?? []) as ApiConversation[]).map(toConversation),
       counts: (res.data?.counts ?? null) as InboxCounts | null,
+      archived_count: (res.data?.archived_count ?? 0) as number,
     };
   },
+
+  /** Chats I archived (Back-end/src/modules/chat/extras/archive.ts): one list, no tabs. */
+  getArchived: async () => {
+    const res = await api.get('/chat/conversation/conversation-list', { params: { archived: 1 } });
+    return {
+      success: !!res.data?.success,
+      conversations: ((res.data?.conversations ?? []) as ApiConversation[]).map(toConversation),
+      archived_count: (res.data?.archived_count ?? 0) as number,
+    };
+  },
+  /** For me only; a new message brings it back. Refused (400, with the reason) while a 1:1 chat's booking is under way. */
+  archive: (conversationId: string) => api.post(`/chat/conversation/${conversationId}/archive`),
+  unarchive: (conversationId: string) => api.post(`/chat/conversation/${conversationId}/unarchive`),
 
   getMessages: async (conversationId: string, params?: MessageListParams) => {
     const res = await api.get(`/chat/message/all-message/${conversationId}`, {
