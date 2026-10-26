@@ -41,6 +41,10 @@ interface Props {
     working_hours?: WorkingHours | null;
     /** how many hours ahead it must be booked: earlier days can't be picked */
     min_notice_hours?: number | null;
+    /** false for venues and packages at the vendor's place: the customer goes to them, so no address is asked */
+    needs_service_address?: boolean;
+    /** venues: a guest count is needed to book */
+    needs_guest_count?: boolean;
   };
   /** Planner bookings: attach to this event (pre-fills venue and guest count). */
   eventId?: string;
@@ -140,6 +144,10 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   // minimum notice (quotes too: a quote agrees the price, not the date)
   const notice = listing.min_notice_hours ?? null;
   const firstDay = firstBookableDay(notice);
+  // venues and packages at the vendor's place happen there: no address to give
+  const asksAddress = listing.needs_service_address !== false;
+  // guests are needed by venues and per person prices (an event's own count counts for venues)
+  const guestsRequired = unit === "person" || (!!listing.needs_guest_count && !eventId);
 
   const pickDate = (value: string) => {
     if (value && hours && !isOpenDay(hours, value)) {
@@ -188,7 +196,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
       scheduled_at: toIso(date, startTime),
       event_start_at: startTime ? toIso(date, startTime) : undefined,
       event_end_at: endFixed,
-      venue_address: venue.trim() || undefined,
+      venue_address: asksAddress ? venue.trim() || undefined : undefined,
       guest_count: guests ? Number(guests) : undefined,
       message: message.trim() || undefined,
       event_id: eventId,
@@ -205,6 +213,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const missingForPrice = (): string | null => {
     const g = guests ? Number(guests) : 0;
     const chosen = addOns.filter((a) => picked[a.id]);
+    if (listing.needs_guest_count && !eventId && !(g >= 1)) return "Enter how many guests are coming. The venue needs a guest count to take the booking.";
     if (unit === "person" || chosen.some((a) => a.price_unit === "PER_PERSON")) {
       if (!(g >= 1)) return unit === "person" ? "Enter how many guests are coming. This package is priced per person." : "Enter how many guests are coming.";
     }
@@ -444,23 +453,32 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                 </p>
               )}
             </div>
-            <div>
-              <label htmlFor="venue" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                <MapPin className="w-4 h-4 inline mr-1" />
-                Venue address{eventId ? " (defaults to your event's venue)" : ""}
-              </label>
-              <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} inputId="venue" maxLength={500} street />
-            </div>
+            {asksAddress ? (
+              <div>
+                <label htmlFor="venue" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  <MapPin className="w-4 h-4 inline mr-1" />
+                  Venue address{eventId ? " (defaults to your event's venue)" : ""}
+                </label>
+                <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} inputId="venue" maxLength={500} street />
+              </div>
+            ) : (
+              <p className="flex gap-2 text-sm text-gray-600 dark:text-gray-300 rounded-xl bg-gray-50 dark:bg-gray-900/40 px-3 py-2.5">
+                <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden />
+                <span>
+                  This happens at {listing.vendor?.name ?? "the vendor"}&apos;s place, so there&apos;s no address to add. You&apos;ll see the full address once they accept.
+                </span>
+              </p>
+            )}
             <div>
               <label htmlFor="guests" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 <Users className="w-4 h-4 inline mr-1" />
-                Guest count{unit === "person" ? " (required)" : ""}
+                Guest count{guestsRequired ? " (required)" : ""}
               </label>
               <input
                 id="guests"
                 type="number"
                 min={1}
-                aria-required={unit === "person"}
+                aria-required={guestsRequired}
                 aria-describedby={unit === "person" && range ? "guests-hint" : undefined}
                 value={guests}
                 onChange={(e) => setGuests(e.target.value)}
