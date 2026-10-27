@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { withBookingLock, withJobLock } from 'src/common/helper/job-lock';
 import * as Sentry from '@sentry/nestjs';
 import { AddOnKind, BookingExtraStatus, BookingStatus, InstallmentStatus, PaymentPlan } from 'prisma/generated/enums';
-import type { Prisma } from 'prisma/generated/client';
+import { Prisma } from 'prisma/generated/client';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import appConfig from 'src/config/app.config';
 import { MailService } from 'src/mail/mail.service';
@@ -14,7 +14,8 @@ import { AUTO_RELEASE_DAYS, buildSchedule, MAX_ATTEMPTS, PROOF_RELEASE_HOURS, RE
 import { track } from 'src/common/analytics';
 import { vendorEarnings } from './vendor-earnings';
 import { bookingTitle, cardText, money, shortDate } from './money-text';
-import { autoRetryAt, deadlineText, dueKindFor, PAYMENT_DUE_REMINDER_HOURS, PAYMENT_DUE_HOURS, paymentDueBy, PaymentDueKind, paymentState } from './payment-due';
+import { autoRetryAt, deadlineText, dueInstallment, dueKindFor, PAYMENT_DUE_REMINDER_HOURS, PAYMENT_DUE_HOURS, paymentDueBy, PaymentDueKind, paymentState } from './payment-due';
+import { customRows, firstCharge, isPaidCharge } from './custom-plan';
 import { checkDisputePhotos, describeDisputeAsk, disputePhotoUrls, removeDisputePhotos, storeDisputePhotos } from './dispute-files';
 import { requestPhotoUrls } from 'src/modules/booking/request-photos';
 import { NOT_STARTED_FLAG_HOURS, notStartedWindow, pastStartNotStarted } from 'src/modules/booking/no-show';
@@ -182,11 +183,17 @@ export class PaymentsService {
   async scheduleForBooking(bookingId: string, acceptedAt = new Date()) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { id: true, amount: true, service_fee: true, security_deposit: true, currency: true, event_start_at: true, scheduled_at: true, payment_plan: true, listing_id: true, paid_at: true, installments: { select: { id: true } } },
+      select: { id: true, amount: true, service_fee: true, security_deposit: true, currency: true, event_start_at: true, scheduled_at: true, payment_plan: true, custom_payment_plan: true, listing_id: true, paid_at: true, installments: { select: { id: true } } },
     });
     if (!booking || booking.installments.length > 0 || booking.paid_at) return [];
-    const plan = booking.payment_plan ?? (await this.planForListing(booking.listing_id));
-    const planned = buildSchedule({
+    let plan = booking.payment_plan ?? (await this.planForListing(booking.listing_id));
+    // a custom plan agreed on the request (custom-plan.ts); if the price moved since, the package's own plan applies
+    const custom = plan === PaymentPlan.CUSTOM ? customRows(booking.custom_payment_plan, Number(booking.amount ?? 0) + Number(booking.service_fee ?? 0), acceptedAt) : null;
+    if (plan === PaymentPlan.CUSTOM && !custom) {
+      this.logger.warn(`Custom payment plan of ${bookingId} no longer matches its total; using the package's plan`);
+      plan = await this.planForListing(booking.listing_id);
+    }
+    const planned = custom ?? buildSchedule({
       plan,
       price: Number(booking.amount ?? 0),
       serviceFee: Number(booking.service_fee ?? 0),
@@ -204,7 +211,7 @@ export class PaymentsService {
     }
 
     const rows = await this.prisma.$transaction(async (tx) => {
-      await tx.booking.update({ where: { id: bookingId }, data: { payment_plan: plan } });
+      await tx.booking.update({ where: { id: bookingId }, data: { payment_plan: plan, ...(plan !== PaymentPlan.CUSTOM && booking.custom_payment_plan ? { custom_payment_plan: Prisma.DbNull } : {}) } });
       return Promise.all(
         rows_.map((p) =>
           tx.bookingInstallment.create({
@@ -373,15 +380,40 @@ export class PaymentsService {
       });
       if (!authorizedOnly) await tx.booking.updateMany({ where: { id: inst.booking_id, paid_at: null }, data: { paid_at: new Date() } });
       // a missed deposit or balance paid in time: the booking is no longer waiting for it
-      const paidKind = inst.kind === 'charge' ? (inst.sequence === 1 ? 'deposit' : inst.sequence === 2 ? 'balance' : null) : null;
+      const custom = inst.kind === 'charge' && (await tx.booking.findUnique({ where: { id: inst.booking_id }, select: { payment_plan: true } }))?.payment_plan === PaymentPlan.CUSTOM;
+      const paidKind = inst.kind === 'charge' && !custom ? (inst.sequence === 1 ? 'deposit' : inst.sequence === 2 ? 'balance' : null) : null;
       if (!authorizedOnly && paidKind) {
         await tx.booking.updateMany({ where: { id: inst.booking_id, payment_due_kind: paidKind }, data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } });
       }
+      // a custom plan: only once none of its payments is still waiting (two can fail before one is paid)
+      if (!authorizedOnly && custom) await this.clearCustomDue(tx, inst.booking_id);
       return inst;
     });
     // the customer's receipt; never lets an email problem touch the payment (the hourly sweep catches misses)
     if (!authorizedOnly) await this.sendReceipt(installmentId);
     return marked;
+  }
+
+  /** Is this the booking's first charge (a custom plan's deposit, custom-plan.ts)? */
+  private async isFirstCharge(bookingId: string, installmentId: string) {
+    const rows = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, kind: 'charge' }, select: { id: true, kind: true, sequence: true, status: true } });
+    return firstCharge(rows)?.id === installmentId;
+  }
+
+  /** Ends a custom plan's pending-payment window once no payment it was waiting for is still unpaid. */
+  private async clearCustomDue(tx: Prisma.TransactionClient, bookingId: string) {
+    const b = await tx.booking.findUnique({ where: { id: bookingId }, select: { payment_plan: true, payment_due_kind: true, installments: { where: { kind: 'charge' }, select: { sequence: true, status: true, attempts: true } } } });
+    if (!b?.payment_due_kind) return;
+    const waiting = dueInstallment(b, b.installments);
+    if (waiting && !isPaidCharge(waiting)) return;
+    await tx.booking.updateMany({ where: { id: bookingId, payment_due_kind: b.payment_due_kind }, data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } });
+  }
+
+  /** Charges a booking's payments that are due now (a custom plan's first payment once the customer agrees). */
+  async chargeDueNow(bookingId: string, now = new Date()) {
+    const due = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, kind: 'charge', status: InstallmentStatus.SCHEDULED, attempts: 0, due_at: { lte: now } }, select: { id: true }, orderBy: { sequence: 'asc' } });
+    for (const d of due) await this.chargeInstallment(d.id).catch((e) => this.logger.error(`charge ${d.id}`, e));
+    return due.length;
   }
 
   /** Moves the booking's end later for a paid add-on that adds time; a booking with only a start ends that long after it starts. */
@@ -405,7 +437,9 @@ export class PaymentsService {
     needsCustomer = false,
   ) {
     // deposit plans: 12 hours to pay, then the booking is cancelled (payment-due.ts)
-    const dueKind = inst.kind && inst.sequence ? dueKindFor(b, { kind: inst.kind, sequence: inst.sequence }) : null;
+    // a custom plan's first charge is its deposit, the later ones balance payments
+    const first = b.payment_plan === PaymentPlan.CUSTOM && inst.kind === 'charge' ? await this.isFirstCharge(b.id, installmentId) : false;
+    const dueKind = inst.kind && inst.sequence ? dueKindFor(b, { kind: inst.kind, sequence: inst.sequence, first }) : null;
     if (dueKind) return this.recordMissedDeposit(installmentId, attempt, message, b, inst, dueKind, paymentIntentId, needsCustomer);
     const exhausted = attempt >= MAX_ATTEMPTS || needsCustomer;
     track('payment_failed', b.customer_id, { booking_id: b.id, attempt, final: exhausted, needs_customer: needsCustomer });

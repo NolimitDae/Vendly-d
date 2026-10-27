@@ -23,6 +23,7 @@
 import { addOnLabel, AddOnUnit, eventDayCount, eventHours, EventInput, PackageLine, PackageUnit, PricingError, priceForPackage, round2 } from 'src/modules/add-ons/pricing';
 import { ChosenGroup, OfferedGroup, UnitBasis } from 'src/modules/add-ons/package-options';
 import { REQUEST_EXPIRY_HOURS } from 'src/modules/booking/booking-requests';
+import type { CustomPlan } from 'src/modules/payments/custom-plan';
 
 /** The most a vendor can set one add-on or fee to, per unit, for a booking. */
 export const MAX_LINE_PRICE = 100000;
@@ -304,6 +305,8 @@ export interface RequestTerms {
   total: number;
   plan: string;
   schedule: { label: string; amount: number; due_at: string | null; capture_manually?: boolean }[];
+  /** a custom payment plan (plan CUSTOM): the payments kept on the booking once approved (payments/custom-plan.ts) */
+  custom?: CustomPlan | null;
 }
 
 const iso = (d: unknown) => (d ? new Date(d as string).toISOString() : null);
@@ -330,6 +333,11 @@ export function describeChanges(before: RequestTerms, after: RequestTerms): stri
   const picks = (t: RequestTerms) => t.options.map((g) => `${g.group_id}:${g.options.map((o) => `${o.option_id}@${o.amount}`).join(',')}`).join('|');
   if (picks(before) !== picks(after)) out.push('Customizations');
   if ((before.promo_code ?? null) !== (after.promo_code ?? null)) out.push(after.promo_code ? `Promo ${after.promo_code}` : `Promo ${before.promo_code} removed`);
+  // a custom plan's payments are agreed one by one; a package plan just follows the price
+  const payments = (t: RequestTerms) => t.schedule.map((s) => `${s.amount}@${s.due_at ?? ''}`).join('|');
+  if ((before.plan === 'CUSTOM' || after.plan === 'CUSTOM') && (before.plan !== after.plan || payments(before) !== payments(after))) {
+    out.push(after.plan === 'CUSTOM' ? `Payment plan: ${after.schedule.length} payments` : 'Payment plan: back to the package’s plan');
+  }
   return out;
 }
 

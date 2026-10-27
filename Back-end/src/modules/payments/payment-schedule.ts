@@ -18,7 +18,12 @@ export const PAYMENT_PLAN_LABELS: Record<PaymentPlan, string> = {
   DEPOSIT_50: '50% deposit when you accept, balance 7 days before the event',
   DEPOSIT_25: '25% deposit when you accept, balance 14 days before the event',
   PAY_AFTER_SERVICE: 'Card held when you accept, charged after the service',
+  // agreed for one booking (custom-plan.ts), never a listing's plan
+  CUSTOM: 'A payment plan agreed with the customer',
 };
+
+/** The plans a package (or a category default) can use; CUSTOM is only ever agreed on a booking. */
+export const LISTING_PAYMENT_PLANS: PaymentPlan[] = [PaymentPlan.FULL_ON_ACCEPT, PaymentPlan.DEPOSIT_50, PaymentPlan.DEPOSIT_25, PaymentPlan.PAY_AFTER_SERVICE];
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
