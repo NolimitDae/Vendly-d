@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Logger,
@@ -33,6 +34,11 @@ const stripeRefused = (err: any) => {
   return code >= 400 && code < 500 && code !== 409;
 };
 
+/** Payouts are for the people Vendly pays: vendors (and planners). */
+export const PAYOUTS_FOR_PAYEES = 'Payouts are for vendors. Switch to your vendor account to set one up.';
+const isPayee = (u: { type?: string | null; roles?: string[] | null }) =>
+  [u.type, ...(u.roles ?? [])].some((r) => r === 'VENDOR' || r === 'EVENT_PLANNER');
+
 @Injectable()
 export class WithdrawService {
   private readonly logger = new Logger(WithdrawService.name);
@@ -60,6 +66,7 @@ export class WithdrawService {
     }
     // test vendors never get a real payout account
     if (user.is_test) throw new BadRequestException(TEST_ACCOUNT_NO_PAYOUTS);
+    if (!isPayee(user)) throw new ForbiddenException(PAYOUTS_FOR_PAYEES);
 
     if (user.stripe_connect_id) {
       throw new BadRequestException('You already have a payout account');
@@ -144,6 +151,7 @@ export class WithdrawService {
       throw new NotFoundException('User not found');
     }
     if (user.is_test) throw new BadRequestException(TEST_ACCOUNT_NO_PAYOUTS);
+    if (!isPayee(user)) throw new ForbiddenException(PAYOUTS_FOR_PAYEES);
 
     // Check if user has a connected account
     if (!user.stripe_connect_id) {

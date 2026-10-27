@@ -1,8 +1,12 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateDepositDto } from './dto/create-deposite.dto';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
+
+/** Card top-ups of the Vendly balance are off: nothing on the website or app uses them. */
+const CARD_TOP_UPS_OPEN = false;
+export const TOP_UPS_CLOSED = 'Adding money to your Vendly balance isn’t available.';
 
 @Injectable()
 export class DepositeService {
@@ -17,6 +21,9 @@ export class DepositeService {
       createDepositDto: CreateDepositDto,
       userId: string
     ) {
+      // the balance holds vendor earnings only: a card top-up could be paid out and then charged back
+      if (!CARD_TOP_UPS_OPEN) throw new ForbiddenException(TOP_UPS_CLOSED);
+
 
       const { amount, currency = 'usd' } = createDepositDto;
 
