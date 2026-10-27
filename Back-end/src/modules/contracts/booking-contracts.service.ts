@@ -1353,7 +1353,8 @@ export class BookingContractsService {
     // a new address: the travel fee is worked out again, and the price moves with it
     const travel = changes.venue_address ? await this.travelChangeFor(full, changes.venue_address) : null;
     const mode = travel ? await this.travelMode(this.prisma, bookingId) : null;
-    const amount = travel && mode === 'reprice' ? round2(Number(changes.amount ?? full.amount) + travel.delta) : (changes.amount ?? full.amount);
+    // a price the vendor types is the final price (the new travel fee is shown, not added on top)
+    const amount = changes.amount !== undefined ? changes.amount : travel && mode === 'reprice' ? round2(Number(full.amount) + travel.delta) : full.amount;
     const nextBooking = {
       id: full.id,
       scheduled_at: changes.scheduled_at ?? changes.event_start_at ?? full.scheduled_at,
@@ -1391,7 +1392,7 @@ export class BookingContractsService {
     const changed = [...Object.keys(changes).map(fieldLabel), ...(travel ? ['travel fee'] : [])];
     const rendered = this.renderFor(vc, data);
     const settle = mode === 'reprice'
-      ? ` The price is now ${dollars(Number(amount))}.`
+      ? ` The price is now ${dollars(Number(amount))}${changes.amount !== undefined ? ', as set by the Vendor (travel fee included)' : ''}.`
       : travel && travel.delta > 0
         ? ` The difference, ${dollars(travel.delta)}, is charged as a travel fee change once both parties sign.`
         : travel
@@ -1545,7 +1546,8 @@ export class BookingContractsService {
       if (travel?.mode === 'reprice') {
         // nothing paid yet: the new price is spread over the charges like any price change
         const b = await tx.booking.findUniqueOrThrow({ where: { id: contract.booking_id }, select: { amount: true } });
-        const amount = round2(Number(price?.amount ?? b.amount) + travel.delta);
+        // the vendor's own new price is final; otherwise the price moves with the fee
+        const amount = price ? price.amount : round2(Number(b.amount) + travel.delta);
         price = { amount, service_fee: this.serviceFee(amount, listing?.listing?.category_id) };
         Object.assign(bookingUpdate, { amount, service_fee: price.service_fee, travel_fee: travel.fee, travel_details: travel.details as unknown as Prisma.InputJsonValue });
       } else if (travel) {

@@ -75,13 +75,14 @@ describe('OnboardingService.get', () => {
     retrieveAccount.mockResolvedValue({ details_submitted: true });
     const { service } = setup(
       { type: 'VENDOR', email_verified_at: now, id_verified_at: now, stripe_connect_id: 'acct_1' },
-      { vendor: { license_photo: ['l.jpg'], license_status: 'PENDING', logo: 'logo.png', banner: null }, listings: 1, contracts: 1 },
+      { vendor: { license_photo: ['l.jpg'], license_status: 'PENDING', logo: 'logo.png', banner: null, business_address: '1 Main St' }, listings: 1, contracts: 1 },
     );
     const { data } = await service.get('u1');
-    expect(data!.steps.map((s) => s.key)).toEqual(['verify_email', 'business_license', 'verify_id', 'first_package', 'payouts', 'booking_contract', 'shop_branding']);
+    expect(data!.steps.map((s) => s.key)).toEqual(['verify_email', 'business_license', 'business_address', 'verify_id', 'first_package', 'payouts', 'booking_contract', 'shop_branding']);
     expect(stateOf(data)).toEqual({
       verify_email: 'done',
       business_license: 'pending',
+      business_address: 'done',
       verify_id: 'done',
       first_package: 'done',
       payouts: 'done',
@@ -113,9 +114,13 @@ describe('OnboardingService.get', () => {
     const pending = await steps({ license_photo: ['l.jpg'], license_status: 'PENDING' });
     expect(pending.business_license.description).toMatch(/approved licence to publish packages/);
     expect(pending.first_package).toMatchObject({ state: 'todo', note: 'You can publish once your business licence is approved.' });
-    // approved, or no licence needed: no note
-    expect((await steps({ license_photo: [], license_status: 'APPROVED' })).first_package.note).toBeUndefined();
-    expect((await steps({ license_photo: [], license_status: 'NOT_APPLICABLE' })).first_package.note).toBeUndefined();
+    // approved, or no licence needed, with a business address: no note
+    expect((await steps({ license_photo: [], license_status: 'APPROVED', business_address: '1 Main St' })).first_package.note).toBeUndefined();
+    expect((await steps({ license_photo: [], license_status: 'NOT_APPLICABLE', business_address: '1 Main St' })).first_package.note).toBeUndefined();
+    // no business address yet: that comes first
+    const noAddress = await steps({ license_photo: [], license_status: 'APPROVED' });
+    expect(noAddress.business_address.state).toBe('todo');
+    expect(noAddress.first_package).toMatchObject({ state: 'todo', note: 'Add your business address first.' });
     // a package already live stays done
     expect((await steps({ license_photo: [], license_status: 'PENDING' }, 1)).first_package).toEqual(expect.objectContaining({ state: 'done' }));
   });

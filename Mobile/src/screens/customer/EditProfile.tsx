@@ -132,9 +132,9 @@ export default function EditProfile({ navigation }: { navigation: NativeStackNav
           </View>
           {isVendor && (
             <View style={{ gap: 8 }}>
-              <Text style={ui.label}>Business address</Text>
+              <Text style={ui.label}>Business address (required)</Text>
               <LocationPicker value={business} onChange={setBusiness} label="Business address" street />
-              <Text style={s.hint}>Private. For packages done at your place, customers see it only once you accept their booking.</Text>
+              <Text style={s.hint}>Required to publish. Private: customers see it only once you accept their booking. Delivery and travel miles are measured from it.</Text>
             </View>
           )}
           {isVendor && (

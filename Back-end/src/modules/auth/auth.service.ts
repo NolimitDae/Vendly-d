@@ -493,6 +493,8 @@ export class AuthService {
           if (updateUserDto.business_address !== undefined) {
             const address = updateUserDto.business_address.trim().slice(0, 500) || null;
             const old = await this.prisma.vendorProfile.findUnique({ where: { user_id: userId }, select: { business_address: true } });
+            // vendors must keep one: it can be changed but not removed
+            if (!address && old?.business_address) throw new BadRequestException('Your business address is required. Enter the new one instead of clearing it.');
             businessMoved = address !== (old?.business_address ?? null);
             // the old map position no longer applies; geocoded again once saved
             if (businessMoved) Object.assign(vendorProfilePatch, { business_address: address, business_lat: null, business_lng: null, business_geocoded_at: null });

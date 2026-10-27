@@ -57,7 +57,7 @@ describe('VendorListingService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockPrisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'APPROVED', license_photo: ['l.pdf'] });
+    mockPrisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'APPROVED', license_photo: ['l.pdf'], business_address: '1 Main St, Austin, TX' });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         VendorListingService,
@@ -397,6 +397,13 @@ describe('VendorListingService', () => {
       await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(ForbiddenException);
       expect(mockPrisma.vendorListing.update).not.toHaveBeenCalled();
       expect(mockPrisma.vendorProfile.findUnique).toHaveBeenCalledWith({ where: { user_id: 'vendor-1' }, select: { license_status: true, license_photo: true } });
+    });
+
+    it('needs a business address on file to publish', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['img.jpg'] });
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'APPROVED', license_photo: ['l.pdf'] }).mockResolvedValueOnce({ business_address: '  ' });
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(/Add your business address in your profile before you publish/);
+      expect(mockPrisma.vendorListing.update).not.toHaveBeenCalled();
     });
 
     it('lets vendors who need no licence publish', async () => {

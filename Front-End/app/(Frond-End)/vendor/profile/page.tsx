@@ -296,10 +296,10 @@ export default function VendorProfilePage() {
               <p id="profile-phone-hint" className="text-xs text-gray-400 mt-1">Only shared with a customer once you accept their booking, so you can call each other on the day.</p>
             </div>
 
-            <div>
-              <label htmlFor="profile-business-address" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Business address</label>
+            <div id="business-address">
+              <label htmlFor="profile-business-address" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Business address <span className="text-red-500">*</span></label>
               <LocationField value={{ label: businessAddress }} onChange={(p) => setBusinessAddress(p.label)} inputId="profile-business-address" label="Business address" street maxLength={500} />
-              <p className="text-xs text-gray-400 mt-1">Private. For packages done at your place, customers see it only once you accept their booking.</p>
+              <p className="text-xs text-gray-400 mt-1">Required to publish. Private: customers see it only once you accept their booking. Delivery and travel miles are measured from it.</p>
             </div>
           </div>
 

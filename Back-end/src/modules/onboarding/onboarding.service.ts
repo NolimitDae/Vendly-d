@@ -14,6 +14,7 @@ export type StepKey =
   | 'profile_photo'
   | 'add_location'
   | 'business_license'
+  | 'business_address'
   | 'first_package'
   | 'payouts'
   | 'booking_contract'
@@ -40,6 +41,7 @@ const COPY: Record<StepKey, { title: string; description: string }> = {
   profile_photo: { title: 'Add a profile photo', description: 'Vendors are quicker to reply when they can see who they’re talking to.' },
   add_location: { title: 'Add your city', description: 'So we can show vendors near you.' },
   business_license: { title: 'Upload your business licence', description: 'Vendly checks it before your packages go live.' },
+  business_address: { title: 'Add your business address', description: 'Needed to publish. Customers see it only once you accept their booking; delivery and travel miles are measured from it.' },
   first_package: { title: 'Publish your first package', description: 'Customers can find and book you once a package is live.' },
   payouts: { title: 'Set up payouts', description: 'Connect a bank account with Stripe to get paid.' },
   booking_contract: { title: 'Set up your booking contract', description: 'Use Vendly’s contract or upload your own; customers sign it when they book.' },
@@ -55,7 +57,7 @@ const VENDOR_COPY: Partial<Record<StepKey, { title: string; description: string 
 
 const STEPS: Record<OnboardingRole, StepKey[]> = {
   CUSTOMER: ['verify_email', 'verify_id', 'add_card', 'profile_photo', 'add_location'],
-  VENDOR: ['verify_email', 'business_license', 'verify_id', 'first_package', 'payouts', 'booking_contract', 'shop_branding'],
+  VENDOR: ['verify_email', 'business_license', 'business_address', 'verify_id', 'first_package', 'payouts', 'booking_contract', 'shop_branding'],
   EVENT_PLANNER: ['verify_email', 'planner_profile', 'business_license', 'verify_id', 'add_card', 'first_event'],
 };
 
@@ -170,7 +172,7 @@ export class OnboardingService {
           })
         : null,
       role === 'VENDOR'
-        ? this.prisma.vendorProfile.findUnique({ where: { user_id: userId }, select: { license_photo: true, license_status: true, logo: true, banner: true } })
+        ? this.prisma.vendorProfile.findUnique({ where: { user_id: userId }, select: { license_photo: true, license_status: true, logo: true, banner: true, business_address: true } })
         : null,
       role === 'EVENT_PLANNER'
         ? this.prisma.eventPlannerProfile.findUnique({ where: { user_id: userId }, select: { license_photo: true, license_status: true, business_name: true, bio: true } })
@@ -192,6 +194,7 @@ export class OnboardingService {
       payouts: done(payouts),
       booking_contract: done(contract > 0),
       shop_branding: done(!!(vendor?.logo || vendor?.banner || user.avatar)),
+      business_address: done(!!vendor?.business_address?.trim()),
       planner_profile: done(!!(planner?.business_name?.trim() && planner?.bio?.trim())),
       first_event: done(events > 0),
     };
@@ -209,6 +212,7 @@ export class OnboardingService {
     else out.business_license = { state: 'todo' };
     // nothing can go live until the licence is approved
     if (role === 'VENDOR' && !published && !canPublish(vendor)) out.first_package = { state: 'todo', note: 'You can publish once your business licence is approved.' };
+    else if (role === 'VENDOR' && !published && !vendor?.business_address?.trim()) out.first_package = { state: 'todo', note: 'Add your business address first.' };
 
     return out;
   }

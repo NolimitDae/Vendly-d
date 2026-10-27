@@ -21,6 +21,7 @@ const LINKS: Record<OnboardingRole, Record<string, string>> = {
   },
   VENDOR: {
     business_license: "/vendor/profile#licence",
+    business_address: "/vendor/profile#business-address",
     verify_id: "/settings/verify-id",
     first_package: "/vendor/listings/new",
     payouts: "/vendor/earnings",
