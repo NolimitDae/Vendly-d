@@ -5,7 +5,7 @@ import { BookingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { withJobLock } from 'src/common/helper/job-lock';
 import { PaymentsService } from 'src/modules/payments/payments.service';
-import { LARGE_PAYMENT_DUE_REMINDER_HOURS, paymentDueRules, PaymentDueKind } from 'src/modules/payments/payment-due';
+import { dueInstallment, LARGE_PAYMENT_DUE_REMINDER_HOURS, paymentDueRules, PaymentDueKind } from 'src/modules/payments/payment-due';
 import { isLargeBooking } from 'src/modules/platform/fee-config';
 import { BookingService } from './booking.service';
 
@@ -53,9 +53,9 @@ export class PaymentDeadlinesService {
         payment_due_by: { gt: now, lte: new Date(now.getTime() + LARGE_PAYMENT_DUE_REMINDER_HOURS * HOUR) },
       },
       select: {
-        id: true, customer_id: true, payment_due_by: true, payment_due_kind: true, amount: true, service_fee: true,
+        id: true, customer_id: true, payment_due_by: true, payment_due_kind: true, amount: true, service_fee: true, payment_plan: true,
         listing: { select: { title: true } }, customer: { select: { email: true, name: true } },
-        installments: { where: { kind: 'charge', status: { in: ['FAILED', 'SCHEDULED'] } }, select: { sequence: true, amount: true } },
+        installments: { where: { kind: 'charge', status: { in: ['FAILED', 'SCHEDULED'] } }, select: { sequence: true, amount: true, status: true, attempts: true } },
       },
       // soonest first: bookings skipped below (not in their own window yet) come last
       orderBy: { payment_due_by: 'asc' },
@@ -68,7 +68,7 @@ export class PaymentDeadlinesService {
       const claimed = await this.prisma.booking.updateMany({ where: { id: b.id, payment_due_reminded_at: null, payment_due_by: b.payment_due_by }, data: { payment_due_reminded_at: now } });
       if (!claimed.count) continue;
       const kind = (b.payment_due_kind === 'balance' ? 'balance' : 'deposit') as PaymentDueKind;
-      const inst = b.installments.find((i) => i.sequence === (kind === 'deposit' ? 1 : 2));
+      const inst = dueInstallment(b, b.installments);
       await this.payments.notifyPaymentDue(b, { kind, amount: Number(inst?.amount ?? 0), dueBy: b.payment_due_by!, reminder: true });
       sent++;
     }
@@ -87,13 +87,13 @@ export class PaymentDeadlinesService {
         OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }],
         installments: { none: { kind: 'charge', status: 'PROCESSING' } },
       },
-      select: { id: true, payment_due_kind: true, installments: { where: { kind: 'charge' }, select: { sequence: true, status: true } } },
+      select: { id: true, payment_due_kind: true, payment_plan: true, installments: { where: { kind: 'charge' }, select: { sequence: true, status: true, attempts: true } } },
       orderBy: { payment_due_by: 'asc' },
       take: BATCH,
     });
     let cancelled = 0;
     for (const b of overdue) {
-      const inst = b.installments.find((i) => i.sequence === (b.payment_due_kind === 'balance' ? 2 : 1));
+      const inst = dueInstallment(b, b.installments);
       // paid in the meantime (the webhook clears it too) or no longer there: nothing is waiting
       if (!inst || inst.status === 'PAID' || inst.status === 'REFUNDED' || inst.status === 'CANCELLED') {
         await this.prisma.booking.updateMany({ where: { id: b.id, payment_due_by: { lte: now } }, data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } });

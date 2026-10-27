@@ -196,6 +196,17 @@ describe('what changed', () => {
     expect(describeChanges(before, terms({ promo_code: null }))).toEqual([]);
     expect(describeChanges(terms({ promo_code: 'SAVE10' }), terms())).toEqual(['Promo SAVE10 removed']);
   });
+
+  it('a custom payment plan is a change of its own; a package plan following the price is not', () => {
+    const plan = [{ label: 'Payment 1 of 2 (deposit)', amount: 400, due_at: null }, { label: 'Payment 2 of 2', amount: 387.5, due_at: end.toISOString() }];
+    const custom = terms({ plan: 'CUSTOM', schedule: plan });
+    expect(describeChanges(terms(), custom)).toEqual(['Payment plan: 2 payments']);
+    expect(describeChanges(custom, terms({ plan: 'CUSTOM', schedule: [plan[0], { ...plan[1], due_at: start.toISOString() }] }))).toEqual(['Payment plan: 2 payments']);
+    expect(describeChanges(custom, terms())).toEqual(['Payment plan: back to the package’s plan']);
+    expect(sameTerms(custom, terms({ plan: 'CUSTOM', schedule: plan }))).toBe(true);
+    // a deposit plan's split moving with the price isn't listed
+    expect(describeChanges(terms({ plan: 'DEPOSIT_50', schedule: [{ label: '50% deposit', amount: 1, due_at: null }] }), terms({ plan: 'DEPOSIT_50' }))).toEqual([]);
+  });
 });
 
 describe('the request’s clock after an answer', () => {

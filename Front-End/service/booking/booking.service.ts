@@ -115,6 +115,27 @@ export const BookingService = {
   declineChanges: async (id: string, reason?: string) =>
     Fetch.post(`/bookings/${id}/changes/decline`, reason ? { reason } : {}, authHeaders()),
 
+  // ─── Custom payment plan on a confirmed booking (vendor proposes, customer signs or declines) ──
+
+  /** The booking's payments, the plan waiting (or last answered), and for the vendor the editor's rules. */
+  paymentPlan: async (id: string) => Fetch.get(`/bookings/${id}/payment-plan`, authHeaders()),
+
+  /** Vendor: check a plan and get the amendment to sign. */
+  previewPaymentPlan: async (id: string, body: Record<string, unknown>) =>
+    Fetch.post(`/bookings/${id}/payment-plan/preview`, body, authHeaders()),
+
+  proposePaymentPlan: async (id: string, body: Record<string, unknown>, signature: SignaturePayload) =>
+    Fetch.post(`/bookings/${id}/payment-plan`, { ...body, signature }, authHeaders()),
+
+  withdrawPaymentPlan: async (id: string) => Fetch.post(`/bookings/${id}/payment-plan/withdraw`, {}, authHeaders()),
+
+  /** Customer: sign to agree to the plan. */
+  approvePaymentPlan: async (id: string, signature: SignaturePayload) =>
+    Fetch.post(`/bookings/${id}/payment-plan/approve`, { signature }, authHeaders()),
+
+  declinePaymentPlan: async (id: string, reason?: string) =>
+    Fetch.post(`/bookings/${id}/payment-plan/decline`, reason ? { reason } : {}, authHeaders()),
+
   /** Vendor's side of an open dispute, read by Vendly. */
   replyToDispute: async (id: string, reply: string) =>
     Fetch.post(`/bookings/${id}/dispute/reply`, { reply }, authHeaders()),

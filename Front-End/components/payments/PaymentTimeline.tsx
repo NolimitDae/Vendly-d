@@ -9,6 +9,7 @@ import { BookingService } from "@/service/booking/booking.service";
 import ReportProblemForm from "@/components/disputes/ReportProblemForm";
 import SavedCards from "@/components/payments/SavedCards";
 import { dueByText, paymentStateText } from "@/lib/booking-status";
+import { paymentStatusText } from "@/lib/payment-plan";
 import DisputeDetails, { type DisputeDetailFields } from "@/components/disputes/DisputeDetails";
 
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
@@ -96,7 +97,8 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
         <>
           <ul className="space-y-3">
             {t.installments.map((i) => {
-              const st = i.clearing ? CLEARING : STATUS[i.status];
+              // a status this app doesn't know yet (a newer server) still reads sensibly
+              const st = i.clearing ? CLEARING : (STATUS[i.status] ?? { label: paymentStatusText(i.status), cls: "text-gray-500", Icon: Clock });
               // a failed charge, or a missed deposit or balance waiting for its automatic retry: the customer can pay now
               const payable = i.status === "FAILED" || (!!t.payment_state && i.status === "SCHEDULED" && i.attempts > 0);
               return (

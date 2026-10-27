@@ -31,7 +31,7 @@ export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = { fee_percent: 5, fee_m
 /** "$5,000" (cents only when there are some). */
 export const wholeMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
-export type PaymentPlan = 'FULL_ON_ACCEPT' | 'DEPOSIT_50' | 'DEPOSIT_25' | 'PAY_AFTER_SERVICE';
+export type PaymentPlan = 'FULL_ON_ACCEPT' | 'DEPOSIT_50' | 'DEPOSIT_25' | 'PAY_AFTER_SERVICE' | 'CUSTOM';
 export type InstallmentStatus = 'SCHEDULED' | 'PROCESSING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
 
 export interface Installment {
@@ -127,6 +127,7 @@ export const PLAN_LABELS: Record<PaymentPlan, string> = {
   DEPOSIT_50: '50% deposit when the vendor accepts, balance 7 days before',
   DEPOSIT_25: '25% deposit when the vendor accepts, balance 14 days before',
   PAY_AFTER_SERVICE: 'Card held at the event, charged after the service',
+  CUSTOM: 'A payment plan agreed with the vendor: each payment is charged on its date',
 };
 
 export const PaymentsService = {

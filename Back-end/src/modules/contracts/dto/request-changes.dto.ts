@@ -5,6 +5,7 @@ import { OptionChoiceDto } from 'src/modules/add-ons/dto/package-options.dto';
 import { MAX_OPTION_GROUPS } from 'src/modules/add-ons/package-options';
 import { MAX_LINE_PRICE, MAX_LINE_QUANTITY, MAX_LINES, MAX_NOTE } from '../request-changes';
 import { SignatureDto } from './contracts.dto';
+import { PaymentPlanInputDto } from './payment-plans.dto';
 
 /** One add-on or fee in a suggestion: a line already on the request (extra_id) or one being added (add_on_id). */
 export class ProposalLineDto {
@@ -74,6 +75,12 @@ export class ProposalDto {
   @ValidateNested({ each: true })
   @Type(() => OptionChoiceDto)
   options?: OptionChoiceDto[];
+
+  @ApiPropertyOptional({ type: PaymentPlanInputDto, nullable: true, description: 'A custom payment plan (payments/custom-plan.ts); null goes back to the package’s own plan; left out keeps the current one' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaymentPlanInputDto)
+  payment_plan?: PaymentPlanInputDto | null;
 
   @ApiPropertyOptional({ description: 'A short note to the customer' })
   @IsOptional()

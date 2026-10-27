@@ -51,12 +51,29 @@ export const isDepositPlan = (plan: PaymentPlan | string | null | undefined) => 
  */
 export function dueKindFor(
   booking: { payment_plan?: PaymentPlan | string | null; deposit_rules?: boolean | null },
-  inst: { kind: string; sequence: number },
+  inst: { kind: string; sequence: number; first?: boolean },
 ): PaymentDueKind | null {
+  // a custom plan (custom-plan.ts): its first charge is the deposit, every later one a balance payment
+  if (booking.payment_plan === PaymentPlan.CUSTOM) return inst.kind === 'charge' ? (inst.first ? 'deposit' : 'balance') : null;
   if (!booking.deposit_rules || !isDepositPlan(booking.payment_plan) || inst.kind !== 'charge') return null;
   if (inst.sequence === 1) return 'deposit';
   if (inst.sequence === 2) return 'balance';
   return null;
+}
+
+/**
+ * The charge a booking's pending-payment window is waiting for: a deposit plan's deposit (sequence 1) or
+ * balance (sequence 2); on a custom plan its first charge for the deposit, or the later payment that didn't
+ * go through (failed, or waiting for its retry). Undefined when nothing is waiting any more.
+ */
+export function dueInstallment<T extends { sequence: number; status: string; attempts?: number }>(
+  b: { payment_plan?: PaymentPlan | string | null; payment_due_kind?: string | null },
+  charges: T[],
+): T | undefined {
+  if (b.payment_plan !== PaymentPlan.CUSTOM) return charges.find((i) => i.sequence === (b.payment_due_kind === 'balance' ? 2 : 1));
+  const live = charges.filter((i) => i.status !== 'CANCELLED').sort((x, y) => x.sequence - y.sequence);
+  if (b.payment_due_kind !== 'balance') return live[0];
+  return live.slice(1).find((i) => i.status === 'FAILED' || i.status === 'PROCESSING' || (i.status === 'SCHEDULED' && (i.attempts ?? 0) > 0));
 }
 
 /** When a missed payment first noticed at `failedAt` must be paid by (12 hours, or `hours`). */

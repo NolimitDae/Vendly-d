@@ -5,7 +5,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { AddOnKind, BookingContractStatus, BookingExtraStatus, BookingStatus, ListingStatus, Prisma } from 'prisma/generated/client';
+import { AddOnKind, BookingContractStatus, BookingExtraStatus, BookingStatus, ListingStatus, PaymentPlan, Prisma } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
@@ -36,6 +36,7 @@ import { CancelledBy, cancelReasonLabel, cancelReasonsFor, countsAgainstVendor, 
 import { TRACK_THRESHOLD, TRACK_WINDOW_DAYS, trackWindowStart, vendorCancellationCounts } from './vendor-cancellations';
 import { deadlineText, isDepositPlan, paymentState, PAYMENT_STATE_LABELS } from 'src/modules/payments/payment-due';
 import { depositShareOf } from 'src/modules/payments/payment-schedule';
+import { firstCharge } from 'src/modules/payments/custom-plan';
 import { MarketplaceService } from 'src/modules/marketplace/marketplace.service';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { trackerDetails } from './booking-tracker';
@@ -715,13 +716,15 @@ export class BookingService {
         ? settleAgainstPaid(owed, paidRows, cancelledBy, cancelledBy === 'CUSTOMER' ? round2(owed.vendorKeeps + feesAgreed) : 0)
         : owed;
     // deposit plans (bookings under the Oct 2026 rules): the paid deposit is non-refundable when the
-    // customer cancels or didn't pay; what was paid beyond it follows the policy (cancellation.ts)
+    // customer cancels or didn't pay; what was paid beyond it follows the policy (cancellation.ts).
+    // A custom plan's deposit is the booking's first charge (payments/custom-plan.ts).
     let depositKept = 0;
-    if (paid && installments.length && cancelledBy === 'CUSTOMER' && booking.deposit_rules && isDepositPlan(booking.payment_plan)) {
+    const custom = booking.payment_plan === PaymentPlan.CUSTOM;
+    if (paid && installments.length && cancelledBy === 'CUSTOMER' && (custom || (booking.deposit_rules && isDepositPlan(booking.payment_plan)))) {
       const vendorPart = (i: (typeof installments)[number]) => Math.max(0, Number(i.amount) - Number(i.fee_amount) - Number(i.refunded_amount));
       const vendorPaid = sum(installments.filter((i) => i.status === 'PAID'), vendorPart);
-      const first = installments.find((i) => i.kind === 'charge' && i.sequence === 1);
-      const split = installments.some((i) => i.kind === 'charge' && i.sequence === 2);
+      const first = custom ? firstCharge(installments) : installments.find((i) => i.kind === 'charge' && i.sequence === 1);
+      const split = custom || installments.some((i) => i.kind === 'charge' && i.sequence === 2);
       let depositPaid = first?.status === 'PAID' ? round2(vendorPart(first)) : 0;
       // the event was too close to split the price: the deposit's share of the full payment
       if (!split) depositPaid = Math.min(depositPaid, round2(Number(booking.amount ?? 0) * depositShareOf(booking.payment_plan!)));

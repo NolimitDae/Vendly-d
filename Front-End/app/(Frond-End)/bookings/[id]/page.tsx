@@ -35,6 +35,7 @@ import { showsTracker, type TrackerFields } from "@/lib/booking-tracker";
 import { useBookingRefresh } from "@/hooks/useBookingRefresh";
 import BookingChoices from "@/components/bookings/BookingChoices";
 import RequestChangesCard from "@/components/bookings/RequestChangesCard";
+import PaymentPlanCard from "@/components/bookings/PaymentPlanCard";
 
 interface Proof {
   id: string;
@@ -328,6 +329,17 @@ export default function CustomerBookingDetailPage() {
       <RentalReturnPanel booking={booking} role="CUSTOMER" />
 
       <BookingExtrasSection bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} onChanged={() => setPaymentsKey((k) => k + 1)} />
+
+      <PaymentPlanCard
+        bookingId={booking.id}
+        role="CUSTOMER"
+        bookingStatus={booking.status}
+        otherName={booking.vendor?.name ?? "The vendor"}
+        onChanged={() => {
+          setContractKey((k) => k + 1);
+          setPaymentsKey((k) => k + 1);
+        }}
+      />
 
       <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} startReporting={reporting} />
 

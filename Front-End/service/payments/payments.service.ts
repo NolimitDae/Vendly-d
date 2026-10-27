@@ -22,7 +22,7 @@ export interface SavedCard {
 
 export const isBankAccount = (m?: { type?: string } | null) => m?.type === "us_bank_account";
 
-export type PaymentPlan = "FULL_ON_ACCEPT" | "DEPOSIT_50" | "DEPOSIT_25" | "PAY_AFTER_SERVICE";
+export type PaymentPlan = "FULL_ON_ACCEPT" | "DEPOSIT_50" | "DEPOSIT_25" | "PAY_AFTER_SERVICE" | "CUSTOM";
 export type InstallmentStatus = "SCHEDULED" | "PROCESSING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED";
 
 export interface Installment {
@@ -123,6 +123,7 @@ export const PLAN_LABELS: Record<PaymentPlan, string> = {
   DEPOSIT_50: "50% deposit when the vendor accepts, balance 7 days before the event",
   DEPOSIT_25: "25% deposit when the vendor accepts, balance 14 days before the event",
   PAY_AFTER_SERVICE: "Card held at the event, charged after the service",
+  CUSTOM: "A payment plan agreed with the vendor: each payment is charged on its date",
 };
 
 /** Deposit plans: the deposit isn't refunded when the customer cancels or a payment isn't made in time (docs/PAYMENTS.md). */

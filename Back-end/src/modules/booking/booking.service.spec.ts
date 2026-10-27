@@ -1088,6 +1088,20 @@ describe('BookingService', () => {
       expect(mockPayments.refundBooking).toHaveBeenCalledWith('booking-1', 375, 'cancel-booking-1', { keepFees: true });
     });
 
+    it('a custom plan: the first charge (not one the plan replaced) is the deposit; later payments follow the policy', async () => {
+      // the plan replaced the unpaid charges of a deposit plan: its first payment ($400 + the $50 fee) and the second ($300) are paid
+      mockPrisma.bookingInstallment.findMany.mockResolvedValue([
+        { ...deposit, id: 'old', status: 'CANCELLED', payment_intent_id: null },
+        { ...deposit, id: 'p1', sequence: 3, amount: 450, payment_intent_id: 'pi_1' },
+        { ...balance('PAID'), id: 'p2', sequence: 4, amount: 300, payment_intent_id: 'pi_2' },
+        { ...balance(), id: 'p3', sequence: 5, amount: 300 },
+      ]);
+      // flexible, 3 days out: half of what was paid beyond the deposit comes back
+      mockPrisma.booking.findFirst.mockResolvedValue(depositPlan({ payment_plan: 'CUSTOM', deposit_rules: false, event_start_at: new Date(Date.now() + 3 * DAY) }));
+      const preview = (await service.cancelPreview('booking-1', 'customer-1')).data as any;
+      expect(preview).toMatchObject({ cancelled_by: 'CUSTOMER', deposit_kept: 400, vendor_keeps: 550, refund_total: 150, fee_kept: 50, unpaid_cancelled: 300 });
+    });
+
     it('a booking made before the rules keeps the old refund', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue(depositPlan({ deposit_rules: false }));
       const result = await service.cancel('booking-1', 'customer-1', { reason_code: 'event_cancelled' });

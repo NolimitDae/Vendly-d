@@ -69,6 +69,9 @@ import { PackageLine, PricingError, eventDayCount, eventHours, packageUnit, pric
 import { PackageOptionsService } from 'src/modules/add-ons/package-options.service';
 import { ChosenGroup, optionScheduleLines, UnitBasis } from 'src/modules/add-ons/package-options';
 import { isProposal } from './request-changes';
+import { readCustomPlan } from 'src/modules/payments/custom-plan';
+import { replaceUnpaidCharges } from 'src/modules/payments/custom-plan-charges';
+import { readPlanChange } from './payment-plan-change';
 import {
   AmendmentChangesDto,
   AmendmentPreviewDto,
@@ -1155,7 +1158,7 @@ export class BookingContractsService {
   private async applyAmendmentToCharges(tx: Tx, bookingId: string, price: { amount: number; service_fee: number } | null, dateChanged: boolean) {
     const b = await tx.booking.findUniqueOrThrow({
       where: { id: bookingId },
-      select: { payment_plan: true, event_start_at: true, scheduled_at: true, payment_due_kind: true, installments: { orderBy: { sequence: 'asc' } } },
+      select: { payment_plan: true, custom_payment_plan: true, event_start_at: true, scheduled_at: true, payment_due_kind: true, installments: { orderBy: { sequence: 'asc' } } },
     });
     const charges = b.installments.filter((i) => i.kind === 'charge');
     if (price && charges.length) {
@@ -1182,6 +1185,12 @@ export class BookingContractsService {
           continue;
         }
         if (due && i.status === 'SCHEDULED') await tx.bookingInstallment.updateMany({ where: { id: i.id, status: 'SCHEDULED' }, data: { due_at: due } });
+      }
+      // a custom plan keeps its agreed dates, but none falls after an event that moved earlier (custom-plan.ts)
+      if (b.payment_plan === PaymentPlan.CUSTOM && !readCustomPlan(b.custom_payment_plan)?.pay_after) {
+        for (const i of charges.filter((x) => x.status === 'SCHEDULED' && x.due_at > start)) {
+          await tx.bookingInstallment.updateMany({ where: { id: i.id, status: 'SCHEDULED' }, data: { due_at: start > now ? start : now } });
+        }
       }
       for (const i of b.installments.filter((x) => x.kind === 'security_deposit' && x.status === 'SCHEDULED')) {
         await tx.bookingInstallment.updateMany({ where: { id: i.id, status: 'SCHEDULED' }, data: { due_at: securityHoldAt(start, now) } });
@@ -1357,6 +1366,9 @@ export class BookingContractsService {
       ? await this.resolveVendorSignatureImage(user.userId, dto)
       : await this.storeSignatureImage(dto.signature_image, `signatures/${user.userId}`);
     const changes = ((contract as any).merge_data?.amendment_changes ?? {}) as Record<string, any>;
+    // a payment plan the vendor proposed (contracts/payment-plans.service.ts): agreed only on a confirmed booking
+    const planChange = readPlanChange(contract.merge_data);
+    if (planChange && contract.booking.status !== BookingStatus.CONFIRMED) throw new BadRequestException('A payment plan can only be agreed while the booking is confirmed.');
     // a payment may have been taken since the amendment was proposed
     if (changes.amount !== undefined) await this.assertPriceChangeable(this.prisma, contract.booking_id);
     const listing = changes.amount !== undefined
@@ -1394,6 +1406,8 @@ export class BookingContractsService {
       }
       if (price) await this.assertPriceChangeable(tx, contract.booking_id);
       await this.applyAmendmentToCharges(tx, contract.booking_id, price, !!(changes.event_start_at || changes.scheduled_at));
+      // the unpaid charges become the agreed plan's payments; paid ones stay as they are
+      if (planChange) await replaceUnpaidCharges(tx, contract.booking_id, planChange);
     });
     if (executed && changes.venue_address) void this.geocoder?.booking(contract.booking_id);
     return { success: true, data: this.summary({ ...executed, signatures: [] }, role) };

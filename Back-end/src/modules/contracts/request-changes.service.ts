@@ -7,7 +7,8 @@ import { ChosenGroup, optionScheduleLines, priceOptionChoices, readChosenOptions
 import { AddOnUnit, EventInput, packageUnit, PricingError, round2 } from 'src/modules/add-ons/pricing';
 import { needsGuestCount } from 'src/modules/booking/booking-place';
 import { requestExpiresAt } from 'src/modules/booking/booking-requests';
-import { buildSchedule } from 'src/modules/payments/payment-schedule';
+import { buildSchedule, PAYMENT_PLAN_LABELS } from 'src/modules/payments/payment-schedule';
+import { checkCustomPlan, CustomPayment, CustomPlan, MAX_PLAN_PAYMENTS, MIN_PLAN_PAYMENT, MIN_PLAN_PAYMENTS, PaymentPlanError, planSentence, readCustomPlan, withPaymentPlan } from 'src/modules/payments/custom-plan';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { promoDiscount } from 'src/modules/platform/promo.service';
 import { ChatExtrasService } from 'src/modules/chat/extras/chat-extras.service';
@@ -111,6 +112,16 @@ export class RequestChangesService {
     return b.payment_plan ?? b.listing?.payment_plan ?? b.listing?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
   }
 
+  /** The package's own plan (what the request goes back to without a custom one). */
+  private packagePlanOf(b: RequestRow): PaymentPlan {
+    return b.listing?.payment_plan ?? b.listing?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
+  }
+
+  /** A custom plan's payments as the comparison shows them (the first, with no date, is taken when the vendor accepts). */
+  private customSchedule(payments: CustomPayment[]) {
+    return payments.map((p) => ({ label: p.label, amount: p.amount, due_at: p.due_at, capture_manually: false }));
+  }
+
   private schedule(plan: PaymentPlan, price: number, fee: number, start: Date | string | null) {
     return buildSchedule({ plan, price, serviceFee: fee, eventStart: start ? new Date(start) : null }).map((i) => ({
       label: i.label,
@@ -160,6 +171,7 @@ export class RequestChangesService {
       options,
     );
     const fee = round2(Number(b.service_fee ?? 0));
+    const custom = plan === PaymentPlan.CUSTOM ? readCustomPlan(b.custom_payment_plan) : null;
     return {
       scheduled_at: b.scheduled_at?.toISOString() ?? null,
       event_start_at: b.event_start_at?.toISOString() ?? null,
@@ -175,8 +187,28 @@ export class RequestChangesService {
       service_fee: fee,
       total: round2(price + fee),
       plan,
-      schedule: this.schedule(plan, price, fee, ev.event_start_at ?? null),
+      schedule: custom ? this.customSchedule(custom.payments) : this.schedule(plan, price, fee, ev.event_start_at ?? null),
+      custom,
     };
+  }
+
+  /**
+   * The plan the suggestion charges on: a custom one sent with it, the package's own (`payment_plan: null`),
+   * or the one the request has (a custom plan is checked again against the new total and dates).
+   */
+  private planFor(b: RequestRow, before: RequestTerms, dto: ProposalDto, t: { total: number; fee: number; start: Date | string | null; end: Date | string | null; timeZone?: string | null }) {
+    const packagePlan = this.packagePlanOf(b);
+    const sent = dto.payment_plan;
+    if (sent === null || (sent === undefined && before.plan !== PaymentPlan.CUSTOM)) return { plan: sent === null ? packagePlan : (before.plan as PaymentPlan), custom: null };
+    const inputs = sent ? sent.payments : (before.custom?.payments ?? []);
+    const payAfter = packagePlan === PaymentPlan.PAY_AFTER_SERVICE;
+    try {
+      const payments = checkCustomPlan(inputs, { owed: t.total, feeOwed: t.fee, eventStart: t.start, eventEnd: t.end, payAfter, timeZone: t.timeZone });
+      return { plan: PaymentPlan.CUSTOM, custom: { pay_after: payAfter, payments } satisfies CustomPlan };
+    } catch (e) {
+      if (e instanceof PaymentPlanError) throw new RequestChangeError(sent ? e.message : `The payment plan no longer fits the new terms: ${e.message} Update the payment plan.`);
+      throw e;
+    }
   }
 
   /** The vendor's add-ons and fees that can go on this request: the package's own, and their library. */
@@ -192,7 +224,7 @@ export class RequestChangesService {
    * The suggested terms, priced on the server from what the vendor sent (nothing the apps total is used).
    * Throws a 400 with a message the vendor can act on.
    */
-  private async proposedTerms(b: RequestRow, before: RequestTerms, dto: ProposalDto, plan: PaymentPlan) {
+  private async proposedTerms(b: RequestRow, before: RequestTerms, dto: ProposalDto) {
     const listing = b.listing!;
     const now = new Date();
     // a new start moves the end with it (a multi-day event keeps its length) unless a new end is sent
@@ -224,6 +256,8 @@ export class RequestChangesService {
       const price = round2(subtotal - promo.discount);
       if (price > MAX_PROPOSAL_PRICE) throw new RequestChangeError(`The total can be up to $${MAX_PROPOSAL_PRICE.toLocaleString('en-US')}.`);
       const fee = platformServiceFee(price, listing.category_id);
+      const tz = ((this.base(b)?.merge_data ?? {}) as Record<string, unknown>).timezone as string | undefined;
+      const chosen = this.planFor(b, before, dto, { total: round2(price + fee), fee, start: start ?? null, end: end ?? null, timeZone: tz });
       const after: RequestTerms = {
         scheduled_at: start ? new Date(start).toISOString() : null,
         event_start_at: b.event_start_at || dto.event_start_at ? new Date(start!).toISOString() : null,
@@ -238,8 +272,9 @@ export class RequestChangesService {
         price,
         service_fee: fee,
         total: round2(price + fee),
-        plan,
-        schedule: this.schedule(plan, price, fee, start ?? null),
+        plan: chosen.plan,
+        schedule: chosen.custom ? this.customSchedule(chosen.custom.payments) : this.schedule(chosen.plan, price, fee, start ?? null),
+        custom: chosen.custom,
       };
       return { after, promoNote: promo.note };
     } catch (e) {
@@ -305,6 +340,11 @@ export class RequestChangesService {
       fees: fees.filter((f) => !charged.has(f.id)).map((f) => ({ name: f.name, price_text: f.price_text, description: f.description })),
       customerRoleLabel: data.customer_role_label,
     });
+    // a custom payment plan: the payment terms say so, and Schedule A lists each payment
+    if (after.custom) {
+      data.payment_schedule = planSentence(after.custom.payments, 'accept', data.timezone, b.currency);
+      data.pricing_schedule = withPaymentPlan(data.pricing_schedule, { payments: after.custom.payments, first: 'accept', timeZone: data.timezone, currency: b.currency, customerRole: data.customer_role_label });
+    }
     const rendered = this.contracts.renderFor(vc, data);
     const role = data.customer_role_label;
     const body = `${rendered.body}\n\n## Changes suggested by the Vendor\nThis version replaces the booking request signed as version ${base.version} (verification ${base.verification_code}). The Vendor suggested these changes: ${changes.join('; ')}. It takes effect once the ${role} signs it and the Vendor accepts the booking. If the ${role} declines, the request stays as it was. Nothing is charged before the Vendor accepts.`;
@@ -319,8 +359,8 @@ export class RequestChangesService {
     const base = this.base(b)!;
     const plan = this.planOf(b);
     const before = this.currentTerms(b, plan, base);
-    const { after, promoNote } = await this.proposedTerms(b, before, dto, plan);
-    if (sameTerms(before, after)) throw new BadRequestException('Nothing has changed yet. Edit the date, guests, add-ons, fees or customizations first.');
+    const { after, promoNote } = await this.proposedTerms(b, before, dto);
+    if (sameTerms(before, after)) throw new BadRequestException('Nothing has changed yet. Edit the date, guests, add-ons, fees, customizations or payment plan first.');
     const changes = describeChanges(before, after);
     const contract = await this.proposalContract(b, base, after, changes);
     const note = dto.note?.trim() || null;
@@ -482,6 +522,12 @@ export class RequestChangesService {
           options_amount: after.options.length ? after.options_amount : null,
           promo_code: after.promo_code,
           discount: after.discount || null,
+          // a custom payment plan is charged from these when the vendor accepts (PaymentsService.scheduleForBooking)
+          ...(after.custom
+            ? { payment_plan: PaymentPlan.CUSTOM, custom_payment_plan: after.custom as unknown as Prisma.InputJsonValue }
+            : b.payment_plan === PaymentPlan.CUSTOM
+              ? { payment_plan: null, custom_payment_plan: Prisma.DbNull }
+              : {}),
           // the vendor has at least 48 hours from now to accept (request-changes.ts)
           request_opened_at: reopenedAt(b.request_opened_at ?? b.created_at, now),
           expiry_reminded_at: null,
@@ -605,6 +651,15 @@ export class RequestChangesService {
         price_unit: packageUnit(b.listing.price_unit),
         needs_guest_count: needsGuestCount(b.listing),
         from_quote: current.package.label.startsWith('Quote:'),
+        // the payment plan section: the package's own plan, or a custom one (payments/custom-plan.ts)
+        payment_plan: {
+          package_plan: this.packagePlanOf(b),
+          package_plan_label: PAYMENT_PLAN_LABELS[this.packagePlanOf(b)],
+          pay_after: this.packagePlanOf(b) === PaymentPlan.PAY_AFTER_SERVICE,
+          min_payments: MIN_PLAN_PAYMENTS,
+          max_payments: MAX_PLAN_PAYMENTS,
+          min_payment: MIN_PLAN_PAYMENT,
+        },
       };
     }
     return {

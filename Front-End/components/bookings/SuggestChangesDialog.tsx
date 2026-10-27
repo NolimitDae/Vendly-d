@@ -23,6 +23,10 @@ import {
 } from "@/lib/request-changes";
 import SignContractPanel from "@/components/contracts/SignContractPanel";
 import ChangesComparison from "./ChangesComparison";
+import PaymentPlanEditor from "./PaymentPlanEditor";
+import dayjs from "dayjs";
+import { planError, planPayload, startingPlan, type PlanDraftRow } from "@/lib/payment-plan";
+import { PLAN_LABELS, type PaymentPlan } from "@/service/payments/payments.service";
 
 const inputCls =
   "w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary";
@@ -55,6 +59,15 @@ export default function SuggestChangesDialog({ bookingId, editor, customerName, 
   const [hasSavedSignature, setHasSavedSignature] = useState(false);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState("");
+  // the payment plan: the package's own, or a custom one (2 to 12 payments with dates)
+  const wasCustom = editor.current.plan === "CUSTOM";
+  const [customPlan, setCustomPlan] = useState(wasCustom);
+  const [planTotal, setPlanTotal] = useState(editor.current.total);
+  const [planRows, setPlanRows] = useState<PlanDraftRow[]>(() =>
+    wasCustom
+      ? editor.current.schedule.map((p, k) => ({ key: `c${k}`, amount: p.amount.toFixed(2), date: p.due_at ? dayjs(p.due_at).format("YYYY-MM-DD") : "" }))
+      : startingPlan(editor.current.total, editor.current.event_start_at ?? editor.current.scheduled_at),
+  );
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
   const setLine = (key: string, patch: Partial<Draft["lines"][number]>) =>
@@ -62,8 +75,32 @@ export default function SuggestChangesDialog({ bookingId, editor, customerName, 
   const used = new Set(draft.lines.map((l) => l.add_on_id).filter(Boolean));
   const keptAddOns = new Set(editor.current.lines.filter((l) => draft.lines.some((d) => d.extra_id === l.extra_id)).map((l) => l.add_on_id));
   const addable = [...editor.add_ons, ...editor.fees].filter((a) => !used.has(a.id) && !keptAddOns.has(a.id));
-  const problem = draftError(draft, { needsGuests: editor.needs_guest_count, customizations: editor.customizations });
-  const body = () => draftPayload(draft, initial, editor.customizations);
+  const startIso = draft.date ? dayjs(`${draft.date}T${draft.start || "00:00"}`).toISOString() : (editor.current.event_start_at ?? editor.current.scheduled_at);
+  const endIso = draft.endDate && draft.end ? dayjs(`${draft.endDate}T${draft.end}`).toISOString() : editor.current.event_end_at;
+  // the last day a payment can be due: the event start, or a week after the event for a pay-after-service package
+  const latest = editor.payment_plan?.pay_after && (endIso || startIso) ? dayjs(endIso || startIso).add(7, "day").toISOString() : startIso;
+  const problem =
+    draftError(draft, { needsGuests: editor.needs_guest_count, customizations: editor.customizations }) ??
+    (customPlan ? planError(planRows, planTotal, { feeOwed: editor.current.service_fee, latest }) : null);
+  const body = () => ({
+    ...draftPayload(draft, initial, editor.customizations),
+    // a custom plan, or back to the package's own (null); left out when it stays as it was
+    ...(customPlan ? { payment_plan: planPayload(planRows, startIso) } : wasCustom ? { payment_plan: null } : {}),
+  });
+
+  /** The total after the other changes, for the plan to add up to (worked out by the server on the package's plan). */
+  const refreshTotal = async () => {
+    setBusy(true);
+    try {
+      const res = await BookingService.previewChanges(bookingId, { ...draftPayload(draft, initial, editor.customizations), payment_plan: null });
+      setPlanTotal(res.data.data.after.total);
+    } catch {
+      // nothing else changed: the total is the request's
+      setPlanTotal(editor.current.total);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const toReview = async () => {
     if (problem) return toast.error(problem);
@@ -72,6 +109,7 @@ export default function SuggestChangesDialog({ bookingId, editor, customerName, 
       const [res, mine] = await Promise.all([BookingService.previewChanges(bookingId, body()), ContractsService.vendorList().catch(() => null)]);
       const d: Review = res.data.data;
       if (d.missing_message) return toast.error(d.missing_message);
+      setPlanTotal(d.after.total);
       setHasSavedSignature(!!mine?.data?.data?.has_saved_signature);
       setReview(d);
     } catch (err) {
@@ -279,6 +317,38 @@ export default function SuggestChangesDialog({ bookingId, editor, customerName, 
                 })}
               </section>
             )}
+
+            <section className="space-y-3" aria-labelledby="changes-plan">
+              <h4 id="changes-plan" className="text-sm font-semibold text-gray-900 dark:text-white">Payment plan</h4>
+              <fieldset className="space-y-1.5">
+                <legend className="sr-only">How {customerName} pays</legend>
+                <label className={`flex items-start gap-3 p-2 rounded-lg border text-sm cursor-pointer ${!customPlan ? "border-primary bg-primary/5" : "border-gray-200 dark:border-gray-700"}`}>
+                  <input type="radio" name="plan-mode" checked={!customPlan} onChange={() => setCustomPlan(false)} className="w-4 h-4 mt-0.5 accent-primary" />
+                  <span className="text-gray-900 dark:text-white">
+                    The package’s plan
+                    {editor.payment_plan && <span className="block text-xs text-gray-500 dark:text-gray-400">{PLAN_LABELS[editor.payment_plan.package_plan as PaymentPlan] ?? editor.payment_plan.package_plan_label}</span>}
+                  </span>
+                </label>
+                <label className={`flex items-start gap-3 p-2 rounded-lg border text-sm cursor-pointer ${customPlan ? "border-primary bg-primary/5" : "border-gray-200 dark:border-gray-700"}`}>
+                  <input type="radio" name="plan-mode" checked={customPlan} onChange={() => setCustomPlan(true)} className="w-4 h-4 mt-0.5 accent-primary" />
+                  <span className="text-gray-900 dark:text-white">
+                    A custom payment plan
+                    <span className="block text-xs text-gray-500 dark:text-gray-400">Split the total into 2 to 12 payments, each charged on its date.</span>
+                  </span>
+                </label>
+              </fieldset>
+              {customPlan && (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <span>Total to split: {money(planTotal)}</span>
+                    <button type="button" onClick={refreshTotal} disabled={busy} className="text-xs font-semibold text-primary disabled:opacity-60">
+                      Update after my other changes
+                    </button>
+                  </div>
+                  <PaymentPlanEditor rows={planRows} onChange={setPlanRows} total={planTotal} feeOwed={editor.current.service_fee} firstLabel="When you accept" latest={latest} />
+                </>
+              )}
+            </section>
 
             <label className="block text-sm text-gray-700 dark:text-gray-300">
               Note to {customerName} (optional)

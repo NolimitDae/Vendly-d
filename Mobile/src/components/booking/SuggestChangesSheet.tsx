@@ -25,6 +25,10 @@ import {
 import CustomizationPicker from './CustomizationPicker';
 import ChangesComparison from './ChangesComparison';
 import SignContractView from '../contracts/SignContractView';
+import PaymentPlanEditor from './PaymentPlanEditor';
+import { addDays, parseISO } from 'date-fns';
+import { planError, planPayload, startingPlan, type PlanDraftRow } from '../../utils/paymentPlan';
+import { PLAN_LABELS, type PaymentPlan } from '../../services/payments.service';
 
 interface Review extends Comparison {
   title: string;
@@ -62,13 +66,46 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
   const [review, setReview] = useState<Review | null>(null);
   const [hasSaved, setHasSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  // the payment plan: the package's own, or a custom one (2 to 12 payments with dates)
+  const wasCustom = editor.current.plan === 'CUSTOM';
+  const [customPlan, setCustomPlan] = useState(wasCustom);
+  const [planTotal, setPlanTotal] = useState(editor.current.total);
+  const [planRows, setPlanRows] = useState<PlanDraftRow[]>(() =>
+    wasCustom
+      ? editor.current.schedule.map((p, k) => ({ key: `c${k}`, amount: p.amount.toFixed(2), date: p.due_at ? parseISO(p.due_at) : null }))
+      : startingPlan(editor.current.total, editor.current.event_start_at ?? editor.current.scheduled_at),
+  );
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
   const setLine = (key: string, patch: Partial<Draft['lines'][number]>) => setDraft((d) => ({ ...d, lines: d.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) }));
   const kept = new Set([...draft.lines.map((l) => l.add_on_id), ...editor.current.lines.filter((l) => draft.lines.some((d) => d.extra_id === l.extra_id)).map((l) => l.add_on_id)].filter(Boolean));
   const addable = [...editor.add_ons, ...editor.fees].filter((a) => !kept.has(a.id));
-  const problem = draftError(draft, { needsGuests: editor.needs_guest_count, customizations: editor.customizations });
-  const body = () => draftPayload(draft, initial, editor.customizations);
+  const startIso = draft.start?.toISOString() ?? editor.current.event_start_at ?? editor.current.scheduled_at;
+  const endIso = draft.end?.toISOString() ?? editor.current.event_end_at;
+  // the last day a payment can be due: the event start, or a week after the event for a pay-after-service package
+  const latest = editor.payment_plan?.pay_after && (endIso || startIso) ? addDays(parseISO((endIso || startIso)!), 7).toISOString() : startIso;
+  const problem =
+    draftError(draft, { needsGuests: editor.needs_guest_count, customizations: editor.customizations }) ??
+    (customPlan ? planError(planRows, planTotal, { feeOwed: editor.current.service_fee, latest }) : null);
+  const body = () => ({
+    ...draftPayload(draft, initial, editor.customizations),
+    // a custom plan, or back to the package's own (null); left out when it stays as it was
+    ...(customPlan ? { payment_plan: planPayload(planRows, startIso) } : wasCustom ? { payment_plan: null } : {}),
+  });
+
+  /** The total after the other changes, for the plan to add up to (worked out by the server on the package's plan). */
+  const refreshTotal = async () => {
+    setBusy(true);
+    try {
+      const res = await BookingService.previewChanges(bookingId, { ...draftPayload(draft, initial, editor.customizations), payment_plan: null });
+      setPlanTotal(res.data.data.after.total);
+    } catch {
+      // nothing else changed: the total is the request's
+      setPlanTotal(editor.current.total);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const pick = (_: unknown, selected?: Date) => {
     const which = picker;
@@ -88,6 +125,7 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
       const [res, mine] = await Promise.all([BookingService.previewChanges(bookingId, body()), ContractsService.vendorList().catch(() => null)]);
       const d: Review = res.data.data;
       if (d.missing_message) return Alert.alert('More details needed', d.missing_message);
+      setPlanTotal(d.after.total);
       setHasSaved(!!mine?.data?.data?.has_saved_signature);
       setReview(d);
     } catch (err) {
@@ -242,6 +280,40 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
               </>
             )}
 
+            <Text style={s.h2} accessibilityRole="header">Payment plan</Text>
+            {[false, true].map((custom) => (
+              <Pressable
+                key={String(custom)}
+                style={[s.option, customPlan === custom && s.optionOn]}
+                onPress={() => setCustomPlan(custom)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: customPlan === custom }}
+              >
+                <Ionicons name={customPlan === custom ? 'radio-button-on' : 'radio-button-off'} size={20} color={customPlan === custom ? DARK.accent : DARK.muted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.value}>{custom ? 'A custom payment plan' : 'The package’s plan'}</Text>
+                  <Text style={s.small}>
+                    {custom
+                      ? 'Split the total into 2 to 12 payments, each charged on its date.'
+                      : editor.payment_plan
+                        ? PLAN_LABELS[editor.payment_plan.package_plan as PaymentPlan] ?? editor.payment_plan.package_plan_label
+                        : ''}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+            {customPlan && (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <Text style={s.value}>Total to split: {money(planTotal)}</Text>
+                  <Pressable onPress={refreshTotal} disabled={busy} accessibilityRole="button">
+                    <Text style={s.link}>Update after my other changes</Text>
+                  </Pressable>
+                </View>
+                <PaymentPlanEditor rows={planRows} onChange={setPlanRows} total={planTotal} feeOwed={editor.current.service_fee} firstLabel="When you accept" latest={latest} />
+              </>
+            )}
+
             <Text style={ui.label}>Note to {customerName} (optional)</Text>
             <TextInput
               style={s.note}
@@ -281,4 +353,6 @@ const s = StyleSheet.create({
   chipText: { color: '#fff', fontSize: 13, fontFamily: FONTS.medium },
   note: { minHeight: 90, borderRadius: 16, backgroundColor: DARK.field, padding: 14, color: '#fff', fontSize: 15, fontFamily: FONTS.regular },
   warn: { color: '#fcd34d', fontSize: 13, lineHeight: 19, fontFamily: FONTS.medium },
+  option: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: DARK.border },
+  optionOn: { borderColor: DARK.accent },
 });

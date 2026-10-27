@@ -13,6 +13,7 @@ import PaymentTimeline from '../../components/PaymentTimeline';
 import RentalReturnCard from '../../components/RentalReturnCard';
 import BookingChoices from '../../components/booking/BookingChoices';
 import RequestChangesCard from '../../components/booking/RequestChangesCard';
+import PaymentPlanCard from '../../components/booking/PaymentPlanCard';
 import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { api } from '../../services/api';
@@ -345,6 +346,17 @@ export default function BookingDetail() {
           {/* the customizations picked, and the vendor's dos and don'ts */}
           <BookingChoices booking={booking} />
           <RentalReturnCard booking={booking} role="CUSTOMER" onDone={load} />
+
+          <PaymentPlanCard
+            bookingId={booking.id}
+            role="CUSTOMER"
+            bookingStatus={booking.status}
+            otherName={vendor}
+            onChanged={() => {
+              setContractKey((k) => k + 1);
+              setPaymentsKey((k) => k + 1);
+            }}
+          />
 
           <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} startReporting={reporting} onChanged={() => { load(); extras.reload(); }} />
 

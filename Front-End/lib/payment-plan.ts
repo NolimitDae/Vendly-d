@@ -1,0 +1,155 @@
+/**
+ * Custom payment plans: the vendor splits what's owed into 2 to 12 payments with dates; the customer signs
+ * to agree. The server checks every rule again (Back-end/src/modules/payments/custom-plan.ts); these helpers
+ * drive the editor (split evenly, add a payment, the running remainder) and the schedule lists.
+ */
+import dayjs from "dayjs";
+
+/** Matches the server's rules. */
+export const MIN_PLAN_PAYMENTS = 2;
+export const MAX_PLAN_PAYMENTS = 12;
+export const MIN_PLAN_PAYMENT = 50;
+export const MIN_LAST_PAYMENT = 0.5;
+
+/** One payment as the vendor edits it: the amount, and a date ("" on the first = when accepted / now). */
+export interface PlanDraftRow {
+  key: string;
+  amount: string;
+  date: string;
+}
+
+/** One payment as the server shows it (a proposal, or the booking's charges with their status). */
+export interface PlanRow {
+  label: string;
+  amount: number;
+  due_at: string | null;
+  status: string | null;
+}
+
+let seq = 0;
+const nextKey = () => `p${(seq++).toString(36)}`;
+const cents = (n: number) => Math.round(n * 100);
+export const money = (n: number | null | undefined) => "$" + Number(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** `total` in `count` equal payments, the leftover cents on the first. */
+export function splitEvenly(total: number, count: number): number[] {
+  if (count < 1) return [];
+  const all = cents(total);
+  const each = Math.floor(all / count);
+  return Array.from({ length: count }, (_, k) => (k === 0 ? each + (all - each * count) : each) / 100);
+}
+
+/** Dates spread evenly from tomorrow to `last` (the event start, or the latest a payment can be due). */
+export function spreadDates(count: number, last: string | null | undefined, today = dayjs()): string[] {
+  const end = last ? dayjs(last) : today.add(count * 30, "day");
+  const from = today.add(1, "day").startOf("day");
+  const span = Math.max(0, end.startOf("day").diff(from, "day"));
+  return Array.from({ length: count }, (_, k) => (k === 0 ? "" : from.add(Math.round((span * k) / Math.max(1, count - 1)), "day").format("YYYY-MM-DD")));
+}
+
+/** A starting plan: two equal payments, the first when accepted and the second a week before the event (or a month away). */
+export function startingPlan(total: number, eventStart: string | null | undefined, today = dayjs()): PlanDraftRow[] {
+  const [a, b] = splitEvenly(total, 2);
+  const second = eventStart ? dayjs(eventStart).subtract(7, "day") : today.add(30, "day");
+  const date = second.isAfter(today.add(1, "day")) ? second : today.add(1, "day");
+  return [
+    { key: nextKey(), amount: a.toFixed(2), date: "" },
+    { key: nextKey(), amount: b.toFixed(2), date: date.format("YYYY-MM-DD") },
+  ];
+}
+
+/** Every payment equal again, keeping the dates; empty dates are filled in up to `last`. */
+export function evenRows(rows: PlanDraftRow[], total: number, last?: string | null): PlanDraftRow[] {
+  const amounts = splitEvenly(total, rows.length);
+  const dates = spreadDates(rows.length, last);
+  return rows.map((r, k) => ({ ...r, amount: amounts[k].toFixed(2), date: k === 0 ? r.date : r.date || dates[k] }));
+}
+
+/** One more payment, for whatever is still left (at least the date after the last one). */
+export function addRow(rows: PlanDraftRow[], total: number): PlanDraftRow[] {
+  const left = Math.max(0, remainder(rows, total));
+  const last = [...rows].reverse().find((r) => r.date)?.date;
+  const date = last ? dayjs(last).add(7, "day").format("YYYY-MM-DD") : "";
+  return [...rows, { key: nextKey(), amount: left > 0 ? left.toFixed(2) : "", date }];
+}
+
+/** What's still to place: positive when the payments come to less than the total. */
+export function remainder(rows: PlanDraftRow[], total: number) {
+  return (cents(total) - rows.reduce((s, r) => s + cents(Number(r.amount) || 0), 0)) / 100;
+}
+
+/** "Sat, Dec 5, 2026" */
+export const planDate = (iso: string | null | undefined) => (iso ? dayjs(iso).format("ddd, MMM D, YYYY") : "");
+
+/**
+ * The first thing to fix in a plan, or null. `feeOwed` is charged with the first payment; `latest` is the
+ * last day a payment can be due (the event day, a week after it for pay-after-service packages).
+ */
+export function planError(rows: PlanDraftRow[], total: number, opts: { feeOwed?: number; latest?: string | null; today?: dayjs.Dayjs } = {}): string | null {
+  const today = (opts.today ?? dayjs()).format("YYYY-MM-DD");
+  if (rows.length < MIN_PLAN_PAYMENTS || rows.length > MAX_PLAN_PAYMENTS) return `A payment plan has ${MIN_PLAN_PAYMENTS} to ${MAX_PLAN_PAYMENTS} payments.`;
+  let previous = "";
+  for (const [k, r] of rows.entries()) {
+    const n = k + 1;
+    const a = Number(r.amount);
+    if (r.amount.trim() === "" || !(a > 0) || Math.abs(a * 100 - Math.round(a * 100)) > 1e-6) return `Enter the amount of payment ${n} in dollars and cents.`;
+    const last = k === rows.length - 1;
+    if (k === 0 && (opts.feeOwed ?? 0) > 0 && cents(a) < cents((opts.feeOwed ?? 0) + MIN_PLAN_PAYMENT)) {
+      return `The first payment includes the Vendly Protection fee of ${money(opts.feeOwed)}, so it must be at least ${money((opts.feeOwed ?? 0) + MIN_PLAN_PAYMENT)}.`;
+    }
+    if (!last && cents(a) < cents(MIN_PLAN_PAYMENT)) return `Payment ${n} must be at least ${money(MIN_PLAN_PAYMENT)}. Only the last payment can be smaller.`;
+    if (last && cents(a) < cents(MIN_LAST_PAYMENT)) return `The last payment must be at least ${money(MIN_LAST_PAYMENT)}.`;
+    if (!r.date) {
+      if (k !== 0) return `Pick a date for payment ${n}.`;
+      continue;
+    }
+    if (r.date <= today) return `Payment ${n} must be due after today.`;
+    if (previous && r.date <= previous) return `Payment ${n} must be due after payment ${n - 1}.`;
+    if (opts.latest && r.date > dayjs(opts.latest).format("YYYY-MM-DD")) return `The last payment can be due up to ${planDate(opts.latest)}.`;
+    previous = r.date;
+  }
+  const left = remainder(rows, total);
+  if (left !== 0) return left > 0 ? `${money(left)} still to place. The payments must add up to ${money(total)}.` : `The payments are ${money(-left)} over ${money(total)}.`;
+  return null;
+}
+
+/**
+ * The plan as the API takes it. A date is charged at 9 AM local time; on the event day it's never later
+ * than the event start.
+ */
+export function planPayload(rows: PlanDraftRow[], eventStart?: string | null) {
+  return {
+    payments: rows.map((r) => {
+      if (!r.date) return { amount: Number(r.amount) };
+      let at = dayjs(`${r.date}T09:00`);
+      if (eventStart && at.isAfter(dayjs(eventStart)) && dayjs(eventStart).format("YYYY-MM-DD") === r.date) at = dayjs(eventStart);
+      return { amount: Number(r.amount), due_at: at.toISOString() };
+    }),
+  };
+}
+
+/** A payment's status in plain words. Unknown ones (newer servers) are shown as they come, tidied up. */
+export function paymentStatusText(status: string | null | undefined) {
+  switch (status) {
+    case null:
+    case undefined:
+      return "Proposed";
+    case "SCHEDULED":
+      return "Scheduled";
+    case "PAID":
+      return "Paid";
+    case "FAILED":
+      return "Failed, pay now";
+    case "PROCESSING":
+      return "Processing";
+    case "CANCELLED":
+      return "Replaced";
+    case "REFUNDED":
+      return "Refunded";
+    default:
+      return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, " ");
+  }
+}
+
+/** A payment's date, or for a first payment without one when it's taken ("When the vendor accepts"). */
+export const whenText = (due: string | null, firstLabel: string) => (due ? planDate(due) : firstLabel);

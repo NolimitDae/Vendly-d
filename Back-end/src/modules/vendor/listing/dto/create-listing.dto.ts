@@ -14,6 +14,7 @@ import {
   Min,
 } from 'class-validator';
 import { PaymentPlan } from 'prisma/generated/enums';
+import { LISTING_PAYMENT_PLANS } from 'src/modules/payments/payment-schedule';
 import { ListingStatus } from 'prisma/generated/client';
 import { Transform, Type } from 'class-transformer';
 import { SERVICE_AT, type ServiceAt } from 'src/modules/booking/booking-tracker';
@@ -123,9 +124,10 @@ export class CreateVendorListingDto {
   @Max(100000)
   max_quantity?: number;
 
-  @ApiPropertyOptional({ enum: PaymentPlan, description: 'How customers pay; defaults to the category setting, else full payment on accept' })
+  @ApiPropertyOptional({ enum: LISTING_PAYMENT_PLANS, description: 'How customers pay; defaults to the category setting, else full payment on accept' })
   @IsOptional()
-  @IsEnum(PaymentPlan)
+  // a custom plan is agreed per booking, never set on a package
+  @IsIn(LISTING_PAYMENT_PLANS)
   payment_plan?: PaymentPlan;
 
   @ApiPropertyOptional({ type: [String], description: "What's included, one short line each (a JSON array in multipart forms)" })

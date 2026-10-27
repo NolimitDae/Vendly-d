@@ -83,6 +83,8 @@ enum PaymentPlan {
   DEPOSIT_50
   DEPOSIT_25
   PAY_AFTER_SERVICE
+  // a schedule the vendor proposed for one booking and the customer signed (payments/custom-plan.ts); never a listing's plan
+  CUSTOM
 }
 
 enum InstallmentStatus {
@@ -974,6 +976,8 @@ model Booking {
 
   // Phase B payment engine
   payment_plan       PaymentPlan?
+  // a CUSTOM plan's agreed payments ({ pay_after, payments: [{ amount, fee_amount, due_at, label }] }, payments/custom-plan.ts)
+  custom_payment_plan Json?
   // Stripe PaymentMethod the customer chose when requesting; charged off-session on accept
   payment_method_id  String?
   // "us_bank_account" when that payment method is a bank account (large bookings only); null for a card
