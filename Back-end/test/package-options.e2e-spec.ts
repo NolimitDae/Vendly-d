@@ -54,6 +54,8 @@ run('Package customizations and dos and don’ts (e2e)', () => {
 
   const G: Record<string, any> = {};
   const charged: { amount: number; pi: string }[] = [];
+  // this run's charge for a payment (the suites share a database, so the payment jobs may charge other suites' bookings in between)
+  const chargeOf = (pi: string | null) => charged.find((c) => c.pi === pi);
   const refunded: { pi: string; amount?: number }[] = [];
   let bookingId = '';
 
@@ -238,7 +240,7 @@ run('Package customizations and dos and don’ts (e2e)', () => {
     const fee = Number(deposit.fee_amount);
     expect(deposit.status).toBe('PAID');
     expect(Number(deposit.amount)).toBe(265 + fee);
-    expect(charged.at(-1)!.amount).toBe(265 + fee);
+    expect(chargeOf(deposit.payment_intent_id)?.amount).toBe(265 + fee);
     const balance = await prisma.bookingInstallment.findFirst({ where: { booking_id: bookingId, sequence: 2 } });
     expect(Number(balance.amount)).toBe(265);
 

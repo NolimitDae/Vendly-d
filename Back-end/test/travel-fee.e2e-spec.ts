@@ -62,6 +62,10 @@ run('Delivery / travel fee (e2e)', () => {
   const msg = (res: request.Response) => res.body?.message?.message ?? res.body?.message;
 
   const charged: { amount: number; pi: string }[] = [];
+
+  // this run's charge for a payment (the suites share a database, so the payment jobs may charge other suites' bookings in between)
+
+  const chargeOf = (pi: string | null) => charged.find((c) => c.pi === pi);
   let lookups: string[] = [];
 
   beforeAll(async () => {
@@ -210,7 +214,7 @@ run('Delivery / travel fee (e2e)', () => {
     const deposit = await prisma.bookingInstallment.findFirst({ where: { booking_id: bookingId, sequence: 1 } });
     expect(deposit.status).toBe('PAID');
     expect(Number(deposit.amount)).toBe(round2(265 + Number(deposit.fee_amount)));
-    expect(charged.at(-1)!.amount).toBe(Number(deposit.amount));
+    expect(chargeOf(deposit.payment_intent_id)?.amount).toBe(Number(deposit.amount));
     const balance = await prisma.bookingInstallment.findFirst({ where: { booking_id: bookingId, sequence: 2 } });
     expect(Number(balance.amount)).toBe(265);
 

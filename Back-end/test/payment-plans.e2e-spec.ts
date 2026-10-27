@@ -53,6 +53,8 @@ run('Custom payment plans (e2e)', () => {
   const as = (who: keyof typeof U, r: request.Test) => r.auth(T[who], { type: 'bearer' });
   const msg = (res: request.Response) => res.body?.message?.message ?? res.body?.message;
   const charged: { amount: number; pi: string }[] = [];
+  // this run's charge for a payment (the suites share a database, so the payment jobs may charge other suites' bookings in between)
+  const chargeOf = (pi: string | null) => charged.find((c) => c.pi === pi);
   const refunds: { pi: string; amount: number }[] = [];
   const charges = (bid: string) => prisma.bookingInstallment.findMany({ where: { booking_id: bid, kind: 'charge' }, orderBy: { sequence: 'asc' } });
 
@@ -212,7 +214,7 @@ run('Custom payment plans (e2e)', () => {
       ['Payment 3 of 3', 500, 0, 'SCHEDULED'],
     ]);
     expect(rows[1].due_at.toISOString()).toBe(second.toISOString());
-    expect(charged.at(-1)!.amount).toBe(r2(2000 + fee));
+    expect(chargeOf(rows[0].payment_intent_id)?.amount).toBe(r2(2000 + fee));
 
     // the scheduler takes the second payment on its date, not before
     await payments.runDueCharges(new Date(second.getTime() - HOUR));
@@ -220,7 +222,7 @@ run('Custom payment plans (e2e)', () => {
     await payments.runDueCharges(new Date(second.getTime() + 60_000));
     rows = await charges(bid);
     expect(rows.map((i: any) => i.status)).toEqual(['PAID', 'PAID', 'SCHEDULED']);
-    expect(charged.at(-1)!.amount).toBe(1500);
+    expect(chargeOf(rows[1].payment_intent_id)?.amount).toBe(1500);
 
     // the third is declined: the pending-payment window starts, as a balance payment
     declined.add(rows[2].id);
@@ -310,7 +312,7 @@ run('Custom payment plans (e2e)', () => {
       ['Payment 2 of 3', 1000, 'PAID'],
       ['Payment 3 of 3', 1000, 'SCHEDULED'],
     ]);
-    expect(charged.at(-1)!.amount).toBe(1000);
+    expect(chargeOf(rows[2].payment_intent_id)?.amount).toBe(1000);
     const b = await prisma.booking.findUnique({ where: { id: bid } });
     expect(b.payment_plan).toBe('CUSTOM');
     const c = await prisma.bookingContract.findUnique({ where: { id: contractId }, include: { signatures: true } });

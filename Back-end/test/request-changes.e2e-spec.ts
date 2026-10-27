@@ -56,6 +56,8 @@ run('Suggested changes to a booking request (e2e)', () => {
 
   const G: Record<string, any> = {};
   const charged: { amount: number; pi: string }[] = [];
+  // this run's charge for a payment (the suites share a database, so the payment jobs may charge other suites' bookings in between)
+  const chargeOf = (pi: string | null) => charged.find((c) => c.pi === pi);
 
   beforeAll(async () => {
     const { StripePayment } = await import('../src/common/lib/Payment/stripe/StripePayment');
@@ -310,7 +312,7 @@ run('Suggested changes to a booking request (e2e)', () => {
     const deposit = await prisma.bookingInstallment.findFirst({ where: { booking_id: bookingId, sequence: 1 } });
     expect(deposit.status).toBe('PAID');
     expect(Number(deposit.amount)).toBe(Math.round((395 + fee) * 100) / 100);
-    expect(charged.at(-1)!.amount).toBe(Math.round((395 + fee) * 100) / 100);
+    expect(chargeOf(deposit.payment_intent_id)?.amount).toBe(Math.round((395 + fee) * 100) / 100);
     const balance = await prisma.bookingInstallment.findFirst({ where: { booking_id: bookingId, sequence: 2 } });
     expect(Number(balance.amount)).toBe(395);
 

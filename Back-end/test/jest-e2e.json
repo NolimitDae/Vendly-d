@@ -13,5 +13,9 @@
   "moduleNameMapper": {
     "^src/(.*)$": "<rootDir>/../src/$1",
     "^prisma/(.*)$": "<rootDir>/../prisma/$1"
-  }
+  },
+  "globalSetup": "<rootDir>/e2e-databases.ts",
+  "setupFiles": [
+    "<rootDir>/e2e-worker-db.ts"
+  ]
 }
