@@ -171,7 +171,7 @@ run('Delivery / travel fee (e2e)', () => {
     expect(d.pricing.schedule[0].amount).toBe(round2(265 + d.pricing.service_fee));
     expect(lookups).toEqual([FAR]);
 
-    // a number from the app is never taken
+    // an app can't send its own fee: the field isn't accepted at all (the price is always worked out here)
     await sleep(1100);
     const sneaky = await as('cust', http().post('/api/bookings')).send({ ...fields(FAR), travel_fee: 0, preview_token: d.preview_token, signature: sig('Cara Customer', d.content_sha256) });
     expect(sneaky.status).toBe(400);

@@ -166,7 +166,8 @@ export class VendorDashboardService {
           status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED] },
           released_at: null,
           rental_return: { is: null },
-          rental_reservations: { some: { status: RentalReservationStatus.ACTIVE, end_date: { lte: now } } },
+          // the last rental day is over (end_date is that day itself, at 00:00 UTC)
+          rental_reservations: { some: { status: RentalReservationStatus.ACTIVE, end_date: { lte: new Date(now.getTime() - DAY) } } },
         },
         take: MAX_PER_KIND,
         select: {
@@ -242,6 +243,8 @@ export class VendorDashboardService {
         arrived_at: true,
         checked_in_at: true,
         started_at: true,
+        // the customer chose to come to the vendor: Customer arrived, not On my way
+        customer_comes: true,
         listing: { select: { id: true, title: true, service_at: true, category: { select: { name: true } } } },
         customer: { select: { id: true, name: true, avatar: true } },
         rental_reservations: { select: { item: { select: { title: true } } } },

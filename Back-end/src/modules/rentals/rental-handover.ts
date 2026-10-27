@@ -29,7 +29,7 @@ export function handoverProblem(items: HandoverItem[], pickup: boolean, address:
     return deliveredOnly ? `${deliveredOnly.title} is delivered by the vendor, not picked up. Choose delivery and enter the address.` : null;
   }
   const pickupOnly = items.find((i) => !i.offers_delivery);
-  if (pickupOnly) return `${pickupOnly.title} is pickup only. Choose pickup, or rent it separately.`;
+  if (pickupOnly) return `${pickupOnly.title} is pickup only. Choose pickup (or leave the delivery address empty), or rent it separately.`;
   return address?.trim() ? null : 'Enter the delivery address.';
 }
 

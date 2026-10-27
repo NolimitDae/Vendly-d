@@ -5,7 +5,7 @@ import { AddOnsService } from 'src/modules/add-ons/add-ons.service';
 import { PackageOptionsService, formatOptionGroups, OPTION_GROUPS_INCLUDE } from 'src/modules/add-ons/package-options.service';
 import { ChosenGroup, optionScheduleLines, priceOptionChoices, readChosenOptions, UnitBasis } from 'src/modules/add-ons/package-options';
 import { AddOnUnit, EventInput, packageUnit, PricingError, round2 } from 'src/modules/add-ons/pricing';
-import { needsGuestCount, requiredBookingFields } from 'src/modules/booking/booking-place';
+import { GUEST_COUNT_NEEDED, needsGuestCount, requiredBookingFields } from 'src/modules/booking/booking-place';
 import { readTravel } from 'src/modules/booking/travel-fee';
 import { requestExpiresAt } from 'src/modules/booking/booking-requests';
 import { buildSchedule, PAYMENT_PLAN_LABELS } from 'src/modules/payments/payment-schedule';
@@ -239,7 +239,7 @@ export class RequestChangesService {
     if (start && end && end <= start) throw new BadRequestException('The end time must be after the start time.');
     const guests = dto.guest_count ?? b.guest_count;
     // a venue takes its booking on how many guests are coming
-    if (needsGuestCount(listing) && !(Number(guests ?? 0) >= 1)) throw new BadRequestException({ message: 'Enter how many guests are coming. A venue is booked for a number of guests.', error: 'GUEST_COUNT_REQUIRED' });
+    if (needsGuestCount(listing) && !(Number(guests ?? 0) >= 1)) throw new BadRequestException({ message: GUEST_COUNT_NEEDED, error: 'GUEST_COUNT_REQUIRED' });
     const ev: EventInput = { guest_count: guests, event_start_at: start, event_end_at: end };
 
     try {

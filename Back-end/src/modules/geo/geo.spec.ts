@@ -1,4 +1,4 @@
-import { __clearGeocodeCache, __clearPlaceCache, addressPoint, boundingBox, censusLabel, geocode, looksLikeStreetAddress, milesBetween, placeLabel, reversePlace, shortStreet, streetLabel, suggestPlaces, titleCase, typedHouseNumber, withoutPosition } from './geo';
+import { __clearGeocodeCache, __clearPlaceCache, addressPoint, boundingBox, censusLabel, geocode, looksLikeStreetAddress, milesBetween, placeLabel, reversePlace, shortStreet, streetLabel, suggestPlaces, takeOsmTurn, titleCase, typedHouseNumber, withoutPosition } from './geo';
 import { GeocodeService } from './geocode.service';
 
 const houston = { lat: 29.7604, lng: -95.3698 };
@@ -174,6 +174,17 @@ describe('street address suggestions', () => {
     const down = jest.fn(() => Promise.resolve({ ok: false, status: 503 }));
     expect(await addressPoint('27 Nowhere Lane Atlantis ZZ', down as any)).toBeNull();
     expect(await addressPoint('   ', down as any)).toBeNull();
+  });
+
+  it('takes OpenStreetMap turns one second apart across everyone, and gives up when the queue is long', () => {
+    __clearGeocodeCache();
+    expect(takeOsmTurn(10_000)).toBe(0);
+    expect(takeOsmTurn(10_000)).toBe(1000);
+    // the next free slot is two seconds away: too long a wait for a live quote
+    expect(takeOsmTurn(10_000)).toBe(-1);
+    expect(takeOsmTurn(11_500)).toBe(500);
+    expect(takeOsmTurn(20_000)).toBe(0);
+    __clearGeocodeCache();
   });
 
   it('does not remember a failed Census lookup as "no exact match"', async () => {

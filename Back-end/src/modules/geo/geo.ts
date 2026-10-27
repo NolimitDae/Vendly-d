@@ -39,11 +39,26 @@ export async function geocode(text: string, fetchImpl: typeof fetch = fetch): Pr
   if (!res.ok) throw new Error(`Geocoder answered ${res.status}`);
   const rows = (await res.json()) as { lat: string; lon: string }[];
   const hit = rows[0] ? { lat: Number(rows[0].lat), lng: Number(rows[0].lon) } : null;
+  if (cache.size > 2000) cache.clear();
   cache.set(q, hit);
   return hit;
 }
 
-export const __clearGeocodeCache = () => cache.clear();
+export const __clearGeocodeCache = () => {
+  cache.clear();
+  osmNext = 0;
+};
+
+// one interactive OpenStreetMap lookup a second, across all users; the hourly backfill paces itself
+let osmNext = 0;
+const OSM_GAP_MS = 1000;
+/** Claims the next free one-second slot: how long to wait for it, or -1 when it's more than a second away. */
+export function takeOsmTurn(now = Date.now()): number {
+  const slot = Math.max(now, osmNext);
+  if (slot - now > OSM_GAP_MS) return -1;
+  osmNext = slot + OSM_GAP_MS;
+  return slot - now;
+}
 
 // ─── Address suggestions (typing a package location) ─────────────────────────
 
@@ -319,6 +334,13 @@ export async function addressPoint(text: string, fetchImpl: typeof fetch = fetch
   if (looksLikeStreetAddress(t)) {
     const exact = await censusMatches(t, null, fetchImpl);
     if (exact?.length) return { lat: exact[0].lat, lng: exact[0].lng };
+  }
+  // OpenStreetMap asks for at most one lookup a second from the whole server: wait for a turn, or
+  // give up (the fee is then not worked out yet) rather than queue past the timeout
+  if (!cache.has(t.toLowerCase())) {
+    const wait = takeOsmTurn();
+    if (wait < 0) return null;
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   }
   let timer: NodeJS.Timeout | undefined;
   const slow = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), POINT_TIMEOUT_MS)));

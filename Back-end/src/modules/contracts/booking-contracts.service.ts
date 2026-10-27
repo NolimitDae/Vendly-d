@@ -1335,6 +1335,8 @@ export class BookingContractsService {
     });
     // Schedule A (how the price was reached at booking, add-ons, fees) carries over unchanged
     if (prevData?.pricing_schedule) data.pricing_schedule = prevData.pricing_schedule;
+    // so does the package's travel fee term the booking was priced on (not the vendor's general one)
+    if (full.travel_details && prevData?.travel_fee) data.travel_fee = prevData.travel_fee;
     const changed = Object.keys(changes).map(fieldLabel);
     const rendered = this.renderFor(vc, data);
     const body = `${rendered.body}\n\n## Amendment\nThis version replaces contract version ${current.version} (verification ${current.verification_code}). Changed: ${changed.join(', ')}. Until both parties sign this amendment, version ${current.version} remains in force.`;

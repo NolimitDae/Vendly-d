@@ -193,7 +193,7 @@ export function draftError(d: Draft, opts: { needsGuests?: boolean; customizatio
   if (d.date && d.start && d.end && (d.endDate || d.date) === d.date && d.end === d.start) return "The end time must be after the start time.";
   if (d.date && d.endDate && d.endDate < d.date) return "The end date can’t be before the start date.";
   if (d.guests && !(Number.isInteger(Number(d.guests)) && Number(d.guests) >= 1)) return "Enter the number of guests as a whole number.";
-  if (opts.needsGuests && !d.guests) return "Enter how many guests are coming. A venue is booked for a number of guests.";
+  if (opts.needsGuests && !d.guests) return "Enter how many guests are coming. The vendor needs a guest count to take the booking.";
   for (const l of d.lines) {
     const p = Number(l.unit_price);
     if (l.unit_price.trim() === "" || !(p >= 0) || p > MAX_LINE_PRICE) return `The price of “${l.name}” must be between $0 and $${MAX_LINE_PRICE.toLocaleString("en-US")}.`;

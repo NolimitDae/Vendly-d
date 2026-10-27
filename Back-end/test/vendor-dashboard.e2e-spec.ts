@@ -180,6 +180,11 @@ run('Vendor dashboard home (e2e)', () => {
     expect(upcoming[1]).toMatchObject({ steps_open: false, payment_state: 'pending_deposit', amount: 400 });
     // the rental started 3 days ago and isn't listed
     expect(upcoming.find((b) => b.id === B.rental)).toBeUndefined();
+
+    // the customer chose to come to the vendor: the day-of step is Customer arrived
+    await prisma.booking.update({ where: { id: B.fee }, data: { customer_comes: true } });
+    expect((await home(T.vendor)).body.data.upcoming[0]).toMatchObject({ id: B.fee, service_at: 'VENDOR_LOCATION' });
+    await prisma.booking.update({ where: { id: B.fee }, data: { customer_comes: false } });
   });
 
   it("another vendor sees only their own", async () => {
