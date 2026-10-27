@@ -61,6 +61,21 @@ describe('BookingExtrasService', () => {
       expect(prisma.bookingExtra.create).toHaveBeenCalledWith({ data: expect.objectContaining({ quantity: 80, amount: 480, fee_amount: 24 }) });
     });
 
+    it('keeps the booking under the Vendly Protection fee cap: the booking fee and its add-ons together', async () => {
+      __setFeeCache({ percent: 5, minimum: 3, maximum: 500, commission: 0, categories: new Map() });
+      const { service, prisma } = setup();
+      prisma.booking.findUnique.mockResolvedValue(booking({ service_fee: 470 }));
+      prisma.bookingExtra.aggregate = jest.fn().mockResolvedValue({ _sum: { fee_amount: 10 } });
+      // 5% of $1,000 would be $50; $470 + $10 is already taken, so $20 is left under the $500 cap
+      await service.request('b1', 'v1', { kind: 'ADD_ON', name: 'Late night set', unit_price: 1000, price_unit: 'FIXED' } as any);
+      expect(prisma.bookingExtra.create).toHaveBeenCalledWith({ data: expect.objectContaining({ amount: 1000, fee_amount: 20 }) });
+      expect(prisma.bookingExtra.aggregate.mock.calls[0][0].where.status.in).toEqual(['PENDING', 'APPROVED', 'IN_REVIEW']);
+      // at the cap: no fee at all
+      prisma.booking.findUnique.mockResolvedValue(booking({ service_fee: 500 }));
+      await service.request('b1', 'v1', { kind: 'ADD_ON', name: 'Late night set', unit_price: 1000, price_unit: 'FIXED' } as any);
+      expect(prisma.bookingExtra.create).toHaveBeenLastCalledWith({ data: expect.objectContaining({ amount: 1000, fee_amount: 0 }) });
+    });
+
     it('fills name and price from the library', async () => {
       const { service, prisma } = setup();
       prisma.vendorAddOn.findFirst.mockResolvedValue({ id: 'lib', kind: 'FEE', name: 'Cleaning', description: 'Extra cleaning', price: 120, price_unit: 'FIXED', max_quantity: null });

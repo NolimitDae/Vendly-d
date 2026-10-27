@@ -10,15 +10,17 @@ import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { currentFees } from 'src/modules/platform/platform-settings.service';
+import { isLargeBooking } from 'src/modules/platform/fee-config';
 import { AUTO_RELEASE_DAYS, buildSchedule, MAX_ATTEMPTS, PROOF_RELEASE_HOURS, RETRY_INTERVAL_MS, securityHoldAt } from './payment-schedule';
 import { track } from 'src/common/analytics';
 import { vendorEarnings } from './vendor-earnings';
 import { bookingTitle, cardText, money, shortDate } from './money-text';
-import { autoRetryAt, deadlineText, dueKindFor, PAYMENT_DUE_REMINDER_HOURS, PAYMENT_DUE_HOURS, paymentDueBy, PaymentDueKind, paymentState } from './payment-due';
+import { autoRetryAt, deadlineText, dueKindFor, paymentDueBy, PaymentDueKind, paymentDueRules, paymentState } from './payment-due';
+import { BANK, BANK_CLEARING_TEXT, bankNotAllowedReason, bankText, isBank, isClearing, paymentMethodType } from './bank-payments';
 import { checkDisputePhotos, describeDisputeAsk, disputePhotoUrls, removeDisputePhotos, storeDisputePhotos } from './dispute-files';
 import { requestPhotoUrls } from 'src/modules/booking/request-photos';
 import { NOT_STARTED_FLAG_HOURS, notStartedWindow, pastStartNotStarted } from 'src/modules/booking/no-show';
-import { isStripeMissing } from 'src/common/lib/Payment/stripe/stripe-errors';
+import { isBankPaymentsOff, isStripeMissing } from 'src/common/lib/Payment/stripe/stripe-errors';
 
 /** A customer's report: the reason, and from newer apps what kind of problem and what they ask for. */
 export interface DisputeInput {
@@ -59,6 +61,11 @@ interface FailureBooking {
   payment_plan?: PaymentPlan | null;
   deposit_rules?: boolean | null;
   payment_due_by?: Date | null;
+  /** price and fee: a large booking gets 48 hours to pay instead of 12 */
+  amount?: unknown;
+  service_fee?: unknown;
+  /** "us_bank_account" when the booking pays from a bank account */
+  payment_method_type?: string | null;
   listing: { title: string } | null;
   customer: { email: string | null; name: string | null };
   vendor?: { email: string | null; name: string | null } | null;
@@ -106,13 +113,31 @@ export class PaymentsService {
     return customer.id;
   }
 
-  async createSetupIntent(userId: string) {
+  /**
+   * Client secret for Stripe's card form, or with `type` us_bank_account for connecting a bank account
+   * (large bookings: instant verification through Stripe Financial Connections, and the mandate the
+   * customer accepts when confirming lets Vendly charge it later).
+   */
+  async createSetupIntent(userId: string, type?: string) {
     const customerId = await this.customerIdFor(userId);
-    const intent = await StripePayment.createSetupIntent(customerId);
-    return { success: true, data: { client_secret: intent.client_secret, customer_id: customerId } };
+    if (!isBank(type)) {
+      const intent = await StripePayment.createSetupIntent(customerId);
+      return { success: true, data: { client_secret: intent.client_secret, customer_id: customerId } };
+    }
+    try {
+      const intent = await StripePayment.createBankSetupIntent(customerId);
+      return { success: true, data: { client_secret: intent.client_secret, customer_id: customerId, type: BANK } };
+    } catch (err) {
+      if (!isBankPaymentsOff(err)) throw err;
+      // ACH Direct Debit isn't switched on in the Stripe dashboard: Vendly needs to know, the customer needs a way on
+      this.logger.error('Bank payments are not enabled on the Stripe account (Settings → Payment methods → ACH Direct Debit)');
+      Sentry.captureMessage('Bank payments (ACH Direct Debit) are not enabled on the Stripe account', { level: 'error', tags: { job: 'bank-setup' } });
+      throw new BadRequestException('Bank payments aren’t available yet. Please use a card for now.');
+    }
   }
 
-  async listCards(userId: string) {
+  /** Saved cards; with `withBank`, saved bank accounts too (apps that can show them ask for them). */
+  async listCards(userId: string, withBank = false) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { billing_id: true } });
     if (!user?.billing_id) return { success: true, data: [] };
     let cards: Awaited<ReturnType<typeof StripePayment.listCards>>;
@@ -125,26 +150,44 @@ export class PaymentsService {
       return { success: true, data: [] };
     }
     const defaultId = (customer as any)?.invoice_settings?.default_payment_method ?? null;
+    // bank payments may be switched off in Stripe: the cards still show
+    const banks = withBank ? await StripePayment.listBankAccounts(user.billing_id).catch(() => []) : [];
     return {
       success: true,
-      data: cards.map((c) => ({
-        id: c.id,
-        brand: c.card?.brand,
-        last4: c.card?.last4,
-        exp_month: c.card?.exp_month,
-        exp_year: c.card?.exp_year,
-        is_default: c.id === defaultId,
-      })),
+      data: [
+        ...cards.map((c) => ({
+          id: c.id,
+          type: 'card',
+          brand: c.card?.brand,
+          last4: c.card?.last4,
+          exp_month: c.card?.exp_month,
+          exp_year: c.card?.exp_year,
+          is_default: c.id === defaultId,
+        })),
+        ...banks.map((b) => ({
+          id: b.id,
+          type: BANK,
+          bank_name: b.us_bank_account?.bank_name ?? null,
+          last4: b.us_bank_account?.last4,
+          account_type: b.us_bank_account?.account_type ?? null,
+          is_default: b.id === defaultId,
+        })),
+      ],
     };
   }
 
   /** Confirms a payment method belongs to this user before it is used or removed. */
   async assertOwnsCard(userId: string, paymentMethodId: string) {
+    return (await this.ownedPaymentMethod(userId, paymentMethodId)).customerId;
+  }
+
+  /** The user's saved payment method and its kind ("card", "us_bank_account"); 403 when it isn't theirs. */
+  async ownedPaymentMethod(userId: string, paymentMethodId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { billing_id: true } });
     const pm = await StripePayment.retrievePaymentMethod(paymentMethodId).catch(() => null);
     const owner = typeof pm?.customer === 'string' ? pm.customer : pm?.customer?.id;
     if (!pm || !user?.billing_id || owner !== user.billing_id) throw new ForbiddenException('That card is not on your account');
-    return user.billing_id;
+    return { customerId: user.billing_id, type: (pm as { type?: string }).type ?? 'card' };
   }
 
   async setDefaultCard(userId: string, paymentMethodId: string) {
@@ -224,7 +267,7 @@ export class PaymentsService {
       include: {
         booking: {
           select: {
-            id: true, customer_id: true, vendor_id: true, payment_method_id: true, status: true, payment_plan: true, deposit_rules: true, payment_due_by: true,
+            id: true, customer_id: true, vendor_id: true, payment_method_id: true, payment_method_type: true, status: true, payment_plan: true, deposit_rules: true, payment_due_by: true, amount: true, service_fee: true,
             listing: { select: { title: true } }, customer: { select: { email: true, name: true, billing_id: true } }, vendor: { select: { email: true, name: true } },
           },
         },
@@ -245,11 +288,17 @@ export class PaymentsService {
     // a pay-after-service charge whose job is already complete is taken straight away: a hold placed
     // now would never be captured (completion captures the holds there are at that moment)
     const captureManually = inst.capture_manually && !(inst.kind !== SECURITY_DEPOSIT && b.status === BookingStatus.COMPLETED);
+    // a bank account (large bookings): the booking's own method is known; another one picked for this charge is looked up
+    const bank = paymentMethodOverride && paymentMethodOverride !== b.payment_method_id ? isBank(await paymentMethodType(paymentMethodOverride)) : isBank(b.payment_method_type);
+    if (bank && captureManually) {
+      // a bank payment can't be held and charged later; the booking flow never offers one for these
+      return this.recordFailure(inst.id, inst.attempts + 1, 'A bank account can’t be used for this payment. Please pay with a card.', b, inst, undefined, true);
+    }
     // claim the attempt so two workers can't double charge
     const claimed = await this.prisma.bookingInstallment.updateMany({
       // the amount too: if the vendor lowered it since we read it, the next run charges the new amount
       where: { id: inst.id, status: InstallmentStatus.SCHEDULED, attempts: inst.attempts, amount: inst.amount },
-      data: { status: InstallmentStatus.PROCESSING, attempts: { increment: 1 } },
+      data: { status: InstallmentStatus.PROCESSING, attempts: { increment: 1 }, ...(bank ? { payment_method_type: BANK } : {}) },
     });
     if (claimed.count !== 1) return inst;
     const attempt = inst.attempts + 1;
@@ -266,7 +315,13 @@ export class PaymentsService {
         // a customer retry resets the attempts, so the key also carries when the row last changed
         idempotencyKey: `inst-${inst.id}-${attempt}-${inst.updated_at ? new Date(inst.updated_at).getTime() : 0}`,
         description: `${b.listing?.title ?? 'Vendly booking'} — ${inst.label}`,
+        ...(bank ? { bank: true } : {}),
       });
+      if (pi.status === 'processing') {
+        // a bank payment on its way: not paid and not failed until Stripe says (payment_intent.succeeded / payment_failed)
+        track('payment_processing', b.customer_id, { booking_id: b.id, amount: Number(inst.amount), label: inst.label });
+        return this.markClearing(inst.id, pi.id);
+      }
       if (pi.status === 'succeeded' || pi.status === 'requires_capture') {
         track(pi.status === 'requires_capture' ? 'payment_authorized' : 'payment_succeeded', b.customer_id, { booking_id: b.id, amount: Number(inst.amount), label: inst.label });
         const marked = await this.markPaid(inst.id, pi.id, pi.status === 'requires_capture');
@@ -352,7 +407,7 @@ export class PaymentsService {
         // PAID records the payment and applies what the payment unlocks
         const moved = await tx.bookingInstallment.updateMany({
           where: { id: installmentId, status: { not: InstallmentStatus.PAID } },
-          data: { status: InstallmentStatus.PAID, payment_intent_id: paymentIntentId, paid_at: new Date(), last_error: null, next_attempt_at: null },
+          data: { status: InstallmentStatus.PAID, payment_intent_id: paymentIntentId, paid_at: new Date(), last_error: null, next_attempt_at: null, clearing_since: null },
         });
         inst = await tx.bookingInstallment.findUniqueOrThrow({ where: { id: installmentId } });
         if (moved.count !== 1) return inst;
@@ -382,6 +437,122 @@ export class PaymentsService {
     // the customer's receipt; never lets an email problem touch the payment (the hourly sweep catches misses)
     if (!authorizedOnly) await this.sendReceipt(installmentId);
     return marked;
+  }
+
+  /**
+   * A bank payment was sent and is clearing (about 4 business days): the installment stays PROCESSING
+   * with `clearing_since` set. It isn't paid (no receipt, no payout, nothing unlocked) and isn't
+   * failed (no retries, and the booking isn't cancelled for non-payment meanwhile).
+   */
+  private async markClearing(installmentId: string, paymentIntentId: string) {
+    const moved = await this.prisma.bookingInstallment.updateMany({
+      where: { id: installmentId, status: InstallmentStatus.PROCESSING, clearing_since: null },
+      data: { payment_intent_id: paymentIntentId, clearing_since: new Date(), payment_method_type: BANK, last_error: null, next_attempt_at: null },
+    });
+    const inst = await this.prisma.bookingInstallment.findUniqueOrThrow({ where: { id: installmentId } });
+    if (moved.count === 1) {
+      const b = await this.prisma.booking.findUnique({ where: { id: inst.booking_id }, select: { customer_id: true, listing: { select: { title: true } } } });
+      await this.prisma.paymentTransaction.create({
+        data: { user_id: b?.customer_id, type: 'booking_installment', provider: 'stripe', reference_number: paymentIntentId, order_id: inst.booking_id, status: 'processing', amount: inst.amount, currency: inst.currency },
+      });
+      if (b) {
+        const body = `Your bank payment of ${money(inst.amount, inst.currency)} for ${b.listing?.title ?? 'your booking'} (${inst.label}) is processing. Bank payments take ${BANK_CLEARING_TEXT} to clear; we'll let you know if anything goes wrong.`;
+        void this.push.sendToUser(b.customer_id, { title: 'Bank payment processing', body, data: { type: 'booking', bookingId: inst.booking_id } }, 'payments');
+      }
+    }
+    return inst;
+  }
+
+  /**
+   * A bank payment that was clearing failed (insufficient funds, account closed, the customer's bank
+   * refused it): handled like a declined card, except there's no automatic retry on the same account
+   * (it would take days again). Deposit plans get the usual window to pay another way (48 hours on
+   * large bookings); other plans wait for the customer to pay with a card.
+   */
+  private async bankPaymentFailed(inst: { id: string; booking_id: string; attempts: number; label: string; amount: unknown; kind: string; sequence: number }, paymentIntentId: string, reason: string) {
+    const moved = await this.prisma.bookingInstallment.updateMany({ where: { id: inst.id, status: InstallmentStatus.PROCESSING, clearing_since: { not: null } }, data: { clearing_since: null } });
+    if (moved.count !== 1) return;
+    const b = await this.failureBooking(inst.booking_id);
+    if (!b) return;
+    await this.prisma.paymentTransaction.updateMany({ where: { reference_number: paymentIntentId, type: 'booking_installment', status: 'processing' }, data: { status: 'failed' } });
+    if (this.bookingEnded(b)) {
+      // the booking ended while it was clearing: nothing is owed any more
+      await this.prisma.bookingInstallment.update({ where: { id: inst.id }, data: { status: InstallmentStatus.CANCELLED, last_error: reason } });
+      return;
+    }
+    await this.recordFailure(inst.id, Math.max(1, inst.attempts), reason, b, inst, paymentIntentId, true);
+  }
+
+  /**
+   * A bank payment that had cleared (and was treated as paid) came back later, e.g. returned by the
+   * customer's bank. Like a refund the other way round: the installment is unpaid again (FAILED), the
+   * vendor's part comes back from their balance if they were already paid for it (an early deposit
+   * release too), and the customer is asked to pay again (the usual window on deposit plans while the
+   * booking is still on). Vendly's admins hear about it. Under the booking lock; safe to repeat.
+   */
+  async bankPaymentReturned(installmentId: string, paymentIntentId: string, reason: string) {
+    const row = await this.prisma.bookingInstallment.findUnique({ where: { id: installmentId }, select: { booking_id: true } });
+    if (!row) return null;
+    return withBookingLock(this.prisma, row.booking_id, async () => {
+      const inst = await this.prisma.bookingInstallment.findUnique({ where: { id: installmentId } });
+      if (!inst || inst.status !== InstallmentStatus.PAID || inst.payment_intent_id !== paymentIntentId) return null;
+      const booking = await this.prisma.booking.findUnique({
+        where: { id: inst.booking_id },
+        select: { id: true, vendor_id: true, customer_id: true, status: true, currency: true, early_released_amount: true, released_gross: true, commission_amount: true, installments: { select: { id: true, status: true } } },
+      });
+      if (!booking) return null;
+      const moved = await this.prisma.bookingInstallment.updateMany({
+        where: { id: inst.id, status: InstallmentStatus.PAID, payment_intent_id: paymentIntentId },
+        data: { status: InstallmentStatus.FAILED, paid_at: null, paid_out_at: null, last_error: `Returned by your bank: ${reason}`, next_attempt_at: null, clearing_since: null },
+      });
+      if (moved.count !== 1) return null;
+      const currency = booking.currency ?? 'usd';
+      await this.prisma.paymentTransaction.create({
+        data: { user_id: booking.customer_id, type: 'booking_payment_returned', provider: 'stripe', reference_number: paymentIntentId, order_id: booking.id, status: 'failed', amount: -Number(inst.amount), currency },
+      });
+      // what the vendor already received for it comes back from their balance (less Vendly's commission on it)
+      let recovered = 0;
+      const part = vendorPortion(inst);
+      if (inst.paid_out_at && part > 0) {
+        const rate = Number(booking.released_gross ?? 0) > 0 ? Number(booking.commission_amount ?? 0) / Number(booking.released_gross) : currentFees().commission / 100;
+        recovered = round2(part * (1 - rate));
+        const commissionBack = round2(part - recovered);
+        if (recovered > 0) await this.recordRecovery(booking.vendor_id, booking.id, -recovered, currency);
+        if (commissionBack > 0) {
+          await this.prisma.paymentTransaction.create({ data: { user_id: booking.vendor_id, type: 'vendly_commission', provider: 'stripe', reference_number: booking.id, status: 'succeeded', amount: -commissionBack, currency } });
+        }
+      } else if (inst.kind === 'charge' && inst.sequence === 1 && Number(booking.early_released_amount ?? 0) > 0) {
+        // the deposit was paid out early: owed back now; the final payout no longer takes it off
+        recovered = Number(booking.early_released_amount);
+        await this.prisma.booking.update({ where: { id: booking.id }, data: { early_released_amount: 0 } });
+        await this.recordRecovery(booking.vendor_id, booking.id, -recovered, currency);
+      }
+      // nothing paid on it any more
+      if (!booking.installments.some((i) => i.id !== inst.id && isPaid(i))) await this.prisma.booking.update({ where: { id: booking.id }, data: { paid_at: null } });
+
+      const b = await this.failureBooking(booking.id);
+      if (b && !this.bookingEnded(b)) {
+        const active = b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.IN_PROGRESS;
+        // once the job is done there's no booking left to cancel: the customer is asked to pay, no deadline
+        await this.recordFailure(inst.id, Math.max(1, inst.attempts), `Returned by your bank: ${reason}`, active ? b : { ...b, deposit_rules: false }, inst, paymentIntentId, true);
+      }
+      const admins = await this.prisma.user.findMany({ where: { type: 'ADMIN', deleted_at: null }, select: { id: true } });
+      const body = `A bank payment of ${money(inst.amount, currency)} on booking ${booking.id} (${inst.label}) was returned after it cleared: ${reason}.${recovered > 0 ? ` ${money(recovered, currency)} is being recovered from the vendor's balance.` : ''} The customer was asked to pay again.`;
+      for (const a of admins) void this.push.sendToUser(a.id, { title: 'Bank payment returned', body, data: { type: 'booking', bookingId: booking.id } });
+      Sentry.captureMessage('Bank payment returned after it cleared', { level: 'warning', tags: { job: 'bank-return' }, extra: { booking_id: booking.id, installment_id: inst.id, recovered } });
+      return { recovered };
+    });
+  }
+
+  /** What recordFailure needs about a booking. */
+  private failureBooking(bookingId: string) {
+    return this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true, customer_id: true, vendor_id: true, status: true, payment_plan: true, deposit_rules: true, payment_due_by: true, amount: true, service_fee: true, dispute_resolution: true, payment_method_type: true,
+        listing: { select: { title: true } }, customer: { select: { email: true, name: true } }, vendor: { select: { email: true, name: true } },
+      },
+    });
   }
 
   /** Moves the booking's end later for a paid add-on that adds time; a booking with only a start ends that long after it starts. */
@@ -422,7 +593,7 @@ export class PaymentsService {
     const title = b.listing?.title ?? 'your booking';
     const clientUrl = appConfig().app.client_app_url;
     const body = exhausted
-      ? `We couldn't take the ${inst.label.toLowerCase()} of $${Number(inst.amount).toFixed(2)} for ${title}. Please pay with another card to keep your booking.`
+      ? `We couldn't take the ${inst.label.toLowerCase()} of $${Number(inst.amount).toFixed(2)} for ${title}${isBank(b.payment_method_type) ? ` from your bank account (${message})` : ''}. Please pay with another card to keep your booking.`
       : `We couldn't take the ${inst.label.toLowerCase()} of $${Number(inst.amount).toFixed(2)} for ${title} (${message}). We'll try again in 24 hours, or you can update your card now.`;
     if (b.customer.email) {
       await this.mail
@@ -435,9 +606,10 @@ export class PaymentsService {
 
   /**
    * A deposit plan's deposit or balance didn't go through: the customer has 12 hours from the first
-   * failure to pay it (the deadline doesn't move on later failures). One automatic retry about 6 hours
-   * in, unless the bank needs the customer. The customer hears it with the amount, the deadline in
-   * their time zone and a pay link; the vendor hears the payment is pending (once).
+   * failure to pay it, 48 on a large booking (the deadline doesn't move on later failures). One
+   * automatic retry about 6 hours in (24 on a large booking), unless the bank needs the customer. The
+   * customer hears it with the amount, the deadline in their time zone and a pay link; the vendor
+   * hears the payment is pending (once).
    */
   private async recordMissedDeposit(
     installmentId: string,
@@ -450,13 +622,15 @@ export class PaymentsService {
     needsCustomer: boolean,
   ) {
     const now = new Date();
+    // 12 hours, or 48 on a large booking (payment-due.ts)
+    const rules = paymentDueRules(isLargeBooking(b));
     // only the first failure starts the clock
     const started = !b.payment_due_by;
-    const dueBy = b.payment_due_by ?? paymentDueBy(now);
+    const dueBy = b.payment_due_by ?? paymentDueBy(now, rules.dueHours);
     if (started) {
       await this.prisma.booking.updateMany({ where: { id: b.id, payment_due_by: null }, data: { payment_due_by: dueBy, payment_due_kind: kind, payment_due_reminded_at: null } });
     }
-    const retryAt = attempt === 1 && !needsCustomer ? autoRetryAt(now, dueBy) : null;
+    const retryAt = attempt === 1 && !needsCustomer ? autoRetryAt(now, dueBy, rules.retryHours) : null;
     track('payment_failed', b.customer_id, { booking_id: b.id, attempt, final: !retryAt, needs_customer: needsCustomer, due: kind });
     const updated = await this.prisma.bookingInstallment.update({
       where: { id: installmentId },
@@ -477,9 +651,10 @@ export class PaymentsService {
    * and with `tellVendor` the vendor that the payment is pending. Also the ~2-hours-left reminder.
    */
   async notifyPaymentDue(
-    b: { id: string; customer_id: string; vendor_id?: string; listing: { title: string } | null; customer: { email: string | null; name: string | null }; vendor?: { email: string | null; name: string | null } | null },
+    b: { id: string; customer_id: string; vendor_id?: string; amount?: unknown; service_fee?: unknown; payment_method_type?: string | null; listing: { title: string } | null; customer: { email: string | null; name: string | null }; vendor?: { email: string | null; name: string | null } | null },
     p: { kind: PaymentDueKind; amount: number; label?: string; dueBy: Date; reason?: string; retryAt?: Date | null; tellVendor?: boolean; reminder?: boolean },
   ) {
+    const rules = paymentDueRules(isLargeBooking(b));
     const title = b.listing?.title ?? 'your booking';
     const clientUrl = appConfig().app.client_app_url;
     // the time zone the booking was made in (the customer's, and the event's)
@@ -490,16 +665,20 @@ export class PaymentsService {
     const when = deadlineText(p.dueBy, tz);
     const what = p.kind === 'deposit' ? 'deposit' : 'balance';
     const amount = money(p.amount);
+    // paying from a bank account (large bookings): its payment failed, a card is the quick way to pay
+    const byBank = isBank(b.payment_method_type);
     const body = p.reminder
-      ? `About ${PAYMENT_DUE_REMINDER_HOURS} hours left: pay the ${amount} ${what} for ${title} by ${when}, or the booking will be cancelled.`
-      : `We couldn't take the ${amount} ${what} for ${title}${p.reason ? ` (${p.reason})` : ''}. Pay it by ${when} with your card or another card to keep your booking. If it isn't paid by then, the booking is cancelled.${p.retryAt ? ' We will also try your card again once in a few hours.' : ''}`;
+      ? `About ${rules.reminderHours} hours left: pay the ${amount} ${what} for ${title} by ${when}, or the booking will be cancelled.`
+      : byBank
+        ? `We couldn't take the ${amount} ${what} for ${title} from your bank account${p.reason ? ` (${p.reason})` : ''}. Pay it by ${when} with a card, or from your bank account again, to keep your booking. If it isn't paid by then, the booking is cancelled.`
+        : `We couldn't take the ${amount} ${what} for ${title}${p.reason ? ` (${p.reason})` : ''}. Pay it by ${when} with your card or another card to keep your booking. If it isn't paid by then, the booking is cancelled.${p.retryAt ? ' We will also try your card again once in a few hours.' : ''}`;
     const payUrl = `${clientUrl}/bookings/${b.id}?pay=1`;
     if (b.customer.email) {
       await this.mail
         .sendBookingNotification({
           to: b.customer.email,
           recipientName: b.customer.name ?? '',
-          subject: p.reminder ? `${PAYMENT_DUE_REMINDER_HOURS} hours left to pay — ${title}` : `Payment needed by ${when} — ${title}`,
+          subject: p.reminder ? `${rules.reminderHours} hours left to pay — ${title}` : `Payment needed by ${when} — ${title}`,
           message: body,
           status: 'PAYMENT_FAILED',
           listingTitle: title,
@@ -512,7 +691,7 @@ export class PaymentsService {
     }
     void this.push.sendToUser(b.customer_id, { title: p.reminder ? 'Payment due soon' : `Pending ${what}`, body, data: { type: 'booking', bookingId: b.id } }, 'payments');
     if (p.tellVendor && b.vendor_id) {
-      const vendorBody = `${b.customer.name ?? 'The customer'}'s ${what} of ${amount} for ${title} didn't go through. They have until ${when} (${PAYMENT_DUE_HOURS} hours) to pay. If they don't, the booking is cancelled automatically and you keep what the cancellation terms give you.`;
+      const vendorBody = `${b.customer.name ?? 'The customer'}'s ${what} of ${amount} for ${title} didn't go through. They have until ${when} (${rules.dueHours} hours) to pay. If they don't, the booking is cancelled automatically and you keep what the cancellation terms give you.`;
       void this.push.sendToUser(b.vendor_id, { title: `Pending ${what}`, body: vendorBody, data: { type: 'booking', bookingId: b.id } }, 'booking_updates');
       if (b.vendor?.email) {
         await this.mail
@@ -524,15 +703,23 @@ export class PaymentsService {
 
   /** Customer retries a failed installment, optionally with a different saved card. */
   async retryInstallment(bookingId: string, installmentId: string, customerId: string, paymentMethodId?: string) {
-    const inst = await this.prisma.bookingInstallment.findFirst({ where: { id: installmentId, booking_id: bookingId }, include: { booking: { select: { customer_id: true, status: true, dispute_resolution: true } } } });
+    const inst = await this.prisma.bookingInstallment.findFirst({
+      where: { id: installmentId, booking_id: bookingId },
+      include: { booking: { select: { customer_id: true, status: true, dispute_resolution: true, amount: true, service_fee: true, payment_plan: true, security_deposit: true } } },
+    });
     if (!inst) throw new NotFoundException('Installment not found');
     if (inst.booking.customer_id !== customerId) throw new ForbiddenException('Access denied');
     // nothing more is charged on a cancelled, declined or fully refunded booking
     if (this.bookingEnded(inst.booking)) throw new BadRequestException('This booking has ended, so there is nothing more to pay.');
+    if (isClearing(inst)) throw new ConflictException(`A bank payment for this is on its way. It takes ${BANK_CLEARING_TEXT} to clear.`);
     if (inst.status !== InstallmentStatus.FAILED && inst.status !== InstallmentStatus.SCHEDULED) throw new BadRequestException('This installment is not waiting for payment');
     if (paymentMethodId) {
-      await this.assertOwnsCard(customerId, paymentMethodId);
-      await this.prisma.booking.update({ where: { id: bookingId }, data: { payment_method_id: paymentMethodId } });
+      const { type } = await this.ownedPaymentMethod(customerId, paymentMethodId);
+      if (isBank(type)) {
+        const why = bankNotAllowedReason({ total: Number(inst.booking.amount ?? 0) + Number(inst.booking.service_fee ?? 0), plan: inst.booking.payment_plan, securityDeposit: inst.booking.security_deposit });
+        if (why || inst.capture_manually) throw new BadRequestException(why ?? 'This payment needs a card. Please choose a card.');
+      }
+      await this.prisma.booking.update({ where: { id: bookingId }, data: { payment_method_id: paymentMethodId, payment_method_type: isBank(type) ? BANK : null } });
     }
     // a fresh attempt window: the retry counter starts over for the new card. Only while the row is as
     // read: the sweep or the automatic retry may have just claimed it, and resetting it then would charge twice
@@ -638,8 +825,10 @@ export class PaymentsService {
     if (d.requested_amount != null && d.outcome !== 'partial_refund') throw new BadRequestException('An amount is only needed for a partial refund.');
     if (d.outcome === 'partial_refund') {
       requested = round2(Number(d.requested_amount ?? 0));
-      const { vendorPaid } = await this.paidSoFar(bookingId, b);
+      const { paid, vendorPaid } = await this.paidSoFar(bookingId, b);
       if (!(requested > 0)) throw new BadRequestException('Enter how much you’d like back.');
+      // never more than was actually paid on the booking (large bookings can be well over $100,000)
+      if (requested > paid) throw new BadRequestException(paid > 0 ? `You can ask for up to ${money(paid)}, what you’ve paid for this booking.` : 'Nothing has been paid on this booking yet.');
       // the same limit an admin has for a partial refund: the Vendly Protection fee comes back only with a full refund
       if (requested >= vendorPaid) {
         throw new BadRequestException(
@@ -788,6 +977,7 @@ export class PaymentsService {
         // was paid, and no rented item is still out
         paid_at: { not: null },
         rental_reservations: { none: { status: 'ACTIVE' } },
+        installments: { none: { status: InstallmentStatus.PROCESSING, clearing_since: { not: null } } },
       },
       select: { id: true },
       orderBy: [{ release_at: 'asc' }, { id: 'asc' }],
@@ -826,6 +1016,8 @@ export class PaymentsService {
     // rentals are paid out once the vendor has checked the items back in
     const outstanding = await this.prisma.rentalReservation.count({ where: { booking_id: bookingId, status: 'ACTIVE' } });
     if (outstanding > 0) return null;
+    // a bank payment still clearing: the vendor is paid once it has (never on money that may not arrive)
+    if (b.installments.some(isClearing)) return null;
     // only what was actually paid (and not paid out already); an installment refunded past the
     // vendor's part (fee included) counts as nothing, never as minus
     const paid = b.installments.filter((i) => isPaid(i) && !i.paid_out_at);
@@ -964,6 +1156,7 @@ export class PaymentsService {
     const charges = b.installments.filter((i) => i.kind === 'charge');
     const deposit = charges[0];
     const depositPlan = b.payment_plan === PaymentPlan.DEPOSIT_50 || b.payment_plan === PaymentPlan.DEPOSIT_25;
+    if (deposit && isClearing(deposit)) throw new BadRequestException(`The customer’s bank payment for the deposit is still clearing (${BANK_CLEARING_TEXT}). You can release it once it has.`);
     if (!depositPlan || !deposit || charges.length < 2 || deposit.status !== InstallmentStatus.PAID) throw new BadRequestException('There is no paid deposit to release on this booking.');
     if (!b.vendor.stripe_connect_id) throw new BadRequestException('Connect a bank account in Payments & Payouts first.');
     const amount = round2(Number(deposit.amount) - Number(deposit.fee_amount) - Number(deposit.refunded_amount));
@@ -1276,11 +1469,12 @@ export class PaymentsService {
 
   // ─── Receipts and the final invoice ──────────────────────────────────────
 
-  /** "Visa •••• 4242" for a saved card, or null when it isn't known. Never throws. */
+  /** "Visa •••• 4242" for a saved card ("Bank account •••• 6789" for a bank account), or null when it isn't known. Never throws. */
   async cardLabel(paymentMethodId?: string | null): Promise<string | null> {
     if (!paymentMethodId) return null;
     try {
       const pm = await StripePayment.retrievePaymentMethod(paymentMethodId);
+      if (pm?.us_bank_account) return bankText(pm.us_bank_account);
       return cardText(pm?.card);
     } catch {
       return null;
@@ -1305,7 +1499,7 @@ export class PaymentsService {
       const i = await this.prisma.bookingInstallment.findUniqueOrThrow({
         where: { id: installmentId },
         select: {
-          label: true, amount: true, currency: true, paid_at: true,
+          label: true, amount: true, currency: true, paid_at: true, payment_method_type: true,
           booking: { select: { id: true, status: true, dispute_resolution: true, payment_method_id: true, listing: { select: { title: true } }, rental_reservations: { select: { item: { select: { title: true } } } }, customer: { select: { email: true, name: true } } } },
         },
       });
@@ -1325,7 +1519,7 @@ export class PaymentsService {
         lines: [
           { label: 'Charged for', value: i.label },
           { label: 'Amount', value: amount },
-          ...(card ? [{ label: 'Card', value: card }] : []),
+          ...(card ? [{ label: isBank(i.payment_method_type) ? 'Bank account' : 'Card', value: card }] : []),
           { label: 'Date', value: shortDate(i.paid_at ?? new Date()) },
           { label: 'Booking reference', value: b.id },
         ],
@@ -1660,7 +1854,24 @@ export class PaymentsService {
     const installmentId = pi.metadata?.installment_id;
     if (!installmentId) return;
     const inst = await this.prisma.bookingInstallment.findUnique({ where: { id: installmentId } });
-    if (!inst || inst.status === InstallmentStatus.PAID || inst.status === InstallmentStatus.REFUNDED) return;
+    if (!inst) return;
+    const failure = pi.last_payment_error?.message ?? 'The bank payment was returned';
+    // a bank payment that had cleared came back later (returned by the customer's bank)
+    if (pi.status === 'requires_payment_method' && inst.status === InstallmentStatus.PAID && inst.payment_intent_id === pi.id && isBank(inst.payment_method_type)) {
+      await this.bankPaymentReturned(inst.id, pi.id, failure);
+      return;
+    }
+    if (inst.status === InstallmentStatus.PAID || inst.status === InstallmentStatus.REFUNDED) return;
+    // a bank payment still clearing that failed
+    if (isClearing(inst) && (pi.status === 'requires_payment_method' || pi.status === 'canceled') && (!inst.payment_intent_id || inst.payment_intent_id === pi.id)) {
+      await this.bankPaymentFailed(inst, pi.id, failure);
+      return;
+    }
+    // our charge call timed out while Stripe started the bank payment
+    if (pi.status === 'processing' && inst.status === InstallmentStatus.PROCESSING && !inst.clearing_since) {
+      await this.markClearing(inst.id, pi.id);
+      return;
+    }
     if (pi.status === 'succeeded') {
       await this.markPaid(inst.id, pi.id, false);
       await this.undoIfBookingEnded(inst.id);
@@ -1678,7 +1889,7 @@ export class PaymentsService {
       select: {
         customer_id: true, vendor_id: true, status: true, amount: true, service_fee: true, security_deposit: true, currency: true, payment_plan: true, payment_method_id: true, payment_transaction_id: true,
         paid_at: true, release_at: true, released_at: true, customer_approved_at: true, dispute_opened_at: true, dispute_resolved_at: true, event_start_at: true, scheduled_at: true,
-        payment_due_by: true, payment_due_kind: true,
+        payment_due_by: true, payment_due_kind: true, payment_method_type: true,
         installments: { orderBy: { sequence: 'asc' } },
       },
     });
@@ -1702,6 +1913,10 @@ export class PaymentsService {
       : Math.max(0, total - paid);
     const extras = b.installments.filter((i) => i.kind !== 'charge' && i.status === InstallmentStatus.PAID).reduce((s, i) => s + Number(i.amount) - Number(i.refunded_amount), 0);
     const givenBack = await this.prisma.paymentTransaction.aggregate({ where: { type: 'vendor_give_back', reference_number: bookingId }, _sum: { amount: true } });
+    // bank payments on their way (large bookings): shown as "Processing", paid out once they clear
+    const processing = round2(b.installments.filter(isClearing).reduce((s, i) => s + Number(i.amount), 0));
+    const large = isLargeBooking(b);
+    const refundByBank = refunded > 0 && b.installments.some((i) => Number(i.refunded_amount) > 0 && isBank(i.payment_method_type));
     // the start time passed and the vendor never started: the customer may report a no-show
     const notStarted = pastStartNotStarted(b);
     const canDispute = b.customer_id === userId && !b.released_at && !b.dispute_opened_at && (b.status === BookingStatus.IN_PROGRESS || b.status === BookingStatus.COMPLETED || notStarted);
@@ -1721,7 +1936,15 @@ export class PaymentsService {
         given_back: round2(Number(givenBack._sum.amount ?? 0)),
         refunded,
         refund_card: refundCard,
-        refund_timing: refunded > 0 ? '5–10 business days' : null,
+        refund_timing: refunded > 0 ? (refundByBank ? 'about 5 business days' : '5–10 business days') : null,
+        // a refund of a bank payment: on its way to the bank account for a few days
+        refund_by_bank: refundByBank,
+        processing,
+        // large bookings: 48 hours to fix a failed payment, and a bank account can pay
+        large,
+        payment_due_hours: paymentDueRules(large).dueHours,
+        bank_allowed: !bankNotAllowedReason({ total: Number(b.amount ?? 0) + Number(b.service_fee ?? 0), plan: b.payment_plan, securityDeposit: b.security_deposit }),
+        paying_by_bank: isBank(b.payment_method_type),
         // the final invoice (GET /bookings/:id/invoice) once the booking is over and something was paid
         invoice_available: !!b.paid_at && (b.status === BookingStatus.COMPLETED || b.status === BookingStatus.CANCELLED),
         paid_at: b.paid_at,
@@ -1748,6 +1971,10 @@ export class PaymentsService {
           next_attempt_at: i.next_attempt_at,
           last_error: i.last_error,
           refunded_amount: Number(i.refunded_amount),
+          // a bank payment on its way: "Processing" until it clears
+          clearing: isClearing(i),
+          clearing_since: i.clearing_since,
+          by_bank: isBank(i.payment_method_type),
         })),
       },
     };

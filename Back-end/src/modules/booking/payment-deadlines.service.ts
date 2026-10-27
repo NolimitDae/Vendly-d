@@ -5,15 +5,16 @@ import { BookingStatus } from 'prisma/generated/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { withJobLock } from 'src/common/helper/job-lock';
 import { PaymentsService } from 'src/modules/payments/payments.service';
-import { PAYMENT_DUE_REMINDER_HOURS, PaymentDueKind } from 'src/modules/payments/payment-due';
+import { LARGE_PAYMENT_DUE_REMINDER_HOURS, paymentDueRules, PaymentDueKind } from 'src/modules/payments/payment-due';
+import { isLargeBooking } from 'src/modules/platform/fee-config';
 import { BookingService } from './booking.service';
 
 const HOUR = 3600 * 1000;
 const BATCH = 100;
 
 /**
- * Deposit plans' 12-hour rule (payments/payment-due.ts): reminds customers with about 2 hours left to
- * pay a missed deposit or balance, and cancels bookings still unpaid at their deadline (settled like a
+ * Deposit plans' 12-hour rule (payments/payment-due.ts; 48 hours on large bookings): reminds customers
+ * with about 2 hours left (6 on large bookings) to pay a missed deposit or balance, and cancels bookings still unpaid at their deadline (settled like a
  * customer cancellation, reason "non_payment" by "system"). Runs every 10 minutes on one server at a
  * time; each step is claimed on the booking row, so a rerun never repeats one.
  */
@@ -41,24 +42,29 @@ export class PaymentDeadlinesService {
     return { reminded, cancelled };
   }
 
-  /** Once per missed payment, when about 2 hours are left. */
+  /** Once per missed payment, when about 2 hours are left (6 on a large booking). */
   async remind(now = new Date()) {
     const due = await this.prisma.booking.findMany({
       where: {
         status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] },
         deleted_at: null,
         payment_due_reminded_at: null,
-        payment_due_by: { gt: now, lte: new Date(now.getTime() + PAYMENT_DUE_REMINDER_HOURS * HOUR) },
+        // the widest window; each booking's own is checked below
+        payment_due_by: { gt: now, lte: new Date(now.getTime() + LARGE_PAYMENT_DUE_REMINDER_HOURS * HOUR) },
       },
       select: {
-        id: true, customer_id: true, payment_due_by: true, payment_due_kind: true,
+        id: true, customer_id: true, payment_due_by: true, payment_due_kind: true, amount: true, service_fee: true,
         listing: { select: { title: true } }, customer: { select: { email: true, name: true } },
         installments: { where: { kind: 'charge', status: { in: ['FAILED', 'SCHEDULED'] } }, select: { sequence: true, amount: true } },
       },
+      // soonest first: bookings skipped below (not in their own window yet) come last
+      orderBy: { payment_due_by: 'asc' },
       take: BATCH,
     });
     let sent = 0;
     for (const b of due) {
+      const { reminderHours } = paymentDueRules(isLargeBooking(b));
+      if (b.payment_due_by!.getTime() > now.getTime() + reminderHours * HOUR) continue;
       const claimed = await this.prisma.booking.updateMany({ where: { id: b.id, payment_due_reminded_at: null, payment_due_by: b.payment_due_by }, data: { payment_due_reminded_at: now } });
       if (!claimed.count) continue;
       const kind = (b.payment_due_kind === 'balance' ? 'balance' : 'deposit') as PaymentDueKind;

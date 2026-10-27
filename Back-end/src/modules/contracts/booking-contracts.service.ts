@@ -17,6 +17,9 @@ import { withJobLock } from 'src/common/helper/job-lock';
 import { PaymentPlan, QuoteStatus } from 'prisma/generated/enums';
 import { buildSchedule, eventLinkedDueAt, rebasedAmounts, securityHoldAt } from 'src/modules/payments/payment-schedule';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
+import { feeMaximum, isLargeTotal } from 'src/modules/platform/fee-config';
+import { BANK, bankNotAllowedReason, isBank, paymentMethodType } from 'src/modules/payments/bank-payments';
+import { paymentDueRules } from 'src/modules/payments/payment-due';
 import { PromoService } from 'src/modules/platform/promo.service';
 import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
 import { GUEST_COUNT_NEEDED, needsGuestCount, needsServiceAddress, vendorPlaceVenueText } from 'src/modules/booking/booking-place';
@@ -410,8 +413,14 @@ export class BookingContractsService {
     const fee = this.serviceFee(price, l?.category_id);
     const plan = l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
     const schedule = buildSchedule({ plan, price, serviceFee: fee, eventStart: eventStart ? new Date(eventStart) : null }).map((i) => ({ label: i.label, amount: i.amount, due_at: i.due_at, capture_manually: i.capture_manually }));
+    const total = Math.round((price + fee) * 100) / 100;
     return {
-      price, service_fee: fee, total: Math.round((price + fee) * 100) / 100, plan, schedule, discount: promo?.discount ?? 0, promo_code: promo?.code ?? null,
+      price, service_fee: fee, total, plan, schedule, discount: promo?.discount ?? 0, promo_code: promo?.code ?? null,
+      // the fee's cap (null when there is none), and the large booking rules: 48 hours to fix a failed payment, bank payments
+      fee_maximum: feeMaximum() || null,
+      large: isLargeTotal(total),
+      payment_due_hours: paymentDueRules(isLargeTotal(total)).dueHours,
+      bank_allowed: !bankNotAllowedReason({ total, plan }),
       // how the price was reached, for the summary screen
       package: lines ? { label: lines.pkg.label, unit: lines.pkg.unit, quantity: lines.pkg.quantity, unit_price: lines.pkg.unit_price, amount: lines.pkg.amount } : null,
       add_ons: lines?.addOns.map((a) => ({ add_on_id: a.add_on_id, name: a.name, label: a.label, quantity: a.quantity, unit_price: a.unit_price, amount: a.amount })) ?? [],
@@ -525,6 +534,14 @@ export class BookingContractsService {
       });
     }
 
+    // a bank account pays only for large bookings that don't need a card hold (payments/bank-payments.ts)
+    const methodType = await paymentMethodType(dto.payment_method_id);
+    if (isBank(methodType)) {
+      const pricing = await this.pricingFor(p.listing.id, p.priced.price, dto.event_start_at);
+      const why = bankNotAllowedReason({ total: pricing.total, plan: pricing.plan });
+      if (why) throw new BadRequestException(why);
+    }
+
     const imageKey = await this.storeSignatureImage(dto.signature.signature_image, `signatures/${userId}`);
     // booking for one of their events means they sign as the planner, whichever role they're using now
     const role = p.event ? ContractSignerRole.PLANNER : this.signerRoleFor(p.customer.type);
@@ -554,6 +571,7 @@ export class BookingContractsService {
           service_fee: this.serviceFee(p.priced.price, p.listing.category_id),
           currency: 'usd',
           payment_method_id: dto.payment_method_id,
+          payment_method_type: isBank(methodType) ? BANK : null,
           promo_code: p.priced.code,
           discount: p.priced.discount || null,
           request_photos: photoKeys,

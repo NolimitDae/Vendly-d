@@ -22,7 +22,8 @@ describe('PaymentDeadlinesService', () => {
 
     expect(await service.remind(now)).toBe(1);
 
-    expect(prisma.booking.findMany.mock.calls[0][0].where).toMatchObject({ payment_due_reminded_at: null, payment_due_by: { gt: now, lte: new Date(now.getTime() + 2 * HOUR) } });
+    // the widest window (large bookings: 6 hours); each booking's own is checked after
+    expect(prisma.booking.findMany.mock.calls[0][0].where).toMatchObject({ payment_due_reminded_at: null, payment_due_by: { gt: now, lte: new Date(now.getTime() + 6 * HOUR) } });
     expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', payment_due_reminded_at: null, payment_due_by: dueBy }, data: { payment_due_reminded_at: now } });
     expect(payments.notifyPaymentDue).toHaveBeenCalledWith(row, { kind: 'balance', amount: 600, dueBy, reminder: true });
 
@@ -30,6 +31,20 @@ describe('PaymentDeadlinesService', () => {
     prisma.booking.findMany.mockResolvedValueOnce([row]);
     prisma.booking.updateMany.mockResolvedValueOnce({ count: 0 });
     expect(await service.remind(now)).toBe(0);
+  });
+
+  it('large bookings are reminded with about 6 hours left, others only in their last 2 hours', async () => {
+    const { service, prisma, payments } = setup();
+    const dueBy = new Date(now.getTime() + 5 * HOUR);
+    const base = { customer_id: 'c1', payment_due_by: dueBy, payment_due_kind: 'deposit', listing: { title: 'Gala' }, customer: { email: 'c@x.com', name: 'Cee' }, installments: [{ sequence: 1, amount: '3000.00' }] };
+    const large = { ...base, id: 'big', amount: 6000, service_fee: 300 };
+    const small = { ...base, id: 'small', amount: 1000, service_fee: 50 };
+    prisma.booking.findMany.mockResolvedValueOnce([large, small]);
+
+    expect(await service.remind(now)).toBe(1);
+    expect(payments.notifyPaymentDue).toHaveBeenCalledWith(large, expect.objectContaining({ reminder: true }));
+    expect(payments.notifyPaymentDue).not.toHaveBeenCalledWith(small, expect.anything());
+    expect(prisma.booking.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it('cancels bookings still unpaid at the deadline', async () => {

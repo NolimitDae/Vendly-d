@@ -3,6 +3,7 @@ import {
   CANCELLATION_PRESETS,
   PLATFORM_TERMS_CLAUSE,
 } from './contract-templates';
+import { largePaymentThreshold, thresholdText } from 'src/modules/platform/fee-config';
 
 export type MergeData = Record<string, string>;
 
@@ -140,6 +141,8 @@ export function buildMergeData(input: MergeInput): MergeData {
     booking_id: b.id,
     contract_version: String(input.contractVersion),
     platform_terms_clause: PLATFORM_TERMS_CLAUSE,
+    // the deposit clause's longer deadline on large bookings (empty when switched off, which drops that part)
+    large_payment_threshold: largePaymentThreshold() > 0 ? thresholdText() : '',
     timezone: tz,
   };
   return data;
@@ -177,16 +180,8 @@ export function contentHash(renderedBody: string, sourcePdfSha256?: string | nul
   return sha256(`${renderedBody}\n--source-pdf:${sourcePdfSha256 ?? 'none'}`);
 }
 
-/**
- * Vendly Protection fee for a vendor price, rounded to cents: `percent` of the price, but never less
- * than `minimum` (brief: 5%, $3 minimum, so small bookings still cover card processing). Free
- * bookings carry no fee.
- */
-export function serviceFeeFor(price: unknown, percent: number, minimum = 0) {
-  const p = Number(price ?? 0);
-  if (!(p > 0)) return 0;
-  return Math.max(Math.round(p * percent) / 100, minimum);
-}
+// the fee maths (percent, minimum, cap) lives with the fee settings
+export { serviceFeeFor } from 'src/modules/platform/fee-config';
 
 export interface PricingScheduleInput {
   /** "$45.00 per person × 120 guests" (per-unit packages) or the quote's title */

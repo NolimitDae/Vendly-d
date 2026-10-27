@@ -20,6 +20,7 @@ import {
   CANCELLATION_PRESETS,
   CATEGORY_LABELS,
   hasDepositClause,
+  hasLargePaymentDeadline,
   CONSENT_TEXT,
   CONSENT_TEXT_VERSION,
   MAX_ADDITIONAL_TERMS,
@@ -28,6 +29,7 @@ import {
   defaultTemplates,
   vendorFieldsFor,
   withDepositClause,
+  withLargePaymentDeadline,
   withProtectionFeeWording,
 } from './contract-templates';
 import { buildMergeData, fieldLabel, renderTemplate, sha256 } from './contract-merge';
@@ -55,9 +57,10 @@ export class VendorContractsService implements OnModuleInit {
   }
 
   /**
-   * Creates version 1 of each category template the first time the app starts. Once, it also
-   * publishes the next version of each category's active template with the deposit clause of Oct
-   * 2026 (withDepositClause); earlier versions stay as they were, and so do contracts signed on them.
+   * Creates version 1 of each category template the first time the app starts. Once each, it also
+   * publishes the next version of each category's active template with the deposit clause of Oct 2026
+   * (withDepositClause) and with the large booking deadline of Nov 2026 (withLargePaymentDeadline: 48
+   * hours on bookings of $5,000 or more); earlier versions stay as they were, and so do contracts signed on them.
    */
   async ensureDefaultTemplates() {
     for (const t of defaultTemplates()) {
@@ -68,19 +71,21 @@ export class VendorContractsService implements OnModuleInit {
         });
         continue;
       }
-      // already published (or an admin wrote it into a version of their own): never again
+      // each change is published once: never again once a version has it (or an admin wrote it into a version of their own)
       const versions = await this.prisma.contractTemplate.findMany({ where: { category: t.category }, orderBy: { version: 'desc' } });
-      if (versions.some((v) => hasDepositClause(v.body))) continue;
       const active = versions.find((v) => v.status === ContractTemplateStatus.ACTIVE);
-      const body = active ? withDepositClause(active.body) : null;
-      if (!active || !body) continue;
+      if (!active) continue;
+      let body = active.body;
+      if (!versions.some((v) => hasDepositClause(v.body))) body = withDepositClause(body) ?? body;
+      if (!versions.some((v) => hasLargePaymentDeadline(v.body))) body = withLargePaymentDeadline(body) ?? body;
+      if (body === active.body) continue;
       await this.prisma.$transaction([
         this.prisma.contractTemplate.update({ where: { id: active.id }, data: { status: ContractTemplateStatus.RETIRED } }),
         this.prisma.contractTemplate.create({
           data: { category: active.category, title: active.title, body, required_fields: active.required_fields, version: versions[0].version + 1, status: ContractTemplateStatus.ACTIVE },
         }),
       ]);
-      this.logger.log(`Published ${CATEGORY_LABELS[active.category]} template v${versions[0].version + 1} with the deposit clause`);
+      this.logger.log(`Published ${CATEGORY_LABELS[active.category]} template v${versions[0].version + 1} with the current deposit clause`);
     }
   }
 

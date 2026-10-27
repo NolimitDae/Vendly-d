@@ -1,50 +1,23 @@
 import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import appConfig from 'src/config/app.config';
-import { serviceFeeFor } from 'src/modules/contracts/contract-merge';
+import { __setFeeCache, currentFees, DEFAULT_FEE_MAXIMUM, DEFAULT_LARGE_PAYMENT_THRESHOLD, envFees, feeMaximum, largePaymentThreshold, type FeeConfig } from './fee-config';
+import { LARGE_PAYMENT_DUE_HOURS, PAYMENT_DUE_HOURS } from 'src/modules/payments/payment-due';
+
+// the fee maths lives in fee-config.ts (contract text reads it too); these names stay importable from here
+export { __setFeeCache, currentFees, isLargeBooking, isLargeTotal, largePaymentThreshold, platformServiceFee, type FeeConfig } from './fee-config';
 
 /** Settings an admin may change, with how each is validated. Unknown keys are rejected. */
 const SCHEMA: Record<string, { kind: 'percent' | 'money' | 'text'; label: string }> = {
   customer_service_fee_percent: { kind: 'percent', label: 'Vendly Protection fee (%)' },
   customer_service_fee_minimum: { kind: 'money', label: 'Minimum Vendly Protection fee ($)' },
+  customer_service_fee_maximum: { kind: 'money', label: 'Maximum Vendly Protection fee ($, empty for no cap)' },
   vendor_commission_percent: { kind: 'percent', label: 'Vendor commission (%)' },
+  large_payment_threshold: { kind: 'money', label: 'Large booking from ($, 0 turns it off)' },
   currency: { kind: 'text', label: 'Currency' },
   min_booking_amount: { kind: 'money', label: 'Minimum booking amount ($)' },
   max_booking_amount: { kind: 'money', label: 'Maximum booking amount ($)' },
   timezone: { kind: 'text', label: 'Timezone' },
 };
-
-export interface FeeConfig {
-  percent: number;
-  minimum: number;
-  commission: number;
-  categories: Map<string, number>;
-}
-
-const envFees = (): FeeConfig => {
-  const f = appConfig().fees ?? ({} as any);
-  return { percent: Number(f.customer_service_fee_percent ?? 5), minimum: Number(f.customer_service_fee_minimum ?? 3), commission: 0, categories: new Map() };
-};
-
-// Module-level cache so fee maths stays synchronous in hot paths (contract previews, booking creation).
-let cache: FeeConfig | null = null;
-
-/** Current fee settings: database values when loaded, else the environment defaults. */
-export function currentFees(): FeeConfig {
-  return cache ?? envFees();
-}
-
-/** Vendly Protection fee for a price, honouring a category override. */
-export function platformServiceFee(price: unknown, categoryId?: string | null): number {
-  const f = currentFees();
-  const percent = (categoryId && f.categories.get(categoryId)) ?? f.percent;
-  return serviceFeeFor(price, percent, f.minimum);
-}
-
-/** For tests: set or clear the cached fee config. */
-export function __setFeeCache(c: FeeConfig | null) {
-  cache = c;
-}
 
 @Injectable()
 export class PlatformSettingsService implements OnModuleInit {
@@ -65,13 +38,17 @@ export class PlatformSettingsService implements OnModuleInit {
     const map = new Map(rows.map((r) => [r.key, r.value]));
     const env = envFees();
     const num = (k: string, d: number) => (map.has(k) && map.get(k) !== '' && !Number.isNaN(Number(map.get(k))) ? Number(map.get(k)) : d);
-    cache = {
+    const config: FeeConfig = {
       percent: num('customer_service_fee_percent', env.percent),
       minimum: num('customer_service_fee_minimum', env.minimum),
+      // saved empty means no cap; never saved means the default cap
+      maximum: map.has('customer_service_fee_maximum') ? Math.max(0, Number(map.get('customer_service_fee_maximum')) || 0) : DEFAULT_FEE_MAXIMUM,
       commission: num('vendor_commission_percent', 0),
       categories: new Map(cats.map((c) => [c.id, Number(c.fee_percent)])),
+      largeThreshold: num('large_payment_threshold', DEFAULT_LARGE_PAYMENT_THRESHOLD),
     };
-    return cache;
+    __setFeeCache(config);
+    return config;
   }
 
   async getAll() {
@@ -81,7 +58,9 @@ export class PlatformSettingsService implements OnModuleInit {
     const defaults: Record<string, string> = {
       customer_service_fee_percent: String(fees.percent),
       customer_service_fee_minimum: String(fees.minimum),
+      customer_service_fee_maximum: fees.maximum ? String(fees.maximum) : '',
       vendor_commission_percent: String(fees.commission),
+      large_payment_threshold: String(fees.largeThreshold ?? DEFAULT_LARGE_PAYMENT_THRESHOLD),
       currency: 'USD',
       min_booking_amount: '',
       max_booking_amount: '',
@@ -125,6 +104,22 @@ export class PlatformSettingsService implements OnModuleInit {
     await this.prisma.serviceCategory.update({ where: { id: categoryId }, data: { fee_percent: feePercent } });
     await this.refresh();
     return { success: true };
+  }
+
+  /** Public: what the apps need for fee and payment wording ("5%, up to $500", "48 hours on bookings of $5,000 or more"). */
+  paymentSettings() {
+    const f = currentFees();
+    return {
+      success: true,
+      data: {
+        fee_percent: f.percent,
+        fee_minimum: f.minimum,
+        fee_maximum: feeMaximum() || null,
+        large_payment_threshold: largePaymentThreshold() || null,
+        payment_due_hours: PAYMENT_DUE_HOURS,
+        large_payment_due_hours: LARGE_PAYMENT_DUE_HOURS,
+      },
+    };
   }
 
   // ─── Feature flags ────────────────────────────────────────────────────────

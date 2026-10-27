@@ -5,6 +5,14 @@ import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { PaymentsService } from './payments.service';
 import { TransactionsService, type TransactionsQuery } from './transactions.service';
+import { IsIn, IsOptional } from 'class-validator';
+
+class SetupIntentDto {
+  // a card (the default), or a US bank account (large bookings)
+  @IsOptional()
+  @IsIn(['card', 'us_bank_account'])
+  type?: 'card' | 'us_bank_account';
+}
 
 @ApiTags('Payments')
 @ApiBearerAuth()
@@ -26,11 +34,14 @@ export class PaymentsController {
     return this.transactions.list({ id: user.id, type: user.type }, query);
   }
 
-  /** Client secret for Stripe's card form; the saved card is charged when vendors accept. */
+  /**
+   * Client secret for Stripe's card form; the saved card is charged when vendors accept. With
+   * { type: 'us_bank_account' }, for connecting a bank account instead (large bookings).
+   */
   @Post('setup-intent')
   @Throttle({ short: { limit: 5, ttl: 60_000 } })
-  setupIntent(@GetUser() user: any) {
-    return this.payments.createSetupIntent(user.id);
+  setupIntent(@GetUser() user: any, @Body() dto: SetupIntentDto) {
+    return this.payments.createSetupIntent(user.id, dto?.type);
   }
 
   /** The signed-in vendor's earnings: released, held, Vendly commission and money given back. */
@@ -39,9 +50,10 @@ export class PaymentsController {
     return this.payments.vendorEarningsSummary(user.id);
   }
 
+  /** Saved cards; ?bank=1 adds saved bank accounts (newer apps, which can show them). */
   @Get('methods')
-  methods(@GetUser() user: any) {
-    return this.payments.listCards(user.id);
+  methods(@GetUser() user: any, @Query('bank') bank?: string) {
+    return this.payments.listCards(user.id, bank === '1' || bank === 'true');
   }
 
   @Patch('methods/:id/default')

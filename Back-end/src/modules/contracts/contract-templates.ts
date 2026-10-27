@@ -142,7 +142,31 @@ export function hasDepositClause(body: string) {
   return body.includes(DEPOSIT_CLAUSE_MARK) || body.includes(LEGACY_DEPOSIT_CLAUSE_MARK);
 }
 
-export const DEPOSIT_CLAUSE = `${DEPOSIT_CLAUSE_MARK} on a booking paid with a deposit, the deposit is non-refundable if the {{customer_role_label}} cancels, or if the booking is cancelled because a deposit or balance payment wasn't made within 12 hours of failing. Anything paid beyond the deposit is refunded under the cancellation policy above. The Vendly Protection fee is not refunded in either case.`;
+/**
+ * Large bookings get 48 hours to pay a missed deposit or balance (owner, Nov 2026). The threshold is
+ * the admin setting (merge field large_payment_threshold: "$5,000"); switched off, the part drops out.
+ */
+export const LARGE_PAYMENT_DEADLINE = `{{#large_payment_threshold}} (48 hours on bookings of {{large_payment_threshold}} or more){{/large_payment_threshold}}`;
+const LARGE_PAYMENT_DEADLINE_MARK = '48 hours on bookings of';
+// the clause's deadline as it was published in Oct 2026
+const OLD_DEADLINE = "wasn't made within 12 hours of failing.";
+
+export const DEPOSIT_CLAUSE = `${DEPOSIT_CLAUSE_MARK} on a booking paid with a deposit, the deposit is non-refundable if the {{customer_role_label}} cancels, or if the booking is cancelled because a deposit or balance payment wasn't made within 12 hours of failing${LARGE_PAYMENT_DEADLINE}. Anything paid beyond the deposit is refunded under the cancellation policy above. The Vendly Protection fee is not refunded in either case.`;
+
+/** Whether a template body already gives large bookings their 48 hours. */
+export function hasLargePaymentDeadline(body: string) {
+  return body.includes(LARGE_PAYMENT_DEADLINE_MARK);
+}
+
+/**
+ * A template body whose deposit clause still says only "within 12 hours of failing", with the large
+ * booking deadline added (in place, so the clause isn't repeated). Null when it already has it or has
+ * no such clause.
+ */
+export function withLargePaymentDeadline(body: string): string | null {
+  if (hasLargePaymentDeadline(body) || !body.includes(OLD_DEADLINE)) return null;
+  return body.split(OLD_DEADLINE).join(`wasn't made within 12 hours of failing${LARGE_PAYMENT_DEADLINE}.`);
+}
 
 const GENERAL_SECTIONS = `# Service Agreement
 

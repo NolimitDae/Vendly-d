@@ -20,12 +20,13 @@ export class DisputeBookingDto {
   @IsIn(DISPUTE_OUTCOMES as unknown as string[])
   outcome?: string;
 
-  @ApiPropertyOptional({ description: 'Partial refund asked for; no more than what was paid' })
+  @ApiPropertyOptional({ description: 'Partial refund asked for; no more than what was paid (checked against the booking)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.5)
-  @Max(100000)
+  // a sanity bound only: the real limit is what was paid on the booking (PaymentsService.openDispute)
+  @Max(1000000)
   requested_amount?: number;
 }
 

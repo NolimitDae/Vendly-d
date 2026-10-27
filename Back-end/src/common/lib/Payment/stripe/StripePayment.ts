@@ -485,7 +485,8 @@ export class StripePayment {
 
   static async createACHPaymentIntent(customerId: string, amount: number) {
     return await getStripe().paymentIntents.create({
-      amount: amount * 100,
+      // in cents, rounded: $12.34 * 100 isn't a whole number in floating point
+      amount: Math.round(amount * 100),
       currency: 'usd',
       customer: customerId,
       payment_method_types: ['us_bank_account'],
@@ -598,8 +599,29 @@ export class StripePayment {
     });
   }
 
+  /**
+   * Lets a customer save a US bank account for later off-session charges (ACH Direct Debit). The bank
+   * is connected and verified instantly through Stripe Financial Connections (no micro-deposits); the
+   * mandate the customer accepts when confirming lets Vendly charge it when payments fall due.
+   */
+  static createBankSetupIntent(customerId: string): Promise<stripe.SetupIntent> {
+    return getStripe().setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['us_bank_account'],
+      payment_method_options: {
+        us_bank_account: { verification_method: 'instant', financial_connections: { permissions: ['payment_method'] } },
+      },
+      usage: 'off_session',
+    });
+  }
+
   static async listCards(customerId: string): Promise<stripe.PaymentMethod[]> {
     const res = await getStripe().paymentMethods.list({ customer: customerId, type: 'card' });
+    return res.data;
+  }
+
+  static async listBankAccounts(customerId: string): Promise<stripe.PaymentMethod[]> {
+    const res = await getStripe().paymentMethods.list({ customer: customerId, type: 'us_bank_account' });
     return res.data;
   }
 
@@ -614,6 +636,8 @@ export class StripePayment {
   /**
    * Charges a saved card without the customer present. Funds stay on the platform balance
    * (no destination) until the booking is released; `transfer_group` ties later transfers back.
+   * With `bank`, the saved payment method is a US bank account: the payment comes back `processing`
+   * and clears (or fails) days later, reported by webhook. Bank payments can't be held, only taken.
    */
   static chargeSavedCard(opts: {
     amount: number;
@@ -625,6 +649,7 @@ export class StripePayment {
     captureManually: boolean;
     idempotencyKey: string;
     description: string;
+    bank?: boolean;
   }): Promise<stripe.PaymentIntent> {
     return getStripe().paymentIntents.create(
       {
@@ -632,9 +657,10 @@ export class StripePayment {
         currency: opts.currency,
         customer: opts.customerId,
         payment_method: opts.paymentMethodId,
+        ...(opts.bank ? { payment_method_types: ['us_bank_account'] } : {}),
         off_session: true,
         confirm: true,
-        capture_method: opts.captureManually ? 'manual' : 'automatic',
+        capture_method: opts.captureManually && !opts.bank ? 'manual' : 'automatic',
         transfer_group: `booking_${opts.bookingId}`,
         description: opts.description,
         metadata: { booking_id: opts.bookingId, installment_id: opts.installmentId },

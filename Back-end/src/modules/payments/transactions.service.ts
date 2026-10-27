@@ -56,7 +56,7 @@ export class TransactionsService {
       customer: { select: { name: true } },
       installments: {
         orderBy: { sequence: 'asc' as const },
-        select: { id: true, label: true, kind: true, status: true, amount: true, fee_amount: true, refunded_amount: true, capture_manually: true, paid_at: true, paid_out_at: true, updated_at: true, attempts: true, extra: { select: { kind: true } } },
+        select: { id: true, label: true, kind: true, status: true, amount: true, fee_amount: true, refunded_amount: true, capture_manually: true, paid_at: true, paid_out_at: true, updated_at: true, attempts: true, clearing_since: true, payment_method_type: true, extra: { select: { kind: true } } },
       },
     };
   }
@@ -103,7 +103,8 @@ export class TransactionsService {
   private async vendorRows(userId: string) {
     const [bookings, txs] = await Promise.all([
       this.prisma.booking.findMany({
-        where: { vendor_id: userId, paid_at: { not: null } },
+        // with a bank payment still clearing on its first charge, nothing is paid yet but it shows
+        where: { vendor_id: userId, OR: [{ paid_at: { not: null } }, { installments: { some: { clearing_since: { not: null } } } }] },
         select: this.bookingSelect(),
         orderBy: { created_at: 'desc' },
         take: MAX_BOOKINGS,

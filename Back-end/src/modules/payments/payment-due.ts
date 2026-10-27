@@ -7,10 +7,30 @@ import { BookingStatus, PaymentPlan } from 'prisma/generated/enums';
  * 2 hours left, and an unpaid booking is then cancelled for non-payment (booking/payment-deadlines.service.ts).
  * Full payment on accept and pay after service keep the 3 tries over 48 hours (payment-schedule.ts).
  * Bookings made before these rules (`deposit_rules` false) keep the old ones.
+ * Large bookings (total at or above Admin → Settings "large booking", $5,000 by default; owner, Nov 2026)
+ * get 48 hours instead: the retry about 24 hours in, the reminder with about 6 hours left.
  */
 export const PAYMENT_DUE_HOURS = 12;
 export const PAYMENT_AUTO_RETRY_HOURS = 6;
 export const PAYMENT_DUE_REMINDER_HOURS = 2;
+export const LARGE_PAYMENT_DUE_HOURS = 48;
+export const LARGE_PAYMENT_AUTO_RETRY_HOURS = 24;
+export const LARGE_PAYMENT_DUE_REMINDER_HOURS = 6;
+
+export interface PaymentDueRules {
+  /** hours to pay from the first failure */
+  dueHours: number;
+  /** the one automatic retry, this long after the failure */
+  retryHours: number;
+  /** the reminder, when this many hours are left */
+  reminderHours: number;
+}
+
+/** The deadline rules for a booking: 12 hours, or 48 for a large one. */
+export const paymentDueRules = (large: boolean): PaymentDueRules =>
+  large
+    ? { dueHours: LARGE_PAYMENT_DUE_HOURS, retryHours: LARGE_PAYMENT_AUTO_RETRY_HOURS, reminderHours: LARGE_PAYMENT_DUE_REMINDER_HOURS }
+    : { dueHours: PAYMENT_DUE_HOURS, retryHours: PAYMENT_AUTO_RETRY_HOURS, reminderHours: PAYMENT_DUE_REMINDER_HOURS };
 
 const HOUR = 3600 * 1000;
 
@@ -39,12 +59,12 @@ export function dueKindFor(
   return null;
 }
 
-/** When a missed payment first noticed at `failedAt` must be paid by. */
-export const paymentDueBy = (failedAt: Date) => new Date(failedAt.getTime() + PAYMENT_DUE_HOURS * HOUR);
+/** When a missed payment first noticed at `failedAt` must be paid by (12 hours, or `hours`). */
+export const paymentDueBy = (failedAt: Date, hours = PAYMENT_DUE_HOURS) => new Date(failedAt.getTime() + hours * HOUR);
 
 /** The one automatic retry, when it still lands well before the deadline; null when there's no time for it. */
-export function autoRetryAt(now: Date, dueBy: Date): Date | null {
-  const at = new Date(now.getTime() + PAYMENT_AUTO_RETRY_HOURS * HOUR);
+export function autoRetryAt(now: Date, dueBy: Date, retryHours = PAYMENT_AUTO_RETRY_HOURS): Date | null {
+  const at = new Date(now.getTime() + retryHours * HOUR);
   return at.getTime() <= dueBy.getTime() - HOUR ? at : null;
 }
 

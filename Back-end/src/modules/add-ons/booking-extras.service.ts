@@ -8,6 +8,7 @@ import appConfig from 'src/config/app.config';
 import { MailService } from 'src/mail/mail.service';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { currentFees } from 'src/modules/platform/platform-settings.service';
+import { feeMaximum } from 'src/modules/platform/fee-config';
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RequestExtraDto } from './dto/add-ons.dto';
@@ -79,7 +80,7 @@ export class BookingExtrasService {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       select: {
-        id: true, status: true, vendor_id: true, customer_id: true, completed_at: true, guest_count: true, currency: true, payment_method_id: true, event_start_at: true, event_end_at: true,
+        id: true, status: true, vendor_id: true, customer_id: true, completed_at: true, guest_count: true, currency: true, payment_method_id: true, event_start_at: true, event_end_at: true, service_fee: true,
         dispute_opened_at: true, dispute_resolved_at: true, dispute_resolution: true,
         listing: { select: { title: true, category_id: true } },
         customer: { select: { id: true, name: true, email: true } },
@@ -185,7 +186,17 @@ export class BookingExtrasService {
     if (amount > MAX_AMOUNT) throw new BadRequestException(`A single request can be up to $${MAX_AMOUNT.toLocaleString('en-US')}. Contact Vendly support for more.`);
     // the customer pays the Vendly Protection fee on add-ons as on the booking; fees carry none
     const percent = (b.listing?.category_id && currentFees().categories.get(b.listing.category_id)) ?? currentFees().percent;
-    const fee = dto.kind === AddOnKind.ADD_ON ? extraProtectionFee(amount, percent) : 0;
+    let fee = dto.kind === AddOnKind.ADD_ON ? extraProtectionFee(amount, percent) : 0;
+    // the fee cap is per booking: the booking's own fee and its add-ons' fees together stay under it
+    const cap = feeMaximum();
+    if (fee > 0 && cap > 0) {
+      const open = await this.prisma.bookingExtra.aggregate({
+        where: { booking_id: bookingId, status: { in: [BookingExtraStatus.PENDING, BookingExtraStatus.APPROVED, BookingExtraStatus.IN_REVIEW] } },
+        _sum: { fee_amount: true },
+      });
+      const used = Number(b.service_fee ?? 0) + Number(open?._sum?.fee_amount ?? 0);
+      fee = round2(Math.max(0, Math.min(fee, cap - used)));
+    }
 
     const extra = await this.prisma.bookingExtra.create({
       data: {

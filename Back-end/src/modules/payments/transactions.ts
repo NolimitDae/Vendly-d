@@ -37,6 +37,9 @@ export interface LedgerInstallment {
   paid_out_at?: Date | null;
   updated_at: Date;
   attempts?: number;
+  /** a bank payment on its way (large bookings): pending until it clears */
+  clearing_since?: Date | null;
+  payment_method_type?: string | null;
   extra?: { kind: string } | null;
 }
 
@@ -96,9 +99,13 @@ export function customerLedger(bookings: LedgerBooking[], legacyRefunds: LedgerT
         rows.push({ ...base, id: `failed-${i.id}`, date: i.updated_at, type, kind: i.kind, description: `${i.label} (not taken)`, amount: -n(i.amount), status: 'failed' });
       } else if (i.status === 'PROCESSING' && i.capture_manually) {
         rows.push({ ...base, id: `hold-${i.id}`, date: i.updated_at, type, kind: i.kind, description: `Card hold: ${i.label}`, amount: -n(i.amount), status: 'pending' });
+      } else if (i.status === 'PROCESSING' && i.clearing_since) {
+        rows.push({ ...base, id: `bank-${i.id}`, date: i.clearing_since, type, kind: i.kind, description: `${i.label} (bank payment processing)`, amount: -n(i.amount), status: 'pending' });
       }
       if (n(i.refunded_amount) > 0) {
-        rows.push({ ...base, id: `refund-${i.id}`, date: i.updated_at, type: 'refund', kind: i.kind, description: `Refund: ${i.label}`, amount: n(i.refunded_amount), status: 'completed' });
+        // a bank refund takes a few days to arrive
+        const bank = i.payment_method_type === 'us_bank_account';
+        rows.push({ ...base, id: `refund-${i.id}`, date: i.updated_at, type: 'refund', kind: i.kind, description: `Refund: ${i.label}${bank ? ' (to your bank account)' : ''}`, amount: n(i.refunded_amount), status: 'completed' });
       }
     }
   }
@@ -142,6 +149,12 @@ export function vendorLedger(bookings: LedgerBooking[], txs: LedgerTransaction[]
       continue;
     }
     for (const i of b.installments) {
+      // the customer's bank payment is on its way: shown, but not counted as received until it clears
+      if (i.status === 'PROCESSING' && i.clearing_since) {
+        const part = n(Math.max(0, Number(i.amount) - Number(i.fee_amount)));
+        if (part > 0) rows.push({ ...base, id: `pay-${i.id}`, date: i.clearing_since, type: 'payment', kind: i.kind, description: `${i.label}${from} (bank payment processing)`, amount: part, status: 'pending' });
+        continue;
+      }
       if (i.status !== 'PAID' && i.status !== 'REFUNDED') continue;
       // the vendor's part: the Vendly Protection fee never is
       const part = n(Math.max(0, Number(i.amount) - Number(i.fee_amount)));

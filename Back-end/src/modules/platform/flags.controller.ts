@@ -31,6 +31,12 @@ export class FlagsController {
     return this.settings.enabledFlags();
   }
 
+  /** The fee (percent, minimum, cap) and the large booking rules, for the apps' wording (public). */
+  @Get('payment-settings')
+  paymentSettings() {
+    return this.settings.paymentSettings();
+  }
+
   /** Checks a promo code against a price without using it up (same answer as sending the booking). */
   @Post('promo/check')
   @ApiBearerAuth()

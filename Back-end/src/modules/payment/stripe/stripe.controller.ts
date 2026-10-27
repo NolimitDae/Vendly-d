@@ -75,6 +75,9 @@ export class StripeController {
           break;
         }
 
+        // bank payments (large bookings): processing for days, then succeeded or payment_failed
+        // (payment_failed also arrives for one returned after it had succeeded)
+        case 'payment_intent.processing':
         case 'payment_intent.payment_failed':
         case 'payment_intent.canceled':
         case 'payment_intent.amount_capturable_updated': {

@@ -976,6 +976,8 @@ model Booking {
   payment_plan       PaymentPlan?
   // Stripe PaymentMethod the customer chose when requesting; charged off-session on accept
   payment_method_id  String?
+  // "us_bank_account" when that payment method is a bank account (large bookings only); null for a card
+  payment_method_type String?  @db.VarChar(30)
   // deposit plans: a missed deposit or balance must be paid by this time, or the booking is cancelled
   // (payments/payment-due.ts); deposit | balance; the customer was reminded when ~2 hours were left
   payment_due_by          DateTime?
@@ -1100,6 +1102,10 @@ model BookingInstallment {
   paid_out_at       DateTime?
   // the customer was emailed a receipt for this charge
   receipt_sent_at   DateTime?
+  // what the last charge attempt used: "us_bank_account" for a bank payment, else "card"
+  payment_method_type String?  @db.VarChar(30)
+  // a bank payment is on its way (status PROCESSING until it clears, about 4 business days); null otherwise
+  clearing_since    DateTime?
   extra             BookingExtra?
 
   @@index([booking_id])
