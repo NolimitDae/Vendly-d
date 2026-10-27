@@ -76,7 +76,11 @@ export default function RentalReturnCard({ booking, role, onDone }: { booking: B
     const fees = d + l;
     Alert.alert(
       'Record the return?',
-      fees > 0 ? `${money(fees)} will be charged to the customer${deposit ? `, from their ${money(deposit)} deposit hold first` : ''}. They can dispute within 48 hours.` : 'The customer’s deposit hold is released.',
+      fees > 0
+        ? deposit
+          ? `Up to ${money(deposit)} comes from the customer’s deposit hold (they can dispute within 48 hours).${fees > deposit ? ` The other ${money(fees - deposit)} is sent to them to approve before it’s charged.` : ''}`
+          : `${money(fees)} is sent to the customer to approve before it’s charged.`
+        : 'The customer’s deposit hold is released.',
       [
         { text: 'Cancel', style: 'cancel' },
         {

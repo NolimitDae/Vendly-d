@@ -9,7 +9,7 @@ import { platformServiceFee } from 'src/modules/platform/platform-settings.servi
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
-import { CreateRentalItemDto, RentalBookDto, RentalDeliveryFeeDto, RentalQuoteDto, RentalReturnDto, UpdateRentalItemDto } from './dto/rentals.dto';
+import { CreateRentalItemDto, RentalBookDto, RentalDeliveryFeeDto, RentalQuoteDto, RentalReturnDto, RETURN_FEES_MAX, UpdateRentalItemDto } from './dto/rentals.dto';
 import { availabilityCalendar, availableQuantity, DAY_MS, parseDay, priceRental, rangeProblem, rentalDays, ReservationLike } from './rental-availability';
 import { track } from 'src/common/analytics';
 import { ACTIVE_VENDOR_WHERE, VENDOR_UNAVAILABLE, vendorIsActive } from 'src/common/helper/active-vendor';
@@ -469,6 +469,9 @@ export class RentalsService {
     if ((damage > 0 || late > 0) && !photos?.length && !dto.notes?.trim()) {
       throw new BadRequestException('Add photos or a note explaining the damage or late fee.');
     }
+    if (damage + late > RETURN_FEES_MAX) {
+      throw new BadRequestException(`Fees on a return can be up to $${RETURN_FEES_MAX.toLocaleString('en-US')} in total. Contact Vendly support for more.`);
+    }
 
     const names = safeStoredNames(photos, PHOTOS);
     for (const [i, f] of (photos ?? []).entries()) await TanvirStorage.put(`proofs/${names[i]}`, f.buffer);
@@ -486,8 +489,12 @@ export class RentalsService {
       if (!b.release_at || b.release_at < window) await this.prisma.booking.update({ where: { id: bookingId }, data: { release_at: window } });
     }
     const title = rentalTitle(b.rental_reservations);
+    const toApprove = Number(settlement?.awaiting_approval ?? 0);
+    const kept = Number(settlement?.captured_from_deposit ?? 0);
     const body = fees > 0
-      ? `${title} was returned. The vendor reported $${fees.toFixed(2)} in ${[damage > 0 && 'damage', late > 0 && 'late'].filter(Boolean).join(' and ')} fees${dto.notes ? `: “${dto.notes}”` : ''}. If you disagree, open a dispute within ${FEE_DISPUTE_HOURS} hours.`
+      ? `${title} was returned. The vendor reported $${fees.toFixed(2)} in ${[damage > 0 && 'damage', late > 0 && 'late'].filter(Boolean).join(' and ')} fees${dto.notes ? `: “${dto.notes}”` : ''}.` +
+        (kept > 0 ? ` $${kept.toFixed(2)} was kept from your security deposit; if you disagree, open a dispute within ${FEE_DISPUTE_HOURS} hours.` : '') +
+        (toApprove > 0 ? ` The other $${toApprove.toFixed(2)} isn’t charged unless you approve it on the booking.` : '')
       : `${title} was returned in good shape. Your security deposit hold has been released.`;
     if (b.customer.email) {
       await this.mail

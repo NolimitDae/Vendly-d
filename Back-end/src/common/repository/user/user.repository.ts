@@ -680,6 +680,15 @@ export class UserRepository {
       };
     }
 
+    // a new secret would replace the one in use: someone holding only a session could take over (or
+    // lock the owner out of) two-step login. Turning it off needs a current code first.
+    if (user.is_two_factor_enabled) {
+      return {
+        success: false,
+        message: 'Two-step login is already on. Turn it off with a code from your authenticator app before setting it up again.',
+      };
+    }
+
     const secret = speakeasy.generateSecret();
     await this.prisma.user.update({
       where: { id: user_id },

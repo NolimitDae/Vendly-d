@@ -19,6 +19,7 @@ const TARGETS: Record<OnboardingRole, Record<string, Target>> = {
   },
   VENDOR: {
     business_license: { tab: 'ProfileTab', screen: 'License' },
+    business_address: { tab: 'ProfileTab', screen: 'EditProfile' },
     verify_id: { tab: 'ProfileTab', screen: 'VerifyIdentity' },
     first_package: { tab: 'DashboardTab', screen: 'VendorListings' },
     payouts: { tab: 'ProfileTab', screen: 'Payouts' },

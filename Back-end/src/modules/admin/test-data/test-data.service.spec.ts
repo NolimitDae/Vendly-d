@@ -33,7 +33,7 @@ function setup() {
   const prisma: any = {
     serviceCategory: { findMany: jest.fn(async () => CATEGORIES) },
     featureFlag: { findUnique: jest.fn(async ({ where }: any) => db.flags.find((f) => f.key === where.key) ?? null) },
-    vendorProfile: { findUnique: jest.fn(async () => null) },
+    vendorProfile: { findUnique: jest.fn(async () => null), updateMany: jest.fn(async () => ({ count: 0 })) },
     user: {
       findMany: jest.fn(async ({ where }: any) =>
         db.users
@@ -115,7 +115,7 @@ describe('TestDataService', () => {
     expect(u).toMatchObject({ type: 'VENDOR', roles: ['VENDOR'], is_test: true, location: 'Atlanta, GA' });
     expect(u.email_verified_at).toBeInstanceOf(Date);
     expect(u.onboarding_seen.VENDOR.complete).toBeTruthy();
-    expect(u.vendorProfile).toMatchObject({ business_name: 'Golden Fork Catering Co (Test)', license_status: 'APPROVED', handle: 'test-catering-food-1' });
+    expect(u.vendorProfile).toMatchObject({ business_name: 'Golden Fork Catering Co (Test)', license_status: 'APPROVED', handle: 'test-catering-food-1', business_address: expect.any(String) });
     expect(u.vendorProfile.working_hours.timezone).toBe('America/New_York');
 
     // one password for all, stored only as a hash

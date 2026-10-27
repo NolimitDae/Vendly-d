@@ -27,8 +27,13 @@ export async function vendorLicence(prisma: Pick<PrismaService, 'vendorProfile'>
   return prisma.vendorProfile.findUnique({ where: { user_id: vendorId }, select: { license_status: true, license_photo: true } });
 }
 
-/** Throws (403) unless the vendor may publish. */
+/** Vendors need a business address on file to publish (where customers come, and where delivery and travel miles start). */
+export const BUSINESS_ADDRESS_NEEDED = 'Add your business address in your profile before you publish. Customers only see it once you accept their booking; delivery and travel miles are measured from it.';
+
+/** Throws (403) unless the vendor may publish: an approved licence and a business address. */
 export async function assertCanPublish(prisma: Pick<PrismaService, 'vendorProfile'>, vendorId: string) {
   const licence = await vendorLicence(prisma, vendorId);
   if (!canPublish(licence)) throw new ForbiddenException(licenceNeededMessage(licence));
+  const profile = await prisma.vendorProfile.findUnique({ where: { user_id: vendorId }, select: { business_address: true } });
+  if (!profile?.business_address?.trim()) throw new ForbiddenException(BUSINESS_ADDRESS_NEEDED);
 }

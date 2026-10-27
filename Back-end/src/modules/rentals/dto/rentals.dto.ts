@@ -127,10 +127,13 @@ export class RentalBookDto extends RentalQuoteDto {
   @ApiProperty() @IsString() payment_method_id: string;
 }
 
+/** Damage and late fees on one return, together (as for any one fee request). */
+export const RETURN_FEES_MAX = 25_000;
+
 export class RentalReturnDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) notes?: string;
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) damage_fee?: number;
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) late_fee?: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(RETURN_FEES_MAX) damage_fee?: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(RETURN_FEES_MAX) late_fee?: number;
   @ApiPropertyOptional()
   @IsOptional()
   @Transform(({ value }) => value === true || value === 'true')

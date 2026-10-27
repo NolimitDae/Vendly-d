@@ -229,6 +229,10 @@ export class TestDataService {
             business_name: `${vendor.business} (Test)`,
             about_me: vendor.about,
             address: place.label,
+            // publishing needs a business address
+            business_address: place.label,
+            business_lat: place.lat,
+            business_lng: place.lng,
             handle: taken ? null : handle,
             license_status: 'APPROVED',
             approved_at: now,
@@ -245,6 +249,11 @@ export class TestDataService {
   private async fillVendor(vendorId: string, slot: Slot, place: Place, rentalsOn: boolean) {
     const { vendor, category, spec } = slot;
     const made = { packages: 0, addOns: 0, contract: 0, rentals: 0 };
+    // test vendors made before a business address was needed to publish get one
+    await this.prisma.vendorProfile.updateMany({
+      where: { user_id: vendorId, OR: [{ business_address: null }, { business_address: '' }] },
+      data: { business_address: place.label, business_lat: place.lat, business_lng: place.lng },
+    });
 
     // a vendor default contract with the cancellation policy, for all their packages
     const contracts = await this.prisma.vendorContract.count({ where: { vendor_id: vendorId, status: VendorContractStatus.ACTIVE } });

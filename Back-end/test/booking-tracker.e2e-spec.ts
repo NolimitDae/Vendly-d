@@ -12,6 +12,7 @@ import * as http from 'http';
 import { AddressInfo } from 'net';
 import * as jwt from 'jsonwebtoken';
 import * as request from 'supertest';
+import { signedIn } from './e2e-sessions';
 
 const DB = process.env.CONTRACTS_E2E_DATABASE_URL;
 const run = DB ? describe : describe.skip;
@@ -85,6 +86,7 @@ run('Booking tracker (e2e)', () => {
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true, transformOptions: { enableImplicitConversion: true } }));
     await app.init();
+    await signedIn(app, Object.values(U));
     prisma = app.get(PrismaService);
 
     await prisma.user.createMany({
@@ -208,8 +210,13 @@ run('Booking tracker (e2e)', () => {
     expect(arrived.body.data).toMatchObject({ status: 'CONFIRMED', arrived_at: expect.any(String) });
 
     // the customer was told both times (inbox; the push follows their settings)
-    const inbox = await prisma.notification.findMany({ where: { receiver_id: U.cust, entity_id: bookingId }, include: { notification_event: true } });
-    const texts = inbox.map((n: any) => n.notification_event.text);
+    // the push is sent in the background: give it a moment to land
+    let texts: string[] = [];
+    for (let i = 0; i < 20 && !texts.some((t) => t.startsWith('Your vendor has arrived:')); i++) {
+      if (i) await sleep(250);
+      const inbox = await prisma.notification.findMany({ where: { receiver_id: U.cust, entity_id: bookingId }, include: { notification_event: true } });
+      texts = inbox.map((n: any) => n.notification_event.text);
+    }
     expect(texts.some((t: string) => t.startsWith('On the way:'))).toBe(true);
     expect(texts.some((t: string) => t.startsWith('Your vendor has arrived:'))).toBe(true);
 
