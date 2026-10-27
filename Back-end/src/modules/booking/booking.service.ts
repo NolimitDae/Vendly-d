@@ -106,6 +106,8 @@ function titleOf(booking: any): string | undefined {
 }
 
 /** Why a booking can't be cancelled while a bank payment on it is clearing. */
+/** A vendor who took the deposit early cancels through Vendly, so the deposit comes back before the customer's refund. */
+export const EARLY_RELEASED_CANCEL = 'You took this booking’s deposit early, so Vendly needs to handle this cancellation. Contact support and we’ll cancel it and refund the customer.';
 const clearingMessage = (by: 'CUSTOMER' | 'VENDOR') =>
   by === 'CUSTOMER'
     ? 'You can cancel once your bank payment clears (about 4 business days). Until then it can’t be settled.'
@@ -459,6 +461,10 @@ export class BookingService {
     // a bank payment still clearing can't be settled yet: the customer's cancellation (or one for non-
     // payment) would refund it in full once it lands, deposit and fee included. They wait for it instead.
     if (settlementSide(by, code) === 'CUSTOMER' && (await this.payments.hasClearingPayment(booking.id))) throw new BadRequestException(clearingMessage(by));
+    // the customer's refund would include a deposit already paid out early: Vendly gets it back first
+    if (settlementSide(by, code) === 'VENDOR' && Number((booking as { early_released_amount?: unknown }).early_released_amount ?? 0) > 0) {
+      throw new BadRequestException(EARLY_RELEASED_CANCEL);
+    }
     const note = (dto.note ?? dto.reason)?.trim() || undefined;
     return this.cancelAs(booking, by, code, note, userId);
   }

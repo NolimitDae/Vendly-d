@@ -5,7 +5,7 @@ import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { PaymentsService } from './payments.service';
+import { PaymentsService, EARLY_RELEASE_OWING } from './payments.service';
 import { __setFeeCache } from 'src/modules/platform/platform-settings.service';
 
 jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
@@ -364,6 +364,16 @@ describe('PaymentsService', () => {
       expect(res.data.amount).toBe(225);
       expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', early_released_amount: 0 }, data: { early_released_amount: 225 } });
       expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 225, idempotencyKey: 'early-b1' }));
+    });
+
+    it('will not release a deposit early while the vendor owes Vendly money', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', payment_plan: PaymentPlan.DEPOSIT_50, early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null,
+        vendor: { stripe_connect_id: 'acct_1', balance: -500 }, contracts: [{ id: 'c1' }],
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 247.5, fee_amount: 22.5 }), installment({ id: 'i2', sequence: 2, status: InstallmentStatus.SCHEDULED })],
+      });
+      await expect(service.releaseDepositEarly('b1', 'v1')).rejects.toThrow(EARLY_RELEASE_OWING);
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
     });
 
     it('will not release a deposit before the contract is signed', async () => {

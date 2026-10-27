@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import { DepositeService } from './deposite.service';
+import { DepositeService, TOP_UPS_CLOSED } from './deposite.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 
@@ -50,126 +50,9 @@ describe('DepositeService', () => {
   });
 
   describe('create', () => {
-    it('should reuse the existing Stripe customer and return client secret', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      (StripePayment.createPaymentIntent as jest.Mock).mockResolvedValue({
-        id: 'pi_abc123',
-        client_secret: 'pi_abc123_secret',
-      });
-      mockPrisma.paymentTransaction.create.mockResolvedValue({});
-
-      const result = await service.create({ amount: 100, currency: 'usd' }, 'user-1');
-
-      expect(result.success).toBe(true);
-      expect(result.data.payment_intent_id).toBe('pi_abc123');
-      expect(result.data.client_secret).toBe('pi_abc123_secret');
-      expect(result.data.amount).toBe(100);
-      expect(result.data.currency).toBe('usd');
-
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-      });
-      expect(StripePayment.createCustomer).not.toHaveBeenCalled();
-      expect(mockPrisma.user.update).not.toHaveBeenCalled();
-      expect(StripePayment.createPaymentIntent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          amount: 100,
-          currency: 'usd',
-          customer_id: 'cus_existing',
-          metadata: expect.objectContaining({ userId: 'user-1', type: 'deposit' }),
-        }),
-      );
-      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            user_id: 'user-1',
-            type: 'deposit',
-            provider: 'stripe',
-            reference_number: 'pi_abc123',
-            status: 'pending',
-            amount: 100,
-          }),
-        }),
-      );
-    });
-
-    it('should default currency to usd when not provided', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      (StripePayment.createCustomer as jest.Mock).mockResolvedValue({ id: 'cus_new' });
-      (StripePayment.createPaymentIntent as jest.Mock).mockResolvedValue({
-        id: 'pi_def456',
-        client_secret: 'pi_def456_secret',
-      });
-      mockPrisma.paymentTransaction.create.mockResolvedValue({});
-
-      const result = await service.create({ amount: 50 }, 'user-1');
-
-      expect(result.data.currency).toBe('usd');
-      expect(StripePayment.createPaymentIntent).toHaveBeenCalledWith(
-        expect.objectContaining({ currency: 'usd' }),
-      );
-    });
-
-    it('should throw BadRequestException when userId is missing', async () => {
-      await expect(
-        service.create({ amount: 100 }, ''),
-      ).rejects.toThrow(BadRequestException);
-
-      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
-    });
-
-    it('should throw BadRequestException when amount is zero', async () => {
-      await expect(
-        service.create({ amount: 0 }, 'user-1'),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should throw BadRequestException when amount is negative', async () => {
-      await expect(
-        service.create({ amount: -50 }, 'user-1'),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should throw BadRequestException when user is not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.create({ amount: 100 }, 'nonexistent-user'),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should create and persist a Stripe customer when user has no billing_id', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, billing_id: null });
-      (StripePayment.createCustomer as jest.Mock).mockResolvedValue({ id: 'cus_new' });
-      (StripePayment.createPaymentIntent as jest.Mock).mockResolvedValue({
-        id: 'pi_new',
-        client_secret: 'pi_new_secret',
-      });
-      mockPrisma.paymentTransaction.create.mockResolvedValue({});
-
-      await service.create({ amount: 100 }, 'user-1');
-
-      expect(StripePayment.createCustomer).toHaveBeenCalledWith(
-        expect.objectContaining({ user_id: 'user-1', name: mockUser.name, email: mockUser.email }),
-      );
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: { billing_id: 'cus_new' },
-      });
-      expect(StripePayment.createPaymentIntent).toHaveBeenCalledWith(
-        expect.objectContaining({ customer_id: 'cus_new' }),
-      );
-    });
-
-    it('should wrap Stripe errors in a BadRequestException', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      (StripePayment.createPaymentIntent as jest.Mock).mockRejectedValue(
-        new Error('Stripe API failure'),
-      );
-
-      await expect(
-        service.create({ amount: 100 }, 'user-1'),
-      ).rejects.toThrow(BadRequestException);
+    it('is turned off: card top-ups of the Vendly balance aren\'t available', async () => {
+      await expect(service.create({ amount: 50, currency: 'usd' } as any, 'user-1')).rejects.toThrow(TOP_UPS_CLOSED);
+      expect(StripePayment.createPaymentIntent).not.toHaveBeenCalled();
     });
   });
 });

@@ -37,6 +37,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const MIN_CHARGE = 0.5;
 const DAY = 24 * HOUR;
 const SECURITY_DEPOSIT = 'security_deposit';
+/** Early release is refused while the vendor owes Vendly money from an earlier refund. */
+export const EARLY_RELEASE_OWING = 'Your Vendly balance is below zero from an earlier refund. It’s settled from your next payout; you can take deposits early again after that.';
 
 /** What of an installment is the vendor's: its amount less the Vendly Protection fee and refunds. */
 export const vendorPortion = (i: { amount: unknown; fee_amount: unknown; refunded_amount: unknown }) =>
@@ -1231,7 +1233,7 @@ export class PaymentsService {
   private async releaseDepositEarlyLocked(bookingId: string, vendorId: string) {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { vendor_id: true, status: true, currency: true, payment_plan: true, early_released_amount: true, dispute_opened_at: true, dispute_resolved_at: true, vendor: { select: { stripe_connect_id: true } }, installments: { orderBy: { sequence: 'asc' } }, contracts: { where: { status: 'EXECUTED' }, select: { id: true }, take: 1 } },
+      select: { vendor_id: true, status: true, currency: true, payment_plan: true, early_released_amount: true, dispute_opened_at: true, dispute_resolved_at: true, vendor: { select: { stripe_connect_id: true, balance: true } }, installments: { orderBy: { sequence: 'asc' } }, contracts: { where: { status: 'EXECUTED' }, select: { id: true }, take: 1 } },
     });
     if (!b) throw new NotFoundException('Booking not found');
     if (b.vendor_id !== vendorId) throw new ForbiddenException('Access denied');
@@ -1239,6 +1241,8 @@ export class PaymentsService {
     if (!b.contracts.length) throw new BadRequestException('The contract must be signed by both sides first.');
     if (b.dispute_opened_at && !b.dispute_resolved_at) throw new BadRequestException('This booking has an open dispute.');
     if (Number(b.early_released_amount ?? 0) > 0) throw new BadRequestException('The deposit for this booking was already released.');
+    // money already owed to Vendly (from an earlier refund) is settled before another deposit goes out early
+    if (Number(b.vendor.balance ?? 0) < 0) throw new BadRequestException(EARLY_RELEASE_OWING);
     // only a deposit plan has a deposit: its first charge, with the balance still to come
     const charges = b.installments.filter((i) => i.kind === 'charge');
     const deposit = charges[0];

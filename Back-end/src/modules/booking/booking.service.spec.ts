@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { BookingService } from './booking.service';
+import { BookingService, EARLY_RELEASED_CANCEL } from './booking.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
@@ -302,6 +302,15 @@ describe('BookingService', () => {
       const res = await service.cancel('booking-1', 'vendor-1', { reason_code: 'emergency' } as any);
       expect(res.success).toBe(true);
       mockPayments.hasClearingPayment.mockResolvedValue(false);
+    });
+
+    it('after taking the deposit early the vendor cancels through Vendly (the deposit comes back before the refund)', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, early_released_amount: 500 });
+      await expect(service.cancel('booking-1', 'vendor-1', { reason_code: 'emergency' } as any)).rejects.toThrow(EARLY_RELEASED_CANCEL);
+      expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+      // the customer can still cancel on their terms (the deposit stays with the vendor)
+      const res = await service.cancel('booking-1', 'customer-1', { reason_code: 'plans_changed' } as any);
+      expect(res.success).toBe(true);
     });
 
     it('lets the vendor cancel', async () => {

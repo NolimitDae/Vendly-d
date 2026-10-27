@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   NotFoundException,
 } from '@nestjs/common';
@@ -42,6 +43,8 @@ const mockUser = {
   id: 'user-1',
   name: 'Jane Doe',
   email: 'jane@test.com',
+  type: 'VENDOR',
+  roles: ['VENDOR'],
   stripe_connect_id: null,
   balance: { toNumber: () => 500, valueOf: () => 500 } as any,
 };
@@ -91,6 +94,15 @@ describe('WithdrawService', () => {
   });
 
   // ─── createConnectedAccount ───────────────────────────────────────────────
+
+  it('only vendors and planners set up payouts or withdraw', async () => {
+    const customer = { ...mockUserWithConnect, type: 'CUSTOMER', roles: ['CUSTOMER'] };
+    mockPrisma.user.findUnique.mockResolvedValue({ ...customer, stripe_connect_id: null });
+    await expect(service.createConnectedAccount('user-1', 'jane@test.com')).rejects.toBeInstanceOf(ForbiddenException);
+    mockPrisma.user.findUnique.mockResolvedValue(customer);
+    await expect(service.processWithdraw('user-1', { amount: 50 } as any)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(StripePayment.createTransfer).not.toHaveBeenCalled();
+  });
 
   describe('createConnectedAccount', () => {
     it('should create and persist a Stripe connected account for a new user', async () => {
@@ -151,7 +163,7 @@ describe('WithdrawService', () => {
 
   describe('createOnboardingLink', () => {
     it('should return an onboarding URL for a valid account id', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_connect_123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ type: 'VENDOR', stripe_connect_id: 'acct_connect_123' });
       (StripePayment.createOnboardingAccountLink as jest.Mock).mockResolvedValue({
         url: 'https://connect.stripe.com/onboard/acct_123',
       });
@@ -166,7 +178,7 @@ describe('WithdrawService', () => {
     });
 
     it('should throw HttpException when Stripe onboarding call fails', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_bad' });
+      mockPrisma.user.findUnique.mockResolvedValue({ type: 'VENDOR', stripe_connect_id: 'acct_bad' });
       (StripePayment.createOnboardingAccountLink as jest.Mock).mockRejectedValue(
         new Error('Stripe error'),
       );
@@ -177,7 +189,7 @@ describe('WithdrawService', () => {
     });
 
     it("should refuse a link for someone else's payout account", async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_mine' });
+      mockPrisma.user.findUnique.mockResolvedValue({ type: 'VENDOR', stripe_connect_id: 'acct_mine' });
 
       await expect(
         service.createOnboardingLink('acct_someone_else', 'user-1'),
@@ -490,7 +502,7 @@ describe('WithdrawService', () => {
       mockPrisma.paymentTransaction.findMany.mockResolvedValue([row]);
       mockPrisma.paymentTransaction.findUnique.mockResolvedValue(row);
       mockPrisma.paymentTransaction.updateMany.mockResolvedValue({ count: 1 });
-      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_connect_123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ type: 'VENDOR', stripe_connect_id: 'acct_connect_123' });
     });
 
     it('marks it completed when its transfer is found by its group', async () => {
