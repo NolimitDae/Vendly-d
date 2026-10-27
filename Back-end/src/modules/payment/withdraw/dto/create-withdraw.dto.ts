@@ -1,4 +1,6 @@
+import { Transform } from 'class-transformer';
 import {
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -14,10 +16,12 @@ export class CreateWithdrawDto {
   @Min(20, { message: 'Minimum withdraw amount is $20' })
   amount: number;
 
+ // the wallet holds US dollars only, so payouts are in US dollars too
   @IsOptional()
-  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.toLowerCase() : value))
+  @IsIn(['usd'], { message: 'Withdrawals are in US dollars (usd) only.' })
   currency?: string = 'usd';
-  
+
 }
 
 

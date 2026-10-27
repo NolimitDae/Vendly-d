@@ -130,7 +130,8 @@ export class WithdrawService {
   ) :
   Promise<WithdrawResponse> {
 
-    const { currency = 'usd' } = withdrawDto;
+    // the balance is in US dollars, so the transfer is too, whatever the request says
+    const currency = 'usd';
     // whole cents: what is taken off the balance is exactly what is sent
     const amount = Math.round(Number(withdrawDto.amount) * 100) / 100;
 
