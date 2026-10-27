@@ -103,6 +103,12 @@ function titleOf(booking: any): string | undefined {
   return booking?.listing?.title ?? (booking?.rental_reservations?.length ? rentalTitle(booking.rental_reservations) : undefined);
 }
 
+/** Why a booking can't be cancelled while a bank payment on it is clearing. */
+const clearingMessage = (by: 'CUSTOMER' | 'VENDOR') =>
+  by === 'CUSTOMER'
+    ? 'You can cancel once your bank payment clears (about 4 business days). Until then it can’t be settled.'
+    : 'The customer’s bank payment is on its way. You can cancel for non-payment only if it doesn’t go through.';
+
 @Injectable()
 export class BookingService {
   constructor(
@@ -434,6 +440,9 @@ export class BookingService {
       }
       if (!(await this.paymentOverdue(booking))) throw new BadRequestException('You can cancel for non-payment only while a payment on this booking is overdue or has failed.');
     }
+    // a bank payment still clearing can't be settled yet: the customer's cancellation (or one for non-
+    // payment) would refund it in full once it lands, deposit and fee included. They wait for it instead.
+    if (settlementSide(by, code) === 'CUSTOMER' && (await this.payments.hasClearingPayment(booking.id))) throw new BadRequestException(clearingMessage(by));
     const note = (dto.note ?? dto.reason)?.trim() || undefined;
     return this.cancelAs(booking, by, code, note, userId);
   }
@@ -657,6 +666,7 @@ export class BookingService {
     // the vendor's "Customer didn't pay" settles like a customer cancellation (offered only while a payment is overdue)
     const nonPayment = !isCustomer && (await this.paymentOverdue(booking));
     const code = reasonCode === 'customer_didnt_pay' && !nonPayment ? undefined : reasonCode;
+    if (isCustomer && (await this.payments.hasClearingPayment(booking.id))) throw new BadRequestException(clearingMessage('CUSTOMER'));
     const terms = await this.cancellationTerms(booking, settlementSide(by, code), now);
     const card = isCustomer ? await this.payments.cardLabel(booking.payment_method_id).catch(() => null) : null;
     // past the start and never started (maybe a no-show): the policy would pay the vendor, so the

@@ -36,7 +36,7 @@ function setup() {
     vendorAddOn: { findFirst: jest.fn() },
     $transaction: jest.fn((fn: any) => fn(prisma)),
   };
-  const payments: any = { chargeInstallment: jest.fn().mockResolvedValue({ status: 'PAID' }), payOutLateFor: jest.fn().mockResolvedValue(null), assertOwnsCard: jest.fn() };
+  const payments: any = { chargeInstallment: jest.fn().mockResolvedValue({ status: 'PAID' }), payOutLateFor: jest.fn().mockResolvedValue(null), assertPaymentMethod: jest.fn() };
   const mail: any = { sendBookingNotification: jest.fn().mockResolvedValue(undefined) };
   const push: any = { sendToUser: jest.fn().mockResolvedValue(undefined) };
   return { service: new BookingExtrasService(prisma, payments, mail, push), prisma, payments, push };
@@ -124,7 +124,7 @@ describe('BookingExtrasService', () => {
     it('can pay with another of the customer’s cards', async () => {
       const { service, payments } = setup();
       await service.approve('e1', 'c1', 'pm_2');
-      expect(payments.assertOwnsCard).toHaveBeenCalledWith('c1', 'pm_2');
+      expect(payments.assertPaymentMethod).toHaveBeenCalledWith('c1', 'pm_2', expect.objectContaining({ total: expect.any(Number) }));
       expect(payments.chargeInstallment).toHaveBeenCalledWith('inst', 'pm_2');
     });
 

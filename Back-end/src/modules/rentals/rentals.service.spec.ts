@@ -26,7 +26,7 @@ const prisma: any = {
   $queryRaw: jest.fn(),
   $transaction: jest.fn(),
 };
-const payments = { assertOwnsCard: jest.fn().mockResolvedValue('cus_1'), settleSecurityDeposit: jest.fn() };
+const payments = { assertPaymentMethod: jest.fn().mockResolvedValue({ customerId: 'cus_1', type: 'card' }), settleSecurityDeposit: jest.fn() };
 const mail = { sendBookingNotification: jest.fn().mockResolvedValue(undefined) };
 const push = { sendToUser: jest.fn().mockResolvedValue(undefined) };
 
@@ -64,7 +64,8 @@ describe('RentalsService', () => {
   it('books, locking the items and storing reservations and the deposit', async () => {
     const res = await service.book('c1', order());
     expect(prisma.$queryRaw).toHaveBeenCalled();
-    expect(payments.assertOwnsCard).toHaveBeenCalledWith('c1', 'pm_1');
+    // cards only
+    expect(payments.assertPaymentMethod).toHaveBeenCalledWith('c1', 'pm_1', null);
     const data = prisma.booking.create.mock.calls[0][0].data;
     expect(data).toMatchObject({ customer_id: 'c1', vendor_id: 'v1', amount: 480, service_fee: 24, security_deposit: 66, payment_method_id: 'pm_1', payment_plan: 'FULL_ON_ACCEPT' });
     expect(data.rental_reservations.create).toHaveLength(2);

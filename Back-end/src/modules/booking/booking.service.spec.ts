@@ -75,6 +75,7 @@ const mockPayments = {
   refundBooking: jest.fn().mockResolvedValue(0),
   voidOpenCharges: jest.fn().mockResolvedValue(undefined),
   cardLabel: jest.fn().mockResolvedValue(null),
+  hasClearingPayment: jest.fn().mockResolvedValue(false),
   sendFinalInvoice: jest.fn().mockResolvedValue(true),
   // as PaymentsService.checkoutPart with nothing refunded yet
   checkoutPart: jest.fn((_id: string, b: any) =>
@@ -288,6 +289,19 @@ describe('BookingService', () => {
       expect(result.data.refund).toBeNull();
       expect(mockContracts.voidPendingForBooking).toHaveBeenCalledWith('booking-1', 'Booking cancelled', 'customer-1');
       expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
+    });
+
+    it('a bank payment still clearing: the customer waits for it to clear; the vendor can still cancel (refunded in full when it lands)', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue(mockBooking);
+      mockPayments.hasClearingPayment.mockResolvedValueOnce(true);
+      await expect(service.cancel('booking-1', 'customer-1', { reason_code: 'plans_changed' } as any)).rejects.toThrow('You can cancel once your bank payment clears (about 4 business days). Until then it can’t be settled.');
+      mockPayments.hasClearingPayment.mockResolvedValueOnce(true);
+      await expect(service.cancelPreview('booking-1', 'customer-1')).rejects.toThrow(/once your bank payment clears/);
+      expect(mockPrisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'CANCELLED' }) }));
+      mockPayments.hasClearingPayment.mockResolvedValue(true);
+      const res = await service.cancel('booking-1', 'vendor-1', { reason_code: 'emergency' } as any);
+      expect(res.success).toBe(true);
+      mockPayments.hasClearingPayment.mockResolvedValue(false);
     });
 
     it('lets the vendor cancel', async () => {

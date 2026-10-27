@@ -80,7 +80,7 @@ export class BookingExtrasService {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       select: {
-        id: true, status: true, vendor_id: true, customer_id: true, completed_at: true, guest_count: true, currency: true, payment_method_id: true, event_start_at: true, event_end_at: true, service_fee: true,
+        id: true, status: true, vendor_id: true, customer_id: true, completed_at: true, guest_count: true, currency: true, payment_method_id: true, event_start_at: true, event_end_at: true, service_fee: true, amount: true, payment_plan: true, security_deposit: true,
         dispute_opened_at: true, dispute_resolved_at: true, dispute_resolution: true,
         listing: { select: { title: true, category_id: true } },
         customer: { select: { id: true, name: true, email: true } },
@@ -294,7 +294,10 @@ export class BookingExtrasService {
     if (b.dispute_opened_at && !b.dispute_resolved_at) throw new BadRequestException('This booking has an open dispute. Vendly will settle it first.');
     const card = paymentMethodId ?? b.payment_method_id;
     if (!card) throw new BadRequestException('Add a card to pay for this.');
-    if (paymentMethodId) await this.payments.assertOwnsCard(customerId, paymentMethodId);
+    // another payment method for this: a bank account only on a booking a bank account can pay for (large)
+    if (paymentMethodId) {
+      await this.payments.assertPaymentMethod(customerId, paymentMethodId, { total: Number(b.amount ?? 0) + Number(b.service_fee ?? 0), plan: b.payment_plan, securityDeposit: b.security_deposit });
+    }
 
     const result = await this.chargeFor(e.id, BookingExtraStatus.PENDING, card, { responded_at: new Date() });
     const title = b.listing?.title ?? 'the booking';

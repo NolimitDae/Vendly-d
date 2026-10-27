@@ -69,11 +69,13 @@ run('Large bookings: fee cap, bank payments and the 48-hour window (e2e)', () =>
       // bank payments take days: Stripe answers "processing"
       return { id: pi, status: o.bank ? 'processing' : 'succeeded' } as any;
     });
-    jest.spyOn(StripePayment, 'retrievePaymentMethod').mockImplementation(async (pm: string) =>
-      (pm.startsWith('pm_bank')
+    jest.spyOn(StripePayment, 'retrievePaymentMethod').mockImplementation(async (pm: string) => {
+      // Stripe can't be reached for this one
+      if (pm === 'pm_unknown') throw new Error('Stripe is down');
+      return (pm.startsWith('pm_bank')
         ? { id: pm, type: 'us_bank_account', customer: CUS, us_bank_account: { bank_name: 'STRIPE TEST BANK', last4: '6789' } }
-        : { id: pm, type: 'card', customer: CUS, card: { brand: 'visa', last4: '4242' } }) as any,
-    );
+        : { id: pm, type: 'card', customer: CUS, card: { brand: 'visa', last4: '4242' } }) as any;
+    });
     jest.spyOn(StripePayment, 'transferForBooking').mockImplementation(async (o: any) => {
       transfers.push({ amount: o.amount, key: o.idempotencyKey });
       return { id: `tr_${transfers.length}` } as any;
@@ -140,6 +142,13 @@ run('Large bookings: fee cap, bank payments and the 48-hour window (e2e)', () =>
     expect(refused.status).toBe(400);
     expect(msg(refused)).toBe('Bank payments are for bookings of $5,000 or more. Please choose a card.');
 
+    // when Stripe can't say what the payment method is, the request isn't sent (a bank account could pass as a card)
+    const unknown = await as('cust', http().post('/api/bookings')).send({ ...fields(L.gala), payment_method_id: 'pm_unknown', preview_token: pv.body.data.preview_token, signature: sig('Cara Customer', pv.body.data.content_sha256) });
+    expect(unknown.status).toBe(503);
+    expect(msg(unknown)).toBe('We couldn’t check your payment method just now. Please try again in a moment.');
+    // two requests a second at most
+    await sleep(1100);
+
     const created = await as('cust', http().post('/api/bookings')).send({ ...fields(L.gala), payment_method_id: 'pm_bank_1', preview_token: pv.body.data.preview_token, signature: sig('Cara Customer', pv.body.data.content_sha256) });
     expect(created.status).toBe(201);
     bookingId = created.body.data.id;
@@ -181,6 +190,13 @@ run('Large bookings: fee cap, bank payments and the 48-hour window (e2e)', () =>
     const deposit = t.body.data.installments[0];
     const twice = await as('cust', http().post(`/api/bookings/${bookingId}/installments/${deposit.id}/retry`)).send({});
     expect(twice.status).toBe(409);
+    // nor cancel and get the non-refundable deposit back in full when it lands: they wait for it to clear
+    const preview = await as('cust', http().get(`/api/bookings/${bookingId}/cancel-preview`));
+    expect(preview.status).toBe(400);
+    const cancel = await as('cust', http().patch(`/api/bookings/${bookingId}/cancel`)).send({ reason_code: 'plans_changed' });
+    expect(cancel.status).toBe(400);
+    expect(msg(cancel)).toBe('You can cancel once your bank payment clears (about 4 business days). Until then it can’t be settled.');
+    expect((await prisma.booking.findUnique({ where: { id: bookingId } })).status).toBe('CONFIRMED');
   });
 
   it('once the bank payment clears, the deposit is paid and the vendor can take it', async () => {
@@ -226,7 +242,13 @@ run('Large bookings: fee cap, bank payments and the 48-hour window (e2e)', () =>
     const again = await prisma.bookingInstallment.findUnique({ where: { id: balance.id } });
     expect(again.status).toBe('PROCESSING');
     expect(again.clearing_since).not.toBeNull();
-    await prisma.booking.update({ where: { id: bookingId }, data: { payment_due_by: new Date(Date.now() - 60_000) } });
+    // while it clears the window is paused: no "Pending balance", no deadline
+    const paused = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(paused.payment_due_by).toBeNull();
+    const shown = await as('cust', http().get(`/api/bookings/${bookingId}/payments`));
+    expect(shown.body.data.payment_state).toBeNull();
+    // and even a window left open (from before the pause) never cancels a booking whose payment is on its way
+    await prisma.booking.update({ where: { id: bookingId }, data: { payment_due_by: new Date(Date.now() - 60_000), payment_due_kind: 'balance' } });
     const { PaymentDeadlinesService } = await import('../src/modules/booking/payment-deadlines.service');
     await app.get(PaymentDeadlinesService).run();
     expect((await prisma.booking.findUnique({ where: { id: bookingId } })).status).toBe('CONFIRMED');

@@ -41,8 +41,9 @@ export function bankNotAllowedReason(b: { total: number; plan?: PaymentPlan | st
 export async function paymentMethodType(paymentMethodId: string | null | undefined): Promise<string | null> {
   if (!paymentMethodId) return null;
   try {
-    const pm = await StripePayment.retrievePaymentMethod(paymentMethodId);
-    return (pm as { type?: string } | null)?.type ?? null;
+    const pm = (await StripePayment.retrievePaymentMethod(paymentMethodId)) as { type?: string; us_bank_account?: unknown } | null;
+    if (!pm) return null;
+    return pm.type ?? (pm.us_bank_account ? BANK : 'card');
   } catch {
     return null;
   }

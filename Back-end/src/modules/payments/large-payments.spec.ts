@@ -418,3 +418,88 @@ describe('dispute refunds are limited by what was paid, not a fixed amount', () 
     );
   });
 });
+
+describe('review fixes: windows, completed bookings, partial refunds, bank checks', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('a missed deposit paid from a bank account: the window pauses while it clears (no "Pending deposit", no deadline)', async () => {
+    const { service, prisma } = setup();
+    const dueBy = new Date(Date.now() + 2 * HOUR);
+    prisma.bookingInstallment.findUnique.mockResolvedValue(inst({ status: InstallmentStatus.SCHEDULED, attempts: 0 }));
+    prisma.bookingInstallment.findUniqueOrThrow.mockResolvedValue(inst({ status: InstallmentStatus.PROCESSING, clearing_since: new Date(), payment_intent_id: 'pi_ach' }));
+    prisma.booking.findUnique.mockImplementation(({ select }: any) =>
+      Promise.resolve(select?.payment_due_kind ? { payment_due_by: dueBy, payment_due_kind: 'deposit', payment_plan: PaymentPlan.DEPOSIT_50, installments: [{ id: 'i1', sequence: 1, status: InstallmentStatus.PROCESSING, attempts: 1 }] } : { ...BANK_BOOKING, payment_due_by: dueBy }),
+    );
+    (StripePayment.chargeSavedCard as jest.Mock).mockResolvedValue({ id: 'pi_ach', status: 'processing' });
+
+    await service.chargeInstallment('i1');
+
+    expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', payment_due_by: dueBy }, data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } });
+  });
+
+  it('a failing bank payment inside an old window starts a fresh 48 hours instead of keeping a deadline that has passed', async () => {
+    const { service, prisma } = setup();
+    const old = new Date(Date.now() - HOUR);
+    prisma.bookingInstallment.findUnique.mockResolvedValue(inst({ status: InstallmentStatus.PROCESSING, clearing_since: new Date(), payment_intent_id: 'pi_ach', attempts: 1, payment_method_type: 'us_bank_account' }));
+    prisma.booking.findUnique.mockImplementation(({ select }: any) =>
+      Promise.resolve(select?.payment_due_kind ? { payment_due_by: old, payment_due_kind: 'deposit', payment_plan: PaymentPlan.DEPOSIT_50, installments: [{ id: 'i1', sequence: 1, status: InstallmentStatus.PROCESSING, attempts: 1 }] } : { ...BANK_BOOKING, payment_due_by: old }),
+    );
+    const before = Date.now();
+
+    await service.reconcilePaymentIntent({ id: 'pi_ach', status: 'requires_payment_method', metadata: { installment_id: 'i1' }, last_payment_error: { message: 'Insufficient funds' } });
+
+    expect(prisma.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { payment_due_by: null, payment_due_kind: null, payment_due_reminded_at: null } }));
+    const fresh = prisma.booking.updateMany.mock.calls.find((c: any) => c[0].data.payment_due_by)[0];
+    expect(fresh.data.payment_due_by.getTime() - before).toBeGreaterThanOrEqual(48 * HOUR - 1000);
+  });
+
+  it('a custom plan’s payment failing after the job is done: the usual retries and "Payment problem", not a cancellation window', async () => {
+    const { service, prisma, push } = setup();
+    prisma.bookingInstallment.findMany = jest.fn().mockResolvedValue([{ id: 'p1', kind: 'charge', sequence: 1, status: InstallmentStatus.PAID }, { id: 'i1', kind: 'charge', sequence: 2, status: InstallmentStatus.PROCESSING }]);
+    prisma.bookingInstallment.findUnique.mockResolvedValue(inst({ sequence: 2, label: 'After the event', booking: { ...BANK_BOOKING, payment_method_type: null, payment_method_id: 'pm_card', payment_plan: PaymentPlan.CUSTOM, status: BookingStatus.COMPLETED } }));
+    (StripePayment.chargeSavedCard as jest.Mock).mockRejectedValue({ code: 'card_declined', raw: { message: 'Your card was declined.' } });
+
+    await service.chargeInstallment('i1');
+
+    expect(prisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ payment_due_by: expect.any(Date) }) }));
+    const row = prisma.bookingInstallment.update.mock.calls[0][0].data;
+    expect(row).toMatchObject({ status: InstallmentStatus.SCHEDULED, attempts: 1 });
+    expect(push.sendToUser).toHaveBeenCalledWith('c1', expect.objectContaining({ title: 'Payment problem' }), 'payments');
+  });
+
+  it('a bank payment returned after a partial refund is owed again only for what the customer kept', async () => {
+    const { service, prisma, mail } = setup();
+    prisma.bookingInstallment.findUnique.mockResolvedValue(inst({ status: InstallmentStatus.PAID, payment_intent_id: 'pi_ach', payment_method_type: 'us_bank_account', paid_at: new Date(), attempts: 1, refunded_amount: 1000 }));
+    prisma.booking.findUnique.mockImplementation(({ select }: any) =>
+      Promise.resolve(select?.installments && !select?.payment_due_kind ? { id: 'b1', vendor_id: 'v1', customer_id: 'c1', status: BookingStatus.CONFIRMED, currency: 'usd', early_released_amount: 0, released_gross: null, commission_amount: null, installments: [{ id: 'i1', status: InstallmentStatus.PAID }] } : BANK_BOOKING),
+    );
+
+    await service.reconcilePaymentIntent({ id: 'pi_ach', status: 'requires_payment_method', metadata: { installment_id: 'i1' }, last_payment_error: { message: 'Account closed' } });
+
+    expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({
+      where: { id: 'i1', status: InstallmentStatus.PAID, payment_intent_id: 'pi_ach' },
+      data: expect.objectContaining({ status: InstallmentStatus.FAILED, amount: 2300, fee_amount: 300, refunded_amount: 0 }),
+    });
+    expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ amount: 2300 }));
+  });
+
+  it('a bank account is checked wherever a payment method is picked: never for card-only payments, only on large bookings', async () => {
+    const { service, prisma } = setup();
+    prisma.user.findUnique.mockResolvedValue({ billing_id: 'cus_1' });
+    (StripePayment.retrievePaymentMethod as jest.Mock).mockResolvedValue({ id: 'pm_bank', type: 'us_bank_account', customer: 'cus_1' });
+    await expect(service.assertPaymentMethod('c1', 'pm_bank', null)).rejects.toThrow('This needs a card. Please choose a card.');
+    await expect(service.assertPaymentMethod('c1', 'pm_bank', { total: 800 })).rejects.toThrow('Bank payments are for bookings of $5,000 or more. Please choose a card.');
+    await expect(service.assertPaymentMethod('c1', 'pm_bank', { total: 6300, plan: PaymentPlan.DEPOSIT_50 })).resolves.toMatchObject({ type: 'us_bank_account' });
+    (StripePayment.retrievePaymentMethod as jest.Mock).mockResolvedValue({ id: 'pm_card', type: 'card', customer: 'cus_1' });
+    await expect(service.assertPaymentMethod('c1', 'pm_card', null)).resolves.toMatchObject({ type: 'card' });
+  });
+
+  it('a card attempt after a bank one records "card", so receipts and refunds read right', async () => {
+    const { service, prisma } = setup();
+    prisma.bookingInstallment.findUnique.mockResolvedValue(inst({ payment_method_type: 'us_bank_account', booking: { ...BANK_BOOKING, payment_method_id: 'pm_card', payment_method_type: null } }));
+    prisma.bookingInstallment.findUniqueOrThrow.mockResolvedValue(inst({ status: InstallmentStatus.PAID }));
+    (StripePayment.chargeSavedCard as jest.Mock).mockResolvedValue({ id: 'pi_c', status: 'succeeded' });
+    await service.chargeInstallment('i1');
+    expect(prisma.bookingInstallment.updateMany.mock.calls[0][0].data).toMatchObject({ status: InstallmentStatus.PROCESSING, payment_method_type: 'card' });
+  });
+});

@@ -11,6 +11,7 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { withJobLock } from 'src/common/helper/job-lock';
@@ -538,7 +539,9 @@ export class BookingContractsService {
     }
 
     // a bank account pays only for large bookings that don't need a card hold (payments/bank-payments.ts)
-    const methodType = await paymentMethodType(dto.payment_method_id);
+    // fail closed: when Stripe can't tell what the payment method is, a bank account could slip through as a card
+    const methodType = dto.payment_method_id ? await paymentMethodType(dto.payment_method_id) : null;
+    if (dto.payment_method_id && !methodType) throw new ServiceUnavailableException('We couldn’t check your payment method just now. Please try again in a moment.');
     if (isBank(methodType)) {
       const pricing = await this.pricingFor(p.listing.id, p.priced.price, dto.event_start_at);
       const why = bankNotAllowedReason({ total: pricing.total, plan: pricing.plan });

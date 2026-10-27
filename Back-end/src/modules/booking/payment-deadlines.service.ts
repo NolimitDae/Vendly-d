@@ -51,11 +51,14 @@ export class PaymentDeadlinesService {
         payment_due_reminded_at: null,
         // the widest window; each booking's own is checked below
         payment_due_by: { gt: now, lte: new Date(now.getTime() + LARGE_PAYMENT_DUE_REMINDER_HOURS * HOUR) },
+        // a charge going through at Stripe (a bank payment clearing) isn't missing: no "pay now or else"
+        installments: { none: { kind: 'charge', status: 'PROCESSING' } },
       },
       select: {
         id: true, customer_id: true, payment_due_by: true, payment_due_kind: true, amount: true, service_fee: true, payment_plan: true,
         listing: { select: { title: true } }, customer: { select: { email: true, name: true } },
-        installments: { where: { kind: 'charge', status: { in: ['FAILED', 'SCHEDULED'] } }, select: { sequence: true, amount: true, status: true, attempts: true } },
+        // every charge, as cancelOverdue reads them: dueInstallment needs the whole list (a custom plan's first one is the deposit)
+        installments: { where: { kind: 'charge' }, select: { sequence: true, amount: true, status: true, attempts: true } },
       },
       // soonest first: bookings skipped below (not in their own window yet) come last
       orderBy: { payment_due_by: 'asc' },
@@ -65,10 +68,12 @@ export class PaymentDeadlinesService {
     for (const b of due) {
       const { reminderHours } = paymentDueRules(isLargeBooking(b));
       if (b.payment_due_by!.getTime() > now.getTime() + reminderHours * HOUR) continue;
+      const inst = dueInstallment(b, b.installments);
+      // nothing waiting any more (paid meanwhile): no reminder; cancelOverdue clears the window
+      if (!inst || !['FAILED', 'SCHEDULED'].includes(inst.status)) continue;
       const claimed = await this.prisma.booking.updateMany({ where: { id: b.id, payment_due_reminded_at: null, payment_due_by: b.payment_due_by }, data: { payment_due_reminded_at: now } });
       if (!claimed.count) continue;
       const kind = (b.payment_due_kind === 'balance' ? 'balance' : 'deposit') as PaymentDueKind;
-      const inst = dueInstallment(b, b.installments);
       await this.payments.notifyPaymentDue(b, { kind, amount: Number(inst?.amount ?? 0), dueBy: b.payment_due_by!, reminder: true });
       sent++;
     }

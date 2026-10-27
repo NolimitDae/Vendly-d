@@ -17,7 +17,7 @@ describe('PaymentDeadlinesService', () => {
   it('reminds once with about 2 hours left', async () => {
     const { service, prisma, payments } = setup();
     const dueBy = new Date(now.getTime() + 90 * 60_000);
-    const row = { id: 'b1', customer_id: 'c1', payment_due_by: dueBy, payment_due_kind: 'balance', listing: { title: 'DJ set' }, customer: { email: 'c@x.com', name: 'Cee' }, installments: [{ sequence: 2, amount: '600.00' }] };
+    const row = { id: 'b1', customer_id: 'c1', payment_due_by: dueBy, payment_due_kind: 'balance', listing: { title: 'DJ set' }, customer: { email: 'c@x.com', name: 'Cee' }, installments: [{ sequence: 1, amount: '300.00', status: 'PAID' }, { sequence: 2, amount: '600.00', status: 'FAILED', attempts: 1 }] };
     prisma.booking.findMany.mockResolvedValueOnce([row]);
 
     expect(await service.remind(now)).toBe(1);
@@ -33,10 +33,31 @@ describe('PaymentDeadlinesService', () => {
     expect(await service.remind(now)).toBe(0);
   });
 
+  it('reads every charge (a custom plan: a later payment that failed is the one reminded about, never $0) and skips bookings with a payment on its way', async () => {
+    const { service, prisma, payments } = setup();
+    const dueBy = new Date(now.getTime() + HOUR);
+    const row = {
+      id: 'c1', customer_id: 'c1', payment_due_by: dueBy, payment_due_kind: 'balance', payment_plan: 'CUSTOM', listing: { title: 'Wedding' }, customer: { email: 'c@x.com', name: 'Cee' },
+      installments: [{ sequence: 1, amount: '500.00', status: 'PAID', attempts: 1 }, { sequence: 2, amount: '700.00', status: 'FAILED', attempts: 1 }, { sequence: 3, amount: '800.00', status: 'SCHEDULED', attempts: 0 }],
+    };
+    prisma.booking.findMany.mockResolvedValueOnce([row]);
+    expect(await service.remind(now)).toBe(1);
+    const q = prisma.booking.findMany.mock.calls[0][0];
+    expect(q.select.installments.where).toEqual({ kind: 'charge' });
+    expect(q.where.installments).toEqual({ none: { kind: 'charge', status: 'PROCESSING' } });
+    expect(payments.notifyPaymentDue).toHaveBeenCalledWith(row, { kind: 'balance', amount: 700, dueBy, reminder: true });
+
+    // nothing waiting any more (paid meanwhile): no reminder at all
+    payments.notifyPaymentDue.mockClear();
+    prisma.booking.findMany.mockResolvedValueOnce([{ ...row, installments: row.installments.map((i) => ({ ...i, status: 'PAID' })) }]);
+    expect(await service.remind(now)).toBe(0);
+    expect(payments.notifyPaymentDue).not.toHaveBeenCalled();
+  });
+
   it('large bookings are reminded with about 6 hours left, others only in their last 2 hours', async () => {
     const { service, prisma, payments } = setup();
     const dueBy = new Date(now.getTime() + 5 * HOUR);
-    const base = { customer_id: 'c1', payment_due_by: dueBy, payment_due_kind: 'deposit', listing: { title: 'Gala' }, customer: { email: 'c@x.com', name: 'Cee' }, installments: [{ sequence: 1, amount: '3000.00' }] };
+    const base = { customer_id: 'c1', payment_due_by: dueBy, payment_due_kind: 'deposit', listing: { title: 'Gala' }, customer: { email: 'c@x.com', name: 'Cee' }, installments: [{ sequence: 1, amount: '3000.00', status: 'FAILED', attempts: 1 }] };
     const large = { ...base, id: 'big', amount: 6000, service_fee: 300 };
     const small = { ...base, id: 'small', amount: 1000, service_fee: 50 };
     prisma.booking.findMany.mockResolvedValueOnce([large, small]);

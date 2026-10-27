@@ -276,7 +276,8 @@ export class RentalsService {
     const end = parseDay(dto.end_date);
     const problem = rangeProblem(start, end);
     if (problem) throw new BadRequestException(problem);
-    await this.payments.assertOwnsCard(customerId, dto.payment_method_id);
+    // cards only: a rental's security deposit is a card hold, which a bank account can't do
+    await this.payments.assertPaymentMethod(customerId, dto.payment_method_id, null);
 
     const created = await this.prisma.$transaction(async (tx) => {
       const ids = dto.lines.map((l) => l.item_id);
