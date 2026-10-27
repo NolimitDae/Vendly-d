@@ -25,6 +25,8 @@ export interface TravelQuote {
   label: string;
   outside_area: boolean;
   message?: string | null;
+  /** the address changed after payments started: the fee for the new one (the difference was settled on its own) */
+  now?: { fee: number; label: string; miles: number | null } | null;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;

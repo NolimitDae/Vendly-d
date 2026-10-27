@@ -25,7 +25,7 @@ import { PromoService } from 'src/modules/platform/promo.service';
 import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
 import { CustomerCantComeError, customerComesFor, GUEST_COUNT_NEEDED, needsGuestCount, needsServiceAddress, requiredBookingFields, vendorPlaceVenueText } from 'src/modules/booking/booking-place';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
-import { Point, priceTravel, readTravel, repriceTravel, TravelListing, travelOrigin, TravelQuote, travelFeeApplies, TravelRequest, travelSummary, UNPRICED_TEXT } from 'src/modules/booking/travel-fee';
+import { currentTravelFee, Point, priceTravel, readTravel, repriceTravel, TravelListing, travelOrigin, TravelQuote, travelFeeApplies, TravelRequest, travelSummary, UNPRICED_TEXT } from 'src/modules/booking/travel-fee';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
 import {
@@ -74,6 +74,7 @@ import { isProposal } from './request-changes';
 import { readCustomPlan } from 'src/modules/payments/custom-plan';
 import { replaceUnpaidCharges } from 'src/modules/payments/custom-plan-charges';
 import { PaymentsService } from 'src/modules/payments/payments.service';
+import { BookingExtrasService } from 'src/modules/add-ons/booking-extras.service';
 import { readPlanChange } from './payment-plan-change';
 import {
   AmendmentChangesDto,
@@ -187,8 +188,9 @@ export class BookingContractsService {
     @Optional() private geocoder?: GeocodeService,
     // optional only so unit tests can leave it out; Nest always provides it
     @Optional() private packageOptions?: PackageOptionsService,
-    // settles a travel fee that changed with the address after payments started
+    // settle a travel fee that changed with the address after payments started (given back, or charged as a fee)
     @Optional() private payments?: PaymentsService,
+    @Optional() private extras?: BookingExtrasService,
   ) {}
 
   // ─── Audit ──────────────────────────────────────────────────────────────
@@ -354,22 +356,32 @@ export class BookingContractsService {
    * priced on, or null when it doesn't change. An address that can't be placed on the map keeps the fee
    * as it was (the vendor can still amend the price).
    */
-  private async travelChangeFor(b: { vendor_id: string; customer_comes: boolean; travel_fee: unknown; travel_details: unknown; listing?: { lat?: number | null; lng?: number | null } | null }, address: string) {
+  private async travelChangeFor(b: { vendor_id: string; customer_comes: boolean; travel_fee: unknown; travel_details: unknown; listing?: { lat?: number | null; lng?: number | null; service_radius_miles?: number | null } | null }, address: string) {
     const stored = readTravel(b.travel_details);
     if (!stored || b.customer_comes) return null;
     const to = (await this.geocoder?.point(address.trim())) ?? null;
-    const quote = repriceTravel(stored, await this.vendorOrigin(b.vendor_id, b.listing), to);
-    const before = round2(Number(b.travel_fee ?? 0));
+    const quote = repriceTravel(stored, await this.vendorOrigin(b.vendor_id, b.listing), to, b.listing?.service_radius_miles);
+    // what the customer pays for travel now (the fee in the price, or one already settled for an earlier address)
+    const before = currentTravelFee(stored, b.travel_fee);
     if (quote.status !== 'PRICED' || quote.fee === before) return null;
     return { quote, before, fee: quote.fee!, delta: round2(quote.fee! - before) };
   }
 
-  /** Whether a payment has started, so the price can no longer be spread over the charges. */
-  private async priceLocked(db: Tx | PrismaService, bookingId: string) {
-    return this.assertPriceChangeable(db, bookingId).then(
+  /**
+   * How a new travel fee is applied: 'reprice' while nothing is paid and the charges can be re-spread (the
+   * price changes); else 'settle': the price keeps its fee and the difference is charged as a fee or given back.
+   */
+  private async travelMode(db: Tx | PrismaService, bookingId: string): Promise<'reprice' | 'settle'> {
+    const locked = await this.assertPriceChangeable(db, bookingId).then(
       () => false,
       () => true,
     );
+    if (locked) return 'settle';
+    const b = await db.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { payment_plan: true, amount: true, service_fee: true, installments: { where: { kind: 'charge' }, select: { id: true } } } });
+    // a custom payment plan's charges can't be re-spread
+    const n = b.installments.length;
+    if (n && !rebasedAmounts({ plan: b.payment_plan, count: n, price: Number(b.amount ?? 0), serviceFee: Number(b.service_fee ?? 0) })) return 'settle';
+    return 'reprice';
   }
 
   /** Where the vendor sets off from: their business address, else the package's location. */
@@ -1340,8 +1352,8 @@ export class BookingContractsService {
     const placeVenue = needsServiceAddress(full.listing, full.customer_comes) ? null : prevData?.venue_address || vendorPlaceVenueText(full.listing?.location);
     // a new address: the travel fee is worked out again, and the price moves with it
     const travel = changes.venue_address ? await this.travelChangeFor(full, changes.venue_address) : null;
-    const locked = travel ? await this.priceLocked(this.prisma, bookingId) : false;
-    const amount = travel ? round2(Number(changes.amount ?? full.amount) + travel.delta) : (changes.amount ?? full.amount);
+    const mode = travel ? await this.travelMode(this.prisma, bookingId) : null;
+    const amount = travel && mode === 'reprice' ? round2(Number(changes.amount ?? full.amount) + travel.delta) : (changes.amount ?? full.amount);
     const nextBooking = {
       id: full.id,
       scheduled_at: changes.scheduled_at ?? changes.event_start_at ?? full.scheduled_at,
@@ -1352,7 +1364,7 @@ export class BookingContractsService {
       message: full.message,
       amount,
       // after payments started the Vendly Protection fee stays as paid; the travel fee difference is settled on its own
-      service_fee: changes.amount !== undefined || (travel && !locked) ? this.serviceFee(amount, full.listing?.category_id) : full.service_fee,
+      service_fee: changes.amount !== undefined || mode === 'reprice' ? this.serviceFee(amount, full.listing?.category_id) : full.service_fee,
       currency: full.currency,
     };
     const vc = current.vendor_contract as ResolvedVendorContract;
@@ -1378,19 +1390,21 @@ export class BookingContractsService {
     if (full.travel_details && prevData?.travel_fee) data.travel_fee = prevData.travel_fee;
     const changed = [...Object.keys(changes).map(fieldLabel), ...(travel ? ['travel fee'] : [])];
     const rendered = this.renderFor(vc, data);
-    const settle = !travel || !locked
-      ? ''
-      : travel.delta > 0
-        ? ' The difference is added to the next payment due, or charged once both parties sign if nothing is left to pay.'
-        : ' The difference comes off the next payment due, or is refunded once both parties sign if nothing is left to pay.';
-    const travelNote = travel ? `\n\nTravel fee for the new address: ${dollars(travel.fee)} (${travel.quote.label}), was ${dollars(travel.before)}. The price is now ${dollars(Number(amount))}.${settle}` : '';
+    const settle = mode === 'reprice'
+      ? ` The price is now ${dollars(Number(amount))}.`
+      : travel && travel.delta > 0
+        ? ` The difference, ${dollars(travel.delta)}, is charged as a travel fee change once both parties sign.`
+        : travel
+          ? ` The difference, ${dollars(-travel.delta)}, is given back once both parties sign: it comes off what is still owed, else it is refunded.`
+          : '';
+    const travelNote = travel ? `\n\nTravel fee for the new address: ${dollars(travel.fee)} (${travel.quote.label}), was ${dollars(travel.before)}.${settle}` : '';
     const body = `${rendered.body}\n\n## Amendment\nThis version replaces contract version ${current.version} (verification ${current.verification_code}). Changed: ${changed.join(', ')}. Until both parties sign this amendment, version ${current.version} remains in force.${travelNote}`;
     const content = contentHash(body, vc.file_sha256);
     const missing = missingFields(requiredBookingFields(rendered.required, full.listing), data);
     const serialisedChanges = Object.fromEntries(
       Object.entries(changes).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : v]),
     );
-    const amendmentTravel = travel ? { fee: travel.fee, delta: travel.delta, details: travel.quote } : undefined;
+    const amendmentTravel = travel ? { fee: travel.fee, delta: travel.delta, details: travel.quote, mode } : undefined;
     return { role, current, vc, version, data: { ...data, amendment_changes: serialisedChanges, ...(amendmentTravel ? { amendment_travel: amendmentTravel } : {}) } as any, title: rendered.title, body, content, missing, full, changed };
   }
 
@@ -1485,12 +1499,22 @@ export class BookingContractsService {
     if (planChange && contract.booking.status !== BookingStatus.CONFIRMED) throw new BadRequestException('A payment plan can only be agreed while the booking is confirmed.');
     // a payment may have been taken since the amendment was proposed
     if (changes.amount !== undefined) await this.assertPriceChangeable(this.prisma, contract.booking_id);
-    // the travel fee worked out for the new address (as signed)
-    const travel = (contract as any).merge_data?.amendment_travel as { fee: number; delta: number; details: TravelQuote } | undefined;
+    // the travel fee worked out for the new address (as signed): only on a booking still under way, without an
+    // open dispute, and applied the way it was agreed (the payments may have moved on since it was proposed)
+    const travel = (contract as any).merge_data?.amendment_travel as { fee: number; delta: number; details: TravelQuote; mode: 'reprice' | 'settle' } | undefined;
+    const now = travel
+      ? await this.prisma.booking.findUniqueOrThrow({ where: { id: contract.booking_id }, select: { status: true, vendor_id: true, dispute_opened_at: true, dispute_resolved_at: true, travel_details: true } })
+      : null;
+    if (travel && now) {
+      if (!([BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] as BookingStatus[]).includes(now.status)) throw new BadRequestException('This booking is no longer under way, so its address and travel fee can’t change.');
+      if (now.dispute_opened_at && !now.dispute_resolved_at) throw new BadRequestException('This booking has an open dispute. Vendly will settle the money when it is resolved.');
+      if ((await this.travelMode(this.prisma, contract.booking_id)) !== travel.mode) {
+        throw new ConflictException('The payments on this booking changed since this address change was proposed. Propose it again so the travel fee is settled the right way.');
+      }
+    }
     const listing = changes.amount !== undefined || travel
       ? await this.prisma.booking.findUnique({ where: { id: contract.booking_id }, select: { listing: { select: { category_id: true } } } })
       : null;
-    let settle: { charge: string | null; refund: number } = { charge: null, refund: 0 };
 
     const executed = await this.execute(contract.id, user.userId, signerRole, dto, imageKey, meta, async (tx) => {
       await tx.bookingContract.update({
@@ -1518,20 +1542,16 @@ export class BookingContractsService {
         bookingUpdate.amount = price.amount;
         bookingUpdate.service_fee = price.service_fee;
       }
-      if (travel) {
-        bookingUpdate.travel_fee = travel.fee;
-        bookingUpdate.travel_details = travel.details as unknown as Prisma.InputJsonValue;
-        const now = await tx.booking.findUniqueOrThrow({ where: { id: contract.booking_id }, select: { amount: true } });
-        const amount = round2(Number(price?.amount ?? now.amount) + travel.delta);
-        bookingUpdate.amount = amount;
-        if (!(await this.priceLocked(tx, contract.booking_id))) {
-          // nothing paid yet: the new price is spread over the charges like any price change
-          price = { amount, service_fee: this.serviceFee(amount, listing?.listing?.category_id) };
-          bookingUpdate.service_fee = price.service_fee;
-        } else if (this.payments) {
-          // payments started: the unpaid charges take the difference, else it's charged or refunded
-          settle = await this.payments.shiftUnpaidCharges(tx, contract.booking_id, travel.delta, 'Travel fee change');
-        }
+      if (travel?.mode === 'reprice') {
+        // nothing paid yet: the new price is spread over the charges like any price change
+        const b = await tx.booking.findUniqueOrThrow({ where: { id: contract.booking_id }, select: { amount: true } });
+        const amount = round2(Number(price?.amount ?? b.amount) + travel.delta);
+        price = { amount, service_fee: this.serviceFee(amount, listing?.listing?.category_id) };
+        Object.assign(bookingUpdate, { amount, service_fee: price.service_fee, travel_fee: travel.fee, travel_details: travel.details as unknown as Prisma.InputJsonValue });
+      } else if (travel) {
+        // payments started: the price keeps its fee; the new address's fee is noted and the difference settled below
+        const stored = readTravel(now?.travel_details) ?? travel.details;
+        bookingUpdate.travel_details = { ...stored, now: { fee: travel.fee, label: travel.details.label, miles: travel.details.miles } } as unknown as Prisma.InputJsonValue;
       }
       if (Object.keys(bookingUpdate).length) {
         await tx.booking.update({ where: { id: contract.booking_id }, data: bookingUpdate });
@@ -1542,8 +1562,14 @@ export class BookingContractsService {
       if (planChange) await replaceUnpaidCharges(tx, contract.booking_id, planChange);
     });
     if (executed && changes.venue_address) void this.geocoder?.booking(contract.booking_id);
-    if (executed && settle.charge) await this.payments?.chargeInstallment(settle.charge).catch((e) => this.logger.error(`travel fee change ${contract.booking_id}`, e));
-    if (executed && settle.refund > 0) await this.payments?.refundVendorPart(contract.booking_id, settle.refund, `travel-change-${contract.id}`).catch((e) => this.logger.error(`travel fee refund ${contract.booking_id}`, e));
+    // the travel fee difference, through the usual paths: charged as an agreed fee, or given back (lowering what's
+    // still owed first, then refunding; taken back from the vendor's balance if they were already paid)
+    if (executed && travel?.mode === 'settle' && now) {
+      const settled = travel.delta > 0
+        ? this.extras?.chargeAgreedFee(contract.booking_id, { name: 'Travel fee change', amount: travel.delta, note: `New address: ${travel.details.label}` })
+        : this.payments?.giveBack(contract.booking_id, now.vendor_id, { amount: -travel.delta, reason: 'the travel fee is lower for the new address' });
+      await settled?.catch((e) => this.logger.error(`travel fee change ${contract.booking_id}`, e));
+    }
     return { success: true, data: this.summary({ ...executed, signatures: [] }, role) };
   }
 

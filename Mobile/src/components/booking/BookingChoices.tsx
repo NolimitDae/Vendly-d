@@ -41,6 +41,11 @@ function TravelFeeCard({ booking, forVendor }: { booking: BookingChoicesFields; 
           <Text style={s.price}>{money(booking.travel_fee ?? t.fee ?? 0)}</Text>
         </View>
       )}
+      {!!t.now && (
+        <Text style={[s.body, s.muted]}>
+          New address: {t.now.label}, {money(t.now.fee)}. The difference was {t.now.fee > (booking.travel_fee ?? 0) ? 'charged as a travel fee change' : 'given back'}.
+        </Text>
+      )}
     </Card>
   );
 }

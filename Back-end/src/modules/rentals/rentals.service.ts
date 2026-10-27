@@ -19,6 +19,8 @@ import { quoteTravel, rentalTravelListing, TravelQuote, travelOrigin, travelSett
 
 /** Said when a delivery address can't be placed on the map (the fee isn't guessed). */
 const DELIVERY_UNPLACED = 'We couldn’t find that delivery address on the map, so the delivery fee can’t be worked out. Check the address, or choose pickup.';
+/** Said when the vendor's own business address isn't on the map (not the customer's doing). */
+const DELIVERY_NO_ORIGIN = 'This vendor’s delivery fee can’t be worked out right now. Choose pickup, or message the vendor.';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Bookings in these states no longer hold stock. */
@@ -314,13 +316,15 @@ export class RentalsService {
    * The delivery fee for an order delivered to `address`, from the vendor's business address; null when
    * none applies (a pickup, or the vendor charges none). UNPRICED when the address can't be placed.
    */
-  private async deliveryFor(vendorId: string, pickup: boolean, address?: string | null): Promise<TravelQuote | null> {
-    if (pickup) return null;
+  private async deliveryFor(vendorId: string, delivered: boolean, address?: string | null): Promise<(TravelQuote & { message: string | null }) | null> {
+    if (!delivered) return null;
     const p = await this.prisma.vendorProfile.findUnique({ where: { user_id: vendorId } });
     const terms = travelTermsOf(rentalTravelListing(p));
     if (!terms) return null;
-    const to = address?.trim() ? ((await this.geocoder?.point(address.trim())) ?? null) : null;
-    return quoteTravel(terms, travelOrigin(p ? { lat: p.business_lat, lng: p.business_lng } : null), to);
+    const from = travelOrigin(p ? { lat: p.business_lat, lng: p.business_lng } : null);
+    const to = from && address?.trim() ? ((await this.geocoder?.point(address.trim())) ?? null) : null;
+    const q = quoteTravel(terms, from, to);
+    return { ...q, message: q.status === 'PRICED' ? null : !from ? DELIVERY_NO_ORIGIN : DELIVERY_UNPLACED };
   }
 
   private checkStock(lines: { item: Item; quantity: number }[], rows: (ReservationLike & { item_id: string })[], start: Date, end: Date) {
@@ -340,7 +344,8 @@ export class RentalsService {
     const rows = await this.holdingReservations(this.prisma, lines.map((l) => l.item.id), start, end, Math.max(...lines.map((l) => l.item.turnaround_hours)));
     const stock = this.checkStock(lines, rows, start, end);
     // delivered: the vendor's delivery fee to the address given (shown live as the customer types it)
-    const delivery = await this.deliveryFor(lines[0].item.vendor_id, isPickup(dto.customer_comes, dto.venue_address), dto.venue_address);
+    // only when the customer chose delivery: older apps don't say, and never showed them a delivery fee
+    const delivery = await this.deliveryFor(lines[0].item.vendor_id, dto.customer_comes === false, dto.venue_address);
     const profile = await this.prisma.vendorProfile.findUnique({ where: { user_id: lines[0].item.vendor_id } });
     const terms = travelTermsOf(rentalTravelListing(profile));
     return {
@@ -354,7 +359,7 @@ export class RentalsService {
         handover: handoverOptions(lines.map((l) => l.item)),
         // the vendor's delivery rates, and this order's fee once there's an address
         delivery_terms: terms ? travelTermsText(terms) : null,
-        delivery: delivery && dto.venue_address?.trim() ? { ...delivery, message: delivery.status === 'UNPRICED' ? DELIVERY_UNPLACED : null } : null,
+        delivery: delivery && dto.venue_address?.trim() ? delivery : null,
       },
     };
   }
@@ -374,8 +379,8 @@ export class RentalsService {
     const pickup = isPickup(dto.customer_comes, dto.venue_address);
     // the delivery fee, worked out here (never taken from the app): an address it can't place isn't guessed
     const vendorId = (await this.prisma.rentalItem.findFirst({ where: { id: dto.lines[0]?.item_id }, select: { vendor_id: true } }))?.vendor_id;
-    const delivery = vendorId ? await this.deliveryFor(vendorId, pickup, dto.venue_address) : null;
-    if (delivery?.status === 'UNPRICED' && dto.venue_address?.trim()) throw new BadRequestException(DELIVERY_UNPLACED);
+    const delivery = vendorId ? await this.deliveryFor(vendorId, !pickup && dto.customer_comes === false, dto.venue_address) : null;
+    if (delivery?.message) throw new BadRequestException(delivery.message);
     const created = await this.prisma.$transaction(async (tx) => {
       const ids = dto.lines.map((l) => l.item_id);
       await tx.$queryRaw`SELECT id FROM rental_items WHERE id IN (${Prisma.join(ids)}) FOR UPDATE`;
@@ -404,7 +409,7 @@ export class RentalsService {
           // the vendor's price: the items and the delivery fee
           amount: round2(price.subtotal + price.delivery_fee),
           service_fee: price.service_fee,
-          ...(delivery?.status === 'PRICED' ? { travel_fee: delivery.fee, travel_details: delivery as unknown as Prisma.InputJsonValue } : {}),
+          ...(delivery?.status === 'PRICED' ? { travel_fee: delivery.fee, travel_details: { ...delivery, message: undefined } as unknown as Prisma.InputJsonValue } : {}),
           security_deposit: price.security_deposit > 0 ? price.security_deposit : null,
           payment_plan: PaymentPlan.FULL_ON_ACCEPT,
           payment_method_id: dto.payment_method_id,

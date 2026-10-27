@@ -327,31 +327,37 @@ run('Delivery / travel fee (e2e)', () => {
     };
     const balance = () => prisma.bookingInstallment.findFirst({ where: { booking_id: bookingId, sequence: 2 } });
 
-    // closer: inside the free miles, so the fee drops to $0 and comes off the balance
+    // closer, inside the free miles: the fee would be $0. The deposit is paid, so the price keeps its $30 and
+    // the $30 is given back, off the balance still to pay
     const body = await amend('cust', NEAR);
     expect(body).toContain('Changed: venue address, travel fee.');
-    expect(body).toContain('Travel fee for the new address: $0.00 (6.0 miles one way, first 15 free), was $30.00. The price is now $500.00. The difference comes off the next payment due');
+    expect(body).toContain('Travel fee for the new address: $0.00 (6.0 miles one way, first 15 free), was $30.00. The difference, $30.00, is given back once both parties sign');
     let b = await prisma.booking.findUnique({ where: { id: bookingId } });
-    expect({ amount: Number(b.amount), travel_fee: Number(b.travel_fee), venue_address: b.venue_address }).toEqual({ amount: 500, travel_fee: 0, venue_address: NEAR });
+    expect({ amount: Number(b.amount), travel_fee: Number(b.travel_fee), venue_address: b.venue_address }).toEqual({ amount: 530, travel_fee: 30, venue_address: NEAR });
+    expect(b.travel_details.now).toMatchObject({ fee: 0 });
     expect(Number((await balance()).amount)).toBe(235);
+    // both sides see the fee for the new address
+    expect((await as('cust', http().get(`/api/bookings/${bookingId}`))).body.data.travel.now).toMatchObject({ fee: 0 });
 
-    // the balance is paid; moving further away again is charged on its own
+    // the balance is paid; moving further away again is charged as an agreed fee (from $0 to $30)
     const { PaymentsService } = await import('../src/modules/payments/payments.service');
     await app.get(PaymentsService).chargeInstallment((await balance()).id);
     expect((await balance()).status).toBe('PAID');
-    await amend('vendor', FAR);
-    b = await prisma.booking.findUnique({ where: { id: bookingId }, include: { installments: { orderBy: { sequence: 'asc' } } } });
-    expect({ amount: Number(b.amount), travel_fee: Number(b.travel_fee) }).toEqual({ amount: 530, travel_fee: 30 });
-    const extra = b.installments.at(-1);
-    expect(extra).toMatchObject({ label: 'Travel fee change', status: 'PAID', kind: 'extra' });
+    const back = await amend('vendor', FAR);
+    expect(back).toContain('The difference, $30.00, is charged as a travel fee change once both parties sign.');
+    const extra = await prisma.bookingExtra.findFirst({ where: { booking_id: bookingId, name: 'Travel fee change' }, include: { installment: true } });
+    expect(extra).toMatchObject({ kind: 'FEE', status: 'APPROVED' });
     expect(Number(extra.amount)).toBe(30);
-    expect(chargeOf(extra.payment_intent_id)?.amount).toBe(30);
+    expect(extra.installment.status).toBe('PAID');
+    expect(chargeOf(extra.installment.payment_intent_id)?.amount).toBe(30);
+    b = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(Number(b.amount)).toBe(530);
+    expect(b.travel_details.now).toMatchObject({ fee: 30 });
 
     // and closer again with nothing left to pay: refunded (the Vendly Protection fee stays)
     await amend('cust', NEAR);
-    b = await prisma.booking.findUnique({ where: { id: bookingId } });
-    expect(Number(b.amount)).toBe(500);
     expect(refunded.reduce((s, r) => s + (r.amount ?? 0), 0)).toBe(30);
+    expect((await prisma.booking.findUnique({ where: { id: bookingId } })).travel_details.now).toMatchObject({ fee: 0 });
   });
 
   it('rental delivery: the vendor sets one fee for delivered orders, measured from their business address', async () => {
@@ -376,8 +382,10 @@ run('Delivery / travel fee (e2e)', () => {
     const q = await quote({ customer_comes: false, venue_address: FAR });
     expect(q.body.data).toMatchObject({ subtotal: 100, delivery_fee: 95, delivery: { status: 'PRICED', miles: 60, fee: 95 }, delivery_terms: expect.stringContaining('$20.00') });
     expect(q.body.data.due_on_accept).toBe(round2(195 + q.body.data.service_fee));
-    // picked up: no fee
+    // picked up: no fee; an older app that doesn't say how isn't charged one either (it never showed it)
     expect((await quote({ customer_comes: true })).body.data).toMatchObject({ delivery_fee: 0, delivery: null });
+    await sleep(1100);
+    expect((await quote({ venue_address: FAR })).body.data).toMatchObject({ delivery_fee: 0, delivery: null });
     // an address that can't be placed: the fee isn't guessed, and the order can't go out like that
     expect((await quote({ customer_comes: false, venue_address: LOST })).body.data.delivery).toMatchObject({ status: 'UNPRICED', message: expect.stringMatching(/choose pickup/) });
 

@@ -81,6 +81,16 @@ export interface TravelQuote {
   label: string;
   /** further than the vendor's travel radius (service_radius_miles), when they set one */
   outside_area: boolean;
+  /**
+   * After payments started the booking's price keeps the fee it was agreed with; a new address's fee is
+   * settled on its own (charged as a fee, or given back). `now` is the fee for the current address.
+   */
+  now?: { fee: number; label: string; miles: number | null } | null;
+}
+
+/** The travel fee the customer pays now: the one for the current address, else the one in the price. */
+export function currentTravelFee(details: TravelQuote | null, inPrice: unknown): number {
+  return details?.now ? details.now.fee : round2(Number(inPrice ?? 0));
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -186,9 +196,12 @@ export function rentalTravelListing(p: RentalTravelProfile | null | undefined): 
   };
 }
 
-/** The new fee when the address changes: the rates the booking was priced on, to the new address. */
-export function repriceTravel(before: TravelQuote, from: Point | null | undefined, to: Point | null | undefined): TravelQuote {
-  return quoteTravel(before.terms, from, to);
+/**
+ * The new fee when the address changes: the rates the booking was priced on, from where the vendor sets
+ * off to the new address. (Positions aren't kept on the booking: the vendor's business address is private.)
+ */
+export function repriceTravel(before: TravelQuote, from: Point | null | undefined, to: Point | null | undefined, radius?: number | null): TravelQuote {
+  return quoteTravel(before.terms, from, to, radius);
 }
 
 /** A travel quote as stored on a booking (travel_details), or null. */

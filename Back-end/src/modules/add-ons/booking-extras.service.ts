@@ -334,6 +334,18 @@ export class BookingExtrasService {
   }
 
   /**
+   * A fee both sides already agreed to (signed in a contract amendment, e.g. a higher travel fee for a new
+   * address): added as an approved fee and charged to the booking's card, like a fee the customer approved.
+   */
+  async chargeAgreedFee(bookingId: string, fee: { name: string; amount: number; note?: string }) {
+    const amount = round2(fee.amount);
+    const extra = await this.prisma.bookingExtra.create({
+      data: { booking_id: bookingId, kind: AddOnKind.FEE, name: fee.name.slice(0, 120), unit_price: amount, quantity: 1, amount, fee_amount: 0, note: fee.note ?? null, status: BookingExtraStatus.PENDING },
+    });
+    return this.chargeFor(extra.id, BookingExtraStatus.PENDING, null, { responded_at: new Date() });
+  }
+
+  /**
    * Claims the request (from `from`) as APPROVED, adds it as an installment and charges it. A card
    * that fails goes through the usual retry and "Payment problem" flow.
    */

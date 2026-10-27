@@ -39,6 +39,11 @@ export function TravelFeeSection({ booking, forVendor }: { booking: BookingChoic
           <span className="whitespace-nowrap">{money(booking.travel_fee ?? t.fee ?? 0)}</span>
         </div>
       )}
+      {t.now && (
+        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+          New address: {t.now.label}, {money(t.now.fee)}. The difference was {t.now.fee > (booking.travel_fee ?? 0) ? "charged as a travel fee change" : "given back"}.
+        </p>
+      )}
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { CreateRentalItemDto, RentalBookDto, RentalDeliveryFeeDto, RentalQuoteDto, RentalReturnDto, UpdateRentalItemDto } from './dto/rentals.dto';
@@ -73,6 +74,8 @@ export class RentalsController {
   }
 
   @Post('quote')
+  // may ask the geocoder for a delivery address; the apps ask once typing pauses
+  @Throttle({ short: { limit: 3, ttl: 1000 }, medium: { limit: 60, ttl: 60_000 } })
   quote(@Body() dto: RentalQuoteDto) {
     return this.service.quote(dto);
   }
