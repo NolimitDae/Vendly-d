@@ -109,7 +109,7 @@ export default function Navbar() {
   const dashboardHref = () => {
     if (!user) return "/login";
     if (user.type === "ADMIN") return "/dashboard";
-    if (user.type === "VENDOR") return "/vendor/listings";
+    if (user.type === "VENDOR") return "/vendor";
     if (user.type === "EVENT_PLANNER") return "/event-planner/profile";
     return "/bookings";
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import dayjs from "dayjs";
 import { CheckCircle2, Loader2, MapPinned, Play } from "lucide-react";
 import { toast } from "react-toastify";
@@ -25,6 +25,8 @@ export default function VendorDayPanel({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  // several panels can share a page (the dashboard's upcoming bookings)
+  const headingId = `vendor-day-${useId()}`;
   if (!["CONFIRMED", "IN_PROGRESS"].includes(booking.status) || booking.is_rental) return null;
 
   const next = nextVendorStep(booking);
@@ -53,8 +55,8 @@ export default function VendorDayPanel({
 
   const btn = "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-60";
   return (
-    <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3" aria-labelledby="vendor-day">
-      <h2 id="vendor-day" className="font-semibold text-gray-900 dark:text-white">
+    <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3" aria-labelledby={headingId}>
+      <h2 id={headingId} className="font-semibold text-gray-900 dark:text-white">
         On the day
       </h2>
       {note && <p className="text-sm text-gray-600 dark:text-gray-300">{note}</p>}
