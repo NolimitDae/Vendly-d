@@ -62,7 +62,7 @@ describe('AccountRoles', () => {
 
     await waitFor(() => expect(IdentityService.switchRole).toHaveBeenCalledWith('VENDOR', 'Bella Events'));
     expect(saveSession).toHaveBeenCalledWith('a2', 'r2');
-    expect(assign).toHaveBeenCalledWith('/vendor/listings');
+    expect(assign).toHaveBeenCalledWith('/vendor');
   });
 
   it('shows the server message when a switch is refused', async () => {

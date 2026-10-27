@@ -52,7 +52,7 @@ const LoginForm = () => {
       if (userType === "ADMIN") {
         router.push("/dashboard");
       } else if (userType === "VENDOR") {
-        router.push("/vendor/listings");
+        router.push("/vendor");
       } else if (userType === "EVENT_PLANNER") {
         router.push("/event-planner/profile");
       } else {
