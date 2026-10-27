@@ -180,6 +180,16 @@ export const BookingService = {
   approveChanges: (id: string, signature: SignaturePayload) => api.post(`/bookings/${id}/changes/approve`, { signature }),
   declineChanges: (id: string, reason?: string) => api.post(`/bookings/${id}/changes/decline`, reason ? { reason } : {}),
 
+  // ─── Custom payment plan on a confirmed booking (vendor proposes, customer signs or declines) ──
+  /** The booking's payments, the plan waiting (or last answered), and for the vendor the editor's rules. */
+  paymentPlan: (id: string) => api.get(`/bookings/${id}/payment-plan`),
+  previewPaymentPlan: (id: string, body: Record<string, unknown>) => api.post(`/bookings/${id}/payment-plan/preview`, body),
+  proposePaymentPlan: (id: string, body: Record<string, unknown>, signature: SignaturePayload) => api.post(`/bookings/${id}/payment-plan`, { ...body, signature }),
+  withdrawPaymentPlan: (id: string) => api.post(`/bookings/${id}/payment-plan/withdraw`),
+  /** Customer: sign to agree to the plan. */
+  approvePaymentPlan: (id: string, signature: SignaturePayload) => api.post(`/bookings/${id}/payment-plan/approve`, { signature }),
+  declinePaymentPlan: (id: string, reason?: string) => api.post(`/bookings/${id}/payment-plan/decline`, reason ? { reason } : {}),
+
   startWork: (id: string) =>
     api.patch<{ success: boolean; data: Booking }>(`/bookings/${id}/start`),
 

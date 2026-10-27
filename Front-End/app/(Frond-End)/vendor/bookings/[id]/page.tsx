@@ -30,6 +30,7 @@ import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceBu
 import { InspirationPhotos } from "@/components/bookings/InspirationPhotos";
 import BookingChoices from "@/components/bookings/BookingChoices";
 import RequestChangesCard from "@/components/bookings/RequestChangesCard";
+import PaymentPlanCard from "@/components/bookings/PaymentPlanCard";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { closesIn } from "@/lib/requests";
@@ -344,6 +345,17 @@ export default function VendorBookingDetailPage() {
       <RentalReturnPanel booking={booking} role="VENDOR" onChanged={fetchAll} />
 
       <RequestChangesCard
+        bookingId={booking.id}
+        role="VENDOR"
+        bookingStatus={booking.status}
+        otherName={booking.customer?.name ?? "The customer"}
+        onChanged={() => {
+          setContractKey((k) => k + 1);
+          fetchAll();
+        }}
+      />
+
+      <PaymentPlanCard
         bookingId={booking.id}
         role="VENDOR"
         bookingStatus={booking.status}

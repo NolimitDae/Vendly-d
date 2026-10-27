@@ -11,6 +11,7 @@ import { apiMessage } from '../screens/auth/SignIn';
 import ReportProblemForm from './ReportProblemForm';
 import DisputeDetails from './DisputeDetails';
 import { dueByText, PAYMENT_STATE_LABELS } from '../utils/bookingStatus';
+import { paymentStatusText } from '../utils/paymentPlan';
 import { BookingService, type Booking } from '../services/booking.service';
 
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
@@ -87,7 +88,8 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
       )}
 
       {hasPlan && t.installments.map((i) => {
-        const st = STATUS[i.status];
+        // a status this app doesn't know yet (a newer server) still reads sensibly
+        const st = STATUS[i.status] ?? { label: paymentStatusText(i.status), color: DARK.muted, icon: 'time-outline' as const };
         // a failed charge, or a missed deposit or balance waiting for its automatic retry: the customer can pay now
         const payable = i.status === 'FAILED' || (!!t.payment_state && i.status === 'SCHEDULED' && i.attempts > 0);
         return (

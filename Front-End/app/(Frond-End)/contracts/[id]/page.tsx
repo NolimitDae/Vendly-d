@@ -48,6 +48,7 @@ const CHANGE_LABELS: Record<string, string> = {
   guest_count: "Guest count",
   amount: "Price",
   cancellation_policy: "Cancellation policy",
+  payment_plan: "Payment plan",
 };
 
 function formatChange(key: string, value: unknown) {

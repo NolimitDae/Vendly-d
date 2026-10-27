@@ -85,6 +85,8 @@ export interface ChangesEditor {
   price_unit: string;
   needs_guest_count: boolean;
   from_quote: boolean;
+  /** the payment plan section (older servers leave it out) */
+  payment_plan?: { package_plan: string; package_plan_label: string; pay_after: boolean; min_payments: number; max_payments: number; min_payment: number };
 }
 
 export interface ChangesState {

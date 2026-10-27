@@ -17,6 +17,7 @@ import { PaymentsService } from '../../services/payments.service';
 import RentalReturnCard from '../../components/RentalReturnCard';
 import BookingChoices from '../../components/booking/BookingChoices';
 import RequestChangesCard from '../../components/booking/RequestChangesCard';
+import PaymentPlanCard from '../../components/booking/PaymentPlanCard';
 import VendorExtras from '../../components/extras/VendorExtras';
 import VendorDisputeCard from '../../components/VendorDisputeCard';
 import type { VendorBookingsStackParams } from '../../navigation/types';
@@ -336,6 +337,17 @@ export default function VendorBookingDetail() {
           )}
 
           <RequestChangesCard
+            bookingId={booking.id}
+            role="VENDOR"
+            bookingStatus={booking.status}
+            otherName={customer}
+            onChanged={() => {
+              setContractKey((k) => k + 1);
+              load();
+            }}
+          />
+
+          <PaymentPlanCard
             bookingId={booking.id}
             role="VENDOR"
             bookingStatus={booking.status}
