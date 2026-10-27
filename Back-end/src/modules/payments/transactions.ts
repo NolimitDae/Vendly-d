@@ -127,6 +127,8 @@ const VENDOR_TX: Record<string, { type: LedgerType; description: string; sign: 1
   vendor_give_back: { type: 'refund', description: 'Money given back to the customer', sign: -1 },
   // stored negative: money the vendor owes back (a refund after payout, an early deposit on a cancelled booking)
   payout_recovery: { type: 'refund', description: 'Taken back from your balance', sign: 1 },
+  // stored negative: taken back from a payout already sent to the vendor's Stripe account
+  payout_reversal: { type: 'refund', description: 'Taken back from a payout', sign: 1 },
 };
 export const VENDOR_TX_TYPES = Object.keys(VENDOR_TX);
 

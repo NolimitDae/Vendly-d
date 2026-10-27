@@ -10,6 +10,8 @@ import { __setFeeCache } from 'src/modules/platform/platform-settings.service';
 
 jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
   StripePayment: {
+    retrieveTransfer: jest.fn(),
+    reverseTransfer: jest.fn(),
     createCustomer: jest.fn(),
     createSetupIntent: jest.fn(),
     listCards: jest.fn(),
@@ -392,6 +394,37 @@ describe('PaymentsService', () => {
       expect(res.data.refunded).toBe(105);
       expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { balance: { increment: -50 } } });
       expect(mail.sendBookingNotification).toHaveBeenCalledTimes(2);
+    });
+
+    it('a full refund takes the early-released deposit back from the vendor’s Stripe account when it is still there', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, dispute_opened_at: new Date(), dispute_resolved_at: null, released_at: null, vendor_id: 'v1', currency: 'usd', early_released_amount: 50,
+        listing: { title: 'Glam' }, customer: { email: 'c@x.com', name: 'C' }, vendor: { email: 'v@x.com', name: 'V' },
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })],
+      });
+      jest.spyOn(service, 'refundBooking').mockResolvedValue(105);
+      prisma.paymentTransaction.findMany.mockResolvedValueOnce([{ reference_number: 'tr_early' }]);
+      (StripePayment.retrieveTransfer as jest.Mock).mockResolvedValue({ id: 'tr_early', amount: 5000, amount_reversed: 0 });
+      (StripePayment.reverseTransfer as jest.Mock).mockResolvedValue({ id: 'trr_1' });
+      await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'No-show confirmed' });
+      expect(StripePayment.reverseTransfer).toHaveBeenCalledWith('tr_early', 50, 'dispute-refund-b1-tr_early');
+      expect(prisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'payout_reversal', reference_number: 'trr_1', amount: -50 }) });
+      // nothing left owed from their Vendly balance
+      expect(prisma.user.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { balance: { increment: -50 } } }));
+    });
+
+    it('owes from the Vendly balance whatever Stripe can’t take back (already paid out to the bank)', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, dispute_opened_at: new Date(), dispute_resolved_at: null, released_at: null, vendor_id: 'v1', currency: 'usd', early_released_amount: 50,
+        listing: { title: 'Glam' }, customer: { email: 'c@x.com', name: 'C' }, vendor: { email: 'v@x.com', name: 'V' },
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })],
+      });
+      jest.spyOn(service, 'refundBooking').mockResolvedValue(105);
+      prisma.paymentTransaction.findMany.mockResolvedValueOnce([{ reference_number: 'tr_early' }]);
+      (StripePayment.retrieveTransfer as jest.Mock).mockResolvedValue({ id: 'tr_early', amount: 5000, amount_reversed: 0 });
+      (StripePayment.reverseTransfer as jest.Mock).mockRejectedValue(Object.assign(new Error('insufficient funds'), { raw: { message: 'Insufficient funds in the connected account' } }));
+      await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'No-show confirmed' });
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { balance: { increment: -50 } } });
     });
 
     it('rejects a partial refund that is the whole amount', async () => {

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { BookingService, EARLY_RELEASED_CANCEL } from './booking.service';
+import { BookingService, EARLY_RELEASED_CANCEL, EARLY_RELEASED_CUSTOMER_CANCEL } from './booking.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
@@ -308,9 +308,6 @@ describe('BookingService', () => {
       mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, early_released_amount: 500 });
       await expect(service.cancel('booking-1', 'vendor-1', { reason_code: 'emergency' } as any)).rejects.toThrow(EARLY_RELEASED_CANCEL);
       expect(StripePayment.refundPaymentIntent).not.toHaveBeenCalled();
-      // the customer can still cancel on their terms (the deposit stays with the vendor)
-      const res = await service.cancel('booking-1', 'customer-1', { reason_code: 'plans_changed' } as any);
-      expect(res.success).toBe(true);
     });
 
     it('lets the vendor cancel', async () => {
@@ -389,6 +386,21 @@ describe('BookingService', () => {
 
         expect(result.data.refund).toMatchObject({ refundTotal: 250, refundFee: 0, vendorKeeps: 0 });
         expect(mockPayments.refundBooking).toHaveBeenCalledWith('booking-1', 250, 'cancel-booking-1', { keepFees: true });
+      });
+
+      it('after the vendor took the deposit early, the customer still cancels on their terms when the deposit stays with the vendor', async () => {
+        mockPrisma.bookingInstallment.findMany.mockResolvedValue([{ ...deposit, sequence: 1 }, { ...balance, sequence: 2 }]);
+        mockPrisma.booking.findFirst.mockResolvedValue(paidBooking({ amount: 1000, service_fee: 50, payment_plan: 'DEPOSIT_25', early_released_amount: 250, deposit_rules: true, event_start_at: new Date(Date.now() + 30 * DAY) }));
+        const result = await service.cancel('booking-1', 'customer-1', { reason_code: 'plans_changed' } as any);
+        expect(result.success).toBe(true);
+        expect(mockPayments.refundBooking).not.toHaveBeenCalled();
+      });
+
+      it('but a refund that would reach into the deposit already paid out goes through Vendly (older bookings)', async () => {
+        mockPrisma.booking.findFirst.mockResolvedValue(paidBooking({ amount: 1000, service_fee: 50, payment_plan: 'DEPOSIT_25', early_released_amount: 250, deposit_rules: false, event_start_at: new Date(Date.now() + 30 * DAY) }));
+        await expect(service.cancel('booking-1', 'customer-1', { reason_code: 'plans_changed' } as any)).rejects.toThrow(EARLY_RELEASED_CUSTOMER_CANCEL);
+        expect(mockPayments.refundBooking).not.toHaveBeenCalled();
+        expect(mockPrisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'CANCELLED' }) }));
       });
 
       it('vendor cancels: everything paid comes back, fee included, and nothing more is charged', async () => {

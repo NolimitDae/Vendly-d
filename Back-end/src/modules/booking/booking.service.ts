@@ -108,6 +108,8 @@ function titleOf(booking: any): string | undefined {
 /** Why a booking can't be cancelled while a bank payment on it is clearing. */
 /** A vendor who took the deposit early cancels through Vendly, so the deposit comes back before the customer's refund. */
 export const EARLY_RELEASED_CANCEL = 'You took this booking’s deposit early, so Vendly needs to handle this cancellation. Contact support and we’ll cancel it and refund the customer.';
+/** The customer's refund would include a deposit the vendor already took early. */
+export const EARLY_RELEASED_CUSTOMER_CANCEL = 'Part of what you paid has already gone to your vendor, so Vendly needs to handle this cancellation. Contact support and we’ll cancel it and refund you.';
 const clearingMessage = (by: 'CUSTOMER' | 'VENDOR') =>
   by === 'CUSTOMER'
     ? 'You can cancel once your bank payment clears (about 4 business days). Until then it can’t be settled.'
@@ -462,8 +464,15 @@ export class BookingService {
     // payment) would refund it in full once it lands, deposit and fee included. They wait for it instead.
     if (settlementSide(by, code) === 'CUSTOMER' && (await this.payments.hasClearingPayment(booking.id))) throw new BadRequestException(clearingMessage(by));
     // the customer's refund would include a deposit already paid out early: Vendly gets it back first
-    if (settlementSide(by, code) === 'VENDOR' && Number((booking as { early_released_amount?: unknown }).early_released_amount ?? 0) > 0) {
+    const early = Number((booking as { early_released_amount?: unknown }).early_released_amount ?? 0);
+    if (settlementSide(by, code) === 'VENDOR' && early > 0) {
       throw new BadRequestException(EARLY_RELEASED_CANCEL);
+    }
+    // the same on a customer's cancellation whose refund reaches into that deposit (bookings from
+    // before the deposit rules, where the deposit can be refundable)
+    if (settlementSide(by, code) === 'CUSTOMER' && early > 0) {
+      const { settlement } = await this.cancellationTerms(booking, 'CUSTOMER', new Date());
+      if (settlement.vendorKeeps < early) throw new BadRequestException(EARLY_RELEASED_CUSTOMER_CANCEL);
     }
     const note = (dto.note ?? dto.reason)?.trim() || undefined;
     return this.cancelAs(booking, by, code, note, userId);

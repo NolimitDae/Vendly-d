@@ -581,7 +581,7 @@ export class PaymentsService {
         const rate = Number(booking.released_gross ?? 0) > 0 ? Number(booking.commission_amount ?? 0) / Number(booking.released_gross) : currentFees().commission / 100;
         recovered = round2(part * (1 - rate));
         const commissionBack = round2(part - recovered);
-        if (recovered > 0) await this.recordRecovery(booking.vendor_id, booking.id, -recovered, currency);
+        if (recovered > 0) await this.takeBackPaidOut(booking.vendor_id, booking.id, recovered, currency, `returned-${inst.id}`);
         if (commissionBack > 0) {
           await this.prisma.paymentTransaction.create({ data: { user_id: booking.vendor_id, type: 'vendly_commission', provider: 'stripe', reference_number: booking.id, status: 'succeeded', amount: -commissionBack, currency } });
         }
@@ -589,7 +589,7 @@ export class PaymentsService {
         // the deposit was paid out early: owed back now; the final payout no longer takes it off
         recovered = Number(booking.early_released_amount);
         await this.prisma.booking.update({ where: { id: booking.id }, data: { early_released_amount: 0 } });
-        await this.recordRecovery(booking.vendor_id, booking.id, -recovered, currency);
+        await this.takeBackPaidOut(booking.vendor_id, booking.id, recovered, currency, `returned-${inst.id}`);
       }
       // nothing paid on it any more
       if (!booking.installments.some((i) => i.id !== inst.id && isPaid(i))) await this.prisma.booking.update({ where: { id: booking.id }, data: { paid_at: null } });
@@ -1176,6 +1176,38 @@ export class PaymentsService {
     return 'balance';
   }
 
+  /**
+   * Money already sent to the vendor that Vendly has to give back: taken back from this booking's
+   * payouts on their Stripe account first (transfer reversals, newest first); what can't be (already
+   * paid out to their bank) is owed from their Vendly balance as before. Returns the amount reversed.
+   */
+  private async takeBackPaidOut(vendorId: string, bookingId: string, amount: number, currency: string, key: string) {
+    let left = round2(amount);
+    const payouts = (await this.prisma.paymentTransaction.findMany({
+      where: { order_id: bookingId, user_id: vendorId, type: { in: ['deposit_early_release', 'booking_payout'] }, status: 'succeeded' },
+      orderBy: { created_at: 'desc' },
+      select: { reference_number: true },
+    })) ?? [];
+    for (const p of payouts) {
+      if (left <= 0) break;
+      if (!p.reference_number?.startsWith('tr_')) continue;
+      try {
+        const tr = await StripePayment.retrieveTransfer(p.reference_number);
+        const take = round2(Math.min(left, (tr.amount - tr.amount_reversed) / 100));
+        if (take <= 0) continue;
+        const rev = await StripePayment.reverseTransfer(p.reference_number, take, `${key}-${p.reference_number}`);
+        await this.prisma.paymentTransaction.create({ data: { user_id: vendorId, type: 'payout_reversal', provider: 'stripe', reference_number: rev.id, order_id: bookingId, status: 'succeeded', amount: -take, currency } });
+        left = round2(left - take);
+      } catch (e: any) {
+        // usually the vendor's Stripe balance is already at their bank: the rest is owed from their Vendly balance
+        this.logger.warn(`reverse ${p.reference_number} for ${bookingId}: ${e?.raw?.message ?? e?.message}`);
+        break;
+      }
+    }
+    if (left > 0) await this.recordRecovery(vendorId, bookingId, -left, currency);
+    return round2(amount - left);
+  }
+
   private async recordRecovery(vendorId: string, bookingId: string, amount: number, currency: string) {
     await this.prisma.user.update({ where: { id: vendorId }, data: { balance: { increment: amount } } });
     await this.prisma.paymentTransaction.create({ data: { user_id: vendorId, type: 'payout_recovery', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount, currency } });
@@ -1555,7 +1587,7 @@ export class PaymentsService {
       const early = Number(b.early_released_amount ?? 0);
       const now = new Date();
       await this.prisma.booking.update({ where: { id: bookingId }, data: { released_at: now, payout_credited_at: now } });
-      if (early > 0) await this.recordRecovery(b.vendor_id, bookingId, -early, b.currency ?? 'usd');
+      if (early > 0) await this.takeBackPaidOut(b.vendor_id, bookingId, early, b.currency ?? 'usd', `dispute-refund-${bookingId}`);
       // a booking the vendor never started (a no-show) is over: it leaves the vendor's upcoming work
       if (b.status === BookingStatus.CONFIRMED) {
         const cancelled = await this.prisma.booking.updateMany({ where: { id: bookingId, status: BookingStatus.CONFIRMED }, data: { status: BookingStatus.CANCELLED, cancelled_at: now, cancel_reason: 'Refunded in full by Vendly after a reported problem', cancelled_by: 'ADMIN', payment_due_by: null, payment_due_kind: null } });

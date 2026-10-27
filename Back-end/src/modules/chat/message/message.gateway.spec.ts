@@ -111,6 +111,38 @@ describe('MessageGateway', () => {
     });
   });
 
+  describe('ending sign-ins', () => {
+    it('closes only the sockets of the sign-ins that ended', async () => {
+      const phone = { data: { sid: 'phone' }, disconnect: jest.fn() };
+      const laptop = { data: { sid: 'laptop' }, disconnect: jest.fn() };
+      const old = { data: {}, disconnect: jest.fn() };
+      const fetchSockets = jest.fn().mockResolvedValue([phone, laptop, old]);
+      (gateway as any).server = { in: jest.fn().mockReturnValue({ fetchSockets }) };
+      await gateway.disconnectSessions('u1', (sid) => sid !== 'laptop');
+      expect((gateway as any).server.in).toHaveBeenCalledWith('user_u1');
+      expect(phone.disconnect).toHaveBeenCalledWith(true);
+      expect(old.disconnect).toHaveBeenCalledWith(true);
+      expect(laptop.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('refuses a token whose sign-in has ended, and remembers the sign-in of one that is live', async () => {
+      const exists = jest.fn().mockResolvedValue(0);
+      (gateway as any).redis = { exists };
+      jest.spyOn(jwt, 'verify').mockReturnValue({ sub: 'u1', sid: 's1' } as any);
+      const ended = makeSocket();
+      await gateway.handleConnection(ended);
+      expect(exists).toHaveBeenCalledWith('refresh_token:u1:s1');
+      expect(ended.disconnect).toHaveBeenCalledWith(true);
+      expect(ended.join).not.toHaveBeenCalled();
+
+      exists.mockResolvedValue(1);
+      const live = makeSocket();
+      await gateway.handleConnection(live);
+      expect(live.data).toMatchObject({ userId: 'u1', sid: 's1' });
+      expect(live.join).toHaveBeenCalledWith('user_u1');
+    });
+  });
+
   describe('handleDisconnect', () => {
     it('should remove client from the map and emit userStatusChange', async () => {
       gateway.clients.set('user-1', 'socket-abc');

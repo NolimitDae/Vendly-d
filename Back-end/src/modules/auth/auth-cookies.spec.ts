@@ -131,9 +131,10 @@ describe('sign-out and socket tokens', () => {
   });
 
   it('hands out a two-minute socket-only token', () => {
-    const { data } = service.socketToken('u1');
+    const { data } = service.socketToken('u1', 's1');
     const claims: any = jwt.verify(data.token, 'test-secret');
-    expect(claims).toMatchObject({ sub: 'u1', typ: 'socket' });
+    // carries its sign-in, so the socket closes when that sign-in ends
+    expect(claims).toMatchObject({ sub: 'u1', typ: 'socket', sid: 's1' });
     expect(claims.exp - claims.iat).toBe(120);
     expect(data.user_id).toBe('u1');
   });

@@ -1047,7 +1047,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('socket-token')
   socketToken(@Req() req: Request) {
-    return this.authService.socketToken(req.user.userId);
+    return this.authService.socketToken(req.user.userId, req.user.sid);
   }
 
   @ApiOperation({ summary: 'Delete my account (users with bookings or signed contracts are anonymised)' })
@@ -1089,7 +1089,7 @@ export class AuthController {
   ) {
     try {
       const userId = req.user.userId;
-      await this.authService.savePushToken(userId, body.token);
+      await this.authService.savePushToken(userId, body.token, req.user.sid);
       return { success: true };
     } catch (error) {
       return { success: false, message: error.message };

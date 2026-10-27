@@ -28,6 +28,7 @@ import { IdentityService } from '../identity/identity.service';
 import { parseWorkingHours, readWorkingHours, type WorkingHours } from '../vendor/working-hours';
 import { NOTIFICATION_PREF_KEYS, NotificationPrefKey, readPrefs } from '../../common/helper/notification-prefs';
 import { sessionKeys } from './session-keys';
+import { MessageGateway } from '../chat/message/message.gateway';
 
 /** Roles a person can hold on one login and switch between (CLIENT is the older name for CUSTOMER). */
 export const SWITCHABLE_ROLES = ['CUSTOMER', 'VENDOR', 'EVENT_PLANNER'] as const;
@@ -69,6 +70,8 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
 end
 return 0`;
 
+/** Which sign-in saved the user's push token ('' for tokens from before sessions). */
+const pushSidKey = (userId: string) => `push_sid:${userId}`;
 /** The user's session ids, so deleting the account can end every one. */
 const sessionsKey = (userId: string) => `refresh_sessions:${userId}`;
 const newSessionId = () => randomBytes(12).toString('hex');
@@ -87,6 +90,8 @@ export class AuthService {
     private identity: IdentityService,
     // puts a vendor's business address on the map in the background (missing in tests that don't load it)
     @Optional() private geocoder?: GeocodeService,
+    // closes the live connections of a sign-in that ends (missing in tests that don't load it)
+    @Optional() private sockets?: MessageGateway,
   ) { }
 
   //
@@ -969,9 +974,10 @@ export class AuthService {
   }
 
   /** A two-minute token that only opens the website's socket connection (see JwtStrategy). */
-  socketToken(user_id: string) {
+  socketToken(user_id: string, sid?: string) {
     const expiresIn = 120;
-    const token = this.jwtService.sign({ sub: user_id, typ: 'socket' }, { expiresIn });
+    // carries the sign-in it came from, so the socket closes when that sign-in ends
+    const token = this.jwtService.sign({ sub: user_id, typ: 'socket', ...(sid && { sid }) }, { expiresIn });
     return { success: true, data: { token, user_id, expires_in: expiresIn } };
   }
 
@@ -989,6 +995,7 @@ export class AuthService {
 
       await this.redis.del(keys.current, keys.previous);
       if (sid) await this.redis.srem(sessionsKey(user_id), sid);
+      await this.afterSessionsEnd(user_id, (s) => s === sid);
 
       return {
         success: true,
@@ -1282,13 +1289,15 @@ export class AuthService {
   }
   // --------- end 2FA ---------
 
-  async savePushToken(userId: string, token: string) {
+  /** `sid`: the sign-in that saved it; when that sign-in ends, the phone stops getting this account's pushes. */
+  async savePushToken(userId: string, token: string, sid?: string) {
     // one phone, one account: someone else signing in on a shared phone takes its pushes over
     if (token) await this.prisma.user.updateMany({ where: { push_token: token, id: { not: userId } }, data: { push_token: null } });
     await this.prisma.user.update({
       where: { id: userId },
       data: { push_token: token },
     });
+    await this.redis.set(pushSidKey(userId), sid ?? '').catch(() => null);
   }
 
   /** After signing out on a phone: stop pushing to it, unless another phone has registered since. */
@@ -1392,11 +1401,35 @@ export class AuthService {
     if (!except) {
       const keys = [undefined, ...sids].flatMap((sid) => Object.values(sessionKeys(userId, sid)));
       await this.redis.del(...keys, sessionsKey(userId));
+      await this.afterSessionsEnd(userId, () => true, { all: true });
       return;
     }
     const ending = [undefined, ...sids].filter((sid) => sid !== except.sid);
     await this.redis.del(...ending.flatMap((sid) => Object.values(sessionKeys(userId, sid))));
     const ended = ending.filter((sid): sid is string => !!sid);
     if (ended.length) await this.redis.srem(sessionsKey(userId), ...ended);
+    await this.afterSessionsEnd(userId, (sid) => sid !== except.sid, { all: true });
+  }
+
+  /**
+   * A sign-in that ends takes its device with it: its open sockets close, and the phone registered
+   * for pushes stops getting them if it was signed in through one of those sessions. `ended` says
+   * which session ids ended (undefined stands for tokens from before sessions).
+   */
+  private async afterSessionsEnd(userId: string, ended: (sid?: string) => boolean, opts: { all?: boolean } = {}) {
+    try {
+      await this.sockets?.disconnectSessions(userId, ended);
+      const pushSid = await this.redis.get(pushSidKey(userId));
+      // a push token saved before sessions were tracked can't be matched: when every other device is
+      // signed out it goes too (the app saves it again on its next start)
+      const unknown = pushSid === null || pushSid === undefined;
+      if (unknown ? opts.all : ended(pushSid || undefined)) {
+        await this.prisma.user.updateMany({ where: { id: userId, push_token: { not: null } }, data: { push_token: null } });
+        await this.redis.del(pushSidKey(userId));
+      }
+    } catch (err) {
+      // the sign-in has ended either way; a socket or push that lingers is closed by its next check
+      console.warn(`after sessions end ${userId}: ${(err as Error)?.message}`);
+    }
   }
 }

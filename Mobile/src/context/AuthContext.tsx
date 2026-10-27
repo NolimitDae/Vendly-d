@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useReducer, u
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, PUSH_TOKEN_KEY } from '../services/api';
+import { SocketService } from '../services/socket.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -188,5 +189,7 @@ export function useAuth(): AuthContextValue {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function clearStorage() {
+  // the live connection belongs to the account signing out: the next one opens its own
+  SocketService.disconnect();
   await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
 }

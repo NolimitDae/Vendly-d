@@ -176,6 +176,15 @@ export class StripePayment {
     return transfer;
   }
 
+  static async retrieveTransfer(transferId: string) {
+    return getStripe().transfers.retrieve(transferId);
+  }
+
+  /** Takes `amount` of a transfer back from the connected account to the platform (whole cents). */
+  static async reverseTransfer(transferId: string, amount: number, idempotencyKey: string) {
+    return getStripe().transfers.createReversal(transferId, { amount: Math.round(amount * 100) }, { idempotencyKey });
+  }
+
   /** Transfers in one group, or to one account within a time range (seconds), newest first. */
   static async listTransfers(opts: { transferGroup?: string; destination?: string; createdFrom?: number; createdTo?: number }) {
     const res = await getStripe().transfers.list({

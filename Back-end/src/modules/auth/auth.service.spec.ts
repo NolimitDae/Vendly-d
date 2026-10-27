@@ -601,3 +601,61 @@ describe('AuthService', () => {
     });
   });
 });
+
+describe('AuthService ending sign-ins: sockets and pushes', () => {
+  const store = new Map<string, string>();
+  const sets = new Map<string, Set<string>>();
+  const redis: any = {
+    get: jest.fn(async (k: string) => store.get(k) ?? null),
+    set: jest.fn(async (k: string, v: string) => void store.set(k, v)),
+    del: jest.fn(async (...ks: string[]) => ks.filter((k) => store.delete(k)).length),
+    smembers: jest.fn(async (k: string) => [...(sets.get(k) ?? [])]),
+    srem: jest.fn(async (k: string, ...vs: string[]) => void vs.forEach((v) => sets.get(k)?.delete(v))),
+  };
+  const prisma: any = { user: { update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) } };
+  const sockets: any = { disconnectSessions: jest.fn().mockResolvedValue(undefined) };
+  const service = new AuthService({} as any, prisma, {} as any, {} as any, {} as any, redis, {} as any, undefined, sockets);
+  const ended = () => sockets.disconnectSessions.mock.calls.at(-1)[1] as (sid?: string) => boolean;
+
+  beforeEach(() => {
+    store.clear();
+    sets.clear();
+    sets.set('refresh_sessions:u1', new Set(['phone', 'laptop']));
+    jest.clearAllMocks();
+  });
+
+  it('a password change closes the other devices’ sockets and stops pushes to a phone signed in elsewhere', async () => {
+    await service.savePushToken('u1', 'ExponentPushToken[x]', 'phone');
+    await service.revokeAllSessions('u1', { sid: 'laptop' });
+    expect(ended()('phone')).toBe(true);
+    expect(ended()('laptop')).toBe(false);
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u1', push_token: { not: null } }, data: { push_token: null } });
+  });
+
+  it('keeps pushes going to the device that made the change', async () => {
+    await service.savePushToken('u1', 'ExponentPushToken[x]', 'laptop');
+    prisma.user.updateMany.mockClear();
+    await service.revokeAllSessions('u1', { sid: 'laptop' });
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('signing out one device closes only its sockets, and its pushes only if it is the phone on file', async () => {
+    await service.savePushToken('u1', 'ExponentPushToken[x]', 'phone');
+    prisma.user.updateMany.mockClear();
+    store.set('refresh_token:u1:laptop', 'r');
+    await service.revokeRefreshToken('u1', 'laptop');
+    expect(ended()('laptop')).toBe(true);
+    expect(ended()('phone')).toBe(false);
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    store.set('refresh_token:u1:phone', 'r');
+    await service.revokeRefreshToken('u1', 'phone');
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('a password reset ends every device, pushes included', async () => {
+    await service.revokeAllSessions('u1');
+    expect(ended()('anything')).toBe(true);
+    expect(ended()(undefined)).toBe(true);
+    expect(prisma.user.updateMany).toHaveBeenCalledTimes(1);
+  });
+});

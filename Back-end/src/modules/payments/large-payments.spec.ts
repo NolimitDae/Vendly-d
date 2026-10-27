@@ -179,7 +179,7 @@ function setup() {
     },
     bookingContract: { findFirst: jest.fn().mockResolvedValue({ merge_data: { timezone: 'America/New_York' } }) },
     bookingExtra: { findFirst: jest.fn().mockResolvedValue(null) },
-    paymentTransaction: { create: jest.fn(), updateMany: jest.fn(), count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
+    paymentTransaction: { create: jest.fn(), updateMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
     rentalReservation: { count: jest.fn().mockResolvedValue(0) },
     $transaction: jest.fn(),
   };

@@ -61,13 +61,13 @@ export class MessageGateway
         return;
       }
 
-      // an access token from a sign-in that has ended (signed out, password reset) opens no socket;
-      // socket tokens are only handed out to a live sign-in, so they need no check here
-      if (decoded.typ !== 'socket' && this.redis) {
-        const sid = typeof decoded.sid === 'string' && decoded.sid ? decoded.sid : undefined;
+      // a token from a sign-in that has ended (signed out, password reset) opens no socket; socket
+      // tokens from before they carried their sign-in were only handed out to a live one
+      const sid = typeof decoded.sid === 'string' && decoded.sid ? decoded.sid : undefined;
+      if ((decoded.typ !== 'socket' || sid) && this.redis) {
         const live = await this.redis.exists(sessionKeys(userId, sid).current).catch(() => 1);
         if (live !== 1) {
-          client.disconnect();
+          client.disconnect(true);
           return;
         }
       }
@@ -83,6 +83,8 @@ export class MessageGateway
 
       this.clients.set(userId, client.id);
       client.data.userId = userId;
+      // which sign-in it belongs to, so ending that sign-in closes it (see disconnectSessions)
+      client.data.sid = sid;
       client.join(`user_${userId}`);
       this.logger.log(`User ${userId} connected`);
     } catch (error) {
@@ -182,5 +184,12 @@ export class MessageGateway
   /** Closes every live connection a user has (after a suspension, so live chat stops at once too). */
   disconnectUser(userId: string) {
     this.server?.in(`user_${userId}`).disconnectSockets(true);
+  }
+
+  /** Closes the user's sockets whose sign-in ended (`ended(sid)`; undefined is a token from before sessions). */
+  async disconnectSessions(userId: string, ended: (sid?: string) => boolean) {
+    if (!this.server) return;
+    const sockets = await this.server.in(`user_${userId}`).fetchSockets();
+    for (const s of sockets) if (ended(s.data?.sid)) s.disconnect(true);
   }
 }
