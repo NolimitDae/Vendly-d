@@ -10,6 +10,8 @@ interface RefundInfo {
   refunded?: number;
   refund_card?: string | null;
   refund_timing?: string | null;
+  /** refunded to a bank account: on its way for a few days */
+  refund_by_bank?: boolean;
   currency?: string;
 }
 
@@ -33,13 +35,13 @@ export default function RefundCard({ bookingId, role, reloadKey }: { bookingId: 
     <Card style={{ gap: 6 }}>
       <View style={s.row}>
         <Ionicons name="refresh-circle-outline" size={22} color={DARK.accent} />
-        <Text style={s.title}>Refund</Text>
+        <Text style={s.title}>{info.refund_by_bank ? 'Refund on its way' : 'Refund'}</Text>
       </View>
       <Text style={s.amount} accessibilityLabel={`Refund ${money(amount, info.currency)}`}>{money(amount, info.currency)}</Text>
       <Text style={s.body}>
         {role === 'CUSTOMER'
-          ? `Back to ${info.refund_card ?? 'the card you paid with'}. Refunds take ${info.refund_timing ?? '5–10 business days'} to show on your statement.`
-          : 'Refunded to the customer’s card.'}
+          ? `Back to ${info.refund_card ?? (info.refund_by_bank ? 'the bank account you paid with' : 'the card you paid with')}. Refunds take ${info.refund_timing ?? '5–10 business days'} to show on your statement.`
+          : `Refunded to the customer’s ${info.refund_by_bank ? 'bank account' : 'card'}.`}
       </Text>
     </Card>
   );

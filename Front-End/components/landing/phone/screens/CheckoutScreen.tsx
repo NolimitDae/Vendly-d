@@ -4,7 +4,7 @@ import { Button, Card, Row, Screen, TopBar } from "./ui";
 
 export default function CheckoutScreen() {
   const price = sample.booking.price;
-  const fee = (price * pricing.example.feePercent) / 100;
+  const fee = Math.min((price * pricing.example.feePercent) / 100, pricing.example.feeMaximum);
   return (
     <Screen className="gap-3 px-4">
       <TopBar title="Checkout" />

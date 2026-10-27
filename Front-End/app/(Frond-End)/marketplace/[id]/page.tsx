@@ -32,7 +32,8 @@ import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { summariseHours, withZone, type WorkingHours } from "@/lib/working-hours";
 import { noticeLine } from "@/lib/package-details";
 import { dateOnly } from "@/lib/date-only";
-import { DEPOSIT_RULE_TEXT, isDepositPlan } from "@/service/payments/payments.service";
+import { depositRuleText, isDepositPlan } from "@/service/payments/payments.service";
+import { usePaymentSettings } from "@/hooks/usePaymentSettings";
 import TestBadge from "@/components/marketplace/TestBadge";
 import ShareButton from "@/components/marketplace/ShareButton";
 import DosDontsList from "@/components/listing/DosDontsList";
@@ -105,6 +106,7 @@ export default function ListingDetailPage() {
   const router = useRouter();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
+  const paymentSettings = usePaymentSettings();
   const [activeImage, setActiveImage] = useState(0);
   const [showBooking, setShowBooking] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -502,7 +504,7 @@ export default function ListingDetailPage() {
                   Cancellation policy: {listing.cancellation_policy.label}
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-300">{listing.cancellation_policy.text}</p>
-                {isDepositPlan(listing.effective_payment_plan) && <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="deposit-rule">{DEPOSIT_RULE_TEXT}</p>}
+                {isDepositPlan(listing.effective_payment_plan) && <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="deposit-rule">{depositRuleText(paymentSettings.large_payment_threshold)}</p>}
                 <p className="text-xs text-gray-500 dark:text-gray-400">The Vendly Protection fee isn’t refunded when you cancel. If the vendor cancels, you get everything back.</p>
               </section>
             )}

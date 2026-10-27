@@ -109,7 +109,7 @@ const sections: { id: string; title: string; body: React.ReactNode }[] = [
           </li>
           <li>
             <strong>What you pay.</strong> Customers pay the vendor&apos;s price plus a Vendly Protection fee, which is
-            currently 5% of the vendor&apos;s price. The fee and total are shown in the contract before you sign.
+            currently 5% of the vendor&apos;s price, up to $500 a booking. The fee and total are shown in the contract before you sign.
           </li>
           <li>
             <strong>Vendor fees.</strong> Vendors currently pay no fees to Vendly. We may introduce paid vendor plans
@@ -157,7 +157,7 @@ const sections: { id: string; title: string; body: React.ReactNode }[] = [
         </li>
         <li>
           <strong>Missed payments.</strong> If a deposit or balance payment on a deposit plan doesn&apos;t go through,
-          the customer has 12 hours to pay it, with the same card or another one. If it still isn&apos;t paid, Vendly
+          the customer has 12 hours to pay it (48 hours on bookings of $5,000 or more), with the same card or another one. If it still isn&apos;t paid, Vendly
           cancels the booking and it is settled as a customer cancellation. While a payment is overdue, the vendor may
           also cancel for non-payment, settled the same way.
         </li>

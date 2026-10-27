@@ -76,10 +76,10 @@ export const pricing = {
   bookers: {
     title: "For people booking",
     price: "5%",
-    note: "A Vendly Protection fee on top of the vendor's price, charged with your first payment.",
+    note: "A Vendly Protection fee on top of the vendor's price (up to $500 a booking), charged with your first payment.",
     points: ["Payments protected until the job is done", "Verified vendors", "Full refund if a vendor cancels"],
   },
-  example: { vendorPrice: 1000, feePercent: 5 },
+  example: { vendorPrice: 1000, feePercent: 5, feeMaximum: 500 },
 } as const;
 
 export const founding = {
@@ -145,7 +145,7 @@ export const trust = {
 export const faqs = [
   {
     q: "How much does Vendly cost?",
-    a: "Vendors list for free and pay no commission. Whoever books, a customer or an event planner, pays a 5% Vendly Protection fee on top of the vendor's price. You always see the price, the fee and the total separately before paying.",
+    a: "Vendors list for free and pay no commission. Whoever books, a customer or an event planner, pays a 5% Vendly Protection fee on top of the vendor's price, up to $500 a booking. You always see the price, the fee and the total separately before paying.",
   },
   {
     q: "How do I pay for a booking?",

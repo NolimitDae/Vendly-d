@@ -156,7 +156,8 @@ export default function Transactions() {
         ListFooterComponent={loading && rows.length ? <ActivityIndicator color={DARK.accent} style={{ marginVertical: 16 }} /> : null}
         renderItem={({ item }) => {
           const incoming = item.amount > 0;
-          const st = STATUS[item.status];
+          // a bank payment still clearing reads "Processing" rather than "Pending"
+          const st = item.status === 'pending' && /bank payment processing/.test(item.description) ? { ...STATUS.pending, label: 'Processing' } : STATUS[item.status];
           return (
             <Pressable
               style={s.row}

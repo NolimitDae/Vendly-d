@@ -26,6 +26,7 @@ import BookingExtrasSection from "@/components/addons/BookingExtrasSection";
 import VendorDisputeCard, { type DisputeFields } from "@/components/disputes/VendorDisputeCard";
 import CancelBookingDialog from "@/components/bookings/CancelBookingDialog";
 import RefundCard from "@/components/bookings/RefundCard";
+import BankPaymentNotice from "@/components/payments/BankPaymentNotice";
 import InvoiceButton, { invoiceAvailable } from "@/components/bookings/InvoiceButton";
 import { InspirationPhotos } from "@/components/bookings/InspirationPhotos";
 import BookingChoices from "@/components/bookings/BookingChoices";
@@ -219,6 +220,8 @@ export default function VendorBookingDetailPage() {
             don’t, the booking is cancelled automatically and you keep what the cancellation terms give you. You can also cancel now with “Customer didn’t pay”.
           </p>
         )}
+        {/* a customer paying a large booking from their bank: Processing until it clears */}
+        {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && <BankPaymentNotice bookingId={booking.id} />}
         {booking.status === "CANCELLED" && cancellationLine(booking, "VENDOR") && (
           <p className="text-sm text-gray-600 dark:text-gray-300" data-testid="cancel-reason">
             {cancellationLine(booking, "VENDOR")}

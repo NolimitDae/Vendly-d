@@ -31,6 +31,9 @@ const FILTERS: Record<"customer" | "vendor", { key: Filter; label: string }[]> =
   ],
 };
 
+/** A bank payment still clearing reads "Processing" rather than "Pending". */
+const statusLabel = (r: Pick<TransactionRow, "status" | "description">) => (r.status === "pending" && /bank payment processing/.test(r.description) ? "Processing" : STATUS[r.status].label);
+
 const STATUS: Record<TransactionRow["status"], { label: string; cls: string }> = {
   completed: { label: "Completed", cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   pending: { label: "Pending", cls: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
@@ -190,7 +193,7 @@ export default function TransactionsList({ role, title = "Transactions" }: { rol
                     {incoming ? "+" : ""}
                     {money(r.amount, r.currency)}
                   </p>
-                  <span className={cn("inline-flex mt-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold", STATUS[r.status].cls)}>{STATUS[r.status].label}</span>
+                  <span className={cn("inline-flex mt-0.5 px-2 py-0.5 rounded-full text-[11px] font-semibold", STATUS[r.status].cls)}>{statusLabel(r)}</span>
                 </div>
               </li>
             );

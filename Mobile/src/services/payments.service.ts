@@ -2,12 +2,34 @@ import { api } from './api';
 
 export interface SavedCard {
   id: string;
+  /** 'card', or 'us_bank_account' for a saved bank account (listed with cards({ bank: true })) */
+  type?: 'card' | 'us_bank_account';
   brand?: string;
   last4?: string;
   exp_month?: number;
   exp_year?: number;
+  bank_name?: string | null;
   is_default: boolean;
 }
+
+export const isBankAccount = (m?: { type?: string } | null) => m?.type === 'us_bank_account';
+
+/** How long a bank payment takes to clear, for the wording. */
+export const BANK_CLEARING_TEXT = 'about 4 business days';
+
+/** The fee and large booking rules from Admin → Settings (GET /payment-settings), for wording. */
+export interface PaymentSettings {
+  fee_percent: number;
+  fee_minimum: number;
+  fee_maximum: number | null;
+  large_payment_threshold: number | null;
+  payment_due_hours: number;
+  large_payment_due_hours: number;
+}
+export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = { fee_percent: 5, fee_minimum: 3, fee_maximum: 500, large_payment_threshold: 5000, payment_due_hours: 12, large_payment_due_hours: 48 };
+
+/** "$5,000" (cents only when there are some). */
+export const wholeMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
 export type PaymentPlan = 'FULL_ON_ACCEPT' | 'DEPOSIT_50' | 'DEPOSIT_25' | 'PAY_AFTER_SERVICE';
 export type InstallmentStatus = 'SCHEDULED' | 'PROCESSING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
@@ -25,6 +47,10 @@ export interface Installment {
   next_attempt_at?: string | null;
   last_error?: string | null;
   refunded_amount: number;
+  /** a bank payment on its way: shown as Processing until it clears (about 4 business days) */
+  clearing?: boolean;
+  clearing_since?: string | null;
+  by_bank?: boolean;
 }
 
 export interface PaymentTimeline {
@@ -49,6 +75,14 @@ export interface PaymentTimeline {
   not_started?: boolean;
   /** the vendor's part of what was paid: a partial refund asked for stays under it */
   vendor_paid?: number | null;
+  /** bank payments still clearing */
+  processing?: number;
+  /** total at or above Admin → Settings' large booking amount: 48 hours to fix a failed payment */
+  large?: boolean;
+  payment_due_hours?: number;
+  /** a bank account can pay for this booking */
+  bank_allowed?: boolean;
+  paying_by_bank?: boolean;
   installments: Installment[];
 }
 
@@ -96,8 +130,11 @@ export const PLAN_LABELS: Record<PaymentPlan, string> = {
 };
 
 export const PaymentsService = {
-  setupIntent: () => api.post<{ success: boolean; data: { client_secret: string } }>('/payments/setup-intent'),
-  cards: () => api.get<{ success: boolean; data: SavedCard[] }>('/payments/methods'),
+  /** A card form's client secret, or with 'us_bank_account' one for connecting a bank account. */
+  setupIntent: (type?: 'us_bank_account') => api.post<{ success: boolean; data: { client_secret: string } }>('/payments/setup-intent', type ? { type } : {}),
+  /** Saved cards; with bank, saved bank accounts too. */
+  cards: (opts: { bank?: boolean } = {}) => api.get<{ success: boolean; data: SavedCard[] }>(opts.bank ? '/payments/methods?bank=1' : '/payments/methods'),
+  paymentSettings: () => api.get<{ success: boolean; data: PaymentSettings }>('/payment-settings'),
   setDefault: (id: string) => api.patch(`/payments/methods/${id}/default`),
   removeCard: (id: string) => api.delete(`/payments/methods/${id}`),
 

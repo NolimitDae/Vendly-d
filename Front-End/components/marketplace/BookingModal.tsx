@@ -15,7 +15,8 @@ import SignContractPanel from "@/components/contracts/SignContractPanel";
 import SavedCards from "@/components/payments/SavedCards";
 import LocationField from "@/components/listing/LocationField";
 import { InspirationPhotosPicker } from "@/components/bookings/InspirationPhotos";
-import { DEPOSIT_RULE_TEXT, isDepositPlan, PLAN_LABELS, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
+import { BANK_CLEARING_TEXT, depositRuleText, feeRuleText, isDepositPlan, PLAN_LABELS, wholeMoney, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
+import { usePaymentSettings } from "@/hooks/usePaymentSettings";
 import { toast } from "react-toastify";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { packagePriceText, perUnit, quantityRangeText } from "@/lib/addons";
@@ -77,6 +78,11 @@ interface Preview {
     add_ons?: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[];
     /** the customizations picked, priced by the server */
     options?: ChosenCustomization[];
+    /** large bookings (Admin → Settings): 48 hours to fix a failed payment, and a bank account can pay */
+    large?: boolean;
+    bank_allowed?: boolean;
+    payment_due_hours?: number;
+    fee_maximum?: number | null;
   };
 }
 
@@ -114,6 +120,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState<string | null>(null);
+  const payment = usePaymentSettings();
   const [promo, setPromo] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   // add-on id -> quantity (1 unless priced "each")
@@ -317,7 +324,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
               </span>
             </div>
             {range && <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">{range}</p>}
-            <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">A Vendly Protection fee is added. You&apos;ll see the total in the contract.</p>
+            <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">A Vendly Protection fee ({feeRuleText(payment)}) is added. You&apos;ll see the total in the contract.</p>
           </div>
         )}
         {step === "contract" && preview?.pricing && (
@@ -354,7 +361,15 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
               </div>
             ))}
             <p className="text-xs text-gray-500 pt-1 dark:text-gray-400">You pay after the vendor accepts and signs. Vendly holds the money until the service is done.</p>
-            {isDepositPlan(preview.pricing.plan) && <p className="text-xs text-amber-700 dark:text-amber-300" data-testid="deposit-rule">{DEPOSIT_RULE_TEXT}</p>}
+            {isDepositPlan(preview.pricing.plan) && <p className="text-xs text-amber-700 dark:text-amber-300" data-testid="deposit-rule">{depositRuleText(payment.large_payment_threshold)}</p>}
+            {preview.pricing.bank_allowed && (
+              <div className="pt-3 space-y-2 border-t border-primary/10 mt-2" data-testid="bank-option">
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  This booking is {wholeMoney(payment.large_payment_threshold ?? 5000)} or more, so you can pay from a bank account instead of a card. Bank payments take {BANK_CLEARING_TEXT} to clear and show as Processing until then.
+                </p>
+                <SavedCards selected={card} onSelect={setCard} allowBank />
+              </div>
+            )}
           </div>
         )}
 

@@ -25,6 +25,7 @@ import { closesIn } from '../../utils/requests';
 import CancelBookingSheet from '../../components/booking/CancelBookingSheet';
 import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
 import RefundCard from '../../components/booking/RefundCard';
+import BankPaymentNotice from '../../components/booking/BankPaymentNotice';
 import InvoiceButton from '../../components/booking/InvoiceButton';
 import { invoiceAvailable } from '../../services/bookingMoney.service';
 import MapPicture from '../../components/booking/MapPicture';
@@ -312,6 +313,9 @@ export default function VendorBookingDetail() {
             <Row label="You receive" value={money(booking.amount)} bold />
             {Number(booking.security_deposit ?? 0) > 0 && <Row label="Security deposit (held)" value={money(booking.security_deposit)} />}
           </Card>
+
+          {/* a customer paying a large booking from their bank: Processing until it clears */}
+          {['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'].includes(st) && <BankPaymentNotice bookingId={booking.id} />}
 
           <VendorDisputeCard booking={booking} onChanged={load} />
 

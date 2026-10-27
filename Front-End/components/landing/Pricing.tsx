@@ -4,8 +4,8 @@ import { money, pricing } from "./content";
 import SectionHeading from "./SectionHeading";
 
 export default function Pricing() {
-  const { vendorPrice, feePercent } = pricing.example;
-  const fee = (vendorPrice * feePercent) / 100;
+  const { vendorPrice, feePercent, feeMaximum } = pricing.example;
+  const fee = Math.min((vendorPrice * feePercent) / 100, feeMaximum);
   const plans = [
     { ...pricing.vendors, featured: false },
     { ...pricing.bookers, featured: true },
@@ -55,7 +55,7 @@ export default function Pricing() {
               <dd data-countup className="mt-1 text-3xl font-extrabold">{money(vendorPrice)}</dd>
             </div>
             <div>
-              <dt className="text-ink-600 dark:text-white/70">Vendly Protection fee ({feePercent}%)</dt>
+              <dt className="text-ink-600 dark:text-white/70">Vendly Protection fee ({feePercent}%, up to {money(feeMaximum)})</dt>
               <dd data-countup className="mt-1 text-3xl font-extrabold">+ {money(fee)}</dd>
             </div>
             <div>

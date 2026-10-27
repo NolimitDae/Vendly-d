@@ -9,6 +9,8 @@ interface RefundInfo {
   refunded?: number;
   refund_card?: string | null;
   refund_timing?: string | null;
+  /** refunded to a bank account: on its way for a few days */
+  refund_by_bank?: boolean;
   currency?: string;
 }
 
@@ -36,16 +38,16 @@ export default function RefundCard({ bookingId, role, cancelledAt }: { bookingId
     <section aria-labelledby="refund-card-title" className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-primary/20 space-y-2">
       <div className="flex items-center gap-2">
         <RotateCcw className="w-5 h-5 text-primary" aria-hidden />
-        <h2 id="refund-card-title" className="font-semibold text-gray-900 dark:text-white">Refund</h2>
+        <h2 id="refund-card-title" className="font-semibold text-gray-900 dark:text-white">{info.refund_by_bank ? "Refund on its way" : "Refund"}</h2>
       </div>
       <p className="text-2xl font-bold text-gray-900 dark:text-white">{money(amount, info.currency)}</p>
       {role === "CUSTOMER" ? (
         <p className="text-sm text-gray-600 dark:text-gray-300">
-          Back to {info.refund_card ?? "the card you paid with"}. Refunds take {info.refund_timing ?? "5–10 business days"} to show on your statement
+          Back to {info.refund_card ?? (info.refund_by_bank ? "the bank account you paid with" : "the card you paid with")}. Refunds take {info.refund_timing ?? "5–10 business days"} to show on your statement
           {cancelledAt ? ` (cancelled ${new Date(cancelledAt).toLocaleDateString()})` : ""}.
         </p>
       ) : (
-        <p className="text-sm text-gray-600 dark:text-gray-300">Refunded to the customer’s card.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-300">Refunded to the customer’s {info.refund_by_bank ? "bank account" : "card"}.</p>
       )}
     </section>
   );

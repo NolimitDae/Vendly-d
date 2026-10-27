@@ -4,9 +4,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import AddCardSheet from './AddCardSheet';
+import AddBankSheet from './AddBankSheet';
 import { Card, GradientButton } from './brand';
 import { DARK, FONTS } from '../constants/colors';
-import { PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline } from '../services/payments.service';
+import { BANK_CLEARING_TEXT, isBankAccount, PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline, type SavedCard } from '../services/payments.service';
 import { apiMessage } from '../screens/auth/SignIn';
 import ReportProblemForm from './ReportProblemForm';
 import DisputeDetails from './DisputeDetails';
@@ -23,6 +24,8 @@ const STATUS: Record<Installment['status'], { label: string; color: string; icon
   CANCELLED: { label: 'Cancelled', color: DARK.muted, icon: 'close-circle-outline' },
   REFUNDED: { label: 'Refunded', color: DARK.accent, icon: 'return-down-back-outline' },
 };
+/** A bank payment on its way (large bookings): not paid yet, not failed. */
+const CLEARING = { label: 'Processing', color: '#fcd34d', icon: 'business-outline' as keyof typeof Ionicons.glyphMap };
 
 /**
  * The customer's view of a booking's money: plan, each charge, what is held, and the actions
@@ -34,6 +37,9 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [addingFor, setAddingFor] = useState<string | null>(null);
+  const [bankFor, setBankFor] = useState<string | null>(null);
+  // saved bank accounts, for a large booking's missed payment
+  const [banks, setBanks] = useState<SavedCard[]>([]);
   const [disputing, setDisputing] = useState(!!startReporting);
 
   const load = useCallback(async () => {
@@ -47,6 +53,12 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
     }
   }, [bookingId]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  useEffect(() => {
+    if (!t?.bank_allowed) return;
+    PaymentsService.cards({ bank: true })
+      .then((r) => setBanks((r.data?.data ?? []).filter(isBankAccount)))
+      .catch(() => {});
+  }, [t?.bank_allowed]);
 
   const run = async (fn: () => Promise<unknown>, fail: string) => {
     setBusy(true);
@@ -87,7 +99,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
       )}
 
       {hasPlan && t.installments.map((i) => {
-        const st = STATUS[i.status];
+        const st = i.clearing ? CLEARING : STATUS[i.status];
         // a failed charge, or a missed deposit or balance waiting for its automatic retry: the customer can pay now
         const payable = i.status === 'FAILED' || (!!t.payment_state && i.status === 'SCHEDULED' && i.attempts > 0);
         return (
@@ -97,6 +109,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
               <Text style={s.label}>{i.label}</Text>
               <Text style={[s.sub, { color: st.color }]}>
                 {st.label}
+                {i.clearing ? ` · bank payment, clears in ${BANK_CLEARING_TEXT}` : ''}
                 {i.status === 'PAID' && i.paid_at ? ` · ${format(parseISO(i.paid_at), 'dd MMM')}` : ''}
                 {i.status === 'SCHEDULED' && i.attempts === 0 ? ` · due ${format(parseISO(i.due_at), 'dd MMM yyyy')}` : ''}
                 {i.status === 'SCHEDULED' && i.attempts > 0 && i.next_attempt_at ? ` · retrying ${format(parseISO(i.next_attempt_at), 'dd MMM, h:mm a')}` : ''}
@@ -110,6 +123,18 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
                   </Pressable>
                   <Pressable onPress={() => setAddingFor(i.id)} disabled={busy} hitSlop={8}>
                     <Text style={s.link}>Use another card</Text>
+                  </Pressable>
+                </View>
+              )}
+              {payable && t.bank_allowed && (
+                <View style={{ gap: 8, marginTop: 6 }}>
+                  {banks.map((b) => (
+                    <Pressable key={b.id} onPress={() => run(() => PaymentsService.retry(bookingId, i.id, b.id), 'Payment failed again')} disabled={busy} hitSlop={8}>
+                      <Text style={s.link}>Pay from Bank account •••• {b.last4}</Text>
+                    </Pressable>
+                  ))}
+                  <Pressable onPress={() => setBankFor(i.id)} disabled={busy} hitSlop={8}>
+                    <Text style={s.link}>{banks.length ? 'Use another bank account' : 'Pay from a bank account'}</Text>
                   </Pressable>
                 </View>
               )}
@@ -127,6 +152,12 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
             {t.outstanding > 0 && <Text style={s.muted}>{money(t.outstanding)} to go</Text>}
           </View>
         </>
+      )}
+      {Number(t.processing ?? 0) > 0 && (
+        <View style={s.note}>
+          <Ionicons name="business-outline" size={16} color="#fcd34d" />
+          <Text style={s.noteText}>Your bank payment of {money(Number(t.processing))} is processing. Bank payments take {BANK_CLEARING_TEXT} to clear; the vendor is paid only once it has. If it doesn't go through, we'll let you know so you can pay another way.</Text>
+        </View>
       )}
       {Number(t.given_back ?? 0) > 0 && (
         <View style={s.note}>
@@ -188,6 +219,11 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
       )}
       {!!t.dispute && <YourReport bookingId={bookingId} />}
 
+      <AddBankSheet
+        visible={!!bankFor}
+        onClose={() => setBankFor(null)}
+        onSaved={(pm) => { const id = bankFor!; setBankFor(null); run(() => PaymentsService.retry(bookingId, id, pm), 'Payment failed again'); }}
+      />
       <AddCardSheet
         visible={!!addingFor}
         onClose={() => setAddingFor(null)}

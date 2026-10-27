@@ -92,7 +92,8 @@ export default function FeeSettings() {
           ))}
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          The Vendly Protection fee is added to the customer’s price on new bookings. Vendor commission is taken from the vendor’s payout when a booking is released. Existing bookings keep the fee they were created with.
+          The Vendly Protection fee is added to the customer’s price on new bookings, never more than the maximum (leave it empty for no cap; category fees are capped too). Vendor commission is taken from the vendor’s payout when a booking is released. Existing bookings keep the fee they were created with.
+          Bookings whose total is at or above the large booking amount get 48 hours instead of 12 to fix a failed deposit or balance, and can be paid from a bank account.
         </p>
         <button onClick={save} disabled={saving} className="px-6 h-11 rounded-full bg-primary text-primary-foreground font-semibold disabled:opacity-60 flex items-center gap-2">
           {saving && <Loader2 className="w-4 h-4 animate-spin" />}Save settings

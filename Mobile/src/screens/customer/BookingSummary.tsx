@@ -8,16 +8,18 @@ import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../compone
 import SignContractView from '../../components/contracts/SignContractView';
 import { DARK, FONTS } from '../../constants/colors';
 import AddCardSheet from '../../components/AddCardSheet';
+import AddBankSheet from '../../components/AddBankSheet';
 import { InspirationPhotosPicker, type PickedPhoto } from '../../components/booking/InspirationPhotos';
 import { CardRow } from './PaymentMethods';
-import { PaymentsService, PLAN_LABELS, type PaymentPlan, type SavedCard } from '../../services/payments.service';
+import { BANK_CLEARING_TEXT, isBankAccount, PaymentsService, PLAN_LABELS, wholeMoney, type PaymentPlan, type SavedCard } from '../../services/payments.service';
+import { usePaymentSettings } from '../../hooks/usePaymentSettings';
 import { openChatWith } from '../../navigation/openChat';
 import { haptic } from '../../utils/haptics';
 import { BookingService } from '../../services/booking.service';
 import { ContractsService, apiError, deviceTimezone, type BookingFields, type SignaturePayload } from '../../services/contracts.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import type { AddOn } from '../../services/addons.service';
-import { DEPOSIT_RULE_TEXT, isDepositPlan } from '../../utils/bookingStatus';
+import { depositRuleText, isDepositPlan } from '../../utils/bookingStatus';
 import type { ChosenCustomization } from '../../utils/packageOptions';
 
 interface Preview {
@@ -48,6 +50,10 @@ interface Pricing {
   options?: ChosenCustomization[];
   /** fees the vendor may request after the service */
   fees?: AddOn[];
+  /** large bookings (Admin → Settings): 48 hours to fix a failed payment, and a bank account can pay */
+  large?: boolean;
+  bank_allowed?: boolean;
+  payment_due_hours?: number;
 }
 
 const money = (n: number | undefined) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
@@ -65,17 +71,21 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
   const [cards, setCards] = useState<SavedCard[]>([]);
   const [card, setCard] = useState<string | null>(null);
   const [addingCard, setAddingCard] = useState(false);
+  const [addingBank, setAddingBank] = useState(false);
+  const paymentSettings = usePaymentSettings();
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<string | undefined>(undefined);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
 
+  // saved bank accounts come too; they're shown only when the booking turns out large enough
+  const loadCards = () => PaymentsService.cards({ bank: true }).then((r) => r.data?.data ?? []);
   useEffect(() => {
-    PaymentsService.cards()
-      .then((r) => {
-        const list = r.data?.data ?? [];
+    loadCards()
+      .then((list) => {
         setCards(list);
-        setCard((list.find((c) => c.is_default) ?? list[0])?.id ?? null);
+        const cardsOnly = list.filter((c) => !isBankAccount(c));
+        setCard((cardsOnly.find((c) => c.is_default) ?? cardsOnly[0])?.id ?? null);
       })
       .catch(() => {});
   }, []);
@@ -128,6 +138,13 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
   useEffect(() => {
     loadPreview();
   }, [loadPreview]);
+
+  // a bank account can pay only for a large booking (the preview says); otherwise only cards are shown
+  const bankOk = !!preview?.pricing?.bank_allowed;
+  const shownCards = bankOk ? cards : cards.filter((c) => !isBankAccount(c));
+  useEffect(() => {
+    if (!bankOk && card && cards.some((c) => c.id === card && isBankAccount(c))) setCard(cards.find((c) => !isBankAccount(c))?.id ?? null);
+  }, [bankOk, card, cards]);
 
   const review = () => {
     // no card yet: go straight to adding one (it's only charged once the vendor accepts)
@@ -250,7 +267,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
                   <Text style={s.rowValue}>{money(i.amount)}</Text>
                 </View>
               ))}
-              {isDepositPlan(price.plan) && <Text style={[s.rowLabel, { color: '#fcd34d' }]}>{DEPOSIT_RULE_TEXT}</Text>}
+              {isDepositPlan(price.plan) && <Text style={[s.rowLabel, { color: '#fcd34d' }]}>{depositRuleText(paymentSettings.large_payment_threshold)}</Text>}
             </View>
           )}
           {!!price?.fees?.length && (
@@ -297,14 +314,26 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
 
         <Card style={{ gap: 12 }}>
           <Text style={s.h2}>Payment method</Text>
-          {cards.length === 0 && <Text style={s.noteText}>No saved cards yet. Add one to send your request.</Text>}
-          {cards.map((c) => <CardRow key={c.id} card={c} selected={card === c.id} onPress={() => setCard(c.id)} />)}
+          {shownCards.length === 0 && <Text style={s.noteText}>No saved cards yet. Add one to send your request.</Text>}
+          {shownCards.map((c) => <CardRow key={c.id} card={c} selected={card === c.id} onPress={() => setCard(c.id)} />)}
           <Pressable onPress={() => setAddingCard(true)} style={s.addCard} accessibilityRole="button">
             <Ionicons name="add-circle-outline" size={22} color={DARK.accent} />
             <Text style={s.addCardText}>Add a card</Text>
           </Pressable>
+          {bankOk && (
+            <>
+              <Pressable onPress={() => setAddingBank(true)} style={s.addCard} accessibilityRole="button">
+                <Ionicons name="business-outline" size={22} color={DARK.accent} />
+                <Text style={s.addCardText}>Add a bank account</Text>
+              </Pressable>
+              <Text style={s.noteText}>
+                This booking is {wholeMoney(paymentSettings.large_payment_threshold ?? 5000)} or more, so you can pay from a bank account instead of a card. Bank payments take {BANK_CLEARING_TEXT} to clear and show as Processing until then.
+              </Text>
+            </>
+          )}
         </Card>
-        <AddCardSheet visible={addingCard} onClose={() => setAddingCard(false)} onSaved={(id) => { setCard(id); PaymentsService.cards().then((r) => setCards(r.data?.data ?? [])).catch(() => {}); }} />
+        <AddCardSheet visible={addingCard} onClose={() => setAddingCard(false)} onSaved={(id) => { setCard(id); loadCards().then(setCards).catch(() => {}); }} />
+        <AddBankSheet visible={addingBank} onClose={() => setAddingBank(false)} onSaved={(id) => { setCard(id); loadCards().then(setCards).catch(() => {}); }} />
       </ScrollView>
 
       <View style={[s.footer, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none" onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>

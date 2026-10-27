@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dayjs from "dayjs";
-import { AlertCircle, CheckCircle2, Clock, Loader2, Lock, RotateCcw, ShieldCheck, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Landmark, Loader2, Lock, RotateCcw, ShieldCheck, XCircle } from "lucide-react";
 import { toast } from "react-toastify";
-import { PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline } from "@/service/payments/payments.service";
+import { BANK_CLEARING_TEXT, PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline } from "@/service/payments/payments.service";
 import { BookingService } from "@/service/booking/booking.service";
 import ReportProblemForm from "@/components/disputes/ReportProblemForm";
 import SavedCards from "@/components/payments/SavedCards";
@@ -21,6 +21,8 @@ const STATUS: Record<Installment["status"], { label: string; cls: string; Icon: 
   CANCELLED: { label: "Cancelled", cls: "text-gray-500", Icon: XCircle },
   REFUNDED: { label: "Refunded", cls: "text-primary", Icon: RotateCcw },
 };
+/** A bank payment on its way (large bookings): not paid yet, not failed. */
+const CLEARING = { label: "Processing", cls: "text-amber-500", Icon: Landmark };
 
 /**
  * Customer's payment timeline for a booking with retry, confirm-work and report-a-problem actions.
@@ -94,7 +96,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
         <>
           <ul className="space-y-3">
             {t.installments.map((i) => {
-              const st = STATUS[i.status];
+              const st = i.clearing ? CLEARING : STATUS[i.status];
               // a failed charge, or a missed deposit or balance waiting for its automatic retry: the customer can pay now
               const payable = i.status === "FAILED" || (!!t.payment_state && i.status === "SCHEDULED" && i.attempts > 0);
               return (
@@ -104,6 +106,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
                     <p className="text-sm font-medium text-gray-900 dark:text-white">{i.label}</p>
                     <p className={`text-xs ${st.cls}`}>
                       {st.label}
+                      {i.clearing ? ` · bank payment, clears in ${BANK_CLEARING_TEXT}` : ""}
                       {i.status === "PAID" && i.paid_at ? ` · ${dayjs(i.paid_at).format("MMM D")}` : ""}
                       {i.status === "SCHEDULED" && i.attempts === 0 ? ` · due ${dayjs(i.due_at).format("MMM D, YYYY")}` : ""}
                       {i.status === "SCHEDULED" && i.attempts > 0 && i.next_attempt_at ? ` · retrying ${dayjs(i.next_attempt_at).format("MMM D, h:mm A")}` : ""}
@@ -117,19 +120,19 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
                             {t.payment_state ? `Pay ${money(i.amount)} now` : "Try again"}
                           </button>
                           <button type="button" onClick={() => setCardFor(cardFor === i.id ? null : i.id)} className="text-xs font-semibold text-primary">
-                            Use another card
+                            {t.bank_allowed ? "Use another card or a bank account" : "Use another card"}
                           </button>
                         </div>
                         {cardFor === i.id && (
                           <div className="space-y-2">
-                            <SavedCards selected={card} onSelect={setCard} />
+                            <SavedCards selected={card} onSelect={setCard} allowBank={!!t.bank_allowed} />
                             <button
                               type="button"
                               disabled={!card || busy}
                               onClick={() => run(() => PaymentsService.retry(bookingId, i.id, card!), "Payment failed again").then(() => setCardFor(null))}
                               className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-60"
                             >
-                              Pay {money(i.amount)} with this card
+                              Pay {money(i.amount)} with this {t.bank_allowed ? "payment method" : "card"}
                             </button>
                           </div>
                         )}
@@ -144,8 +147,14 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
 
           <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-3">
             <span>Paid {money(t.paid)} of {money(t.total)}</span>
-            {t.outstanding > 0 && <span>{money(t.outstanding)} to go</span>}
+            {t.outstanding > 0 && <span>{money(t.outstanding)} to go{t.processing ? ` (${money(t.processing)} processing)` : ""}</span>}
           </div>
+          {!!t.processing && t.processing > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-300 flex gap-2" data-testid="bank-processing">
+              <Landmark className="w-4 h-4 flex-shrink-0" />
+              Your bank payment of {money(t.processing)} is processing. Bank payments take {BANK_CLEARING_TEXT} to clear; the vendor is paid only once it has. If it doesn&apos;t go through, we&apos;ll let you know so you can pay another way.
+            </p>
+          )}
         </>
       )}
 
