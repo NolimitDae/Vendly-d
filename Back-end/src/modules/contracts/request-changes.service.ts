@@ -6,6 +6,7 @@ import { PackageOptionsService, formatOptionGroups, OPTION_GROUPS_INCLUDE } from
 import { ChosenGroup, optionScheduleLines, priceOptionChoices, readChosenOptions, UnitBasis } from 'src/modules/add-ons/package-options';
 import { AddOnUnit, EventInput, packageUnit, PricingError, round2 } from 'src/modules/add-ons/pricing';
 import { needsGuestCount, requiredBookingFields } from 'src/modules/booking/booking-place';
+import { readTravel } from 'src/modules/booking/travel-fee';
 import { requestExpiresAt } from 'src/modules/booking/booking-requests';
 import { buildSchedule, PAYMENT_PLAN_LABELS } from 'src/modules/payments/payment-schedule';
 import { checkCustomPlan, CustomPayment, CustomPlan, MAX_PLAN_PAYMENTS, MIN_PLAN_PAYMENT, MIN_PLAN_PAYMENTS, PaymentPlanError, planSentence, readCustomPlan, withPaymentPlan } from 'src/modules/payments/custom-plan';
@@ -28,6 +29,7 @@ import {
   packageForProposal,
   pairLines,
   priceProposalLines,
+  proposedTravel,
   ProposalData,
   quoteBasis,
   readProposal,
@@ -162,12 +164,15 @@ export class RequestChangesService {
     const optionsAmount = round2(options.reduce((s, g) => s + Number(g.amount ?? 0), 0));
     const discount = round2(Number(b.discount ?? 0));
     const price = round2(Number(b.amount ?? 0));
+    // the travel fee is part of the price (booking/travel-fee.ts): the booking's amount is the source of truth
+    const stored = readTravel(b.travel_details);
+    const travel = stored ? { ...stored, fee: b.travel_fee != null ? round2(Number(b.travel_fee)) : null } : null;
     const ev = this.evOf(b);
     const md = (source?.merge_data ?? null) as { package_terms?: unknown; pricing_schedule?: unknown } | null;
     const pkg = packageAsRequested(
       readProposal(md)?.after.package ?? md?.package_terms,
       md?.pricing_schedule,
-      round2(price + discount - lines.reduce((s, l) => s + l.amount, 0) - optionsAmount),
+      round2(price + discount - lines.reduce((s, l) => s + l.amount, 0) - optionsAmount - (travel?.fee ?? 0)),
       options,
     );
     const fee = round2(Number(b.service_fee ?? 0));
@@ -181,6 +186,7 @@ export class RequestChangesService {
       lines,
       options,
       options_amount: optionsAmount,
+      travel,
       promo_code: b.promo_code,
       discount,
       price,
@@ -251,7 +257,9 @@ export class RequestChangesService {
       const choices = dto.options ?? before.options.map((g) => ({ group_id: g.group_id, option_ids: g.options.map((o) => o.option_id) }));
       const options = priceOptionChoices(withChosenPrices(await this.packageOptions.offered(listing.id), before.options), choices, basis);
 
-      const subtotal = round2(pkg.amount + lines.reduce((s, l) => s + l.amount, 0) + options.amount);
+      // the travel fee stays as it is unless the vendor sets it (the address doesn't change here)
+      const travel = proposedTravel(before.travel, dto.travel_fee);
+      const subtotal = round2(pkg.amount + lines.reduce((s, l) => s + l.amount, 0) + options.amount + (travel?.fee ?? 0));
       const promo = await this.promoFor(b.promo_code, subtotal);
       const price = round2(subtotal - promo.discount);
       if (price > MAX_PROPOSAL_PRICE) throw new RequestChangeError(`The total can be up to $${MAX_PROPOSAL_PRICE.toLocaleString('en-US')}.`);
@@ -267,6 +275,7 @@ export class RequestChangesService {
         lines,
         options: options.groups,
         options_amount: options.amount,
+        travel,
         promo_code: promo.code,
         discount: promo.discount,
         price,
@@ -325,6 +334,8 @@ export class RequestChangesService {
       contractVersion: version,
       timezone: prev.timezone,
     });
+    // the package's travel fee term, as the request's contract had it (Schedule A has this booking's fee)
+    if (after.travel && prev.travel_fee) data.travel_fee = prev.travel_fee;
     const { fees } = await this.addOns.forListing(b.listing!.id);
     const charged = new Set(after.lines.map((l) => l.add_on_id).filter(Boolean));
     data.pricing_schedule = buildPricingSchedule({
@@ -333,6 +344,7 @@ export class RequestChangesService {
       addOns: after.lines.filter((l) => l.kind === AddOnKind.ADD_ON).map((l) => ({ label: l.label, amount: l.amount, description: l.description })),
       includedFees: after.lines.filter((l) => l.kind === AddOnKind.FEE).map((l) => ({ label: l.label, amount: l.amount, description: l.description })),
       options: optionScheduleLines(after.options),
+      travel: after.travel ? { label: after.travel.label, amount: after.travel.fee } : null,
       discount: after.discount,
       promoCode: after.promo_code,
       vendorPrice: after.price,
@@ -520,6 +532,8 @@ export class RequestChangesService {
           guest_count: after.guest_count,
           chosen_options: after.options.length ? (after.options as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
           options_amount: after.options.length ? after.options_amount : null,
+          // the travel fee the vendor set (suggestions made before travel fees existed don't carry one)
+          ...(after.travel ? { travel_fee: after.travel.fee, travel_details: after.travel as unknown as Prisma.InputJsonValue } : {}),
           promo_code: after.promo_code,
           discount: after.discount || null,
           // a custom payment plan is charged from these when the vendor accepts (PaymentsService.scheduleForBooking)

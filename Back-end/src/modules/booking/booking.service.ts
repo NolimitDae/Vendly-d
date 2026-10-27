@@ -42,6 +42,7 @@ import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { trackerDetails } from './booking-tracker';
 import { chosenGroupText, readChosenOptions } from 'src/modules/add-ons/package-options';
 import { arrivalMissing } from './booking-tracker';
+import { readTravel } from './travel-fee';
 
 /** Extra tabs on the vendor's bookings list. */
 export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
@@ -145,6 +146,13 @@ export class BookingService {
     const customer = booking.customer;
     // what the customer picked for the package's customizations ("Style: Knotless")
     const chosen = readChosenOptions(booking.chosen_options).map(chosenGroupText).join('; ');
+    // the travel fee in the price, or that it couldn't be worked out (the vendor can add it with suggested changes)
+    const travel = readTravel(booking.travel_details);
+    const travelNote = !travel
+      ? ''
+      : travel.status === 'UNPRICED'
+        ? ' We couldn’t work out the travel fee for their address: if you charge one, add it with Suggest changes before you accept.'
+        : ` Travel fee: $${Number(booking.travel_fee ?? 0).toFixed(2)} (${travel.label}).`;
 
     // notify vendor via email
     const clientUrl = appConfig().app.client_app_url;
@@ -154,7 +162,7 @@ export class BookingService {
       subject: `New booking request — ${listing.title}`,
       message: (created.awaiting_client
         ? `${customer.name} signed the contract and sent a booking request. Their client is co-signing it too; you can Accept & Sign once they have.`
-        : `${customer.name} signed the contract and sent a booking request. Review it, then Accept & Sign or decline.`) + (chosen ? ` They chose: ${chosen}.` : ''),
+        : `${customer.name} signed the contract and sent a booking request. Review it, then Accept & Sign or decline.`) + (chosen ? ` They chose: ${chosen}.` : '') + travelNote,
       status: 'PENDING',
       listingTitle: listing.title,
       scheduledAt: booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString() : undefined,
@@ -1285,6 +1293,10 @@ export class BookingService {
       customizations: readChosenOptions(booking.chosen_options),
       chosen_options: undefined,
       options_amount: booking.options_amount != null ? Number(booking.options_amount) : null,
+      // the delivery / travel fee (part of amount) and how it was worked out; null when none applies
+      travel_fee: booking.travel_fee != null ? Number(booking.travel_fee) : null,
+      travel: readTravel(booking.travel_details),
+      travel_details: undefined,
       customer: booking.customer
         ? { ...booking.customer, avatar_url: avatarUrl(booking.customer.avatar) }
         : null,

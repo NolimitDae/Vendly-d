@@ -14,7 +14,7 @@ jest.mock('@/service/contracts/contracts.service', () => {
   const actual = jest.requireActual('@/service/contracts/contracts.service');
   return {
     ...actual,
-    ContractsService: { bookingPreview: jest.fn() },
+    ContractsService: { bookingPreview: jest.fn(), travelFee: jest.fn() },
   };
 });
 
@@ -629,6 +629,47 @@ describe('BookingModal', () => {
       render(<BookingModal listing={{ ...listing, needs_service_address: true, needs_guest_count: false }} onClose={onClose} />);
       expect(screen.getByLabelText(/venue address/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/guest count/i)).toHaveAttribute('aria-required', 'false');
+    });
+  });
+
+  describe('travel fee', () => {
+    const dj = { ...listing, travel_fee: { text: 'Free within 15 miles, then $2.00 a mile (miles counted one way)' } };
+    const terms = { free_miles: 15, per_mile: 2, base_fee: 0, round_trip: false };
+
+    it('shows the distance and fee for the address as it is entered', async () => {
+      (ContractsService.travelFee as jest.Mock).mockResolvedValue({
+        data: { data: { applies: true, status: 'PRICED', terms, one_way_miles: 30, miles: 30, chargeable_miles: 15, fee: 30, label: '30.0 miles one way, first 15 free: 15.0 × $2.00', outside_area: false, message: null } },
+      });
+      const user = userEvent.setup();
+      render(<BookingModal listing={dj} onClose={onClose} />);
+      expect(screen.getByTestId('travel-quote')).toHaveTextContent('Travel fee: Free within 15 miles, then $2.00 a mile');
+      await user.type(screen.getByLabelText(/venue address/i), '100 Far St, Round Rock');
+      expect(await screen.findByText(/Your travel fee: \$30\.00/)).toBeInTheDocument();
+      expect(screen.getByTestId('travel-quote')).toHaveTextContent('About 30.0 miles away.');
+      // asked once typing paused, for the whole address
+      expect(ContractsService.travelFee).toHaveBeenLastCalledWith('listing-1', '100 Far St, Round Rock');
+    });
+
+    it('says when the address can’t be placed, and lists the travel fee before signing', async () => {
+      const message = 'We couldn’t place this address on the map, so the travel fee isn’t worked out yet. The vendor can add it before they accept, and you approve it first.';
+      (ContractsService.travelFee as jest.Mock).mockResolvedValue({ data: { data: { applies: true, status: 'UNPRICED', terms, one_way_miles: null, miles: null, chargeable_miles: null, fee: null, label: 'Not worked out yet', outside_area: false, message } } });
+      (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({
+        data: { data: { ...preview, pricing: { ...preview.pricing, price: 530, travel: { status: 'PRICED', terms, one_way_miles: 30, miles: 30, chargeable_miles: 15, fee: 30, label: '30.0 miles one way, first 15 free: 15.0 × $2.00', outside_area: false, message: null } } } },
+      });
+      const user = userEvent.setup();
+      render(<BookingModal listing={dj} onClose={onClose} />);
+      await fillDetails(user);
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+      expect(await screen.findByTestId('travel-line')).toHaveTextContent('Travel fee (30.0 miles one way, first 15 free: 15.0 × $2.00)$30.00');
+    });
+
+    it('asks nothing for a package without a travel fee', async () => {
+      const user = userEvent.setup();
+      render(<BookingModal listing={listing} onClose={onClose} />);
+      await user.type(screen.getByLabelText(/venue address/i), '100 Far St, Round Rock');
+      expect(screen.queryByTestId('travel-quote')).not.toBeInTheDocument();
+      expect(ContractsService.travelFee).not.toHaveBeenCalled();
     });
   });
 

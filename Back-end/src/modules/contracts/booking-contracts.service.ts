@@ -25,6 +25,7 @@ import { PromoService } from 'src/modules/platform/promo.service';
 import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
 import { CustomerCantComeError, customerComesFor, GUEST_COUNT_NEEDED, needsGuestCount, needsServiceAddress, requiredBookingFields, vendorPlaceVenueText } from 'src/modules/booking/booking-place';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
+import { Point, priceTravel, TravelQuote, travelFeeApplies, TravelRequest, travelSummary, UNPRICED_TEXT } from 'src/modules/booking/travel-fee';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
 import {
@@ -135,12 +136,22 @@ function tokenSecret() {
   return s;
 }
 
-function signPreview(claims: { bid: string; lid: string; uid: string }) {
+/**
+ * The service address's map position as the preview found it (null: it couldn't be placed). Carried in the
+ * signed preview token so the request is priced on the same position the customer reviewed, without asking
+ * the geocoder again (an answer that changed in between would otherwise change the contract).
+ */
+interface TravelPointClaim {
+  a: string;
+  p: Point | null;
+}
+
+function signPreview(claims: { bid: string; lid: string; uid: string; tp?: TravelPointClaim }) {
   const payload = Buffer.from(JSON.stringify({ ...claims, exp: Date.now() + PREVIEW_TTL_MS, p: 'contract-preview' })).toString('base64url');
   return `${payload}.${createHmac('sha256', tokenSecret()).update(payload).digest('base64url')}`;
 }
 
-function verifyPreview(token: string): { bid: string; lid: string; uid: string } | null {
+function verifyPreview(token: string): { bid: string; lid: string; uid: string; tp?: TravelPointClaim } | null {
   const [payload, sig] = (token ?? '').split('.');
   if (!payload || !sig) return null;
   const expected = createHmac('sha256', tokenSecret()).update(payload).digest('base64url');
@@ -323,7 +334,40 @@ export class BookingContractsService {
     if (outside) throw new ConflictException({ message: outside, error: 'OUTSIDE_WORKING_HOURS' });
   }
 
-  private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {
+  /**
+   * The travel fee for a request (booking/travel-fee.ts), or null when none applies. The address is placed
+   * on the map by the server; `known` is where the preview placed it (from its signed token).
+   */
+  private async travelFor(listing: Parameters<typeof priceTravel>[0], request: TravelRequest, known?: TravelPointClaim) {
+    if (!travelFeeApplies(listing, request)) return null;
+    const address = request.venue_address?.trim() ?? '';
+    const point = known && known.a === address ? known.p : address ? ((await this.geocoder?.point(address)) ?? null) : null;
+    return { quote: priceTravel(listing, point), point: { a: address, p: point } satisfies TravelPointClaim };
+  }
+
+  /** The live travel fee while a customer types the service address (the request prices it again on its own). */
+  async travelQuote(listingId: string, address?: string) {
+    const listing = await this.prisma.vendorListing.findFirst({
+      where: { id: listingId, status: ListingStatus.ACTIVE, deleted_at: null },
+      include: { category: { select: { name: true } } },
+    });
+    if (!listing) throw new NotFoundException('Listing not found or not active');
+    const travel = await this.travelFor(listing, { venue_address: address });
+    if (!travel) return { success: true, data: { applies: false } };
+    const q = travel.quote;
+    return {
+      success: true,
+      data: {
+        applies: true,
+        ...q,
+        terms_text: travelSummary(listing)?.text ?? null,
+        // no address yet is not a failure: the apps just show the rates
+        message: !address?.trim() ? null : q.status === 'UNPRICED' ? UNPRICED_TEXT : q.outside_area ? 'This address is further than the vendor usually travels. They may decline or suggest changes.' : null,
+      },
+    };
+  }
+
+  private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string, knownPoint?: TravelPointClaim) {
     const ctx = await this.loadBookingContext(userId, dto);
     // the customer comes to the vendor instead, where the package allows it: no service address then
     let customerComes: boolean;
@@ -355,7 +399,10 @@ export class BookingContractsService {
     const { lines: addOnLines, fees } = await this.addOns.priceSelection(ctx.listing.id, dto.add_ons, dto);
     // customizations: per unit upcharges count the package's guests, hours or days (a quote's too)
     const options = await this.packageOptions!.priceChoices(ctx.listing.id, dto.options, quote ? this.unitBasis(ctx.listing, dto) : { unit: pkg.unit, quantity: pkg.quantity });
-    const subtotal = round2(pkg.amount + addOnLines.reduce((s, l) => s + l.amount, 0) + options.amount);
+    // the travel fee is part of the vendor price like an add-on (Vendly Protection fee, promo, payments,
+    // refunds), worked out to the address the contract names: the one given, or the planner's event venue
+    const travel = await this.travelFor(ctx.listing, { venue_address: dto.venue_address?.trim() || ctx.event?.venue, customer_comes: customerComes }, knownPoint);
+    const subtotal = round2(pkg.amount + addOnLines.reduce((s, l) => s + l.amount, 0) + options.amount + (travel?.quote.fee ?? 0));
     const priced = await this.priceAfterPromo(subtotal, dto.promo_code, userId);
     const data = buildMergeData({
       booking: {
@@ -381,11 +428,14 @@ export class BookingContractsService {
       contractVersion: 1,
       timezone: dto.timezone,
     });
+    // the package's own travel fee replaces the contract's general travel fee term for this booking
+    if (travel) data.travel_fee = `${travelSummary(ctx.listing)?.text ?? 'Set on the package'}. This booking's travel fee is in Schedule A.`;
     data.pricing_schedule = buildPricingSchedule({
       packageLabel: quote || pkg.unit !== 'fixed' ? pkg.label : null,
       packageAmount: pkg.amount,
       addOns: addOnLines.map((l) => ({ label: l.label, amount: l.amount, description: l.description })),
       options: optionScheduleLines(options.groups),
+      travel: travel ? { label: travel.quote.label, amount: travel.quote.fee } : null,
       discount: priced.discount,
       promoCode: priced.code,
       vendorPrice: priced.price,
@@ -393,7 +443,7 @@ export class BookingContractsService {
       customerRoleLabel: data.customer_role_label,
     });
     const rendered = this.renderFor(ctx.vc, data);
-    return { ...ctx, customerComes, quote, pkg, addOnLines, options, fees, priced, data, rendered, missing: missingFields(requiredBookingFields(rendered.required, ctx.listing), data) };
+    return { ...ctx, customerComes, quote, pkg, addOnLines, options, travel, fees, priced, data, rendered, missing: missingFields(requiredBookingFields(rendered.required, ctx.listing), data) };
   }
 
   /**
@@ -420,7 +470,7 @@ export class BookingContractsService {
   }
 
   /** Numbers (not the formatted strings the contract uses) plus the charge schedule the customer will be on. */
-  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null, promo?: { discount: number; code: string | null }, lines?: { pkg: PackageLine; addOns: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[]; options?: { groups: ChosenGroup[]; amount: number }; fees: unknown[] }) {
+  private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null, promo?: { discount: number; code: string | null }, lines?: { pkg: PackageLine; addOns: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[]; options?: { groups: ChosenGroup[]; amount: number }; travel?: TravelQuote | null; fees: unknown[] }) {
     const l = await this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { payment_plan: true, category_id: true, category: { select: { default_payment_plan: true } } } });
     const fee = this.serviceFee(price, l?.category_id);
     const plan = l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
@@ -439,6 +489,8 @@ export class BookingContractsService {
       // the customizations picked, priced by the server
       options: lines?.options?.groups ?? [],
       options_amount: lines?.options?.amount ?? 0,
+      // the travel fee worked out on the server (null when none applies), with what to say when it couldn't be
+      travel: lines?.travel ? { ...lines.travel, message: lines.travel.status === 'UNPRICED' ? UNPRICED_TEXT : null } : null,
       fees: lines?.fees ?? [],
     };
   }
@@ -457,8 +509,8 @@ export class BookingContractsService {
         vendor_contract_version: p.vc.version,
         missing_fields: p.missing,
         missing_message: p.missing.length ? missingFieldsMessage(p.missing) : null,
-        pricing: { ...(await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced, { pkg: p.pkg, addOns: p.addOnLines, options: p.options, fees: p.fees })), quote: p.quote ? { id: p.quote.id, title: p.quote.title, amount: Number(p.quote.amount) } : null },
-        preview_token: signPreview({ bid: bookingId, lid: dto.listing_id, uid: userId }),
+        pricing: { ...(await this.pricingFor(dto.listing_id, p.priced.price, dto.event_start_at, p.priced, { pkg: p.pkg, addOns: p.addOnLines, options: p.options, travel: p.travel?.quote, fees: p.fees })), quote: p.quote ? { id: p.quote.id, title: p.quote.title, amount: Number(p.quote.amount) } : null },
+        preview_token: signPreview({ bid: bookingId, lid: dto.listing_id, uid: userId, ...(p.travel ? { tp: p.travel.point } : {}) }),
         source_pdf_url: p.vc.file_key
           ? this.vendorContracts.downloadUrl(p.vc.file_key, userId, p.vc.id, p.vc.file_name || 'contract.pdf')
           : null,
@@ -537,7 +589,7 @@ export class BookingContractsService {
       throw new ConflictException('This booking request was already sent.');
     }
 
-    const p = await this.prepareForBooking(userId, dto, claims.bid);
+    const p = await this.prepareForBooking(userId, dto, claims.bid, claims.tp);
     if (p.missing.length) throw new BadRequestException(missingFieldsMessage(p.missing));
     if (p.rendered.content_sha256 !== dto.signature.content_sha256) {
       throw new ConflictException({
@@ -592,6 +644,8 @@ export class BookingContractsService {
           request_photos: photoKeys,
           // the customizations as they were chosen, frozen with the booking (their price is already in amount)
           ...(p.options.groups.length ? { chosen_options: p.options.groups as unknown as Prisma.InputJsonValue, options_amount: p.options.amount } : {}),
+          // the travel fee (already in amount) and how it was worked out; not worked out: the vendor can add it
+          ...(p.travel ? { travel_fee: p.travel.quote.fee, travel_details: p.travel.quote as unknown as Prisma.InputJsonValue } : {}),
           status: BookingStatus.PENDING,
         },
       });

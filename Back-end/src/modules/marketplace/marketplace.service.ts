@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { MAX_SERVICE_RADIUS, boundingBox, geocode, milesBetween, withoutPosition } from 'src/modules/geo/geo';
 import { bookingNeeds } from 'src/modules/booking/booking-place';
+import { travelSummary } from 'src/modules/booking/travel-fee';
 import { ListingStatus, VendorContractStatus } from 'prisma/generated/client';
 import { formatAddOn } from 'src/modules/add-ons/add-ons.service';
 import { formatOptionGroups, OPTION_GROUPS_INCLUDE } from 'src/modules/add-ons/package-options.service';
@@ -300,6 +301,8 @@ export class MarketplaceService {
         working_hours_summary: summariseWorkingHours(workingHours),
         // the policy in the contract a booking of this package would use, so customers see it before booking
         cancellation_policy: cancellationPolicy,
+        // the delivery / travel fee rates (null: none), so customers see them before booking (booking/travel-fee.ts)
+        travel_fee: travelSummary(listing),
       },
     };
   }

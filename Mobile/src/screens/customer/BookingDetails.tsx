@@ -6,6 +6,7 @@ import { addHours, format, parseISO, set } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import LocationPicker from '../../components/LocationPicker';
+import TravelFeeQuote from '../../components/booking/TravelFeeQuote';
 import { DARK, FONTS } from '../../constants/colors';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { haptic } from '../../utils/haptics';
@@ -40,7 +41,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const [guests, setGuests] = useState('');
   const [notes, setNotes] = useState('');
   // the package's limits and add-ons come from the listing itself (the summary passed in doesn't carry them)
-  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null; needs_service_address?: boolean; needs_guest_count?: boolean; customer_can_come?: boolean } | null>(null);
+  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null; needs_service_address?: boolean; needs_guest_count?: boolean; customer_can_come?: boolean; travel_fee?: { text: string } | null } | null>(null);
   const [picks, setPicks] = useState<Record<string, number>>({});
   // the package's customizations: what was picked for each
   const [choices, setChoices] = useState<Picks>({});
@@ -49,7 +50,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
     MarketplaceService.getListing(listing.id)
       .then((r) => {
         const l = r.data?.data;
-        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null, needs_service_address: l.needs_service_address, needs_guest_count: l.needs_guest_count, customer_can_come: l.customer_can_come });
+        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null, needs_service_address: l.needs_service_address, needs_guest_count: l.needs_guest_count, customer_can_come: l.customer_can_come, travel_fee: l.travel_fee ?? null });
       })
       .catch(() => {});
   }, [listing.id]);
@@ -226,6 +227,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
             <View style={{ gap: 8 }}>
               <Text style={ui.label}>Service Address</Text>
               <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Service address" placeholder="Where should the vendor come?" street />
+              {pkg?.travel_fee && <TravelFeeQuote listingId={listing.id} address={venue} termsText={pkg.travel_fee.text} />}
             </View>
           ) : (
             <View style={{ gap: 8 }}>

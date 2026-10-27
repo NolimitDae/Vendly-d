@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { BookingStatus } from 'prisma/generated/client';
 import { withJobLock } from 'src/common/helper/job-lock';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { geocode } from './geo';
+import { addressPoint, geocode } from './geo';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -47,6 +47,16 @@ export class GeocodeService {
     } catch (e) {
       // leave venue_geocoded_at empty so the hourly backfill retries it
       this.logger.warn(`geocode booking ${bookingId}: ${(e as Error).message}`);
+    }
+  }
+
+  /** A service address's map position for pricing travel (geo.ts addressPoint), or null. Never throws. */
+  async point(address: string): Promise<{ lat: number; lng: number } | null> {
+    try {
+      return await addressPoint(address);
+    } catch (e) {
+      this.logger.warn(`address lookup: ${(e as Error).message}`);
+      return null;
     }
   }
 

@@ -6,6 +6,7 @@
  */
 import { format, parseISO } from 'date-fns';
 import { choicesPayload, type ChosenCustomization, type Customization, type Picks } from './packageOptions';
+import type { TravelQuote } from './travelFee';
 
 export type AddOnUnit = 'FIXED' | 'PER_PERSON' | 'PER_HOUR' | 'PER_ITEM';
 
@@ -36,6 +37,8 @@ export interface RequestTerms {
   lines: TermsLine[];
   options: ChosenCustomization[];
   options_amount: number;
+  /** the delivery / travel fee in the price (null or missing: none applies) */
+  travel?: TravelQuote | null;
   promo_code: string | null;
   discount: number;
   price: number;
@@ -140,6 +143,10 @@ export function comparisonRows(c: Comparison): ComparisonRow[] {
     const text = (g?: ChosenCustomization) => (g ? `${g.options.map((o) => o.label).join(', ')}${g.amount > 0 ? ` · +${money(g.amount)}` : ''}` : 'None');
     rows.push({ label: title, before: text(b.options.find((g) => g.group_id === id)), after: text(a.options.find((g) => g.group_id === id)) });
   }
+  if (b.travel || a.travel) {
+    const travel = (t: RequestTerms) => (!t.travel ? 'None' : t.travel.fee == null ? 'Not worked out' : money(t.travel.fee));
+    rows.push({ label: 'Travel fee', before: travel(b), after: travel(a) });
+  }
   if (b.discount > 0 || a.discount > 0) {
     const promo = (t: RequestTerms) => (t.discount > 0 ? `${t.promo_code ?? ''} -${money(t.discount)}`.trim() : 'None');
     rows.push({ label: 'Promo', before: promo(b), after: promo(a) });
@@ -177,6 +184,8 @@ export interface Draft {
   lines: DraftLine[];
   picks: Picks;
   note: string;
+  /** the travel fee for this booking, when one applies ("" when it couldn't be worked out yet) */
+  travelFee?: string;
 }
 
 let seq = 0;
@@ -202,6 +211,7 @@ export function draftFrom(current: RequestTerms): Draft {
     })),
     picks: Object.fromEntries(current.options.map((g) => [g.group_id, g.options.map((o) => o.option_id)])),
     note: '',
+    ...(current.travel ? { travelFee: current.travel.fee != null ? String(current.travel.fee) : '' } : {}),
   };
 }
 
@@ -223,6 +233,10 @@ export function draftError(d: Draft, opts: { needsGuests?: boolean; customizatio
       const q = Number(l.quantity);
       if (!Number.isInteger(q) || q < 1 || q > MAX_LINE_QUANTITY) return `The quantity of “${l.name}” must be a whole number from 1 to ${MAX_LINE_QUANTITY}.`;
     }
+  }
+  if (d.travelFee !== undefined && d.travelFee.trim() !== '') {
+    const t = Number(d.travelFee);
+    if (!(t >= 0) || t > MAX_LINE_PRICE || Math.abs(t * 100 - Math.round(t * 100)) > 1e-6) return `The travel fee must be between $0 and $${MAX_LINE_PRICE.toLocaleString('en-US')}, in dollars and cents.`;
   }
   const g = (opts.customizations ?? []).find((x) => x.required && !d.picks[x.id]?.length);
   if (g) return `Choose ${g.max_select > 1 ? 'at least one option' : 'an option'} for “${g.title}”.`;
@@ -265,6 +279,8 @@ export function draftPayload(d: Draft, initial: Draft, customizations: Customiza
     body.event_end_at = end.toISOString();
   }
   if (d.guests && d.guests !== initial.guests) body.guest_count = Number(d.guests);
+  // the travel fee only when the vendor set it
+  if (d.travelFee !== undefined && d.travelFee.trim() !== '' && d.travelFee !== initial.travelFee) body.travel_fee = Number(d.travelFee);
   if (d.note.trim()) body.note = d.note.trim();
   return body;
 }

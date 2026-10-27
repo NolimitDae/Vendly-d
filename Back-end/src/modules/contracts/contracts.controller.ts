@@ -90,6 +90,16 @@ export class ContractsController {
     return this.contracts.previewForBooking(user.userId, dto);
   }
 
+  /** The travel fee for a package to an address, shown live while booking (the request prices it again itself). */
+  @Get('travel-fee')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  // each one may ask the geocoder; the apps ask once the address is picked or typing pauses
+  @Throttle({ short: { limit: 3, ttl: 1000 }, medium: { limit: 60, ttl: 60_000 } })
+  travelFee(@Query('listing_id') listingId = '', @Query('address') address?: string) {
+    return this.contracts.travelQuote(String(listingId), address ? String(address).slice(0, 500) : undefined);
+  }
+
   @Get('booking/:bookingId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

@@ -72,6 +72,8 @@ export function apiError(err: any, fallback = 'Something went wrong') {
 export const ContractsService = {
   templates: () => api.get('/contracts/templates'),
   bookingPreview: (data: BookingFields) => api.post('/contracts/booking-preview', data),
+  /** The travel fee for a package to an address, shown while booking (the request prices it again on the server). */
+  travelFee: (listingId: string, address?: string) => api.get('/contracts/travel-fee', { params: { listing_id: listingId, ...(address ? { address } : {}) } }),
   forBooking: (bookingId: string) => api.get(`/contracts/booking/${bookingId}`),
   get: (id: string) => api.get(`/contracts/${id}`),
   downloadLink: (id: string, kind: 'executed' | 'source' | 'draft' = 'executed') =>

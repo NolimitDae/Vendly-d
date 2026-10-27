@@ -21,6 +21,7 @@ import type { CustomerHomeStackParams } from '../../navigation/types';
 import type { AddOn } from '../../services/addons.service';
 import { depositRuleText, isDepositPlan } from '../../utils/bookingStatus';
 import type { ChosenCustomization } from '../../utils/packageOptions';
+import type { TravelQuote } from '../../utils/travelFee';
 
 interface Preview {
   title: string;
@@ -48,6 +49,8 @@ interface Pricing {
   add_ons?: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[];
   /** the customizations picked, priced by the server */
   options?: ChosenCustomization[];
+  /** the travel fee worked out on the server (null: none applies) */
+  travel?: TravelQuote | null;
   /** fees the vendor may request after the service */
   fees?: AddOn[];
   /** large bookings (Admin → Settings): 48 hours to fix a failed payment, and a bank account can pay */
@@ -252,8 +255,12 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
                 <Row key={g.group_id} label={`${g.title}: ${g.options.map((o) => o.label).join(', ')}`} value={g.amount > 0 ? `+${money(g.amount)}` : 'Included'} />
               ))}
               {price?.add_ons?.map((a) => <Row key={a.add_on_id} label={a.label} value={money(a.amount)} />)}
+              {price?.travel && (
+                <Row label={price.travel.fee != null ? `Travel fee (${price.travel.label})` : 'Travel fee'} value={price.travel.fee != null ? money(price.travel.fee) : 'Not worked out yet'} />
+              )}
+              {!!price?.travel?.message && <Text style={s.travelNote}>{price.travel.message}</Text>}
               {!!price?.discount && <Row label={`Promo ${price.promo_code ?? ''}`} value={`-${money(price.discount)}`} />}
-              {(!!price?.add_ons?.length || !!price?.options?.some((g) => g.amount > 0) || !!price?.discount) && <Row label="Subtotal" value={money(price?.price)} />}
+              {(!!price?.add_ons?.length || !!price?.options?.some((g) => g.amount > 0) || !!price?.travel?.fee || !!price?.discount) && <Row label="Subtotal" value={money(price?.price)} />}
               <Row label="Vendly Protection fee" value={money(price?.service_fee)} />
               <View style={s.line} />
               <Row label="Total" value={money(price?.total ?? listing.price)} bold />
@@ -406,6 +413,7 @@ function Row({ icon, label, value, bold }: { icon?: keyof typeof Ionicons.glyphM
 }
 
 const s = StyleSheet.create({
+  travelNote: { color: '#FBBF24', fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
   root: { flex: 1, backgroundColor: DARK.bg },
   listingCard: { flexDirection: 'row', gap: 12, padding: 12 },
   thumb: { width: 100, height: 100, borderRadius: 10, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
