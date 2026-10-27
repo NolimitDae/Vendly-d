@@ -76,6 +76,14 @@ export class ProposalDto {
   @Type(() => OptionChoiceDto)
   options?: OptionChoiceDto[];
 
+  @ApiPropertyOptional({ description: 'The travel fee for this booking (only on a booking that has one, e.g. when it couldn’t be worked out from the map)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_LINE_PRICE)
+  travel_fee?: number;
+
   @ApiPropertyOptional({ type: PaymentPlanInputDto, nullable: true, description: 'A custom payment plan (payments/custom-plan.ts); null goes back to the package’s own plan; left out keeps the current one' })
   @IsOptional()
   @ValidateNested()

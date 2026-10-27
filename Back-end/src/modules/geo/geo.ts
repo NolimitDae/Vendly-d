@@ -305,6 +305,30 @@ export async function suggestPlaces(q: string, near?: { lat: number; lng: number
   return places;
 }
 
+/** Past this a slow geocoder answer isn't waited for (the travel fee is then left for the vendor to set). */
+const POINT_TIMEOUT_MS = 4000;
+
+/**
+ * A service address's map position, looked up on the server (a position sent by an app is never used to
+ * price anything). An exact US street match from the Census geocoder first (the same one the address
+ * suggestions use), else OpenStreetMap. Null when it can't be placed, or the lookup fails or is slow.
+ */
+export async function addressPoint(text: string, fetchImpl: typeof fetch = fetch): Promise<{ lat: number; lng: number } | null> {
+  const t = text.trim().slice(0, 500);
+  if (!t) return null;
+  if (looksLikeStreetAddress(t)) {
+    const exact = await censusMatches(t, null, fetchImpl);
+    if (exact?.length) return { lat: exact[0].lat, lng: exact[0].lng };
+  }
+  let timer: NodeJS.Timeout | undefined;
+  const slow = new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), POINT_TIMEOUT_MS)));
+  try {
+    return await Promise.race([geocode(t, fetchImpl).catch(() => null), slow]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The place at a position (for "use my current location"). */
 /**
  * The town or city at a position, for "use my current location". Only the area is named and the

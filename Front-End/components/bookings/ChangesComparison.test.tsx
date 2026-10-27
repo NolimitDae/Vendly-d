@@ -203,4 +203,23 @@ describe('the vendor’s editor helpers', () => {
     expect(draftError({ ...edited, guests: '' }, { needsGuests: true })).toMatch(/how many guests/);
     expect(draftError(edited, { customizations: groups })).toBeNull();
   });
+
+  it('sets a travel fee the map couldn’t work out, and shows it in the comparison', () => {
+    const terms = { free_miles: 15, per_mile: 2, base_fee: 0, round_trip: false };
+    const unpriced = { status: 'UNPRICED' as const, terms, one_way_miles: null, miles: null, chargeable_miles: null, fee: null, label: 'Not worked out yet', outside_area: false };
+    const withTravel = { ...before, travel: unpriced };
+    const initial = draftFrom(withTravel);
+    expect(initial.travelFee).toBe('');
+    // left empty: nothing about travel is sent
+    expect(draftPayload(initial, initial, [])).not.toHaveProperty('travel_fee');
+    expect(draftPayload({ ...initial, travelFee: '45' }, initial, [])).toMatchObject({ travel_fee: 45 });
+    expect(draftError({ ...initial, travelFee: '4.555' })).toMatch(/travel fee must be between/);
+    // no travel fee on the request: none in the editor
+    expect(draftFrom(before).travelFee).toBeUndefined();
+
+    const set = { ...withTravel, travel: { ...unpriced, status: 'VENDOR' as const, fee: 45, label: 'set by the vendor' } };
+    const rows = comparisonRows({ ...comparison, before: withTravel, after: set });
+    expect(rows.find((r) => r.label === 'Travel fee')).toEqual({ label: 'Travel fee', before: 'Not worked out', after: '$45.00' });
+    expect(comparisonRows(comparison).find((r) => r.label === 'Travel fee')).toBeUndefined();
+  });
 });

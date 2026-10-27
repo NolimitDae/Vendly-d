@@ -33,6 +33,8 @@ export default function BookingDetails({ booking, onClose }: { booking: any; onC
             ["Customer", person(booking.customer)],
             ["Vendor", person(booking.vendor)],
             ["Amount", money(booking.amount)],
+            // the delivery / travel fee, part of the amount
+            ["Travel fee", booking.travel_fee != null ? `${money(booking.travel_fee)}${booking.travel?.label ? ` (${booking.travel.label})` : ""}` : booking.travel?.status === "UNPRICED" ? "Not worked out (address not on the map)" : null],
             ["Service fee", money(booking.service_fee)],
             ["Discount", booking.discount ? `${money(booking.discount)}${booking.promo_code ? ` (${booking.promo_code})` : ""}` : null],
             ["Payment plan", words(booking.payment_plan)],

@@ -283,6 +283,30 @@ export default function SuggestChangesDialog({ bookingId, editor, customerName, 
               )}
             </section>
 
+            {draft.travelFee !== undefined && (
+              <section className="space-y-2" aria-labelledby="changes-travel">
+                <h4 id="changes-travel" className="text-sm font-semibold text-gray-900 dark:text-white">Travel fee</h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {editor.current.travel?.status === "UNPRICED"
+                    ? "We couldn't place the customer's address on the map, so no travel fee was added. Set one here if you charge it."
+                    : `Worked out from your package: ${editor.current.travel?.label}. You can change it for this booking.`}
+                </p>
+                <label className="block text-xs text-gray-600 dark:text-gray-300">
+                  Travel fee for this booking
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={draft.travelFee}
+                    onChange={(e) => set({ travelFee: e.target.value })}
+                    className={`${inputCls} mt-1 w-32`}
+                  />
+                </label>
+              </section>
+            )}
+
             {editor.customizations.length > 0 && (
               <section className="space-y-3" aria-labelledby="changes-custom">
                 <h4 id="changes-custom" className="text-sm font-semibold text-gray-900 dark:text-white">Customizations</h4>

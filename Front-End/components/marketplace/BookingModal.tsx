@@ -14,6 +14,8 @@ import {
 import SignContractPanel from "@/components/contracts/SignContractPanel";
 import SavedCards from "@/components/payments/SavedCards";
 import LocationField from "@/components/listing/LocationField";
+import TravelFeeQuote from "@/components/marketplace/TravelFeeQuote";
+import type { TravelQuote } from "@/lib/travel-fee";
 import { InspirationPhotosPicker } from "@/components/bookings/InspirationPhotos";
 import { BANK_CLEARING_TEXT, depositRuleText, feeRuleText, isDepositPlan, PLAN_LABELS, wholeMoney, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
 import { usePaymentSettings } from "@/hooks/usePaymentSettings";
@@ -46,6 +48,8 @@ interface Props {
     needs_service_address?: boolean;
     /** venues: a guest count is needed to book */
     needs_guest_count?: boolean;
+    /** the package's delivery / travel fee rates (null: none); the fee is worked out from the address */
+    travel_fee?: { text: string } | null;
   };
   /** Planner bookings: attach to this event (pre-fills venue and guest count). */
   eventId?: string;
@@ -78,6 +82,8 @@ interface Preview {
     add_ons?: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[];
     /** the customizations picked, priced by the server */
     options?: ChosenCustomization[];
+    /** the travel fee worked out on the server (null: none applies) */
+    travel?: TravelQuote | null;
     /** large bookings (Admin → Settings): 48 hours to fix a failed payment, and a bank account can pay */
     large?: boolean;
     bank_allowed?: boolean;
@@ -349,6 +355,13 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                 <span>{money(a.amount)}</span>
               </div>
             ))}
+            {preview.pricing.travel && (
+              <div className="flex justify-between gap-3 text-gray-700 dark:text-gray-300" data-testid="travel-line">
+                <span>Travel fee{preview.pricing.travel.fee != null ? ` (${preview.pricing.travel.label})` : ""}</span>
+                <span>{preview.pricing.travel.fee != null ? money(preview.pricing.travel.fee) : "Not worked out yet"}</span>
+              </div>
+            )}
+            {preview.pricing.travel?.message && <p className="text-xs text-amber-700 dark:text-amber-300">{preview.pricing.travel.message}</p>}
             {!!preview.pricing.discount && <div className="flex justify-between text-green-600"><span>Promo {preview.pricing.promo_code}</span><span>-{money(preview.pricing.discount)}</span></div>}
             <div className="flex justify-between"><span>Vendor price</span><span>{money(preview.pricing.price)}</span></div>
             <div className="flex justify-between"><span>Vendly Protection fee</span><span>{money(preview.pricing.service_fee)}</span></div>
@@ -475,6 +488,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                   Venue address{eventId ? " (defaults to your event's venue)" : ""}
                 </label>
                 <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} inputId="venue" maxLength={500} street />
+                {listing.travel_fee && <TravelFeeQuote listingId={listing.id} address={venue} termsText={listing.travel_fee.text} />}
               </div>
             ) : (
               <p className="flex gap-2 text-sm text-gray-600 dark:text-gray-300 rounded-xl bg-gray-50 dark:bg-gray-900/40 px-3 py-2.5">

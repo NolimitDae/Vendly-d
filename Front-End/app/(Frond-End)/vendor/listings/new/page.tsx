@@ -11,6 +11,8 @@ import Link from "next/link";
 import CategoryCombobox from "@/components/listing/CategoryCombobox";
 import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
 import ServiceAtField from "@/components/listing/ServiceAtField";
+import TravelFeeFields, { appendTravelFee, emptyTravelFee, travelFeeError, travelFeeFrom, type TravelFeeValue } from "@/components/listing/TravelFeeFields";
+import { offersTravelFee } from "@/lib/travel-fee";
 import type { ServiceAt } from "@/lib/booking-tracker";
 import type { PickerCategory } from "@/lib/categories";
 import { SubscriptionService } from "@/service/subscription/subscription.service";
@@ -54,6 +56,9 @@ export default function NewListingPage() {
   const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
   const [customizations, setCustomizations] = useState<PackageCustomizationsValue>(emptyCustomizations());
   const [dosDonts, setDosDonts] = useState<DosDonts>(emptyDosDonts());
+  // delivery / travel fee by distance: only when the vendor goes to the customer (not venues)
+  const [travel, setTravel] = useState<TravelFeeValue>(emptyTravelFee());
+  const travelOffered = offersTravelFee(serviceAt, categories.find((c) => c.id === form.category_id)?.name);
 
   useEffect(() => {
     // vendor plans aren't required until subscriptions launch
@@ -119,7 +124,7 @@ export default function NewListingPage() {
       toast.error(limitProblem);
       return;
     }
-    const detailsProblem = packageDetailsError(details) ?? dosDontsError(dosDonts) ?? customizationsError(customizations.drafts);
+    const detailsProblem = packageDetailsError(details) ?? dosDontsError(dosDonts) ?? customizationsError(customizations.drafts) ?? (travelOffered ? travelFeeError(travel) : null);
     if (detailsProblem) {
       toast.error(detailsProblem);
       return;
@@ -133,6 +138,7 @@ export default function NewListingPage() {
       fd.append("service_at", serviceAt);
       appendLimits(fd, form.price_unit, limits, false);
       appendPackageDetails(fd, details, false);
+      if (travelOffered) appendTravelFee(fd, travel, false);
       appendDosDonts(fd, dosDonts, false);
       images.forEach((img) => fd.append("images", img));
 
@@ -355,6 +361,7 @@ export default function NewListingPage() {
             <h2 className="font-semibold text-gray-900 dark:text-white">Location</h2>
             <LocationField value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
             <ServiceAtField value={serviceAt} onChange={setServiceAt} />
+            {travelOffered && <TravelFeeFields value={travel} onChange={setTravel} />}
           </div>
 
           {/* Details */}

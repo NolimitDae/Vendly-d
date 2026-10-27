@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -18,7 +19,14 @@ import { LISTING_PAYMENT_PLANS } from 'src/modules/payments/payment-schedule';
 import { ListingStatus } from 'prisma/generated/client';
 import { Transform, Type } from 'class-transformer';
 import { SERVICE_AT, type ServiceAt } from 'src/modules/booking/booking-tracker';
+import { MAX_BASE_FEE, MAX_FREE_MILES, MAX_PER_MILE } from 'src/modules/booking/travel-fee';
 import { MAX_DOS, MAX_DO_LENGTH, MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readIncludedItems, readNoticeHours } from '../package-details';
+
+/** "true" / "false" from a multipart form (implicit conversion would read "false" as true). */
+const readBoolean = ({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
+  const v = obj[key];
+  return v === 'true' || v === true ? true : v === 'false' || v === false ? false : v;
+};
 
 export class CreateVendorListingDto {
   @ApiProperty()
@@ -157,6 +165,42 @@ export class CreateVendorListingDto {
   @IsString({ each: true })
   @MaxLength(MAX_DO_LENGTH, { each: true, message: `Each don't can be up to ${MAX_DO_LENGTH} characters.` })
   donts?: string[];
+
+  @ApiPropertyOptional({ description: 'Charge a delivery / travel fee by distance (only when the vendor goes to the customer; booking/travel-fee.ts)' })
+  @IsOptional()
+  @Transform(readBoolean)
+  @IsBoolean()
+  travel_fee_enabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Travel fee: miles that are free (0 or empty = none)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'Free miles must be a whole number.' })
+  @Min(0)
+  @Max(MAX_FREE_MILES, { message: `Free miles can be up to ${MAX_FREE_MILES}.` })
+  travel_free_miles?: number;
+
+  @ApiPropertyOptional({ description: 'Travel fee: price per mile after the free miles' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_PER_MILE, { message: `The price per mile can be up to $${MAX_PER_MILE}.` })
+  travel_per_mile?: number;
+
+  @ApiPropertyOptional({ description: 'Travel fee: a flat amount added to every booking it applies to (optional)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(MAX_BASE_FEE, { message: `The base travel fee can be up to $${MAX_BASE_FEE}.` })
+  travel_base_fee?: number;
+
+  @ApiPropertyOptional({ description: 'Travel fee: count the miles there and back (round trip) instead of one way' })
+  @IsOptional()
+  @Transform(readBoolean)
+  @IsBoolean()
+  travel_round_trip?: boolean;
 
   @ApiPropertyOptional({ description: 'How many hours ahead the package must be booked (0 or empty = no minimum)' })
   @IsOptional()

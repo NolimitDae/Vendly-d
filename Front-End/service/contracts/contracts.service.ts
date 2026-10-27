@@ -65,6 +65,9 @@ export function apiError(err: any, fallback = "Something went wrong") {
 export const ContractsService = {
   templates: () => Fetch.get("/contracts/templates", auth()),
   bookingPreview: (data: BookingFields) => Fetch.post("/contracts/booking-preview", data, auth()),
+  /** The travel fee for a package to an address, shown while booking (the request prices it again on the server). */
+  travelFee: (listingId: string, address?: string) =>
+    Fetch.get(`/contracts/travel-fee?${new URLSearchParams({ listing_id: listingId, ...(address ? { address } : {}) }).toString()}`, auth()),
   forBooking: (bookingId: string) => Fetch.get(`/contracts/booking/${bookingId}`, auth()),
   get: (id: string) => Fetch.get(`/contracts/${id}`, auth()),
   downloadLink: (id: string, kind: "executed" | "source" | "draft" = "executed") =>

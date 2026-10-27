@@ -41,6 +41,10 @@ export function comparisonRows(c: Comparison): Row[] {
     const text = (g?: typeof was) => (g ? `${g.options.map((o) => o.label).join(", ")}${g.amount > 0 ? ` · +${money(g.amount)}` : ""}` : "None");
     rows.push({ label: title, before: text(was), after: text(now) });
   }
+  if (b.travel || a.travel) {
+    const travel = (t: RequestTerms) => (!t.travel ? "None" : t.travel.fee == null ? "Not worked out" : money(t.travel.fee));
+    rows.push({ label: "Travel fee", before: travel(b), after: travel(a) });
+  }
   if (b.discount > 0 || a.discount > 0) {
     rows.push({ label: "Promo", before: b.discount > 0 ? `${b.promo_code ?? ""} -${money(b.discount)}`.trim() : "None", after: a.discount > 0 ? `${a.promo_code ?? ""} -${money(a.discount)}`.trim() : "None" });
   }

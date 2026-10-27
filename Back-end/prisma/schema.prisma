@@ -819,6 +819,14 @@ model VendorListing {
   // per person / hour / day packages: the fewest and most a customer can book (guests, hours or days)
   min_quantity   Int?
   max_quantity   Int?
+  // delivery / travel fee when the vendor goes to the customer (booking/travel-fee.ts): the first
+  // travel_free_miles are free, then travel_per_mile a mile, plus an optional flat travel_base_fee;
+  // travel_round_trip counts the miles there and back
+  travel_fee_enabled Boolean  @default(false)
+  travel_free_miles  Int?
+  travel_per_mile    Decimal? @db.Decimal(10, 2)
+  travel_base_fee    Decimal? @db.Decimal(10, 2)
+  travel_round_trip  Boolean  @default(false)
   // what the package includes (shown as a list), and how far ahead it must be booked
   included_items   String[]
   min_notice_hours Int?
@@ -1044,6 +1052,11 @@ model Booking {
   // later package edits don't change it; their upcharges are already part of amount
   chosen_options Json?
   options_amount Decimal?  @db.Decimal(10, 2)
+  // the delivery / travel fee (booking/travel-fee.ts), already part of amount like the upcharges; null = none
+  // applies. travel_details freezes how it was worked out (miles, the package's rates), or that it couldn't be
+  // (an address with no map position): then the vendor can set it by suggesting changes
+  travel_fee     Decimal?  @db.Decimal(10, 2)
+  travel_details Json?
 
   // requests the vendor doesn't answer in time are declined automatically (see booking-requests.ts);
   // the clock starts when the vendor can answer: at the request, or once a planner's client co-signs

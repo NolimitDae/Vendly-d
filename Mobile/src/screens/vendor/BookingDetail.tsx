@@ -324,7 +324,7 @@ export default function VendorBookingDetail() {
           {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}
 
           {/* the customizations picked, and the vendor's dos and don'ts */}
-          <BookingChoices booking={booking} />
+          <BookingChoices booking={booking} forVendor />
           <RentalReturnCard booking={booking} role="VENDOR" onDone={load} />
 
           <VendorExtras booking={booking} onChanged={load} />

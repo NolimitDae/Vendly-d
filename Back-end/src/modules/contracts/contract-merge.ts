@@ -192,6 +192,8 @@ export interface PricingScheduleInput {
   includedFees?: { label: string; amount: number; description?: string | null }[];
   /** package customizations the customer picked ("Style: Knotless"), with their upcharges */
   options?: { label: string; amount: number }[];
+  /** the delivery / travel fee (booking/travel-fee.ts); amount null = it couldn't be worked out from the map */
+  travel?: { label: string; amount: number | null } | null;
   discount: number;
   promoCode?: string | null;
   vendorPrice: number;
@@ -208,7 +210,7 @@ export interface PricingScheduleInput {
 export function buildPricingSchedule(p: PricingScheduleInput): string {
   const options = p.options ?? [];
   const charged = p.includedFees ?? [];
-  if (!p.packageLabel && !p.addOns.length && !p.fees.length && !options.length && !charged.length) return '';
+  if (!p.packageLabel && !p.addOns.length && !p.fees.length && !options.length && !charged.length && !p.travel) return '';
   const m = (n: number) => fmtMoney(n, p.currency);
   // the price as worked out at booking; a later amendment changes the price in its own terms
   const lines = ['## Schedule A: Price at booking, add-ons and fees'];
@@ -216,6 +218,13 @@ export function buildPricingSchedule(p: PricingScheduleInput): string {
   for (const o of options) lines.push(`- Customization: ${o.label}${o.amount > 0 ? ` = ${m(o.amount)}` : ''}`);
   for (const a of p.addOns) lines.push(`- Add-on: ${a.label} = ${m(a.amount)}${a.description ? ` (${a.description})` : ''}`);
   for (const f of charged) lines.push(`- Fee: ${f.label} = ${m(f.amount)}${f.description ? ` (${f.description})` : ''}`);
+  if (p.travel) {
+    lines.push(
+      p.travel.amount != null
+        ? `- Travel fee: ${p.travel.label} = ${m(p.travel.amount)}`
+        : `- Travel fee: not worked out yet (the address couldn't be placed on the map). The Vendor may add it by suggesting changes, which the ${p.customerRoleLabel} approves before anything is charged.`,
+    );
+  }
   if (p.discount > 0) lines.push(`- Promo${p.promoCode ? ` ${p.promoCode}` : ''}: -${m(p.discount)}`);
   lines.push(`- Vendor price: ${m(p.vendorPrice)}`);
   if (p.fees.length) {

@@ -66,6 +66,8 @@ interface Listing {
   tags: string[];
   location?: string;
   service_radius_miles?: number | null;
+  /** the delivery / travel fee rates (null: none), worked out per booking from the customer's address */
+  travel_fee?: { free_miles: number; per_mile: number; base_fee: number; round_trip: boolean; text: string } | null;
   availability?: string;
   /** the vendor's weekly hours (null = any day, any time) and a short line like "Mon–Fri 9am–5pm" */
   working_hours?: WorkingHours | null;
@@ -382,6 +384,13 @@ export default function ListingDetailPage() {
                     ))}
                   </ul>
                 </div>
+              )}
+
+              {listing.travel_fee && (
+                <p className="mt-4 flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300" data-testid="travel-fee-terms">
+                  <MapPin className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
+                  <span>Travel fee: {listing.travel_fee.text}. You&apos;ll see yours when you enter the address.</span>
+                </p>
               )}
 
               {noticeLine(listing.min_notice_hours) && (

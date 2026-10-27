@@ -171,6 +171,13 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
             </View>
           )}
 
+          {!!listing.travel_fee && (
+            <View style={s.included}>
+              <Ionicons name="car-outline" size={18} color={DARK.accent} />
+              <Text style={[s.muted, { flex: 1 }]}>{`Travel fee: ${listing.travel_fee.text}. You'll see yours when you enter the address.`}</Text>
+            </View>
+          )}
+
           {!!listing.customizations?.length && (
             <Card style={{ gap: 12 }}>
               <View style={{ gap: 2 }}>

@@ -24,6 +24,7 @@ import { addOnLabel, AddOnUnit, eventDayCount, eventHours, EventInput, PackageLi
 import { ChosenGroup, OfferedGroup, UnitBasis } from 'src/modules/add-ons/package-options';
 import { REQUEST_EXPIRY_HOURS } from 'src/modules/booking/booking-requests';
 import type { CustomPlan } from 'src/modules/payments/custom-plan';
+import { TravelQuote, vendorSetTravel } from 'src/modules/booking/travel-fee';
 
 /** The most a vendor can set one add-on or fee to, per unit, for a booking. */
 export const MAX_LINE_PRICE = 100000;
@@ -297,6 +298,8 @@ export interface RequestTerms {
   lines: ProposalLine[];
   options: ChosenGroup[];
   options_amount: number;
+  /** the travel fee in the price (booking/travel-fee.ts); null or missing when none applies to the booking */
+  travel?: TravelQuote | null;
   promo_code: string | null;
   discount: number;
   /** vendor price, after the promo */
@@ -330,6 +333,10 @@ export function describeChanges(before: RequestTerms, after: RequestTerms): stri
   }
   const kept = new Set(after.lines.map((l) => l.extra_id).filter(Boolean));
   for (const l of before.lines) if (l.extra_id && !kept.has(l.extra_id)) out.push(`Removed ${l.kind === 'FEE' ? 'fee' : 'add-on'}: ${l.name}`);
+  const travelFee = (t: RequestTerms) => t.travel?.fee ?? null;
+  if (travelFee(before) !== travelFee(after)) {
+    out.push(travelFee(before) == null ? `Travel fee: ${money(travelFee(after) ?? 0)}` : `Travel fee: ${money(travelFee(before)!)} to ${money(travelFee(after) ?? 0)}`);
+  }
   const picks = (t: RequestTerms) => t.options.map((g) => `${g.group_id}:${g.options.map((o) => `${o.option_id}@${o.amount}`).join(',')}`).join('|');
   if (picks(before) !== picks(after)) out.push('Customizations');
   if ((before.promo_code ?? null) !== (after.promo_code ?? null)) out.push(after.promo_code ? `Promo ${after.promo_code}` : `Promo ${before.promo_code} removed`);
@@ -339,6 +346,17 @@ export function describeChanges(before: RequestTerms, after: RequestTerms): stri
     out.push(after.plan === 'CUSTOM' ? `Payment plan: ${after.schedule.length} payments` : 'Payment plan: back to the package’s plan');
   }
   return out;
+}
+
+/**
+ * The travel fee of a suggestion: the vendor can set it for this booking (for example when the address
+ * couldn't be placed on the map and the fee wasn't worked out), only on a booking that has one.
+ */
+export function proposedTravel(before: TravelQuote | null | undefined, sent: number | null | undefined): TravelQuote | null {
+  if (sent == null) return before ?? null;
+  if (!before) throw new RequestChangeError('This booking has no travel fee. Add a fee instead.');
+  const fee = linePrice('Travel fee', sent, 0);
+  return before.fee === fee ? before : vendorSetTravel(before, fee);
 }
 
 /** True when the suggestion changes nothing the customer would see. */

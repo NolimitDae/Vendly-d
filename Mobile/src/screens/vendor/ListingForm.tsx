@@ -20,6 +20,8 @@ import type { VendorDashboardStackParams } from '../../navigation/types';
 import { MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, noticeHours } from '../../utils/packageDetails';
 import CustomizationsEditor from '../../components/listing/CustomizationsEditor';
 import { DosDontsEditor } from '../../components/listing/DosDonts';
+import TravelFeeEditor from '../../components/listing/TravelFeeEditor';
+import { appendTravelFee, emptyTravelFee, offersTravelFee, travelFeeError, travelFeeFrom, type TravelFeeValue } from '../../utils/travelFee';
 import { appendDosDonts, customizationsError, dosDontsError, dosDontsFrom, draftsFrom, draftsToInput, emptyDosDonts, type CustomizationDraft, type DosDonts } from '../../utils/packageOptions';
 
 interface PickedImage { uri: string; type: string; name: string }
@@ -79,6 +81,9 @@ export default function ListingForm() {
   const [custom, setCustom] = useState<CustomizationDraft[]>([]);
   const [customLoaded, setCustomLoaded] = useState(!isEdit);
   const [dosDonts, setDosDonts] = useState<DosDonts>(emptyDosDonts());
+  // delivery / travel fee by distance: only when the vendor goes to the customer (not venues)
+  const [travel, setTravel] = useState<TravelFeeValue>(emptyTravelFee());
+  const travelOffered = offersTravelFee(serviceAt, categories.find((c) => c.id === categoryId)?.name);
 
   useEffect(() => {
     (async () => {
@@ -117,6 +122,7 @@ export default function ListingForm() {
             setNotice(h ? String(days ? h / 24 : h) : '');
             setNoticeUnit(days || !h ? 'days' : 'hours');
             setDosDonts(dosDontsFrom(l));
+            setTravel(travelFeeFrom(l));
             setCustom(draftsFrom(l.customizations));
             setCustomLoaded(Array.isArray(l.customizations));
           }
@@ -155,6 +161,8 @@ export default function ListingForm() {
     if (dosProblem) return Alert.alert('Dos and don’ts', dosProblem);
     const customProblem = customizationsError(custom);
     if (customProblem) return Alert.alert('Customizations', customProblem);
+    const travelProblem = travelOffered ? travelFeeError(travel) : null;
+    if (travelProblem) return Alert.alert('Travel fee', travelProblem);
     setSaving(true);
     try {
       const fd = new FormData();
@@ -183,6 +191,8 @@ export default function ListingForm() {
       if (items.length || isEdit) fd.append('included_items', JSON.stringify(items));
       if (noticeH || isEdit) fd.append('min_notice_hours', noticeH ? String(noticeH) : '');
       appendDosDonts(fd, dosDonts, isEdit);
+      // hidden (the customer comes to the vendor): left as saved, and it doesn't apply to bookings
+      if (travelOffered) appendTravelFee(fd, travel, isEdit);
       // the photos already on the package that the vendor kept; new ones are added after them
       if (isEdit) fd.append('keep_images', JSON.stringify(existing));
       images.forEach((img) => fd.append('images', img as unknown as Blob));
@@ -453,6 +463,13 @@ export default function ListingForm() {
                 : 'You go to the address the customer gives when they book. You get directions on the booking.'}
             </Text>
           </View>
+
+          {travelOffered && (
+            <View style={{ gap: 8 }}>
+              <Text style={ui.label}>Delivery / travel fee</Text>
+              <TravelFeeEditor value={travel} onChange={setTravel} />
+            </View>
+          )}
 
           {addOnsReady && (
             <View style={{ gap: 12 }}>

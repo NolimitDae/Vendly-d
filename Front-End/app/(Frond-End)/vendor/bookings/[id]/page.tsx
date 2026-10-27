@@ -281,7 +281,7 @@ export default function VendorBookingDetailPage() {
             </div>
           )}
         </div>
-        <BookingChoices booking={booking} />
+        <BookingChoices booking={booking} forVendor />
         {(["CONFIRMED", "IN_PROGRESS"].includes(booking.status) || invoiceAvailable(booking)) && (
           <div className="flex flex-wrap gap-2 pt-1">
             {invoiceAvailable(booking) && <InvoiceButton bookingId={booking.id} />}

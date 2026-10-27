@@ -16,6 +16,17 @@ import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
 import { MAX_LISTING_PHOTOS, keptImageNames } from './package-details';
 import { formatOptionGroups, OPTION_GROUPS_INCLUDE } from 'src/modules/add-ons/package-options.service';
+import { travelSettings, TravelSettingsError, TravelSettingsInput, TravelListing } from 'src/modules/booking/travel-fee';
+
+/** The travel fee columns to save (booking/travel-fee.ts), as a 400 the vendor can act on. */
+function travelColumns(sent: TravelSettingsInput, saved?: TravelListing) {
+  try {
+    return travelSettings(sent, saved);
+  } catch (e) {
+    if (e instanceof TravelSettingsError) throw new BadRequestException(e.message);
+    throw e;
+  }
+}
 
 /** Minimum and maximum guests / hours / days, or nulls for a flat price. Throws if they don't make sense. */
 export function quantityLimits(priceUnit: string, min?: number | null, max?: number | null) {
@@ -58,6 +69,7 @@ export class VendorListingService {
 
     const categoryId = await this.assertSubCategory(dto.category_id, dto.sub_category_id);
     const limits = quantityLimits(dto.price_unit ?? 'fixed', dto.min_quantity, dto.max_quantity);
+    const travel = travelColumns(dto);
     const listing = await this.prisma.vendorListing.create({
       data: {
         vendor_id: vendorId,
@@ -83,6 +95,7 @@ export class VendorListingService {
         min_notice_hours: dto.min_notice_hours || null,
         dos: dto.dos ?? [],
         donts: dto.donts ?? [],
+        ...travel,
       },
       include: {
         category: { select: { id: true, name: true } },
@@ -178,8 +191,10 @@ export class VendorListingService {
     // putting a package live needs an approved licence; one that's already live stays live
     if (dto.status === ListingStatus.ACTIVE && listing.status !== ListingStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
 
-    const { keep_images, ...fields } = dto;
+    const { keep_images, travel_fee_enabled, travel_free_miles, travel_per_mile, travel_base_fee, travel_round_trip, ...fields } = dto;
     const updateData: any = { ...fields };
+    // the travel fee settings are checked together with the ones saved
+    Object.assign(updateData, travelColumns({ travel_fee_enabled, travel_free_miles, travel_per_mile, travel_base_fee, travel_round_trip }, listing));
     // limits only mean something for per person / hour / day prices; 0 clears one
     if (dto.min_quantity !== undefined || dto.max_quantity !== undefined || dto.price_unit !== undefined) {
       Object.assign(

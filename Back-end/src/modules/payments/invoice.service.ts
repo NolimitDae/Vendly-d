@@ -53,7 +53,7 @@ export class InvoiceService {
     const b = await this.prisma.booking.findFirst({
       where: { id: bookingId },
       select: {
-        id: true, status: true, customer_id: true, vendor_id: true, amount: true, service_fee: true, discount: true, promo_code: true, currency: true, chosen_options: true,
+        id: true, status: true, customer_id: true, vendor_id: true, amount: true, service_fee: true, discount: true, promo_code: true, currency: true, chosen_options: true, travel_fee: true,
         created_at: true, completed_at: true, cancelled_at: true, event_start_at: true, scheduled_at: true,
         cancelled_by: true, cancel_reason_code: true, cancel_reason: true,
         paid_at: true, released_at: true, payout_credited_at: true, commission_amount: true, released_gross: true, early_released_amount: true,
@@ -87,12 +87,15 @@ export class InvoiceService {
     // the customizations picked, as they were when booked (upcharges are part of the booking amount)
     const options = readChosenOptions(b.chosen_options);
     const optionsAmount = options.reduce((s, g) => s + Number(g.amount ?? 0), 0);
-    const pkgAmount = round2(Number(b.amount ?? 0) + discount - included.reduce((s, e) => s + Number(e.amount), 0) - optionsAmount);
+    // the travel fee (booking/travel-fee.ts) is part of the booking amount too
+    const travelFee = round2(Number(b.travel_fee ?? 0));
+    const pkgAmount = round2(Number(b.amount ?? 0) + discount - included.reduce((s, e) => s + Number(e.amount), 0) - optionsAmount - travelFee);
     const lines: InvoiceData['price_lines'] = [];
     const pkg = packageLabel(merge?.pricing_schedule);
     lines.push({ label: b.listing ? `Package: ${b.listing.title}${pkg ? ` (${pkg})` : ''}` : `Rental: ${title}`, amount: pkgAmount });
     for (const g of options) lines.push({ label: `Customization: ${chosenGroupText(g)}`, amount: round2(Number(g.amount ?? 0)) });
     for (const e of included) lines.push({ label: `${e.kind === AddOnKind.FEE ? 'Fee' : 'Add-on'}: ${e.name}`, amount: round2(Number(e.amount)) });
+    if (travelFee > 0) lines.push({ label: 'Travel fee', amount: travelFee });
     if (discount > 0) lines.push({ label: `Promo${b.promo_code ? ` ${b.promo_code}` : ''}`, amount: -discount });
     for (const e of later) lines.push({ label: `${e.kind === AddOnKind.FEE ? 'Fee' : 'Add-on'} added later: ${e.name}`, amount: round2(Number(e.amount)) });
     // rental damage / late fees: charged straight from the return (no add-on request behind them)

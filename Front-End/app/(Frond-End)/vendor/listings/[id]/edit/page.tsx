@@ -11,6 +11,8 @@ import Link from "next/link";
 import CategoryCombobox from "@/components/listing/CategoryCombobox";
 import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
 import ServiceAtField from "@/components/listing/ServiceAtField";
+import TravelFeeFields, { appendTravelFee, emptyTravelFee, travelFeeError, travelFeeFrom, type TravelFeeValue } from "@/components/listing/TravelFeeFields";
+import { offersTravelFee } from "@/lib/travel-fee";
 import type { ServiceAt } from "@/lib/booking-tracker";
 import type { PickerCategory } from "@/lib/categories";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
@@ -75,6 +77,9 @@ export default function EditListingPage() {
   // not saved until the package's own list has loaded
   const [customizations, setCustomizations] = useState<PackageCustomizationsValue>(emptyCustomizations(false));
   const [dosDonts, setDosDonts] = useState<DosDonts>(emptyDosDonts());
+  // delivery / travel fee by distance: only when the vendor goes to the customer (not venues)
+  const [travel, setTravel] = useState<TravelFeeValue>(emptyTravelFee());
+  const travelOffered = offersTravelFee(serviceAt, categories.find((c) => c.id === form.category_id)?.name);
 
   const fetchBlockedDates = async () => {
     try {
@@ -110,6 +115,7 @@ export default function EditListingPage() {
         setServiceAt(l.service_at === "VENDOR_LOCATION" ? "VENDOR_LOCATION" : "CUSTOMER_LOCATION");
         setLimits({ min: l.min_quantity ? String(l.min_quantity) : "", max: l.max_quantity ? String(l.max_quantity) : "" });
         setDetails(packageDetailsFrom(l));
+        setTravel(travelFeeFrom(l));
         setDosDonts(dosDontsFrom(l));
         setCustomizations({ drafts: draftsFrom(l.customizations), loaded: Array.isArray(l.customizations) });
       } else {
@@ -156,7 +162,7 @@ export default function EditListingPage() {
       toast.error(limitProblem);
       return;
     }
-    const detailsProblem = packageDetailsError(details) ?? dosDontsError(dosDonts) ?? customizationsError(customizations.drafts);
+    const detailsProblem = packageDetailsError(details) ?? dosDontsError(dosDonts) ?? customizationsError(customizations.drafts) ?? (travelOffered ? travelFeeError(travel) : null);
     if (detailsProblem) {
       toast.error(detailsProblem);
       return;
@@ -171,6 +177,8 @@ export default function EditListingPage() {
       fd.append("service_at", serviceAt);
       appendLimits(fd, form.price_unit, limits, true);
       appendPackageDetails(fd, details, true);
+      // hidden (the customer comes to the vendor): left as saved, and it doesn't apply to bookings
+      if (travelOffered) appendTravelFee(fd, travel, true);
       appendDosDonts(fd, dosDonts, true);
 
       // the current photos the vendor kept (the rest are deleted); new ones are added after them
@@ -448,6 +456,7 @@ export default function EditListingPage() {
             <h2 className="font-semibold text-gray-900 dark:text-white">Location</h2>
             <LocationField value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
             <ServiceAtField value={serviceAt} onChange={setServiceAt} />
+            {travelOffered && <TravelFeeFields value={travel} onChange={setTravel} />}
           </div>
 
           {/* Details */}

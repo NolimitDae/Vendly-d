@@ -273,6 +273,29 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
               </View>
             )}
 
+            {draft.travelFee !== undefined && (
+              <>
+                <Text style={s.h2}>Travel fee</Text>
+                <Text style={s.muted}>
+                  {editor.current.travel?.status === 'UNPRICED'
+                    ? 'We couldn’t place the customer’s address on the map, so no travel fee was added. Set one here if you charge it.'
+                    : `Worked out from your package: ${editor.current.travel?.label}. You can change it for this booking.`}
+                </Text>
+                <View style={s.smallField}>
+                  <Text style={s.muted}>$</Text>
+                  <TextInput
+                    style={ui.input}
+                    value={draft.travelFee}
+                    onChangeText={(t) => set({ travelFee: t.replace(/[^0-9.]/g, '') })}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={DARK.muted}
+                    accessibilityLabel="Travel fee for this booking"
+                  />
+                </View>
+              </>
+            )}
+
             {editor.customizations.length > 0 && (
               <>
                 <Text style={s.h2}>Customizations</Text>

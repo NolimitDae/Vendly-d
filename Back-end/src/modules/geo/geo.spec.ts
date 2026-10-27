@@ -1,4 +1,4 @@
-import { __clearGeocodeCache, __clearPlaceCache, boundingBox, censusLabel, geocode, looksLikeStreetAddress, milesBetween, placeLabel, reversePlace, shortStreet, streetLabel, suggestPlaces, titleCase, typedHouseNumber, withoutPosition } from './geo';
+import { __clearGeocodeCache, __clearPlaceCache, addressPoint, boundingBox, censusLabel, geocode, looksLikeStreetAddress, milesBetween, placeLabel, reversePlace, shortStreet, streetLabel, suggestPlaces, titleCase, typedHouseNumber, withoutPosition } from './geo';
 import { GeocodeService } from './geocode.service';
 
 const houston = { lat: 29.7604, lng: -95.3698 };
@@ -160,6 +160,20 @@ describe('street address suggestions', () => {
     expect(looksLikeStreetAddress('200 E Glenwood Ave Smyrna DE')).toBe(true);
     expect(looksLikeStreetAddress('200 E')).toBe(false);
     expect(looksLikeStreetAddress('100 S Main')).toBe(false);
+  });
+
+  it('places a service address for the travel fee: an exact Census match, else OpenStreetMap, else nothing', async () => {
+    __clearGeocodeCache();
+    const census = [{ matchedAddress: '100 S MAIN ST, SMYRNA, DE, 19977', coordinates: { x: -75.6047, y: 39.2998 } }];
+    expect(await addressPoint('100 S Main St, Smyrna, DE 19977', mockFetch([], census) as any)).toEqual({ lat: 39.2998, lng: -75.6047 });
+    // no exact match: OpenStreetMap (Nominatim answers a list of { lat, lon })
+    const osm = jest.fn((url: string) =>
+      Promise.resolve(url.includes('census.gov') ? { ok: true, json: () => Promise.resolve({ result: { addressMatches: [] } }) } : { ok: true, json: () => Promise.resolve([{ lat: '39.3', lon: '-75.6' }]) }),
+    );
+    expect(await addressPoint('Smyrna Town Hall, Delaware', osm as any)).toEqual({ lat: 39.3, lng: -75.6 });
+    const down = jest.fn(() => Promise.resolve({ ok: false, status: 503 }));
+    expect(await addressPoint('27 Nowhere Lane Atlantis ZZ', down as any)).toBeNull();
+    expect(await addressPoint('   ', down as any)).toBeNull();
   });
 
   it('does not remember a failed Census lookup as "no exact match"', async () => {

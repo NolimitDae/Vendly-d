@@ -33,6 +33,8 @@ export interface Listing {
   needs_service_address?: boolean;
   /** venues: a guest count is needed to book */
   needs_guest_count?: boolean;
+  /** the delivery / travel fee rates (null: none), worked out per booking from the customer's address */
+  travel_fee?: { free_miles: number; per_mile: number; base_fee: number; round_trip: boolean; text: string } | null;
   /** the vendor's weekly hours (null = any day, any time) and a short line like "Mon–Fri 9am–5pm" */
   working_hours?: WorkingHours | null;
   working_hours_summary?: string | null;
