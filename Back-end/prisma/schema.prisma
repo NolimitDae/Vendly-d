@@ -275,6 +275,9 @@ model User {
 
   // Saved listings (favourites)
   savedListings SavedListing[] @relation("UserSavedListings")
+  // Saved vendors (favourites): vendors this user saved, and the users who saved this vendor
+  savedVendors  SavedVendor[]  @relation("UserSavedVendors")
+  savedByUsers  SavedVendor[]  @relation("VendorSavedBy")
 
   // Event planner profile
   eventPlannerProfile EventPlannerProfile? @relation("UserToEventPlannerProfile")
@@ -941,6 +944,20 @@ model SavedListing {
 
   @@unique([user_id, listing_id])
   @@map("saved_listings")
+}
+
+model SavedVendor {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  user_id String
+  user    User   @relation("UserSavedVendors", fields: [user_id], references: [id], onDelete: Cascade)
+
+  vendor_id String
+  vendor    User   @relation("VendorSavedBy", fields: [vendor_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, vendor_id])
+  @@map("saved_vendors")
 }
 
 /**

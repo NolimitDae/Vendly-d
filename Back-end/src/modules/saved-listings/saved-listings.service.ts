@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { withoutPosition } from '../geo/geo';
+import { liveListingWhere } from '../marketplace/marketplace.service';
 
 @Injectable()
 export class SavedListingsService {
@@ -23,8 +24,9 @@ export class SavedListingsService {
   }
 
   async findAll(userId: string) {
+    // only packages still on the marketplace: drafts, removed packages and suspended vendors' packages drop out
     const saved = await this.prisma.savedListing.findMany({
-      where: { user_id: userId },
+      where: { user_id: userId, listing: liveListingWhere() },
       include: {
         listing: {
           include: {
@@ -48,7 +50,7 @@ export class SavedListingsService {
 
   async getSavedIds(userId: string) {
     const saved = await this.prisma.savedListing.findMany({
-      where: { user_id: userId },
+      where: { user_id: userId, listing: liveListingWhere() },
       select: { listing_id: true },
     });
     return { success: true, data: saved.map((s) => s.listing_id) };

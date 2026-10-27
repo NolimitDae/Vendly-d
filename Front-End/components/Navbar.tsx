@@ -8,7 +8,7 @@ import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
 import Logo from "@/components/brand/Logo";
 import { nav, VENDOR_SIGNUP_HREF } from "@/components/landing/content";
-import { ClipboardList, FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Bookmark, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat, PlusSquare, Receipt, Star } from "lucide-react";
+import { ClipboardList, FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Heart, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat, PlusSquare, Receipt, Star } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
@@ -395,12 +395,12 @@ export default function Navbar() {
                         My Bookings
                       </Link>
                       <Link
-                        href="/saved-listings"
+                        href="/favorites"
                         onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                       >
-                        <Bookmark className="w-4 h-4" />
-                        Saved Listings
+                        <Heart className="w-4 h-4" />
+                        Favorites
                       </Link>
                       <Link
                         href="/my-events"
@@ -645,12 +645,12 @@ export default function Navbar() {
                 </Link>
                 {(user.type === "CLIENT" || user.type === "CUSTOMER") && (
                   <Link
-                    href="/saved-listings"
+                    href="/favorites"
                     onClick={() => setMenuOpen(false)}
                     className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                   >
-                    <Bookmark className="w-4 h-4" />
-                    Saved Listings
+                    <Heart className="w-4 h-4" />
+                    Favorites
                   </Link>
                 )}
                 {(user.type === "CLIENT" || user.type === "CUSTOMER" || user.type === "VENDOR") && (
