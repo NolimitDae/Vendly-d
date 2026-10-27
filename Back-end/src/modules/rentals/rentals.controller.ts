@@ -3,7 +3,7 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { GetUser } from 'src/modules/auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
-import { CreateRentalItemDto, RentalBookDto, RentalQuoteDto, RentalReturnDto, UpdateRentalItemDto } from './dto/rentals.dto';
+import { CreateRentalItemDto, RentalBookDto, RentalDeliveryFeeDto, RentalQuoteDto, RentalReturnDto, UpdateRentalItemDto } from './dto/rentals.dto';
 import { RentalsService } from './rentals.service';
 
 @ApiTags('vendor/rentals')
@@ -23,6 +23,17 @@ export class VendorRentalsController {
   @Get()
   mine(@GetUser() user: any) {
     return this.service.myItems(user.id);
+  }
+
+  // before ':id' so it isn't read as an item id
+  @Get('delivery-fee')
+  deliveryFee(@GetUser() user: any) {
+    return this.service.deliveryFee(user.id);
+  }
+
+  @Patch('delivery-fee')
+  updateDeliveryFee(@GetUser() user: any, @Body() dto: RentalDeliveryFeeDto) {
+    return this.service.updateDeliveryFee(user.id, dto);
   }
 
   @Get(':id')

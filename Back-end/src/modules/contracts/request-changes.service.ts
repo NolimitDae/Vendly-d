@@ -259,9 +259,10 @@ export class RequestChangesService {
 
       // the travel fee stays as it is unless the vendor sets it (the address doesn't change here)
       const travel = proposedTravel(before.travel, dto.travel_fee);
-      const subtotal = round2(pkg.amount + lines.reduce((s, l) => s + l.amount, 0) + options.amount + (travel?.fee ?? 0));
+      // promo codes never discount the travel fee
+      const subtotal = round2(pkg.amount + lines.reduce((s, l) => s + l.amount, 0) + options.amount);
       const promo = await this.promoFor(b.promo_code, subtotal);
-      const price = round2(subtotal - promo.discount);
+      const price = round2(subtotal - promo.discount + (travel?.fee ?? 0));
       if (price > MAX_PROPOSAL_PRICE) throw new RequestChangeError(`The total can be up to $${MAX_PROPOSAL_PRICE.toLocaleString('en-US')}.`);
       const fee = platformServiceFee(price, listing.category_id);
       const tz = ((this.base(b)?.merge_data ?? {}) as Record<string, unknown>).timezone as string | undefined;

@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { cn } from "@/lib/utils";
 import { RentalsService, errorMessage, money, type RentalItem, type RentalReservation } from "@/service/rentals/rentals.service";
 import LicenceNotice from "@/components/vendor/LicenceNotice";
+import RentalDeliveryFee from "@/components/rentals/RentalDeliveryFee";
 import LocationField from "@/components/listing/LocationField";
 import DosDontsFields from "@/components/listing/DosDontsFields";
 import { appendDosDonts, dosDontsError, dosDontsFrom, type DosDonts } from "@/lib/package-options";
@@ -76,6 +77,7 @@ export default function VendorRentalsPage() {
         </div>
 
         <LicenceNotice things="rental items" />
+        <RentalDeliveryFee />
 
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>

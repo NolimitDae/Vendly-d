@@ -58,15 +58,20 @@ export default function RentalItemPage() {
 
   const lines = useMemo(() => Object.entries(qty).filter(([, q]) => q > 0).map(([item_id, quantity]) => ({ item_id, quantity })), [qty]);
 
+  const offers = quote?.handover ?? { delivery: item?.offers_delivery ?? true, pickup: item?.offers_pickup ?? true };
+  const way = offers.delivery && offers.pickup ? handover : offers.delivery ? "delivery" : offers.pickup ? "pickup" : null;
+  // a delivered order is quoted with its address, so the delivery fee shows as it's typed
+  const deliverTo = way === "delivery" ? venue.trim() : "";
+
   useEffect(() => {
     if (!startKey || !lines.length) return setQuote(null);
     const t = setTimeout(() => {
-      RentalsService.quote({ lines, start_date: startKey, end_date: endKey })
+      RentalsService.quote({ lines, start_date: startKey, end_date: endKey, customer_comes: way ? way === "pickup" : undefined, venue_address: deliverTo || undefined })
         .then((r) => r.data?.success && setQuote(r.data.data))
         .catch((e) => toast.error(errorMessage(e)));
-    }, 250);
+    }, deliverTo ? 600 : 250);
     return () => clearTimeout(t);
-  }, [lines, startKey, endKey]);
+  }, [lines, startKey, endKey, way, deliverTo]);
 
   const maxFor = (itemId: string) => {
     const line = quote?.lines.find((l) => l.item_id === itemId);
@@ -80,9 +85,6 @@ export default function RentalItemPage() {
     return others.find((o) => o.id === itemId)?.available ?? 0;
   };
 
-  const offers = quote?.handover ?? { delivery: item?.offers_delivery ?? true, pickup: item?.offers_pickup ?? true };
-  const way = offers.delivery && offers.pickup ? handover : offers.delivery ? "delivery" : offers.pickup ? "pickup" : null;
-
   const send = async () => {
     if (!loggedIn) return router.push(`/login?redirect=/rentals/${id}`);
     if (!start) return toast.error("Pick your dates first");
@@ -91,6 +93,7 @@ export default function RentalItemPage() {
     if (!offers.delivery && !offers.pickup) return toast.error("These items can't go in one order: some are delivery only and some pickup only. Rent them separately.");
     if (!way) return toast.error("Choose delivery or pickup");
     if (way === "delivery" && !venue.trim()) return toast.error("Enter the delivery address");
+    if (way === "delivery" && quote?.delivery?.status === "UNPRICED") return toast.error(quote.delivery.message ?? "Check the delivery address");
     setSending(true);
     try {
       const pickup = way === "pickup";
@@ -239,7 +242,11 @@ export default function RentalItemPage() {
                     )}
                   </fieldset>
                   {way === "delivery" && (
-                    <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address" maxLength={500} street />
+                    <>
+                      <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address" maxLength={500} street />
+                      {quote?.delivery_terms && <p className="text-xs text-gray-500 dark:text-gray-400">Delivery fee: {quote.delivery_terms}.</p>}
+                      {quote?.delivery?.message && <p role="alert" className="text-xs text-amber-700 dark:text-amber-400">{quote.delivery.message}</p>}
+                    </>
                   )}
                   {way === "pickup" && (
                     <p className="text-xs text-gray-500 dark:text-gray-400">You&apos;ll see where to pick it up once the vendor accepts.</p>
@@ -252,6 +259,7 @@ export default function RentalItemPage() {
                   {quote ? (
                     <>
                       <Row label={`Rental · ${quote.days} day${quote.days > 1 ? "s" : ""}`} value={money(quote.subtotal)} />
+                      {!!quote.delivery_fee && <Row label={`Delivery${quote.delivery?.label ? ` · ${quote.delivery.label}` : ""}`} value={money(quote.delivery_fee)} />}
                       <Row label="Vendly Protection fee" value={money(quote.service_fee)} />
                       <div className="border-t border-gray-100 dark:border-gray-700 my-2" />
                       <Row label="Charged when accepted" value={money(quote.due_on_accept)} bold />

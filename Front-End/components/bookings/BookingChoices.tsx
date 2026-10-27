@@ -23,7 +23,7 @@ export function TravelFeeSection({ booking, forVendor }: { booking: BookingChoic
   return (
     <section aria-labelledby="travel-fee" data-testid="booking-travel-fee">
       <h3 id="travel-fee" className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-        Travel fee
+        {booking.rental_reservations?.length ? "Delivery fee" : "Travel fee"}
       </h3>
       {unpriced ? (
         <p className="text-sm text-gray-600 dark:text-gray-300">

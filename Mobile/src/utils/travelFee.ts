@@ -74,6 +74,13 @@ export function appendTravelFee(fd: FormData, v: TravelFeeValue, clear: boolean)
   fd.append('travel_round_trip', String(v.roundTrip));
 }
 
+/** The delivery fee as JSON (rental settings): turned off, the rates are kept for next time. */
+export function travelFeeBody(v: TravelFeeValue) {
+  return v.enabled
+    ? { travel_fee_enabled: true, travel_free_miles: num(v.freeMiles), travel_per_mile: num(v.perMile), travel_base_fee: num(v.baseFee), travel_round_trip: v.roundTrip }
+    : { travel_fee_enabled: false };
+}
+
 /** Whether the package form offers a travel fee: the vendor goes to the customer, and it isn't a venue. */
 export function offersTravelFee(serviceAt: string, categoryName?: string | null): boolean {
   return serviceAt !== 'VENDOR_LOCATION' && categoryName?.trim().toLowerCase() !== 'venues';

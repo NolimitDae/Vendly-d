@@ -61,6 +61,13 @@ export function appendTravelFee(fd: FormData, v: TravelFeeValue, clear: boolean)
   fd.append("travel_round_trip", String(v.roundTrip));
 }
 
+/** The delivery fee as JSON (rental settings): turned off, the rates are kept for next time. */
+export function travelFeeBody(v: TravelFeeValue) {
+  return v.enabled
+    ? { travel_fee_enabled: true, travel_free_miles: num(v.freeMiles), travel_per_mile: num(v.perMile), travel_base_fee: num(v.baseFee), travel_round_trip: v.roundTrip }
+    : { travel_fee_enabled: false };
+}
+
 const inputCls =
   "w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary text-gray-900 dark:text-white";
 const labelCls = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5";
@@ -69,7 +76,7 @@ const labelCls = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-
  * "Delivery / travel fee" for a package where the vendor goes to the customer: free miles, a price per
  * mile after them, an optional base fee, and one way or round trip. Vendly works out the miles per booking.
  */
-export default function TravelFeeFields({ value, onChange }: { value: TravelFeeValue; onChange: (v: TravelFeeValue) => void }) {
+export default function TravelFeeFields({ value, onChange, rentals = false }: { value: TravelFeeValue; onChange: (v: TravelFeeValue) => void; rentals?: boolean }) {
   const set = (patch: Partial<TravelFeeValue>) => onChange({ ...value, ...patch });
   const problem = travelFeeError(value);
   const example =
@@ -82,9 +89,9 @@ export default function TravelFeeFields({ value, onChange }: { value: TravelFeeV
       <label className="flex items-start gap-3 cursor-pointer">
         <input type="checkbox" checked={value.enabled} onChange={(e) => set({ enabled: e.target.checked })} className="mt-1 h-4 w-4 accent-primary" />
         <span>
-          <span className="block text-sm font-medium text-gray-900 dark:text-white">Charge a delivery / travel fee</span>
+          <span className="block text-sm font-medium text-gray-900 dark:text-white">{rentals ? "Charge a delivery fee" : "Charge a delivery / travel fee"}</span>
           <span className="block text-xs text-gray-500 dark:text-gray-400">
-            Vendly works out the distance to each customer&apos;s address (a straight line plus 20%, close to the miles by road) and adds the fee to their booking.
+            Vendly works out the distance from your business address (set in your profile{rentals ? "" : "; without one, this package's location"}) to each customer&apos;s address: a straight line plus 20%, close to the miles by road. The fee is added to their {rentals ? "delivered orders" : "booking"}, and promo codes never discount it.
           </span>
         </span>
       </label>
@@ -123,7 +130,7 @@ export default function TravelFeeFields({ value, onChange }: { value: TravelFeeV
             </div>
           </fieldset>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            The first free miles cost nothing, then each mile is charged at your price. The base fee is added to every booking with an address.
+            The first free miles cost nothing, then each mile is charged at your price. The base fee is added to every {rentals ? "delivered order" : "booking with an address"}.
           </p>
           {problem ? (
             <p role="alert" className="text-xs text-red-600 dark:text-red-400">{problem}</p>

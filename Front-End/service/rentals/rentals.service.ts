@@ -59,6 +59,12 @@ export interface RentalQuote {
   available: boolean;
   /** what every item in the order offers */
   handover?: { delivery: boolean; pickup: boolean };
+  /** the vendor's delivery fee: part of the price (0 for a pickup or none) */
+  delivery_fee?: number;
+  /** the vendor's delivery rates in a line, when they charge one */
+  delivery_terms?: string | null;
+  /** this order's delivery fee once there's an address (UNPRICED: the address couldn't be placed) */
+  delivery?: { status: "PRICED" | "UNPRICED"; miles: number | null; fee: number | null; label: string; message: string | null } | null;
   lines: { item_id: string; title: string; quantity: number; available: number; ok: boolean; daily_rate: number; deposit_amount: number }[];
 }
 
@@ -72,7 +78,7 @@ export const RentalsService = {
   browse: (params: { search?: string; vendor_id?: string; start_date?: string; end_date?: string; page?: number; limit?: number }) =>
     Fetch.get(`/rentals?${qs(params)}`),
   item: (id: string) => Fetch.get(`/rentals/${id}`),
-  quote: (body: { lines: RentalLine[]; start_date: string; end_date: string }) => Fetch.post("/rentals/quote", body),
+  quote: (body: { lines: RentalLine[]; start_date: string; end_date: string; venue_address?: string; customer_comes?: boolean }) => Fetch.post("/rentals/quote", body),
   book: (body: { lines: RentalLine[]; start_date: string; end_date: string; venue_address?: string; customer_comes?: boolean; message?: string; payment_method_id: string }) =>
     Fetch.post("/rentals/book", body, authHeaders()),
 
@@ -85,6 +91,9 @@ export const RentalsService = {
     return Fetch.patch(`/vendor/rentals/${id}`, fd, authHeaders(true));
   },
   remove: (id: string) => Fetch.delete(`/vendor/rentals/${id}`, authHeaders()),
+  /** The vendor's delivery fee on rental orders (one for all their items) */
+  deliveryFee: () => Fetch.get("/vendor/rentals/delivery-fee", authHeaders()),
+  saveDeliveryFee: (body: Record<string, unknown>) => Fetch.patch("/vendor/rentals/delivery-fee", body, authHeaders()),
   recordReturn: (bookingId: string, body: { notes?: string; damage_fee?: number; late_fee?: number; photos?: File[] }) => {
     const fd = new FormData();
     if (body.notes) fd.append("notes", body.notes);

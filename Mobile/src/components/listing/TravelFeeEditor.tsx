@@ -11,7 +11,7 @@ const decimal = (t: string) => t.replace(/[^0-9.]/g, '');
  * "Delivery / travel fee" for a package where the vendor goes to the customer: free miles, a price per
  * mile after them, an optional base fee, and one way or round trip. Vendly works out the miles per booking.
  */
-export default function TravelFeeEditor({ value, onChange }: { value: TravelFeeValue; onChange: (v: TravelFeeValue) => void }) {
+export default function TravelFeeEditor({ value, onChange, rentals = false }: { value: TravelFeeValue; onChange: (v: TravelFeeValue) => void; rentals?: boolean }) {
   const set = (patch: Partial<TravelFeeValue>) => onChange({ ...value, ...patch });
   const problem = travelFeeError(value);
   return (
@@ -19,8 +19,8 @@ export default function TravelFeeEditor({ value, onChange }: { value: TravelFeeV
       <CheckRow
         checked={value.enabled}
         onPress={() => set({ enabled: !value.enabled })}
-        title="Charge a delivery / travel fee"
-        subtitle="Vendly works out the distance to each customer’s address (a straight line plus 20%, close to the miles by road) and adds the fee to their booking."
+        title={rentals ? 'Charge a delivery fee' : 'Charge a delivery / travel fee'}
+        subtitle={`Vendly works out the distance from your business address (set in Profile${rentals ? '' : '; without one, this package’s location'}) to each customer’s address: a straight line plus 20%, close to the miles by road. The fee is added to their ${rentals ? 'delivered orders' : 'booking'}, and promo codes never discount it.`}
       />
       {value.enabled && (
         <View style={{ gap: 12 }}>

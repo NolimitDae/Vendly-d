@@ -2,10 +2,12 @@
  * Delivery / travel fee by distance, set per package (owner's ask, Nov 2026: "can we have it in the package
  * set up and we calculate it for the vendor and they can set the price").
  *
- * The vendor sets, per package: the miles that are free, a price per mile after them, an optional flat
- * base fee, and whether the miles count one way or there and back. Vendly works out the distance from the
- * package's map position to the service address: the straight line plus 20% (roughly the road miles; no
- * routing service is used).
+ * The vendor sets, per package (and once for all their rental deliveries): the miles that are free, a price
+ * per mile after them, an optional flat base fee, and whether the miles count one way or there and back.
+ * Vendly works out the distance from the vendor's business address (else the package's location) to the
+ * service address: the straight line plus 20% (roughly the road miles; no routing service is used). The fee
+ * is part of the vendor's price but promo codes never discount it, and it is worked out again when the
+ * address changes (an amendment).
  *
  *   miles      = straight line × 1.2, rounded to one decimal (doubled for a round trip)
  *   chargeable = max(0, miles − free miles)
@@ -137,21 +139,56 @@ export function travelLabel(terms: TravelTerms, f: { miles: number; chargeable_m
 /** Said when the fee can't be worked out from the map. */
 export const UNPRICED_TEXT = 'We couldn’t place this address on the map, so the travel fee isn’t worked out yet. The vendor can add it before they accept, and you approve it first.';
 
-/**
- * The travel fee for a booking from the package's map position to the service address. Without either
- * position it is UNPRICED (nothing is guessed).
- */
-export function priceTravel(listing: TravelListing & { lat?: number | null; lng?: number | null }, to: Point | null | undefined): TravelQuote {
-  const terms = travelTermsOf(listing) ?? { free_miles: 0, per_mile: 0, base_fee: 0, round_trip: false };
-  const from = listing.lat != null && listing.lng != null ? { lat: listing.lat, lng: listing.lng } : null;
-  if (!from || !to || !Number.isFinite(to.lat) || !Number.isFinite(to.lng)) {
+type MaybePoint = { lat?: number | null; lng?: number | null } | null | undefined;
+const pointOf = (p: MaybePoint): Point | null => (p?.lat != null && p?.lng != null && Number.isFinite(p.lat) && Number.isFinite(p.lng) ? { lat: p.lat, lng: p.lng } : null);
+
+/** Where the vendor sets off from: their business address, else the package's location (town level). */
+export function travelOrigin(business: MaybePoint, listing?: MaybePoint): Point | null {
+  return pointOf(business) ?? pointOf(listing);
+}
+
+/** The fee on these rates from one point to another. Without either position it is UNPRICED (nothing is guessed). */
+export function quoteTravel(terms: TravelTerms, from: Point | null | undefined, to: Point | null | undefined, radius?: number | null): TravelQuote {
+  const a = pointOf(from);
+  const b = pointOf(to);
+  if (!a || !b) {
     return { status: 'UNPRICED', terms, one_way_miles: null, miles: null, chargeable_miles: null, fee: null, label: 'Not worked out yet', outside_area: false };
   }
-  const straight = milesBetween(from, to);
+  const straight = milesBetween(a, b);
   const f = feeForMiles(terms, straight * ROAD_FACTOR);
   // the vendor's radius is a straight-line reach (as "near me" search uses it): only a warning, never a block
-  const radius = listing.service_radius_miles;
   return { status: 'PRICED', terms, ...f, label: travelLabel(terms, f), outside_area: !!radius && straight > radius };
+}
+
+/** The travel fee for a booking on the package's rates, from where the vendor sets off to the service address. */
+export function priceTravel(listing: TravelListing, from: Point | null | undefined, to: Point | null | undefined): TravelQuote {
+  const terms = travelTermsOf(listing) ?? { free_miles: 0, per_mile: 0, base_fee: 0, round_trip: false };
+  return quoteTravel(terms, from, to, listing.service_radius_miles);
+}
+
+/** A vendor's delivery fee for rental orders, as stored on their profile. */
+export interface RentalTravelProfile {
+  rental_travel_fee_enabled?: boolean | null;
+  rental_travel_free_miles?: number | null;
+  rental_travel_per_mile?: Money;
+  rental_travel_base_fee?: Money;
+  rental_travel_round_trip?: boolean | null;
+}
+
+/** The rental delivery rates in the package shape (so the same rules and checks apply). */
+export function rentalTravelListing(p: RentalTravelProfile | null | undefined): TravelListing {
+  return {
+    travel_fee_enabled: p?.rental_travel_fee_enabled,
+    travel_free_miles: p?.rental_travel_free_miles,
+    travel_per_mile: p?.rental_travel_per_mile,
+    travel_base_fee: p?.rental_travel_base_fee,
+    travel_round_trip: p?.rental_travel_round_trip,
+  };
+}
+
+/** The new fee when the address changes: the rates the booking was priced on, to the new address. */
+export function repriceTravel(before: TravelQuote, from: Point | null | undefined, to: Point | null | undefined): TravelQuote {
+  return quoteTravel(before.terms, from, to);
 }
 
 /** A travel quote as stored on a booking (travel_details), or null. */

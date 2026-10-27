@@ -327,6 +327,13 @@ model VendorProfile {
   business_lat            Float?
   business_lng            Float?
   business_geocoded_at    DateTime?
+  // delivery fee on rental orders the vendor delivers (booking/travel-fee.ts), measured from the business
+  // address: the first free miles, then a price a mile, plus an optional flat fee; one way or round trip
+  rental_travel_fee_enabled Boolean                  @default(false)
+  rental_travel_free_miles  Int?
+  rental_travel_per_mile    Decimal?                 @db.Decimal(10, 2)
+  rental_travel_base_fee    Decimal?                 @db.Decimal(10, 2)
+  rental_travel_round_trip  Boolean                  @default(false)
 
   @@map("vendor_profiles")
 }
@@ -823,9 +830,9 @@ model VendorListing {
   // per person / hour / day packages: the fewest and most a customer can book (guests, hours or days)
   min_quantity   Int?
   max_quantity   Int?
-  // delivery / travel fee when the vendor goes to the customer (booking/travel-fee.ts): the first
-  // travel_free_miles are free, then travel_per_mile a mile, plus an optional flat travel_base_fee;
-  // travel_round_trip counts the miles there and back
+  // delivery / travel fee when the vendor goes to the customer (booking/travel-fee.ts), measured from the
+  // vendor's business address (else this package's location): the first travel_free_miles are free, then
+  // travel_per_mile a mile, plus an optional flat travel_base_fee; travel_round_trip counts there and back
   travel_fee_enabled Boolean  @default(false)
   travel_free_miles  Int?
   travel_per_mile    Decimal? @db.Decimal(10, 2)

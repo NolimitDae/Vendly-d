@@ -55,32 +55,35 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
 
   const lines = useMemo(() => Object.entries(qty).filter(([, q]) => q > 0).map(([item_id, quantity]) => ({ item_id, quantity })), [qty]);
 
+  const offers = quote?.handover ?? { delivery: true, pickup: true };
+  const way = offers.delivery && offers.pickup ? handover : offers.delivery ? 'delivery' : offers.pickup ? 'pickup' : null;
+  // a delivered order is quoted with its address, so the delivery fee shows as it's entered
+  const deliverTo = way === 'delivery' ? venue.trim() : '';
+
   const refreshQuote = useCallback(async () => {
     if (!lines.length) return setQuote(null);
     setQuoting(true);
     try {
-      const res = await RentalsService.quote({ lines, start_date: startDate, end_date: endDate });
+      const res = await RentalsService.quote({ lines, start_date: startDate, end_date: endDate, customer_comes: way ? way === 'pickup' : undefined, venue_address: deliverTo || undefined });
       setQuote(res.data?.data ?? null);
     } catch (e) {
       Alert.alert('Rental', apiError(e));
     } finally {
       setQuoting(false);
     }
-  }, [lines, startDate, endDate]);
+  }, [lines, startDate, endDate, way, deliverTo]);
 
   useEffect(() => {
-    const t = setTimeout(refreshQuote, 250);
+    const t = setTimeout(refreshQuote, deliverTo ? 600 : 250);
     return () => clearTimeout(t);
-  }, [refreshQuote]);
-
-  const offers = quote?.handover ?? { delivery: true, pickup: true };
-  const way = offers.delivery && offers.pickup ? handover : offers.delivery ? 'delivery' : offers.pickup ? 'pickup' : null;
+  }, [refreshQuote, deliverTo]);
 
   const send = async () => {
     if (!lines.length) return Alert.alert('Nothing selected', 'Add at least one item.');
     if (!offers.delivery && !offers.pickup) return Alert.alert('Delivery or pickup', 'Some of these items are delivery only and some pickup only. Rent them separately.');
     if (!way) return Alert.alert('Delivery or pickup', 'Choose how you get the items.');
     if (way === 'delivery' && !venue.trim()) return Alert.alert('Delivery address', 'Enter where the vendor should deliver.');
+    if (way === 'delivery' && quote?.delivery?.status === 'UNPRICED') return Alert.alert('Delivery address', quote.delivery.message ?? 'Check the delivery address.');
     // no card yet: go straight to adding one (it's only charged once the vendor accepts)
     if (!card) return setAddingCard(true);
     if (quote && !quote.available) return Alert.alert('Not enough stock', 'Lower the quantity of the items marked in red, or pick other dates.');
@@ -158,6 +161,8 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
             </Text>
           )}
           {way === 'delivery' && <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address" street />}
+          {way === 'delivery' && !!quote?.delivery_terms && <Text style={s.muted}>Delivery fee: {quote.delivery_terms}.</Text>}
+          {way === 'delivery' && !!quote?.delivery?.message && <Text style={[s.muted, { color: '#F5B700' }]}>{quote.delivery.message}</Text>}
           {way === 'pickup' && <Text style={s.muted}>You&apos;ll see where to pick it up once the vendor accepts.</Text>}
           <View style={[ui.field, { height: undefined, paddingVertical: 12, alignItems: 'flex-start' }]}>
             <Ionicons name="chatbox-ellipses-outline" size={20} color={DARK.muted} style={{ marginTop: 2 }} />
@@ -172,6 +177,7 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
           ) : quote ? (
             <>
               <Row label="Rental" value={money(quote.subtotal)} />
+              {!!quote.delivery_fee && <Row label={`Delivery${quote.delivery?.label ? ` · ${quote.delivery.label}` : ''}`} value={money(quote.delivery_fee)} />}
               <Row label="Vendly Protection fee" value={money(quote.service_fee)} />
               <View style={s.line} />
               <Row label="Charged when accepted" value={money(quote.due_on_accept)} bold />

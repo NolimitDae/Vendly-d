@@ -1921,6 +1921,48 @@ export class PaymentsService {
     return parts;
   }
 
+  /**
+   * The vendor's price moved by `delta` after payments started (a new address changed the travel fee).
+   * The unpaid charges take it first (the newest one, never below its Vendly Protection fee); what's left
+   * is charged now as its own installment (more) or refunded from what was paid (less). The Vendly
+   * Protection fee doesn't change. Table changes run in `tx`; the card charge or refund happens after it.
+   */
+  async shiftUnpaidCharges(tx: Prisma.TransactionClient, bookingId: string, delta: number, label: string): Promise<{ charge: string | null; refund: number }> {
+    const amount = round2(delta);
+    if (!amount) return { charge: null, refund: 0 };
+    const unpaid = await tx.bookingInstallment.findMany({
+      where: { booking_id: bookingId, kind: 'charge', status: { in: [InstallmentStatus.SCHEDULED, InstallmentStatus.FAILED] } },
+      orderBy: { sequence: 'desc' },
+    });
+    if (amount > 0) {
+      if (unpaid[0]) {
+        await tx.bookingInstallment.update({ where: { id: unpaid[0].id }, data: { amount: round2(Number(unpaid[0].amount) + amount) } });
+        return { charge: null, refund: 0 };
+      }
+      const last = await tx.bookingInstallment.findFirst({ where: { booking_id: bookingId }, orderBy: { sequence: 'desc' }, select: { sequence: true, currency: true } });
+      const row = await tx.bookingInstallment.create({
+        data: { booking_id: bookingId, sequence: (last?.sequence ?? 0) + 1, label: label.slice(0, 100), amount, fee_amount: 0, currency: last?.currency ?? 'usd', due_at: new Date(), kind: 'extra' },
+      });
+      return { charge: row.id, refund: 0 };
+    }
+    let less = -amount;
+    for (const i of unpaid) {
+      if (less <= 0) break;
+      const take = round2(Math.min(less, Number(i.amount) - Number(i.fee_amount)));
+      if (take <= 0) continue;
+      const left = round2(Number(i.amount) - take);
+      await tx.bookingInstallment.update({ where: { id: i.id }, data: left > 0 ? { amount: left } : { amount: 0, status: InstallmentStatus.CANCELLED } });
+      less = round2(less - take);
+    }
+    return { charge: null, refund: less };
+  }
+
+  /** Refunds `amount` of the vendor's part of what was paid (the Vendly Protection fee stays); card holds are left alone. */
+  async refundVendorPart(bookingId: string, amount: number, reasonKey: string) {
+    const parts = await this.refundParts(bookingId, amount, reasonKey, { keepFees: true, stateKey: true });
+    return round2(parts.reduce((s, p) => s + p.amount, 0));
+  }
+
   /** A cancelled booking: unpaid installments are called off and card holds released. */
   async voidOpenCharges(bookingId: string) {
     const open = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, status: { in: [InstallmentStatus.SCHEDULED, InstallmentStatus.FAILED, InstallmentStatus.PROCESSING] } } });

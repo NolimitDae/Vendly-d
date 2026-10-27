@@ -9,6 +9,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { RentalsService, type RentalItem } from '../../services/rentals.service';
 import type { VendorDashboardStackParams } from '../../navigation/types';
 import LicenceNotice from '../../components/LicenceNotice';
+import RentalDeliveryFee from '../../components/rentals/RentalDeliveryFee';
 
 const STATUS: Record<string, { label: string; color: string }> = {
   ACTIVE: { label: 'Live', color: '#5BD69A' },
@@ -66,6 +67,7 @@ export default function RentalInventory({ navigation }: NativeStackScreenProps<V
           ListHeaderComponent={
             <View style={{ gap: 12 }}>
               <LicenceNotice things="rental items" />
+              <RentalDeliveryFee />
               {items.length ? (
                 <View style={s.stats}>
                   <Stat label="Items" value={items.length} />

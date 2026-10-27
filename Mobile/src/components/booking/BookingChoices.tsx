@@ -26,7 +26,7 @@ function TravelFeeCard({ booking, forVendor }: { booking: BookingChoicesFields; 
   const unpriced = t.status === 'UNPRICED' && booking.travel_fee == null;
   return (
     <Card style={{ gap: 10 }}>
-      <Text style={s.title}>Travel fee</Text>
+      <Text style={s.title}>{booking.rental_reservations?.length ? 'Delivery fee' : 'Travel fee'}</Text>
       {unpriced ? (
         <Text style={[s.body, s.muted]}>
           {forVendor

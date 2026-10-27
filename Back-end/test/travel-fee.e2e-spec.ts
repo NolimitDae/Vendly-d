@@ -62,6 +62,7 @@ run('Delivery / travel fee (e2e)', () => {
   const msg = (res: request.Response) => res.body?.message?.message ?? res.body?.message;
 
   const charged: { amount: number; pi: string }[] = [];
+  const refunded: { pi: string; amount?: number }[] = [];
 
   // this run's charge for a payment (the suites share a database, so the payment jobs may charge other suites' bookings in between)
 
@@ -77,6 +78,10 @@ run('Delivery / travel fee (e2e)', () => {
       return { id: pi, status: 'succeeded' } as any;
     });
     jest.spyOn(StripePayment, 'retrievePaymentMethod').mockResolvedValue({ card: { brand: 'visa', last4: '4242' } } as any);
+    jest.spyOn(StripePayment, 'refundPaymentIntent').mockImplementation(async (pi: string, _key: string, amount?: number) => {
+      refunded.push({ pi, amount });
+      return { id: `re_${pi}_${refunded.length}`, status: 'succeeded' } as any;
+    });
     // the geocoder: these addresses only, and nothing in the background
     const { GeocodeService } = await import('../src/modules/geo/geocode.service');
     jest.spyOn(GeocodeService.prototype, 'point').mockImplementation(async (a: string) => {
@@ -288,5 +293,105 @@ run('Delivery / travel fee (e2e)', () => {
     const res = await as('vendor', http().post(`/api/bookings/${created.body.data.id}/changes/preview`)).send({ travel_fee: 20 });
     expect(res.status).toBe(400);
     expect(msg(res)).toBe('This booking has no travel fee. Add a fee instead.');
+  });
+  it('promo codes never discount the travel fee', async () => {
+    await prisma.promoCode.create({ data: { code: `TEN${id}`.toUpperCase(), percent_off: 10 } });
+    const pv = await as('cust', http().post('/api/contracts/booking-preview')).send({ ...fields(FAR), promo_code: `TEN${id}`.toUpperCase() });
+    expect(pv.status).toBe(201);
+    // 10% of the $500 package only: $450, then the $30 travel fee in full
+    expect(pv.body.data.pricing).toMatchObject({ price: 480, discount: 50, travel: { fee: 30 } });
+  });
+
+  it('miles are measured from the vendor’s business address when they have one', async () => {
+    // the business is 10 miles north of the package's town: Round Rock is 15 miles away in a straight line
+    await prisma.vendorProfile.update({ where: { user_id: U.vendor }, data: { business_address: '9 North Rd', business_lat: north(10).lat, business_lng: north(10).lng } });
+    const q = await as('cust', http().get('/api/contracts/travel-fee').query({ listing_id: L.dj, address: FAR }));
+    // 15 × 1.2 = 18.0 miles; 15 free, 3 × $2.00
+    expect(q.body.data).toMatchObject({ status: 'PRICED', miles: 18, chargeable_miles: 3, fee: 6 });
+    await prisma.vendorProfile.update({ where: { user_id: U.vendor }, data: { business_address: null, business_lat: null, business_lng: null } });
+  });
+
+  it('a new address after acceptance works the fee out again: unpaid charges first, then a charge or a refund', async () => {
+    // the accepted booking: $530 with a $30 travel fee, deposit paid, $265 balance to come
+    const amend = async (who: 'cust' | 'vendor', address: string) => {
+      const pv = await as(who, http().post(`/api/contracts/booking/${bookingId}/amendments/preview`)).send({ changes: { venue_address: address } });
+      expect(pv.status).toBe(201);
+      await sleep(2100);
+      const sent = await as(who, http().post(`/api/contracts/booking/${bookingId}/amendments`)).send({ changes: { venue_address: address }, signature: sig(who === 'cust' ? 'Cara Customer' : 'Vic Vendor', pv.body.data.content_sha256) });
+      expect(sent.status).toBe(201);
+      await sleep(2100);
+      const other = who === 'cust' ? 'vendor' : 'cust';
+      const signed = await as(other, http().post(`/api/contracts/${sent.body.data.id}/sign`)).send({ signature: sig(other === 'cust' ? 'Cara Customer' : 'Vic Vendor', pv.body.data.content_sha256) });
+      expect(signed.status).toBe(201);
+      return pv.body.data.body as string;
+    };
+    const balance = () => prisma.bookingInstallment.findFirst({ where: { booking_id: bookingId, sequence: 2 } });
+
+    // closer: inside the free miles, so the fee drops to $0 and comes off the balance
+    const body = await amend('cust', NEAR);
+    expect(body).toContain('Changed: venue address, travel fee.');
+    expect(body).toContain('Travel fee for the new address: $0.00 (6.0 miles one way, first 15 free), was $30.00. The price is now $500.00. The difference comes off the next payment due');
+    let b = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect({ amount: Number(b.amount), travel_fee: Number(b.travel_fee), venue_address: b.venue_address }).toEqual({ amount: 500, travel_fee: 0, venue_address: NEAR });
+    expect(Number((await balance()).amount)).toBe(235);
+
+    // the balance is paid; moving further away again is charged on its own
+    const { PaymentsService } = await import('../src/modules/payments/payments.service');
+    await app.get(PaymentsService).chargeInstallment((await balance()).id);
+    expect((await balance()).status).toBe('PAID');
+    await amend('vendor', FAR);
+    b = await prisma.booking.findUnique({ where: { id: bookingId }, include: { installments: { orderBy: { sequence: 'asc' } } } });
+    expect({ amount: Number(b.amount), travel_fee: Number(b.travel_fee) }).toEqual({ amount: 530, travel_fee: 30 });
+    const extra = b.installments.at(-1);
+    expect(extra).toMatchObject({ label: 'Travel fee change', status: 'PAID', kind: 'extra' });
+    expect(Number(extra.amount)).toBe(30);
+    expect(chargeOf(extra.payment_intent_id)?.amount).toBe(30);
+
+    // and closer again with nothing left to pay: refunded (the Vendly Protection fee stays)
+    await amend('cust', NEAR);
+    b = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(Number(b.amount)).toBe(500);
+    expect(refunded.reduce((s, r) => s + (r.amount ?? 0), 0)).toBe(30);
+  });
+
+  it('rental delivery: the vendor sets one fee for delivered orders, measured from their business address', async () => {
+    const settings = () => as('vendor', http().get('/api/vendor/rentals/delivery-fee'));
+    const save = (body: Record<string, unknown>) => as('vendor', http().patch('/api/vendor/rentals/delivery-fee')).send(body);
+    expect((await settings()).body.data).toMatchObject({ travel_fee_enabled: false, has_business_address: false });
+    // measured from the business address: needed first
+    const noAddress = await save({ travel_fee_enabled: true, travel_per_mile: 1.5 });
+    expect(noAddress.status).toBe(400);
+    expect(msg(noAddress)).toMatch(/business address/);
+    await prisma.vendorProfile.update({ where: { user_id: U.vendor }, data: { business_address: '1 Studio Way, Austin', business_lat: AUSTIN.lat, business_lng: AUSTIN.lng } });
+    const saved = await save({ travel_fee_enabled: true, travel_free_miles: 10, travel_per_mile: 1.5, travel_base_fee: 20, travel_round_trip: true });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data).toMatchObject({ travel_fee_enabled: true, travel_free_miles: 10, travel_per_mile: 1.5, travel_base_fee: 20, travel_round_trip: true, has_business_address: true });
+
+    const item = await prisma.rentalItem.create({ data: { vendor_id: U.vendor, title: 'Speaker', description: 'PA speaker', daily_rate: 100, status: 'ACTIVE' } });
+    const day = (n: number) => new Date(Date.now() + n * DAY).toISOString().slice(0, 10);
+    const order = { lines: [{ item_id: item.id, quantity: 1 }], start_date: day(60), end_date: day(60) };
+    const quote = (extra: Record<string, unknown>) => http().post('/api/rentals/quote').send({ ...order, ...extra });
+
+    // delivered to Round Rock: 30.0 miles each way, 60.0 round trip; 10 free; $20 + 50 × $1.50 = $95
+    const q = await quote({ customer_comes: false, venue_address: FAR });
+    expect(q.body.data).toMatchObject({ subtotal: 100, delivery_fee: 95, delivery: { status: 'PRICED', miles: 60, fee: 95 }, delivery_terms: expect.stringContaining('$20.00') });
+    expect(q.body.data.due_on_accept).toBe(round2(195 + q.body.data.service_fee));
+    // picked up: no fee
+    expect((await quote({ customer_comes: true })).body.data).toMatchObject({ delivery_fee: 0, delivery: null });
+    // an address that can't be placed: the fee isn't guessed, and the order can't go out like that
+    expect((await quote({ customer_comes: false, venue_address: LOST })).body.data.delivery).toMatchObject({ status: 'UNPRICED', message: expect.stringMatching(/choose pickup/) });
+
+    const { PaymentsService } = await import('../src/modules/payments/payments.service');
+    jest.spyOn(app.get(PaymentsService), 'assertPaymentMethod').mockResolvedValue(undefined as any);
+    const book = (extra: Record<string, unknown>) => as('cust', http().post('/api/rentals/book')).send({ ...order, payment_method_id: 'pm_e2e_card', ...extra });
+    const lost = await book({ customer_comes: false, venue_address: LOST });
+    expect(lost.status).toBe(400);
+    expect(msg(lost)).toMatch(/couldn’t find that delivery address/);
+    const sent = await book({ customer_comes: false, venue_address: FAR });
+    expect(sent.status).toBe(201);
+    const b = await prisma.booking.findUnique({ where: { id: sent.body.data.id } });
+    expect({ amount: Number(b.amount), travel_fee: Number(b.travel_fee) }).toEqual({ amount: 195, travel_fee: 95 });
+    expect(Number(b.service_fee)).toBe(q.body.data.service_fee);
+    expect(b.travel_details).toMatchObject({ status: 'PRICED', miles: 60 });
   });
 });

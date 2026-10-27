@@ -20,33 +20,33 @@ const pkg = (over: Record<string, unknown> = {}) => ({
 describe('travel fee', () => {
   it('one way: straight line plus 20%, the free miles off, then the rate', () => {
     // 25 miles in a straight line is 30.0 road miles; 15 are free
-    const q = priceTravel(pkg(), north(25));
+    const q = priceTravel(pkg(), base, north(25));
     expect(q).toMatchObject({ status: 'PRICED', one_way_miles: 30, miles: 30, chargeable_miles: 15, fee: 30, outside_area: false });
     expect(q.label).toBe('30.0 miles one way, first 15 free: 15.0 × $2.00');
   });
 
   it('round trip counts the miles there and back', () => {
-    const q = priceTravel(pkg({ travel_round_trip: true }), north(25));
+    const q = priceTravel(pkg({ travel_round_trip: true }), base, north(25));
     expect(q).toMatchObject({ one_way_miles: 30, miles: 60, chargeable_miles: 45, fee: 90 });
     expect(q.label).toBe('60.0 miles round trip, first 15 free: 45.0 × $2.00');
   });
 
   it('adds a flat base fee', () => {
     // "$25 delivery + $1.50 a mile after 10 miles"
-    const q = priceTravel(pkg({ travel_free_miles: 10, travel_per_mile: 1.5, travel_base_fee: 25 }), north(25));
+    const q = priceTravel(pkg({ travel_free_miles: 10, travel_per_mile: 1.5, travel_base_fee: 25 }), base, north(25));
     expect(q.fee).toBe(55);
     expect(q.label).toBe('30.0 miles one way, first 10 free: $25.00 + 20.0 × $1.50');
   });
 
   it('inside the free miles costs nothing (the base fee still applies)', () => {
-    expect(priceTravel(pkg(), north(5))).toMatchObject({ miles: 6, chargeable_miles: 0, fee: 0, label: '6.0 miles one way, first 15 free' });
-    expect(priceTravel(pkg({ travel_base_fee: 20 }), north(5)).fee).toBe(20);
+    expect(priceTravel(pkg(), base, north(5))).toMatchObject({ miles: 6, chargeable_miles: 0, fee: 0, label: '6.0 miles one way, first 15 free' });
+    expect(priceTravel(pkg({ travel_base_fee: 20 }), base, north(5)).fee).toBe(20);
   });
 
   it('never guesses without a map position at either end', () => {
-    expect(priceTravel(pkg(), null)).toMatchObject({ status: 'UNPRICED', fee: null, miles: null });
-    expect(priceTravel(pkg({ lat: null, lng: null }), north(10))).toMatchObject({ status: 'UNPRICED', fee: null });
-    expect(priceTravel(pkg(), { lat: NaN, lng: 1 }).status).toBe('UNPRICED');
+    expect(priceTravel(pkg(), base, null)).toMatchObject({ status: 'UNPRICED', fee: null, miles: null });
+    expect(priceTravel(pkg(), null, north(10))).toMatchObject({ status: 'UNPRICED', fee: null });
+    expect(priceTravel(pkg(), base, { lat: NaN, lng: 1 }).status).toBe('UNPRICED');
   });
 
   it('rounds the miles to one decimal and the fee to cents', () => {
@@ -55,8 +55,8 @@ describe('travel fee', () => {
   });
 
   it('warns when the address is further than the vendor travels, without blocking', () => {
-    expect(priceTravel(pkg({ service_radius_miles: 20 }), north(25))).toMatchObject({ status: 'PRICED', fee: 30, outside_area: true });
-    expect(priceTravel(pkg({ service_radius_miles: 30 }), north(25)).outside_area).toBe(false);
+    expect(priceTravel(pkg({ service_radius_miles: 20 }), base, north(25))).toMatchObject({ status: 'PRICED', fee: 30, outside_area: true });
+    expect(priceTravel(pkg({ service_radius_miles: 30 }), base, north(25)).outside_area).toBe(false);
   });
 
   it('applies only when the package charges one and the vendor goes to the customer', () => {
@@ -83,10 +83,10 @@ describe('travel fee', () => {
   });
 
   it('the vendor can set the fee for one booking; stored quotes are read back', () => {
-    const q = priceTravel(pkg({ travel_round_trip: true }), north(25));
+    const q = priceTravel(pkg({ travel_round_trip: true }), base, north(25));
     const set = vendorSetTravel(q, 75.555);
     expect(set).toMatchObject({ status: 'VENDOR', fee: 75.56, miles: 60, label: '60.0 miles round trip, set by the vendor' });
-    expect(vendorSetTravel(priceTravel(pkg(), null), 40).label).toBe('set by the vendor');
+    expect(vendorSetTravel(priceTravel(pkg(), base, null), 40).label).toBe('set by the vendor');
     expect(readTravel(JSON.parse(JSON.stringify(set)))).toEqual(set);
     expect(readTravel({ status: 'nope' })).toBeNull();
     expect(readTravel(null)).toBeNull();
