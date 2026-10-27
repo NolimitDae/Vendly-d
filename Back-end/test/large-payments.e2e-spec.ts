@@ -13,6 +13,7 @@ import { Test } from '@nestjs/testing';
 import { randomBytes } from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import * as request from 'supertest';
+import { signedIn } from './e2e-sessions';
 
 const DB = process.env.CONTRACTS_E2E_DATABASE_URL;
 const run = DB ? describe : describe.skip;
@@ -93,6 +94,7 @@ run('Large bookings: fee cap, bank payments and the 48-hour window (e2e)', () =>
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true, transformOptions: { enableImplicitConversion: true } }));
     await app.init();
+    await signedIn(app, Object.values(U));
     prisma = app.get(PrismaService);
     payments = app.get(PaymentsService);
 

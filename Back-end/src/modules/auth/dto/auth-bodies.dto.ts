@@ -15,6 +15,15 @@ export class EmailTokenBodyDto extends EmailBodyDto {
   @IsOptional() @IsString() @MaxLength(64) token?: string;
 }
 
+/** Changing the sign-in email needs the current password, so a stolen session alone can't take the account. */
+export class RequestEmailChangeBodyDto extends EmailBodyDto {
+  @IsOptional() @IsString() @MaxLength(128) current_password?: string;
+}
+
+export class ChangeEmailBodyDto extends EmailTokenBodyDto {
+  @IsOptional() @IsString() @MaxLength(128) current_password?: string;
+}
+
 export class ResetPasswordBodyDto extends EmailTokenBodyDto {
   @IsOptional() @IsString() @MaxLength(128) password?: string;
 }

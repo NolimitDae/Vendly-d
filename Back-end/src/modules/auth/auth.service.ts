@@ -27,6 +27,7 @@ import { normalizeSocial, readSocials, SOCIAL_KEYS, SOCIALS_SELECT } from '../..
 import { IdentityService } from '../identity/identity.service';
 import { parseWorkingHours, readWorkingHours, type WorkingHours } from '../vendor/working-hours';
 import { NOTIFICATION_PREF_KEYS, NotificationPrefKey, readPrefs } from '../../common/helper/notification-prefs';
+import { sessionKeys } from './session-keys';
 
 /** Roles a person can hold on one login and switch between (CLIENT is the older name for CUSTOMER). */
 export const SWITCHABLE_ROLES = ['CUSTOMER', 'VENDOR', 'EVENT_PLANNER'] as const;
@@ -68,16 +69,6 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
 end
 return 0`;
 
-/**
- * Where a sign-in's refresh token lives. Every sign-in is its own session (`sid`, carried in its
- * tokens), so signing in on one device never signs another out. Tokens issued before sessions
- * existed have no `sid` and keep the user's single old slot until they expire or sign out.
- */
-export function sessionKeys(userId: string, sid?: string | null) {
-  return sid
-    ? { current: `refresh_token:${userId}:${sid}`, previous: `refresh_token_prev:${userId}:${sid}` }
-    : { current: `refresh_token:${userId}`, previous: `refresh_token_prev:${userId}` };
-}
 /** The user's session ids, so deleting the account can end every one. */
 const sessionsKey = (userId: string) => `refresh_sessions:${userId}`;
 const newSessionId = () => randomBytes(12).toString('hex');
@@ -751,12 +742,15 @@ export class AuthService {
       });
 
       if (user) {
+        // wrong codes count per email, as on verify-token, so a code can't be guessed
+        if (await this.tooManyCodeTries(email)) return { success: false, message: TOO_MANY_CODE_TRIES };
         const existToken = await this.ucodeRepository.verifycheckToken({
           email: email,
           token: token,
         });
 
         if (existToken) {
+          await this.clearCodeTries(email);
           await this.userRepository.changePassword({
             email: email,
             password: password,
@@ -1006,10 +1000,12 @@ export class AuthService {
     }
   }
 
-  async requestEmailChange(user_id: string, email: string) {
+  async requestEmailChange(user_id: string, email: string, current_password?: string) {
     try {
       const user = await this.userRepository.getUserDetails(user_id);
       if (user) {
+        const reauth = await this.emailChangeReauth(user_id, current_password);
+        if (reauth) return reauth;
         const token = await this.ucodeRepository.createToken({
           userId: user.id,
           isOtp: true,
@@ -1040,19 +1036,28 @@ export class AuthService {
     }
   }
 
+  /** `sid`: the session making the change, which stays signed in; every other one ends. */
   async changeEmail({
     user_id,
     new_email,
     token,
+    current_password,
+    sid,
   }: {
     user_id: string;
     new_email: string;
     token: string;
+    current_password?: string;
+    sid?: string;
   }) {
     try {
       const user = await this.userRepository.getUserDetails(user_id);
 
       if (user) {
+        const reauth = await this.emailChangeReauth(user_id, current_password);
+        if (reauth) return reauth;
+        // wrong codes count per address, so the code mailed to it can't be guessed
+        if (await this.tooManyCodeTries(new_email)) return { success: false, message: TOO_MANY_CODE_TRIES };
         const existToken = await this.ucodeRepository.validateToken({
           email: new_email,
           token: token,
@@ -1060,6 +1065,7 @@ export class AuthService {
         });
 
         if (existToken) {
+          await this.clearCodeTries(new_email);
           await this.userRepository.changeEmail({
             user_id: user.id,
             new_email: new_email,
@@ -1070,10 +1076,12 @@ export class AuthService {
             email: new_email,
             token: token,
           });
+          // the email signs in from now on: other devices sign in again with it
+          await this.revokeAllSessions(user.id, { sid }).catch(() => null);
 
           return {
             success: true,
-            message: 'Email updated successfully',
+            message: `Email updated successfully. ${SIGNED_OUT_ELSEWHERE}`,
           };
         } else {
           return {
@@ -1093,6 +1101,19 @@ export class AuthService {
         message: error.message,
       };
     }
+  }
+
+  /**
+   * Changing the sign-in email needs the current password (a session alone isn't enough). Null when
+   * it checks out, else the answer to send back.
+   */
+  private async emailChangeReauth(user_id: string, current_password?: string) {
+    const row = await this.prisma.user.findUnique({ where: { id: user_id }, select: { password: true } });
+    const ok =
+      typeof current_password === 'string' && !!current_password && !!row?.password &&
+      (await bcrypt.compare(current_password, row.password).catch(() => false));
+    // accounts made with Google or Apple have a random password: "Forgot password" sets one
+    return ok ? null : { success: false, message: 'Enter your current password to change your email. If you sign in with Google or Apple, set a password first with “Forgot password”.' };
   }
 
   async validateUser(

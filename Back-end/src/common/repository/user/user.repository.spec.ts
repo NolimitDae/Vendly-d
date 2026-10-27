@@ -69,3 +69,25 @@ describe('UserRepository account deletion', () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
+
+describe('UserRepository.generate2FASecret', () => {
+  const findFirst = jest.fn();
+  const update = jest.fn().mockResolvedValue({});
+  const repo2fa = new UserRepository({ user: { findFirst, update } } as any);
+
+  beforeEach(() => update.mockClear());
+
+  it('keeps the secret in use when two-step login is already on', async () => {
+    findFirst.mockResolvedValue({ id: 'u1', is_two_factor_enabled: 1, two_factor_secret: 'CURRENT' });
+    const res: any = await repo2fa.generate2FASecret('u1');
+    expect(res.success).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('sets up a new secret when two-step login is off', async () => {
+    findFirst.mockResolvedValue({ id: 'u1', is_two_factor_enabled: 0, two_factor_secret: null });
+    const res: any = await repo2fa.generate2FASecret('u1');
+    expect(res.success).toBe(true);
+    expect(update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { two_factor_secret: res.data.secret } });
+  });
+});

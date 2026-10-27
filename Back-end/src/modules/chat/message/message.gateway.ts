@@ -11,7 +11,10 @@ import { Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 import appConfig from '../../../config/app.config';
+import { sessionKeys } from '../../auth/session-keys';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -27,7 +30,10 @@ export class MessageGateway
 
   public clients = new Map<string, string>();
 
-  constructor(@Optional() private readonly prisma?: PrismaService) {}
+  constructor(
+    @Optional() private readonly prisma?: PrismaService,
+    @Optional() @InjectRedis() private readonly redis?: Redis,
+  ) {}
 
   onModuleInit() {}
 
@@ -53,6 +59,17 @@ export class MessageGateway
       if (!userId || decoded.typ === 'refresh') {
         client.disconnect();
         return;
+      }
+
+      // an access token from a sign-in that has ended (signed out, password reset) opens no socket;
+      // socket tokens are only handed out to a live sign-in, so they need no check here
+      if (decoded.typ !== 'socket' && this.redis) {
+        const sid = typeof decoded.sid === 'string' && decoded.sid ? decoded.sid : undefined;
+        const live = await this.redis.exists(sessionKeys(userId, sid).current).catch(() => 1);
+        if (live !== 1) {
+          client.disconnect();
+          return;
+        }
       }
 
       // a suspended or deleted account's access token still verifies until it expires: no live updates for it

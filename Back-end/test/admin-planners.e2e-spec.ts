@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import * as request from 'supertest';
+import { signedIn } from './e2e-sessions';
 
 const DB = process.env.CONTRACTS_E2E_DATABASE_URL;
 const run = DB ? describe : describe.skip;
@@ -46,6 +47,7 @@ run('Admin event planners (e2e)', () => {
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true, transformOptions: { enableImplicitConversion: true } }));
     await app.init();
+    await signedIn(app, Object.values(U));
     prisma = app.get(PrismaService);
 
     const password = await bcrypt.hash('secret123', 4);
