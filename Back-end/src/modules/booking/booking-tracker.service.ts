@@ -45,7 +45,7 @@ export class BookingTrackerService {
       const field = STEP_FIELD[step];
       // only while still accepted and not yet recorded: a cancellation or a double tap in the meantime wins
       const moved = await this.prisma.booking.updateMany({
-        where: { id: bookingId, status: BookingStatus.CONFIRMED, [field]: null },
+        where: { id: bookingId, status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] }, [field]: null },
         data: { [field]: now },
       });
       if (moved.count === 1) {

@@ -41,6 +41,7 @@ import { MarketplaceService } from 'src/modules/marketplace/marketplace.service'
 import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { trackerDetails } from './booking-tracker';
 import { chosenGroupText, readChosenOptions } from 'src/modules/add-ons/package-options';
+import { arrivalMissing } from './booking-tracker';
 
 /** Extra tabs on the vendor's bookings list. */
 export const VENDOR_BOOKING_FILTERS = ['refunds', 'complaints'] as const;
@@ -283,6 +284,13 @@ export class BookingService {
     const start = booking.event_start_at ?? booking.scheduled_at;
     if (start && start > new Date())
       throw new BadRequestException('You can mark this booking complete once the event has started.');
+    // the arrival is recorded first (Arrived, or Customer arrived at the vendor's place)
+    const place = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { arrived_at: true, checked_in_at: true, rental_reservations: { select: { id: true } }, listing: { select: { service_at: true, category: { select: { name: true } } } } },
+    });
+    const missing = place && arrivalMissing(place);
+    if (missing) throw new BadRequestException(missing);
 
     // only from IN_PROGRESS: a cancellation that landed since it was loaded must not be overwritten
     const completedAt = new Date();

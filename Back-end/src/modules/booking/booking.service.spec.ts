@@ -700,6 +700,13 @@ describe('BookingService', () => {
       );
     });
 
+    it('needs the arrival recorded before the booking can be completed', async () => {
+      mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.IN_PROGRESS });
+      mockPrisma.booking.findUnique.mockResolvedValueOnce({ arrived_at: null, checked_in_at: null, rental_reservations: [], listing: { service_at: 'CUSTOMER_LOCATION', category: null } });
+      await expect(service.complete('booking-1', 'vendor-1')).rejects.toThrow('Tap Arrived first');
+      expect(mockPrisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: BookingStatus.COMPLETED }) }));
+    });
+
     it('holds the money on completion and starts the release clock instead of paying the vendor at once', async () => {
       mockPrisma.booking.findFirst.mockResolvedValue({ ...mockBooking, status: BookingStatus.IN_PROGRESS });
       mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
@@ -716,9 +723,9 @@ describe('BookingService', () => {
       mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.booking.update.mockResolvedValue({ ...mockBooking, status: BookingStatus.COMPLETED });
 
-      mockPrisma.booking.findUnique.mockResolvedValueOnce({ status: BookingStatus.COMPLETED, paid_at: null, payout_credited_at: null, amount: 100, vendor_id: 'vendor-1' });
+      const arrived = { arrived_at: new Date(), checked_in_at: null, rental_reservations: [], listing: null };
+      mockPrisma.booking.findUnique.mockResolvedValue(arrived);
       await service.complete('booking-1', 'vendor-1');
-      mockPrisma.booking.findUnique.mockResolvedValueOnce({ status: BookingStatus.COMPLETED, paid_at: new Date(), payout_credited_at: new Date(), amount: 100, vendor_id: 'vendor-1' });
       await service.complete('booking-1', 'vendor-1');
 
       expect(mockPrisma.user.update).not.toHaveBeenCalled();

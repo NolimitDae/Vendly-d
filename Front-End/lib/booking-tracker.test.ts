@@ -27,8 +27,15 @@ describe("nextVendorStep", () => {
     expect(nextVendorStep({ ...today, en_route_at: "x" })).toEqual({ path: "arrived", label: "Arrived" });
     expect(nextVendorStep({ ...today, en_route_at: "x", arrived_at: "y" })).toBeNull();
     expect(nextVendorStep({ ...today, steps_open: false })).toBeNull();
-    expect(nextVendorStep({ ...today, status: "IN_PROGRESS" })).toBeNull();
+    expect(nextVendorStep({ ...today, status: "COMPLETED" })).toBeNull();
     expect(nextVendorStep({ ...today, is_rental: true })).toBeNull();
+  });
+
+  it("still asks for the arrival once started, skipping On my way", () => {
+    const started = { status: "IN_PROGRESS", steps_open: true };
+    expect(nextVendorStep(started)).toEqual({ path: "arrived", label: "Arrived" });
+    expect(nextVendorStep({ ...started, arrived_at: "y" })).toBeNull();
+    expect(nextVendorStep({ ...started, service_at: "VENDOR_LOCATION" })).toEqual({ path: "check-in", label: "Customer arrived" });
   });
 
   it("has Customer arrived for packages at the vendor's place", () => {

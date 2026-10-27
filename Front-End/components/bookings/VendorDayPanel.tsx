@@ -12,7 +12,7 @@ const hm = (iso: string) => dayjs(iso).format("h:mm A");
 
 /**
  * The vendor's buttons for the day: On my way → Arrived (at the customer's place) or Customer arrived
- * (at the vendor's), then Start booking and Mark as completed. The day-of steps only show the customer
+ * (at the vendor's), then Start booking and Mark as completed (only once the arrival is recorded). The day-of steps show the customer
  * where things are; Start and Complete are what move the booking (and its money) on.
  */
 export default function VendorDayPanel({
@@ -81,7 +81,8 @@ export default function VendorDayPanel({
             Start booking
           </button>
         )}
-        {booking.status === "IN_PROGRESS" && (
+        {/* the arrival is recorded before the booking can be completed */}
+        {booking.status === "IN_PROGRESS" && !next && (
           <button
             type="button"
             disabled={!!busy}
@@ -93,6 +94,9 @@ export default function VendorDayPanel({
           </button>
         )}
       </div>
+      {booking.status === "IN_PROGRESS" && next && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">Tap {next.label} first, then mark the booking completed.</p>
+      )}
       {booking.status === "CONFIRMED" && !booking.steps_open && (
         <p className="text-xs text-gray-500 dark:text-gray-400">
           {booking.service_at === "VENDOR_LOCATION" ? "Customer arrived" : "On my way and Arrived"} show up here the day before the booking.

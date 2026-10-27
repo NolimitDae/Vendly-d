@@ -79,4 +79,11 @@ describe("VendorDayPanel", () => {
     expect(screen.getByRole("button", { name: "Mark as completed" })).toBeInTheDocument();
     expect(screen.getByText(/You arrived at/)).toBeInTheDocument();
   });
+
+  it("asks for Arrived before Mark as completed once started", () => {
+    render(<VendorDayPanel booking={{ id: "b1", status: "IN_PROGRESS", steps_open: true }} customerName="Ana" onChanged={jest.fn()} />);
+    expect(screen.getByRole("button", { name: "Arrived" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark as completed" })).toBeNull();
+    expect(screen.getByText(/Tap Arrived first/)).toBeInTheDocument();
+  });
 });

@@ -261,7 +261,7 @@ run('Package customizations and dos and don’ts (e2e)', () => {
     expect(paid.every((i: any) => i.status === 'PAID')).toBe(true);
 
     // the job happened
-    await prisma.booking.update({ where: { id: bid }, data: { status: 'IN_PROGRESS', event_start_at: new Date(Date.now() - 3600e3), scheduled_at: new Date(Date.now() - 3600e3) } });
+    await prisma.booking.update({ where: { id: bid }, data: { status: 'IN_PROGRESS', event_start_at: new Date(Date.now() - 3600e3), scheduled_at: new Date(Date.now() - 3600e3), arrived_at: new Date(), checked_in_at: new Date() } });
     const done = await as('vendor', http().patch(`/api/bookings/${bid}/complete`));
     expect(done.status).toBe(200);
     await payments.releaseBooking(bid);

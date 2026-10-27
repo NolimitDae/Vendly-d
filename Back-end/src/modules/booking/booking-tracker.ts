@@ -64,13 +64,25 @@ export function stepCheck(b: StepBooking, step: TrackerStep, now = new Date(), t
   // asking again (a double tap, a retry) is fine; steps only move forward
   if (b[STEP_FIELD[step]]) return 'done';
   if (step === 'en_route' && b.arrived_at) return 'done';
-  if (b.status !== BookingStatus.CONFIRMED) return { error: 'These steps are for accepted bookings that haven’t started yet.' };
+  // before the job (on its day) and during it: arriving is recorded before the booking can be completed
+  if (b.status !== BookingStatus.CONFIRMED && b.status !== BookingStatus.IN_PROGRESS) return { error: 'These steps are for accepted bookings that aren’t finished yet.' };
   if (b.rental_reservations?.length) return { error: 'Rentals don’t have day-of steps.' };
   const at = serviceAtOf(b);
   if (step === 'check_in' && at !== 'VENDOR_LOCATION') return { error: 'You go to the customer for this booking. Use On my way and Arrived.' };
   if (step !== 'check_in' && at !== 'CUSTOMER_LOCATION') return { error: 'The customer comes to you for this booking. Use Customer arrived.' };
-  if (!stepsOpen(b.event_start_at ?? b.scheduled_at, now, timeZone)) return { error: 'You can do this on the day of the booking, or the day before.' };
+  if (b.status === BookingStatus.CONFIRMED && !stepsOpen(b.event_start_at ?? b.scheduled_at, now, timeZone)) return { error: 'You can do this on the day of the booking, or the day before.' };
   return 'ok';
+}
+
+/**
+ * Before a booking can be completed the vendor records the arrival: Arrived when they go to the
+ * customer, Customer arrived when the customer comes to them. Rentals have no day-of steps.
+ * Returns the message to show, or null when completing is fine.
+ */
+export function arrivalMissing(b: Omit<StepBooking, 'status'>): string | null {
+  if (b.rental_reservations?.length) return null;
+  if (serviceAtOf(b) === 'VENDOR_LOCATION') return b.checked_in_at ? null : 'Tap Customer arrived first, then mark the booking completed.';
+  return b.arrived_at ? null : 'Tap Arrived first, then mark the booking completed.';
 }
 
 /** The customer's time zone for a booking, as saved with its contract (UTC when unknown). */
@@ -102,10 +114,15 @@ export async function trackerDetails(
       ])
     : [null, null];
   // the vendor's day-of buttons show on the booking's day (or the day before) where the customer is
+  // (and while the job is under way, so the arrival can be recorded before completing)
   const stepsDay =
-    !isCustomer && booking.status === BookingStatus.CONFIRMED && !booking.rental_reservations?.length
-      ? stepsOpen(booking.event_start_at ?? booking.scheduled_at, now, await bookingTimeZone(prisma, booking.id))
-      : false;
+    isCustomer || booking.rental_reservations?.length
+      ? false
+      : booking.status === BookingStatus.IN_PROGRESS
+        ? true
+        : booking.status === BookingStatus.CONFIRMED
+          ? stepsOpen(booking.event_start_at ?? booking.scheduled_at, now, await bookingTimeZone(prisma, booking.id))
+          : false;
   return {
     service_at: serviceAt,
     contact_revealed: revealed,

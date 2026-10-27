@@ -232,6 +232,37 @@ run('Booking tracker (e2e)', () => {
     expect((await get(bookingId, T.vendor)).body.data.contact_phone).toBeNull();
   });
 
+  it('a started booking needs the arrival before it can be completed', async () => {
+    const begun = new Date(Date.now() - 3600e3);
+    const complete = (id: string) => api().patch(`/api/bookings/${id}/complete`).auth(T.vendor, { type: 'bearer' });
+    const make = (listing_id: string) => prisma.booking.create({
+      data: { customer_id: U.cust, vendor_id: U.vendor, listing_id, status: 'IN_PROGRESS', amount: 200, service_fee: 10, event_start_at: begun, scheduled_at: begun, started_at: begun },
+    });
+
+    // at the customer's place: Arrived (On my way is optional)
+    const visit = await make(L.visit);
+    expect((await get(visit.id, T.vendor)).body.data.steps_open).toBe(true);
+    const early = await complete(visit.id);
+    expect(early.status).toBe(400);
+    expect(early.body.message).toMatch(/Tap Arrived first/);
+    await sleep(1100); // the steps are rate limited
+    const arrived = await step(visit.id, 'arrived');
+    expect(arrived.status).toBe(201);
+    expect(arrived.body.data).toMatchObject({ status: 'IN_PROGRESS', arrived_at: expect.any(String) });
+    expect((await complete(visit.id)).status).toBe(200);
+
+    // at the vendor's place: Customer arrived
+    const studio = await make(L.studio);
+    expect((await complete(studio.id)).body.message).toMatch(/Tap Customer arrived first/);
+    expect((await step(studio.id, 'check-in')).status).toBe(201);
+    expect((await complete(studio.id)).status).toBe(200);
+
+    // steps stay closed once it's done
+    await sleep(1100);
+    const done = await prisma.booking.create({ data: { customer_id: U.cust, vendor_id: U.vendor, listing_id: L.visit, status: 'COMPLETED', amount: 200, service_fee: 10, event_start_at: begun, scheduled_at: begun } });
+    expect((await step(done.id, 'arrived')).status).toBe(400);
+  });
+
   it('the vendor’s business address is shown only once a booking at their place is accepted', async () => {
     const start = new Date(Date.now() + 5 * 3600e3);
     const b = await prisma.booking.create({

@@ -66,12 +66,15 @@ export function trackerSteps(b: TrackerFields): TrackerStep[] {
 /** The tracker shows once a booking is accepted, and stays after it's done. */
 export const showsTracker = (b: TrackerFields) => ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(b.status) && !b.is_rental;
 
-/** The vendor's next day-of step, if it's that day (or the day before) and one is left. */
+/**
+ * The vendor's next day-of step, if it's that day (or the day before) and one is left. Once the booking
+ * is started only the arrival is left (it comes before Mark as completed), so On my way is skipped.
+ */
 export function nextVendorStep(b: TrackerFields): { path: "en-route" | "arrived" | "check-in"; label: string } | null {
-  if (b.status !== "CONFIRMED" || !b.steps_open || b.is_rental) return null;
+  if (!["CONFIRMED", "IN_PROGRESS"].includes(b.status) || !b.steps_open || b.is_rental) return null;
   if (b.service_at === "VENDOR_LOCATION") return b.checked_in_at ? null : { path: "check-in", label: "Customer arrived" };
   if (b.arrived_at) return null;
-  return b.en_route_at ? { path: "arrived", label: "Arrived" } : { path: "en-route", label: "On my way" };
+  return b.en_route_at || b.status === "IN_PROGRESS" ? { path: "arrived", label: "Arrived" } : { path: "en-route", label: "On my way" };
 }
 
 /** A tel: link for a phone number as typed (keeps the + and the digits). */

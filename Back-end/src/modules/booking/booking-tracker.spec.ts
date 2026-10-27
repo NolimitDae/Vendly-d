@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { BookingStatus } from 'prisma/generated/client';
 import { BookingService } from './booking.service';
 import { BookingTrackerService } from './booking-tracker.service';
-import { contactRevealed, CONTACT_WINDOW_DAYS, serviceAtOf, stepCheck, stepsOpen, trackerDetails } from './booking-tracker';
+import { contactRevealed, CONTACT_WINDOW_DAYS, serviceAtOf, stepCheck, stepsOpen, trackerDetails, arrivalMissing } from './booking-tracker';
 
 const DAY = 24 * 3600 * 1000;
 const now = new Date('2026-11-14T15:00:00Z');
@@ -56,7 +56,22 @@ describe('day-of steps', () => {
     expect(stepCheck({ ...base, arrived_at: now }, 'arrived', now)).toBe('done');
   });
 
-  it.each([BookingStatus.PENDING, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.REJECTED])(
+  it('allows the arrival during the job too (before completing), on any day', () => {
+    const started = { ...base, status: BookingStatus.IN_PROGRESS, event_start_at: new Date(now.getTime() - 5 * 86400e3) };
+    expect(stepCheck(started, 'arrived', now)).toBe('ok');
+    expect(stepCheck({ ...started, listing: { service_at: 'VENDOR_LOCATION' } }, 'check_in', now)).toBe('ok');
+  });
+
+  it('needs the arrival recorded before completing', () => {
+    expect(arrivalMissing({ ...base })).toMatch(/Tap Arrived first/);
+    expect(arrivalMissing({ ...base, arrived_at: now })).toBeNull();
+    expect(arrivalMissing({ ...base, listing: { service_at: 'VENDOR_LOCATION' } })).toMatch(/Tap Customer arrived first/);
+    expect(arrivalMissing({ ...base, listing: { service_at: 'VENDOR_LOCATION' }, checked_in_at: now })).toBeNull();
+    // rentals have no day-of steps
+    expect(arrivalMissing({ ...base, rental_reservations: [{}] })).toBeNull();
+  });
+
+  it.each([BookingStatus.PENDING, BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.REJECTED])(
     'refuses a new step on a %s booking',
     (status) => {
       expect(stepCheck({ ...base, status }, 'en_route', now)).toEqual({ error: expect.stringContaining('accepted bookings') });
@@ -152,7 +167,7 @@ describe('BookingTrackerService.step', () => {
   it('records On my way and tells the customer (booking-updates push and inbox), never touching status', async () => {
     const { prisma, push, bookings, svc } = setup(stored());
     await svc.step('b1', 'vend', 'en_route', now);
-    expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', status: BookingStatus.CONFIRMED, en_route_at: null }, data: { en_route_at: now } });
+    expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', status: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] }, en_route_at: null }, data: { en_route_at: now } });
     expect(push.sendToUser).toHaveBeenCalledWith('cust', { title: 'On the way', body: 'DJ Sam is on the way for Wedding DJ', data: { type: 'booking', bookingId: 'b1' } }, 'booking_updates');
     expect(bookings.getBooking).toHaveBeenCalledWith('b1', 'vend');
   });

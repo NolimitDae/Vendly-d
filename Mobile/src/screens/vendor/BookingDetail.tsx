@@ -199,7 +199,7 @@ export default function VendorBookingDetail() {
       : atVendor
         ? booking.checked_in_at ? null : { step: 'check-in', title: 'Customer arrived', fail: 'Could not check the customer in' }
         : booking.arrived_at ? null
-          : booking.en_route_at ? { step: 'arrived', title: 'Arrived', fail: 'Could not mark arrived' }
+          : booking.en_route_at || st === 'IN_PROGRESS' ? { step: 'arrived', title: 'Arrived', fail: 'Could not mark arrived' }
             : { step: 'en-route', title: 'On my way', fail: 'Could not mark on your way' };
   const hm = (iso: string) => format(parseISO(iso), 'h:mm a');
   const stepNote = booking.checked_in_at
@@ -494,7 +494,10 @@ export default function VendorBookingDetail() {
           ) : (
             <GradientButton title="Start booking" onPress={start} loading={busy} />
           ))}
-          {st === 'IN_PROGRESS' && (!booking.is_rental || booking.rental_return) && <GradientButton title="Mark as completed" onPress={complete} loading={busy} />}
+          {/* the arrival is recorded before the booking can be completed */}
+          {st === 'IN_PROGRESS' && nextStep && <Text style={s.footerHint}>Tap {nextStep.title} first, then mark the booking completed</Text>}
+          {st === 'IN_PROGRESS' && nextStep && <GradientButton title={nextStep.title} onPress={() => takeStep(nextStep.step, nextStep.fail)} loading={busy} />}
+          {st === 'IN_PROGRESS' && !nextStep && (!booking.is_rental || booking.rental_return) && <GradientButton title="Mark as completed" onPress={complete} loading={busy} />}
           {st === 'IN_PROGRESS' && booking.is_rental && !booking.rental_return && <Text style={s.footerHint}>Check the items back in above, then complete the rental</Text>}
         </View>
       )}
