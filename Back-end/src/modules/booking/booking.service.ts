@@ -287,7 +287,7 @@ export class BookingService {
     // the arrival is recorded first (Arrived, or Customer arrived at the vendor's place)
     const place = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { arrived_at: true, checked_in_at: true, rental_reservations: { select: { id: true } }, listing: { select: { service_at: true, category: { select: { name: true } } } } },
+      select: { arrived_at: true, checked_in_at: true, customer_comes: true, rental_reservations: { select: { id: true } }, listing: { select: { service_at: true, category: { select: { name: true } } } } },
     });
     const missing = place && arrivalMissing(place);
     if (missing) throw new BadRequestException(missing);

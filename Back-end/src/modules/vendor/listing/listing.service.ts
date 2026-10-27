@@ -71,6 +71,8 @@ export class VendorListingService {
         ...(dto.lat !== undefined && dto.lng !== undefined && dto.location && { lat: dto.lat, lng: dto.lng, geocoded_at: new Date() }),
         service_radius_miles: dto.service_radius_miles,
         service_at: dto.service_at,
+        customer_can_come: dto.customer_can_come ?? false,
+        guest_count_required: dto.guest_count_required ?? null,
         availability: dto.availability,
         delivery_time: dto.delivery_time,
         category_id: categoryId,
@@ -191,6 +193,8 @@ export class VendorListingService {
         ),
       );
     }
+    // empty turns letting customers come off (guest count: back to the default)
+    if (dto.customer_can_come === null) updateData.customer_can_come = false;
     // 0 or empty clears the minimum notice
     if (dto.min_notice_hours !== undefined) updateData.min_notice_hours = dto.min_notice_hours || null;
     // forms send an empty value to clear a category or sub-category

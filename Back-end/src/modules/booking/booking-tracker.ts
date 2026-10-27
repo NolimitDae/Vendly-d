@@ -30,9 +30,11 @@ export function contactRevealed(b: { status: BookingStatus | string; completed_a
 
 /**
  * Where a booking happens (rentals and older packages: at the customer's venue). A venue is booked for
- * its own place, so it counts as the vendor's place whatever the package says.
+ * its own place, so it counts as the vendor's place whatever the package says; so does a booking where the
+ * customer chose to come to the vendor (or pick up a rental).
  */
-export function serviceAtOf(b: { listing?: PlaceRulesListing | null }): ServiceAt {
+export function serviceAtOf(b: { listing?: PlaceRulesListing | null; customer_comes?: boolean | null }): ServiceAt {
+  if (b.customer_comes) return 'VENDOR_LOCATION';
   return needsServiceAddress(b.listing) ? 'CUSTOMER_LOCATION' : 'VENDOR_LOCATION';
 }
 
@@ -48,6 +50,7 @@ export function stepsOpen(start: Date | null | undefined, now = new Date(), time
 interface StepBooking {
   status: BookingStatus | string;
   listing?: PlaceRulesListing | null;
+  customer_comes?: boolean | null;
   rental_reservations?: unknown[] | null;
   event_start_at?: Date | null;
   scheduled_at?: Date | null;
@@ -98,7 +101,7 @@ export async function bookingTimeZone(prisma: PrismaService, bookingId: string):
  */
 export async function trackerDetails(
   prisma: PrismaService,
-  booking: { id: string; status: BookingStatus | string; completed_at?: Date | null; customer_id: string; vendor_id: string; listing?: PlaceRulesListing | null; event_start_at?: Date | null; scheduled_at?: Date | null; rental_reservations?: unknown[] | null },
+  booking: { id: string; status: BookingStatus | string; completed_at?: Date | null; customer_id: string; vendor_id: string; listing?: PlaceRulesListing | null; customer_comes?: boolean | null; event_start_at?: Date | null; scheduled_at?: Date | null; rental_reservations?: unknown[] | null },
   viewerId: string,
   now = new Date(),
 ) {
@@ -128,7 +131,7 @@ export async function trackerDetails(
     contact_revealed: revealed,
     // the other side's number: the vendor's for the customer, the customer's for the vendor
     contact_phone: other?.phone_number?.trim() || null,
-    // packages at the vendor's place: where the customer goes
+    // packages at the vendor's place, and customers coming to the vendor: where the customer goes
     vendor_place: place?.business_address ? { address: place.business_address, lat: place.business_lat, lng: place.business_lng } : null,
     steps_open: stepsDay,
   };

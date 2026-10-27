@@ -23,7 +23,7 @@ import { BANK, bankNotAllowedReason, isBank, paymentMethodType } from 'src/modul
 import { paymentDueRules } from 'src/modules/payments/payment-due';
 import { PromoService } from 'src/modules/platform/promo.service';
 import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
-import { GUEST_COUNT_NEEDED, needsGuestCount, needsServiceAddress, vendorPlaceVenueText } from 'src/modules/booking/booking-place';
+import { CustomerCantComeError, customerComesFor, GUEST_COUNT_NEEDED, needsGuestCount, needsServiceAddress, requiredBookingFields, vendorPlaceVenueText } from 'src/modules/booking/booking-place';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import * as JSZip from 'jszip';
@@ -325,6 +325,14 @@ export class BookingContractsService {
 
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string) {
     const ctx = await this.loadBookingContext(userId, dto);
+    // the customer comes to the vendor instead, where the package allows it: no service address then
+    let customerComes: boolean;
+    try {
+      customerComes = customerComesFor(ctx.listing, dto.customer_comes);
+    } catch (e) {
+      if (e instanceof CustomerCantComeError) throw new BadRequestException({ message: e.message, error: 'CUSTOMER_CANT_COME' });
+      throw e;
+    }
     // a venue takes its booking on how many guests are coming (an event's own count does too)
     if (needsGuestCount(ctx.listing) && !(Number(dto.guest_count ?? ctx.event?.guest_count ?? 0) >= 1)) {
       throw new BadRequestException({ message: GUEST_COUNT_NEEDED, error: 'GUEST_COUNT_REQUIRED' });
@@ -357,7 +365,7 @@ export class BookingContractsService {
         event_end_at: dto.event_end_at,
         // venues and packages at the vendor's place: the customer gives no address and the contract names the
         // vendor's place by its public town only (the full address is shown once the vendor accepts)
-        venue_address: needsServiceAddress(ctx.listing) ? dto.venue_address : vendorPlaceVenueText(ctx.listing.location),
+        venue_address: needsServiceAddress(ctx.listing, customerComes) ? dto.venue_address : vendorPlaceVenueText(ctx.listing.location),
         guest_count: dto.guest_count,
         message: dto.message,
         amount: priced.price,
@@ -385,7 +393,7 @@ export class BookingContractsService {
       customerRoleLabel: data.customer_role_label,
     });
     const rendered = this.renderFor(ctx.vc, data);
-    return { ...ctx, quote, pkg, addOnLines, options, fees, priced, data, rendered, missing: missingFields(rendered.required, data) };
+    return { ...ctx, customerComes, quote, pkg, addOnLines, options, fees, priced, data, rendered, missing: missingFields(requiredBookingFields(rendered.required, ctx.listing), data) };
   }
 
   /**
@@ -570,7 +578,8 @@ export class BookingContractsService {
           event_start_at: dto.event_start_at,
           event_end_at: dto.event_end_at,
           // at the vendor's place: the package's public location (an address the customer sent anyway isn't used)
-          venue_address: needsServiceAddress(p.listing) ? dto.venue_address : p.listing.location ?? null,
+          venue_address: needsServiceAddress(p.listing, p.customerComes) ? dto.venue_address : p.listing.location ?? null,
+          customer_comes: p.customerComes,
           guest_count: dto.guest_count,
           message: dto.message,
           amount: p.priced.price,
@@ -1240,7 +1249,7 @@ export class BookingContractsService {
     const prevData = current.merge_data as MergeData;
     // a venue / package at the vendor's place keeps its contract venue line ("At the Vendor's place in …"),
     // even when the package has no location (the booking row then has no venue)
-    const placeVenue = needsServiceAddress(full.listing) ? null : prevData?.venue_address || vendorPlaceVenueText(full.listing?.location);
+    const placeVenue = needsServiceAddress(full.listing, full.customer_comes) ? null : prevData?.venue_address || vendorPlaceVenueText(full.listing?.location);
     const nextBooking = {
       id: full.id,
       scheduled_at: changes.scheduled_at ?? changes.event_start_at ?? full.scheduled_at,
@@ -1276,7 +1285,7 @@ export class BookingContractsService {
     const rendered = this.renderFor(vc, data);
     const body = `${rendered.body}\n\n## Amendment\nThis version replaces contract version ${current.version} (verification ${current.verification_code}). Changed: ${changed.join(', ')}. Until both parties sign this amendment, version ${current.version} remains in force.`;
     const content = contentHash(body, vc.file_sha256);
-    const missing = missingFields(rendered.required, data);
+    const missing = missingFields(requiredBookingFields(rendered.required, full.listing), data);
     const serialisedChanges = Object.fromEntries(
       Object.entries(changes).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : v]),
     );

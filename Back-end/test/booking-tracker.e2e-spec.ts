@@ -301,7 +301,7 @@ run('Booking tracker (e2e)', () => {
     // no guests: refused with a clear message
     const noGuests = await preview({});
     expect(noGuests.status).toBe(400);
-    expect(msg(noGuests)).toBe('Enter how many guests are coming. The venue needs a guest count to take the booking.');
+    expect(msg(noGuests)).toBe('Enter how many guests are coming. The vendor needs a guest count to take the booking.');
 
     // guests and no address: the contract's venue (required by this vendor's contract) is the venue's town only
     const pv = await preview({ guest_count: 80 });
@@ -317,7 +317,7 @@ run('Booking tracker (e2e)', () => {
     const hash = pv.body.data.content_sha256;
     const refused = await api().post('/api/bookings').auth(T.cust, { type: 'bearer' }).send({ ...body, preview_token: token, signature: sig('Cara Customer', hash) });
     expect(refused.status).toBe(400);
-    expect(msg(refused)).toBe('Enter how many guests are coming. The venue needs a guest count to take the booking.');
+    expect(msg(refused)).toBe('Enter how many guests are coming. The vendor needs a guest count to take the booking.');
 
     // an address sent anyway (an older app) isn't used: the contract stays the one reviewed
     await signing();
@@ -349,6 +349,61 @@ run('Booking tracker (e2e)', () => {
     expect(amend.status).toBe(201);
     expect(amend.body.data.missing_fields ?? []).toEqual([]);
     expect(amend.body.data.body).toContain("- Venue: At the Vendor's place in Austin, TX.");
+  });
+
+  it('a customer can come to the vendor instead where the package allows it, and the vendor chooses whether guests are required', async () => {
+    const start = new Date(Date.now() + 7 * 3600e3);
+    const body = { listing_id: L.visit, vendor_id: U.vendor, timezone: 'America/Chicago', event_start_at: start, event_end_at: new Date(start.getTime() + 3 * 3600e3) };
+    const preview = (extra: Record<string, unknown>) => api().post('/api/contracts/booking-preview').auth(T.cust, { type: 'bearer' }).send({ ...body, ...extra });
+    const edit = (fields: Record<string, string>) => {
+      const r = api().patch(`/api/vendor/listings/${L.visit}`).auth(T.vendor, { type: 'bearer' });
+      for (const [k, v] of Object.entries(fields)) r.field(k, v);
+      return r;
+    };
+
+    // not offered on this package yet: the address is needed
+    const notOffered = await preview({ customer_comes: true });
+    expect(notOffered.status).toBe(400);
+    expect(msg(notOffered)).toBe('This vendor comes to you for this package. Enter the address where it happens.');
+
+    // the vendor lets customers come to them, and asks for a guest count
+    expect((await edit({ customer_can_come: 'true', guest_count_required: 'true' })).status).toBe(200);
+    expect((await api().get(`/api/marketplace/listings/${L.visit}`)).body.data).toMatchObject({ needs_service_address: true, customer_can_come: true, needs_guest_count: true });
+    expect(msg(await preview({ customer_comes: true }))).toBe('Enter how many guests are coming. The vendor needs a guest count to take the booking.');
+
+    // coming to the vendor: no address, the contract names the vendor's place by its town
+    const pv = await preview({ customer_comes: true, guest_count: 20 });
+    expect(pv.status).toBe(201);
+    expect(pv.body.data).toMatchObject({ missing_fields: [], missing_message: null });
+    expect(pv.body.data.body).toContain("- Venue: At the Vendor's place in Austin, TX.");
+    expect(JSON.stringify(pv.body)).not.toContain('Hall Rd');
+
+    await signing();
+    const sent = await api().post('/api/bookings').auth(T.cust, { type: 'bearer' })
+      .send({ ...body, customer_comes: true, guest_count: 20, venue_address: '9 Other Pl, Austin, TX', preview_token: pv.body.data.preview_token, signature: sig('Cara Customer', pv.body.data.content_sha256) });
+    expect(sent.status).toBe(201);
+    const comes = sent.body.data.id;
+    expect(await prisma.booking.findUnique({ where: { id: comes }, select: { venue_address: true, customer_comes: true } })).toEqual({ venue_address: 'Austin, TX', customer_comes: true });
+    expect((await get(comes, T.cust)).body.data).toMatchObject({ service_at: 'VENDOR_LOCATION', vendor_place: null });
+
+    // accepted: the customer sees where to go, and the vendor records the customer arriving
+    await signing();
+    const confirmed = await api().patch(`/api/bookings/${comes}/confirm`).auth(T.vendor, { type: 'bearer' })
+      .send({ signature: sig('Sam Vendor', pv.body.data.content_sha256) });
+    expect(confirmed.status).toBe(200);
+    expect((await get(comes, T.cust)).body.data.vendor_place).toMatchObject({ address: '77 Hall Rd, Austin, TX' });
+    expect((await step(comes, 'en-route')).status).toBe(400);
+    await sleep(1100);
+    expect((await step(comes, 'check-in')).status).toBe(201);
+
+    // guests optional again: a request without them is fine; the address is needed when not coming over
+    expect((await edit({ guest_count_required: 'false' })).status).toBe(200);
+    const noGuests = await preview({ venue_address: '5 Elm St, Austin, TX' });
+    expect(noGuests.status).toBe(201);
+    expect(noGuests.body.data.body).toContain('- Venue: 5 Elm St, Austin, TX');
+    // the default again (empty): not a venue, so not required
+    expect((await edit({ customer_can_come: '', guest_count_required: '' })).status).toBe(200);
+    expect(await prisma.vendorListing.findUnique({ where: { id: L.visit }, select: { customer_can_come: true, guest_count_required: true } })).toEqual({ customer_can_come: false, guest_count_required: null });
   });
 
   it('serves map tiles to signed-in users through the cache, and only the booking map zooms', async () => {

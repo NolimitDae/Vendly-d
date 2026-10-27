@@ -27,9 +27,10 @@ import { isProposal } from './request-changes';
 import { PlanChange, PlanRow, proposedRows, readPlanChange } from './payment-plan-change';
 import { PaymentPlanProposalDto, SendPaymentPlanDto } from './dto/payment-plans.dto';
 import { SignatureDto } from './dto/contracts.dto';
+import { requiredBookingFields } from 'src/modules/booking/booking-place';
 
 const bookingInclude = {
-  listing: { select: { title: true, payment_plan: true, category: { select: { default_payment_plan: true } } } },
+  listing: { select: { title: true, payment_plan: true, guest_count_required: true, category: { select: { default_payment_plan: true } } } },
   vendor: { select: { id: true, name: true, email: true, vendorProfile: { select: { business_name: true } } } },
   customer: { select: { id: true, name: true, email: true, type: true } },
   installments: { orderBy: { sequence: 'asc' } },
@@ -141,7 +142,7 @@ export class PaymentPlansService {
     };
     const rendered = this.contracts.renderFor(vc, data);
     const body = `${rendered.body}\n\n## Amendment\nThis version replaces contract version ${current.version} (verification ${current.verification_code}). Changed: payment plan. Until both parties sign this amendment, version ${current.version} and its payments remain in force.`;
-    return { vc, version, data, title: rendered.title, body, content: contentHash(body, vc.file_sha256), missing: missingFields(rendered.required, data) };
+    return { vc, version, data, title: rendered.title, body, content: contentHash(body, vc.file_sha256), missing: missingFields(requiredBookingFields(rendered.required, { guest_count_required: b.listing?.guest_count_required }), data) };
   }
 
   /** "3 payments: $2,000.00 now, $1,500.00 on Tue, Dec 1, 2026, ..." (the amendment's change line). */

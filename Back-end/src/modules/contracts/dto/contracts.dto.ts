@@ -139,6 +139,12 @@ export class BookingContractFieldsDto {
   @MaxLength(500)
   venue_address?: string;
 
+  @ApiPropertyOptional({ description: 'The customer comes to the vendor instead (only on packages that allow it): no service address' })
+  @IsOptional()
+  @Transform(toBool)
+  @IsBoolean()
+  customer_comes?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)

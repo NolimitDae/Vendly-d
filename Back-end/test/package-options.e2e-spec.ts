@@ -293,4 +293,42 @@ run('Package customizations and dos and don’ts (e2e)', () => {
     const tooMany = await as('vendor', http().patch(`/api/vendor/rentals/${created.body.data.id}`)).field('dos', JSON.stringify(Array.from({ length: 16 }, (_, i) => `Do ${i}`)));
     expect(tooMany.status).toBe(400);
   });
+
+  it('rentals are delivered to an address or picked up, as each item offers', async () => {
+    const created = await as('vendor', http().post('/api/vendor/rentals'))
+      .field('title', 'Dance floor')
+      .field('description', '12 x 12 panels')
+      .field('daily_rate', '150')
+      .field('status', 'DRAFT')
+      .field('offers_pickup', 'false');
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({ offers_delivery: true, offers_pickup: false });
+    const item = created.body.data.id;
+    // live (this vendor has no licence on file in this suite)
+    await prisma.rentalItem.update({ where: { id: item }, data: { status: 'ACTIVE' } });
+    // something has to be offered
+    expect((await as('vendor', http().patch(`/api/vendor/rentals/${item}`)).field('offers_delivery', 'false')).status).toBe(400);
+
+    const day = (n: number) => new Date(Date.now() + n * DAY).toISOString().slice(0, 10);
+    const order = { lines: [{ item_id: item, quantity: 1 }], start_date: day(50), end_date: day(51), payment_method_id: 'pm_e2e_card' };
+    const quote = await as('cust', http().post('/api/rentals/quote')).send({ lines: order.lines, start_date: order.start_date, end_date: order.end_date });
+    expect(quote.body.data.handover).toEqual({ delivery: true, pickup: false });
+    // the saved card check is Stripe's (covered elsewhere)
+    jest.spyOn(payments, 'assertPaymentMethod').mockResolvedValue(undefined);
+    const book = (extra: Record<string, unknown>) => as('cust', http().post('/api/rentals/book')).send({ ...order, ...extra });
+
+    expect((await book({ customer_comes: true })).body.message).toMatch(/Dance floor is delivered by the vendor/);
+    expect((await book({ customer_comes: false })).body.message).toBe('Enter the delivery address.');
+    const delivered = await book({ customer_comes: false, venue_address: '12 Salon Row, Austin TX' });
+    expect(delivered.status).toBe(201);
+    expect(await prisma.booking.findUnique({ where: { id: delivered.body.data.id }, select: { venue_address: true, customer_comes: true } })).toEqual({ venue_address: '12 Salon Row, Austin TX', customer_comes: false });
+
+    // pickup offered too: the customer picks it up and gives no address
+    expect((await as('vendor', http().patch(`/api/vendor/rentals/${item}`)).field('offers_pickup', 'true')).status).toBe(200);
+    const picked = await book({ customer_comes: true, start_date: day(53), end_date: day(53) });
+    expect(picked.status).toBe(201);
+    expect(await prisma.booking.findUnique({ where: { id: picked.body.data.id }, select: { venue_address: true, customer_comes: true } })).toEqual({ venue_address: null, customer_comes: true });
+    const seen = await as('cust', http().get(`/api/bookings/${picked.body.data.id}`));
+    expect(seen.body.data.service_at).toBe('VENDOR_LOCATION');
+  });
 });

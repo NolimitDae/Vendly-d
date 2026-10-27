@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
 import { RentalItemStatus } from 'prisma/generated/enums';
-import { MAX_DOS, MAX_DO_LENGTH, readIncludedItems } from 'src/modules/vendor/listing/package-details';
+import { MAX_DOS, MAX_DO_LENGTH, readFlag, readIncludedItems } from 'src/modules/vendor/listing/package-details';
 
 /** Dos and don'ts on a rental item: short lines (a JSON array in multipart forms). */
 class RentalInstructionsDto {
@@ -25,7 +25,22 @@ class RentalInstructionsDto {
   donts?: string[];
 }
 
-export class CreateRentalItemDto extends RentalInstructionsDto {
+/** How the customer gets the item: the vendor delivers it, and/or the customer picks it up. */
+class RentalHandoverDto extends RentalInstructionsDto {
+  @ApiPropertyOptional({ description: 'The vendor delivers the item to the customer (default true)' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readFlag(obj[key]))
+  @IsBoolean()
+  offers_delivery?: boolean;
+
+  @ApiPropertyOptional({ description: 'The customer can pick the item up from the vendor (default true)' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readFlag(obj[key]))
+  @IsBoolean()
+  offers_pickup?: boolean;
+}
+
+export class CreateRentalItemDto extends RentalHandoverDto {
   @ApiProperty() @IsString() @MaxLength(255) title: string;
   @ApiProperty() @IsString() description: string;
   @ApiProperty() @Type(() => Number) @IsNumber() @Min(0.5) daily_rate: number;
@@ -37,7 +52,7 @@ export class CreateRentalItemDto extends RentalInstructionsDto {
   @ApiPropertyOptional({ enum: RentalItemStatus }) @IsOptional() @IsEnum(RentalItemStatus) status?: RentalItemStatus;
 }
 
-export class UpdateRentalItemDto extends RentalInstructionsDto {
+export class UpdateRentalItemDto extends RentalHandoverDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) title?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0.5) daily_rate?: number;
@@ -74,7 +89,13 @@ export class RentalQuoteDto {
 }
 
 export class RentalBookDto extends RentalQuoteDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) venue_address?: string;
+  @ApiPropertyOptional({ description: 'The delivery address (not for a pickup)' }) @IsOptional() @IsString() @MaxLength(500) venue_address?: string;
+  /** The customer picks the items up from the vendor (no delivery address). Older apps don't send it: no address then means a pickup. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ obj, key }) => readFlag(obj[key]))
+  @IsBoolean()
+  customer_comes?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) message?: string;
   /** Saved card charged when the vendor accepts (and held for the security deposit) */
   @ApiProperty() @IsString() payment_method_id: string;

@@ -806,6 +806,10 @@ model VendorListing {
   // where the service happens: CUSTOMER_LOCATION (the vendor goes to the venue) or VENDOR_LOCATION
   // (the customer comes to the vendor's business address)
   service_at    String    @default("CUSTOMER_LOCATION") @db.VarChar(20)
+  // at the customer's place, but the customer may choose to come to the vendor instead (pickup, drop-off)
+  customer_can_come    Boolean @default(false)
+  // whether booking needs a guest count: the vendor's choice; null = the default (venues only)
+  guest_count_required Boolean?
   availability  String?   @db.Text
   delivery_time Int?
 
@@ -1027,6 +1031,8 @@ model Booking {
   event_start_at DateTime?
   event_end_at   DateTime?
   venue_address  String?  @db.VarChar(500)
+  // the customer comes to the vendor (a package that allows it, or picking up a rental): no service address
+  customer_comes Boolean  @default(false)
   guest_count    Int?
   // venue_address on the map, geocoded in the background (null = not found or not done yet)
   venue_lat         Float?
@@ -1314,6 +1320,9 @@ model RentalItem {
   quantity         Int              @default(1)
   // cleaning / delivery buffer either side of a rental during which the stock is unavailable
   turnaround_hours Int              @default(24)
+  // how the customer gets the item: the vendor delivers it, and/or the customer picks it up
+  offers_delivery  Boolean          @default(true)
+  offers_pickup    Boolean          @default(true)
   location         String?          @db.VarChar(255)
   status           RentalItemStatus @default(DRAFT)
   // special instructions for using the equipment, shown on the item and the rental

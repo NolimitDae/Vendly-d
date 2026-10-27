@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -18,7 +19,7 @@ import { LISTING_PAYMENT_PLANS } from 'src/modules/payments/payment-schedule';
 import { ListingStatus } from 'prisma/generated/client';
 import { Transform, Type } from 'class-transformer';
 import { SERVICE_AT, type ServiceAt } from 'src/modules/booking/booking-tracker';
-import { MAX_DOS, MAX_DO_LENGTH, MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readIncludedItems, readNoticeHours } from '../package-details';
+import { MAX_DOS, MAX_DO_LENGTH, MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readFlag, readIncludedItems, readNoticeHours } from '../package-details';
 
 export class CreateVendorListingDto {
   @ApiProperty()
@@ -79,6 +80,18 @@ export class CreateVendorListingDto {
   @IsOptional()
   @IsIn(SERVICE_AT)
   service_at?: ServiceAt;
+
+  @ApiPropertyOptional({ description: 'At the customer’s place, but the customer may choose to come to the vendor instead (pickup, drop-off)' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readFlag(obj[key]))
+  @IsBoolean()
+  customer_can_come?: boolean;
+
+  @ApiPropertyOptional({ description: 'Whether customers must give a guest count to book (empty = the default: venues only)' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readFlag(obj[key]))
+  @IsBoolean()
+  guest_count_required?: boolean | null;
 
   @ApiPropertyOptional()
   @IsOptional()

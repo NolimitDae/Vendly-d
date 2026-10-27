@@ -29,7 +29,7 @@ export class BookingTrackerService {
       where: { id: bookingId, deleted_at: null },
       select: {
         id: true, vendor_id: true, customer_id: true, status: true, event_start_at: true, scheduled_at: true,
-        en_route_at: true, arrived_at: true, checked_in_at: true,
+        en_route_at: true, arrived_at: true, checked_in_at: true, customer_comes: true,
         // the category too: a venue counts as the vendor's place
         listing: { select: { title: true, service_at: true, category: { select: { name: true } } } },
         rental_reservations: { select: { id: true, quantity: true, item: { select: { title: true } } } },

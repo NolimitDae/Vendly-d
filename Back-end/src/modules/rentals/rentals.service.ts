@@ -14,6 +14,7 @@ import { availabilityCalendar, availableQuantity, DAY_MS, parseDay, priceRental,
 import { track } from 'src/common/analytics';
 import { ACTIVE_VENDOR_WHERE, VENDOR_UNAVAILABLE, vendorIsActive } from 'src/common/helper/active-vendor';
 import { assertCanPublish, canPublish, vendorLicence } from 'src/common/helper/publish-licence';
+import { handoverOptions, handoverProblem, isPickup, NO_HANDOVER } from './rental-handover';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** Bookings in these states no longer hold stock. */
@@ -22,7 +23,7 @@ const IMAGE_DIR = 'rentals';
 /** Hours the customer has to dispute damage or late fees before the vendor is paid. */
 const FEE_DISPUTE_HOURS = 48;
 
-type Item = { id: string; vendor_id: string; title: string; quantity: number; turnaround_hours: number; daily_rate: Prisma.Decimal; deposit_amount: Prisma.Decimal; category_id: string | null; status: RentalItemStatus; deleted_at: Date | null };
+type Item = { id: string; vendor_id: string; title: string; quantity: number; turnaround_hours: number; offers_delivery: boolean; offers_pickup: boolean; daily_rate: Prisma.Decimal; deposit_amount: Prisma.Decimal; category_id: string | null; status: RentalItemStatus; deleted_at: Date | null };
 
 @Injectable()
 export class RentalsService {
@@ -85,6 +86,7 @@ export class RentalsService {
     let status = dto.status;
     if (status === RentalItemStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
     else if (!status) status = canPublish(await vendorLicence(this.prisma, vendorId)) ? RentalItemStatus.ACTIVE : RentalItemStatus.DRAFT;
+    if (dto.offers_delivery === false && dto.offers_pickup === false) throw new BadRequestException(NO_HANDOVER);
     const names = await this.saveImages(images);
     const item = await this.prisma.rentalItem.create({
       data: {
@@ -95,6 +97,8 @@ export class RentalsService {
         deposit_amount: dto.deposit_amount ?? 0,
         quantity: dto.quantity ?? 1,
         turnaround_hours: dto.turnaround_hours ?? 24,
+        offers_delivery: dto.offers_delivery ?? true,
+        offers_pickup: dto.offers_pickup ?? true,
         category_id: dto.category_id,
         location: dto.location,
         status,
@@ -119,7 +123,11 @@ export class RentalsService {
     const item = await this.ownedItem(id, vendorId);
     // making an item live needs an approved licence; one that's already live stays live
     if (dto.status === RentalItemStatus.ACTIVE && item.status !== RentalItemStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
+    if ((dto.offers_delivery ?? item.offers_delivery) === false && (dto.offers_pickup ?? item.offers_pickup) === false) throw new BadRequestException(NO_HANDOVER);
     const { keep_images, ...fields } = dto;
+    // empty means the default (offered)
+    if (fields.offers_delivery === null) fields.offers_delivery = true;
+    if (fields.offers_pickup === null) fields.offers_pickup = true;
     let kept = item.images;
     if (keep_images) {
       const keepNames = new Set(keep_images.map((k) => decodeURIComponent(k.split('/').pop() ?? k)));
@@ -263,7 +271,7 @@ export class RentalsService {
     const stock = this.checkStock(lines, rows, start, end);
     return {
       success: true,
-      data: { start_date: start, end_date: end, ...this.priceFor(lines, start, end), lines: stock, available: stock.every((s) => s.ok) },
+      data: { start_date: start, end_date: end, ...this.priceFor(lines, start, end), lines: stock, available: stock.every((s) => s.ok), handover: handoverOptions(lines.map((l) => l.item)) },
     };
   }
 
@@ -279,6 +287,7 @@ export class RentalsService {
     // cards only: a rental's security deposit is a card hold, which a bank account can't do
     await this.payments.assertPaymentMethod(customerId, dto.payment_method_id, null);
 
+    const pickup = isPickup(dto.customer_comes, dto.venue_address);
     const created = await this.prisma.$transaction(async (tx) => {
       const ids = dto.lines.map((l) => l.item_id);
       await tx.$queryRaw`SELECT id FROM rental_items WHERE id IN (${Prisma.join(ids)}) FOR UPDATE`;
@@ -289,6 +298,9 @@ export class RentalsService {
       if (short.length) {
         throw new ConflictException(short.map((s) => (s.available ? `Only ${s.available} × ${s.title} left for those dates.` : `${s.title} is booked for those dates.`)).join(' '));
       }
+      // delivered to the address they give, or picked up from the vendor (only as every item allows)
+      const handover = handoverProblem(lines.map((l) => l.item), pickup, dto.venue_address);
+      if (handover) throw new BadRequestException(handover);
       const price = this.priceFor(lines, start, end);
       return tx.booking.create({
         data: {
@@ -298,7 +310,8 @@ export class RentalsService {
           scheduled_at: start,
           event_start_at: start,
           event_end_at: new Date(end.getTime() + DAY_MS),
-          venue_address: dto.venue_address,
+          venue_address: pickup ? null : dto.venue_address?.trim(),
+          customer_comes: pickup,
           message: dto.message,
           amount: price.subtotal,
           service_fee: price.service_fee,
@@ -322,7 +335,7 @@ export class RentalsService {
           to: created.vendor.email,
           recipientName: created.vendor.name ?? '',
           subject: `New rental request — ${title}`,
-          message: `${created.customer.name ?? 'A customer'} wants to rent ${title} from ${start.toDateString()} to ${end.toDateString()}. Accept or decline it in Vendly.`,
+          message: `${created.customer.name ?? 'A customer'} wants to rent ${title} from ${start.toDateString()} to ${end.toDateString()}${created.customer_comes ? ', picking it up from you' : ', delivered'}. Accept or decline it in Vendly.`,
           status: 'PENDING',
           listingTitle: title,
           amount: Number(created.amount),

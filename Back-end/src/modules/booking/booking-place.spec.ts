@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { BookingContractsService } from 'src/modules/contracts/booking-contracts.service';
 import { buildMergeData, missingFields, renderTemplate } from 'src/modules/contracts/contract-merge';
-import { bookingNeeds, GUEST_COUNT_NEEDED, isVenuePackage, needsGuestCount, needsServiceAddress, vendorPlaceVenueText } from './booking-place';
+import { bookingNeeds, canComeToVendor, CustomerCantComeError, customerComesFor, GUEST_COUNT_NEEDED, isVenuePackage, needsGuestCount, needsServiceAddress, requiredBookingFields, vendorPlaceVenueText } from './booking-place';
 import { serviceAtOf } from './booking-tracker';
 
 const venue = { service_at: 'CUSTOMER_LOCATION', category: { name: 'Venues' } };
@@ -12,18 +12,44 @@ describe('what a booking request asks for', () => {
   it('venues: no service address, a guest count', () => {
     expect(isVenuePackage(venue)).toBe(true);
     expect(isVenuePackage({ category: { name: ' venues ' } })).toBe(true);
-    expect(bookingNeeds(venue)).toEqual({ needs_service_address: false, needs_guest_count: true });
+    expect(bookingNeeds(venue)).toEqual({ needs_service_address: false, needs_guest_count: true, customer_can_come: false });
   });
 
   it("packages at the vendor's place: no service address, guests as before", () => {
-    expect(bookingNeeds(salon)).toEqual({ needs_service_address: false, needs_guest_count: false });
+    expect(bookingNeeds(salon)).toEqual({ needs_service_address: false, needs_guest_count: false, customer_can_come: false });
   });
 
   it('everything else (and rentals with no package) asks for the address as before', () => {
-    expect(bookingNeeds(dj)).toEqual({ needs_service_address: true, needs_guest_count: false });
+    expect(bookingNeeds(dj)).toEqual({ needs_service_address: true, needs_guest_count: false, customer_can_come: false });
     expect(needsServiceAddress(null)).toBe(true);
     expect(needsGuestCount(undefined)).toBe(false);
     expect(needsServiceAddress({ service_at: null })).toBe(true);
+  });
+
+  it('lets the customer come to the vendor instead, only where the package allows it', () => {
+    const rentals = { ...dj, customer_can_come: true };
+    expect(bookingNeeds(rentals)).toEqual({ needs_service_address: true, needs_guest_count: false, customer_can_come: true });
+    expect(needsServiceAddress(rentals, true)).toBe(false);
+    expect(needsServiceAddress(rentals, false)).toBe(true);
+    // not offered: still needs the address
+    expect(needsServiceAddress(dj, true)).toBe(true);
+    expect(() => customerComesFor(dj, true)).toThrow(CustomerCantComeError);
+    expect(customerComesFor(dj, false)).toBe(false);
+    expect(customerComesFor(rentals, true)).toBe(true);
+    // a venue or a package at the vendor's place doesn't offer it: the customer comes anyway
+    expect(canComeToVendor({ ...venue, customer_can_come: true })).toBe(false);
+    expect(canComeToVendor({ ...salon, customer_can_come: true })).toBe(false);
+    expect(serviceAtOf({ listing: rentals, customer_comes: true })).toBe('VENDOR_LOCATION');
+  });
+
+  it('asks for a guest count as the vendor chose (venues by default)', () => {
+    expect(needsGuestCount({ ...dj, guest_count_required: true })).toBe(true);
+    expect(needsGuestCount({ ...venue, guest_count_required: false })).toBe(false);
+    expect(needsGuestCount({ ...venue, guest_count_required: null })).toBe(true);
+    // the contract's required fields follow the same choice
+    expect(requiredBookingFields(['event_date', 'guest_count'], { guest_count_required: false })).toEqual(['event_date']);
+    expect(requiredBookingFields(['event_date'], { guest_count_required: true })).toEqual(['event_date', 'guest_count']);
+    expect(requiredBookingFields(['event_date', 'guest_count'], { guest_count_required: null })).toEqual(['event_date', 'guest_count']);
   });
 
   it("a venue booking happens at the vendor's place (Where to go, Customer arrived)", () => {

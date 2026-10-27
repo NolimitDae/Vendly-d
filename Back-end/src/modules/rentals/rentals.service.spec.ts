@@ -14,8 +14,8 @@ const day = (n: number) => {
 };
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-const chairs = { id: 'chairs', vendor_id: 'v1', title: 'Chiavari chair', quantity: 10, turnaround_hours: 0, daily_rate: 5, deposit_amount: 2, category_id: null, status: RentalItemStatus.ACTIVE, deleted_at: null, vendor: { status: 1, deleted_at: null } };
-const arch = { id: 'arch', vendor_id: 'v1', title: 'Flower arch', quantity: 1, turnaround_hours: 24, daily_rate: 120, deposit_amount: 50, category_id: null, status: RentalItemStatus.ACTIVE, deleted_at: null, vendor: { status: 1, deleted_at: null } };
+const chairs = { id: 'chairs', vendor_id: 'v1', title: 'Chiavari chair', quantity: 10, turnaround_hours: 0, offers_delivery: true, offers_pickup: true, daily_rate: 5, deposit_amount: 2, category_id: null, status: RentalItemStatus.ACTIVE, deleted_at: null, vendor: { status: 1, deleted_at: null } };
+const arch = { id: 'arch', vendor_id: 'v1', title: 'Flower arch', quantity: 1, turnaround_hours: 24, offers_delivery: true, offers_pickup: true, daily_rate: 120, deposit_amount: 50, category_id: null, status: RentalItemStatus.ACTIVE, deleted_at: null, vendor: { status: 1, deleted_at: null } };
 
 const prisma: any = {
   rentalItem: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), count: jest.fn() },
@@ -71,6 +71,19 @@ describe('RentalsService', () => {
     expect(data.rental_reservations.create).toHaveLength(2);
     expect(res.data.title).toBe('Chiavari chair + 1 more');
     expect(mail.sendBookingNotification).toHaveBeenCalled();
+  });
+
+  it('delivers to the address given, or has the customer pick up (only as every item allows)', async () => {
+    await service.book('c1', order({ venue_address: ' 12 Main St ', customer_comes: false }));
+    expect(prisma.booking.create.mock.calls[0][0].data).toMatchObject({ venue_address: '12 Main St', customer_comes: false });
+
+    await service.book('c1', order({ venue_address: '12 Main St', customer_comes: true }));
+    expect(prisma.booking.create.mock.calls[1][0].data).toMatchObject({ venue_address: null, customer_comes: true });
+
+    await expect(service.book('c1', order({ customer_comes: false }))).rejects.toThrow('Enter the delivery address.');
+    prisma.rentalItem.findMany.mockResolvedValue([{ ...chairs, offers_pickup: false }, arch]);
+    await expect(service.book('c1', order({ customer_comes: true }))).rejects.toThrow(/Chiavari chair is delivered by the vendor/);
+    expect(prisma.booking.create).toHaveBeenCalledTimes(2);
   });
 
   it('refuses when another booking holds the stock', async () => {

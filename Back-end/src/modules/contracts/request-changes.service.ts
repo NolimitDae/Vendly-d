@@ -5,7 +5,7 @@ import { AddOnsService } from 'src/modules/add-ons/add-ons.service';
 import { PackageOptionsService, formatOptionGroups, OPTION_GROUPS_INCLUDE } from 'src/modules/add-ons/package-options.service';
 import { ChosenGroup, optionScheduleLines, priceOptionChoices, readChosenOptions, UnitBasis } from 'src/modules/add-ons/package-options';
 import { AddOnUnit, EventInput, packageUnit, PricingError, round2 } from 'src/modules/add-ons/pricing';
-import { needsGuestCount } from 'src/modules/booking/booking-place';
+import { needsGuestCount, requiredBookingFields } from 'src/modules/booking/booking-place';
 import { requestExpiresAt } from 'src/modules/booking/booking-requests';
 import { buildSchedule, PAYMENT_PLAN_LABELS } from 'src/modules/payments/payment-schedule';
 import { checkCustomPlan, CustomPayment, CustomPlan, MAX_PLAN_PAYMENTS, MIN_PLAN_PAYMENT, MIN_PLAN_PAYMENTS, PaymentPlanError, planSentence, readCustomPlan, withPaymentPlan } from 'src/modules/payments/custom-plan';
@@ -348,7 +348,7 @@ export class RequestChangesService {
     const rendered = this.contracts.renderFor(vc, data);
     const role = data.customer_role_label;
     const body = `${rendered.body}\n\n## Changes suggested by the Vendor\nThis version replaces the booking request signed as version ${base.version} (verification ${base.verification_code}). The Vendor suggested these changes: ${changes.join('; ')}. It takes effect once the ${role} signs it and the Vendor accepts the booking. If the ${role} declines, the request stays as it was. Nothing is charged before the Vendor accepts.`;
-    return { vc, version, data, title: rendered.title, body, content: contentHash(body, vc.file_sha256), missing: missingFields(rendered.required, data) };
+    return { vc, version, data, title: rendered.title, body, content: contentHash(body, vc.file_sha256), missing: missingFields(requiredBookingFields(rendered.required, b.listing), data) };
   }
 
   private async prepare(bookingId: string, user: AuthUser, dto: ProposalDto) {

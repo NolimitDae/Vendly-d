@@ -34,6 +34,15 @@ export function readNoticeHours(value: unknown): number | null | undefined {
   return Number(value);
 }
 
+/** A yes/no setting from a form (multipart sends text): empty clears it (null), anything else stays as sent for validation. */
+export function readFlag(value: unknown): boolean | null | undefined | unknown {
+  if (value === undefined) return undefined;
+  if (value === '' || value === null) return null;
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return value;
+}
+
 /** "3 days" for whole days, else "36 hours". */
 export function noticeLabel(hours: number) {
   if (hours >= 24 && hours % 24 === 0) {
