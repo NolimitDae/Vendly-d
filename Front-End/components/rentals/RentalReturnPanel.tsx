@@ -37,7 +37,11 @@ export default function RentalReturnPanel({ booking, role, onChanged }: { bookin
     if (Number.isNaN(d) || Number.isNaN(l) || d < 0 || l < 0) return toast.error("Enter fees in dollars, or leave them empty");
     if ((d > 0 || l > 0) && !photos.length && !notes.trim()) return toast.error("Add photos or a note explaining the fees");
     const fees = d + l;
-    const msg = fees > 0 ? `${money(fees)} will be charged to the customer${deposit ? `, from their ${money(deposit)} deposit hold first` : ""}. They can dispute within 48 hours.` : "The customer's deposit hold will be released.";
+    const msg = fees > 0
+      ? (deposit
+        ? `Up to ${money(deposit)} comes from the customer's deposit hold (they can dispute within 48 hours).${fees > deposit ? ` The other ${money(fees - deposit)} is sent to them to approve before it's charged.` : ""}`
+        : `${money(fees)} is sent to the customer to approve before it's charged.`)
+      : "The customer's deposit hold will be released.";
     if (!confirm(`Record the return? ${msg}`)) return;
     setBusy(true);
     try {

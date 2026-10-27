@@ -147,9 +147,11 @@ describe('RentalsService', () => {
 
     it('takes damage and late fees and gives the customer 48h to dispute', async () => {
       prisma.booking.findUnique.mockResolvedValue(rental({ release_at: new Date() }));
-      payments.settleSecurityDeposit.mockResolvedValue({ captured_from_deposit: 50, charged_extra: 10 });
+      payments.settleSecurityDeposit.mockResolvedValue({ captured_from_deposit: 50, charged_extra: 0, awaiting_approval: 10 });
       await service.recordReturn('b1', 'v1', { damage_fee: 45, late_fee: 15, notes: 'Arch frame bent' });
       expect(payments.settleSecurityDeposit).toHaveBeenCalledWith('b1', 60);
+      // what the deposit didn't cover waits for the customer's approval
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/\$50\.00 was kept from your security deposit.*The other \$10\.00 isn’t charged unless you approve it/) }));
       expect(prisma.rentalReturn.create).toHaveBeenCalledWith({ data: expect.objectContaining({ damage_reported: true, damage_fee: 45, late_fee: 15 }) });
       const releaseAt: Date = prisma.booking.update.mock.calls[0][0].data.release_at;
       expect(releaseAt.getTime()).toBeGreaterThan(Date.now() + 47 * 3600 * 1000);
@@ -158,6 +160,7 @@ describe('RentalsService', () => {
     it('needs evidence for fees, only lets the vendor record it, and only once', async () => {
       prisma.booking.findUnique.mockResolvedValue(rental());
       await expect(service.recordReturn('b1', 'v1', { damage_fee: 20 })).rejects.toThrow(/photos or a note/);
+      await expect(service.recordReturn('b1', 'v1', { damage_fee: 20_000, late_fee: 6_000, notes: 'gone' })).rejects.toThrow(/up to \$25,000/);
       await expect(service.recordReturn('b1', 'c1', {})).rejects.toThrow(ForbiddenException);
       prisma.booking.findUnique.mockResolvedValue(rental({ rental_return: { id: 'x' } }));
       await expect(service.recordReturn('b1', 'v1', {})).rejects.toThrow(/already been recorded/);

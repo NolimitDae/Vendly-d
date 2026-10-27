@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as jwt from 'jsonwebtoken';
 import * as request from 'supertest';
+import { signedIn } from './e2e-sessions';
 
 const DB = process.env.CONTRACTS_E2E_DATABASE_URL;
 const run = DB ? describe : describe.skip;
@@ -88,6 +89,7 @@ run('Booking requests (e2e)', () => {
       new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true, transformOptions: { enableImplicitConversion: true } }),
     );
     await app.init();
+    await signedIn(app, Object.values(U));
     prisma = app.get(PrismaService);
 
     await prisma.user.createMany({

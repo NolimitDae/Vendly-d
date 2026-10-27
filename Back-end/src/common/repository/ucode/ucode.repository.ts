@@ -209,8 +209,9 @@ export class UcodeRepository {
   }
 
   /**
-   * Check if token is verified
-   * @returns boolean - true if verified, false otherwise
+   * Whether `token` is the current, unexpired code mailed to `email` (for a password reset). The
+   * website and app send the code straight from the email, so it doesn't need verify-token first.
+   * An expired code is deleted. The caller deletes a code it has used.
    */
   async verifycheckToken({ email, token }: { email: string; token: string }) {
     if (!isText(email) || !isText(token)) return false;
@@ -225,11 +226,12 @@ export class UcodeRepository {
       return false;
     }
 
-    if (existToken.verified_at) {
-      return true;
+    if (existToken.expired_at && existToken.expired_at < new Date()) {
+      await this.prisma.ucode.delete({ where: { id: existToken.id } }).catch(() => null);
+      return false;
     }
 
-    return false;
+    return true;
   }
 
   /**

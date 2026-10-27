@@ -101,7 +101,7 @@ describe('website login cookies', () => {
 });
 
 describe('JwtStrategy token sources', () => {
-  const strategy = new JwtStrategy({ user: { findUnique: jest.fn() } } as any);
+  const strategy = new JwtStrategy({ user: { findUnique: jest.fn() } } as any, { exists: jest.fn().mockResolvedValue(1) } as any);
   it('reads the cookie when there is no Bearer token', () => {
     const extract = (strategy as any)._jwtFromRequest as (r: any) => string | null;
     expect(extract(req({ cookie: `vendly_session=${good}` }))).toBe(good);

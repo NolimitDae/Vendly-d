@@ -252,6 +252,60 @@ describe('AuthService', () => {
           expect((await refreshWith(laptop)).success).toBe(false);
         });
 
+        it('a reset stops taking codes after too many wrong ones for that email', async () => {
+          memoryRedis();
+          mockUserRepo.exist.mockResolvedValue(mockUser);
+          (mockUcodeRepo as any).verifycheckToken.mockResolvedValue(false);
+          mockRedis.incr.mockResolvedValueOnce(6);
+          const result: any = await service.resetPassword({ email: 'jane@test.com', token: '123456', password: 'new-password' });
+          expect(result).toEqual({ success: false, message: 'Too many wrong codes. Please request a new code.' });
+          expect((mockUcodeRepo as any).verifycheckToken).not.toHaveBeenCalled();
+          expect((mockUserRepo as any).changePassword).not.toHaveBeenCalled();
+        });
+
+        describe('email change', () => {
+          beforeEach(() => {
+            mockUserRepo.getUserDetails.mockResolvedValue(mockUser);
+            mockPrisma.user.findUnique.mockResolvedValue({ password: 'hashed-password' });
+            (mockUcodeRepo as any).validateToken = jest.fn().mockResolvedValue(true);
+            (mockUserRepo as any).changeEmail = jest.fn().mockResolvedValue(undefined);
+          });
+
+          it('needs the current password: a session alone changes nothing', async () => {
+            memoryRedis();
+            (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false);
+            for (const current_password of [undefined, 'wrong']) {
+              const res: any = await service.changeEmail({ user_id: 'user-1', new_email: 'new@test.com', token: '123456', current_password });
+              expect(res.success).toBe(false);
+              expect(res.message).toMatch(/current password/);
+            }
+            const req: any = await service.requestEmailChange('user-1', 'new@test.com');
+            expect(req.success).toBe(false);
+            expect((mockUcodeRepo as any).validateToken).not.toHaveBeenCalled();
+            expect(mockUcodeRepo.createToken).not.toHaveBeenCalled();
+            expect((mockUserRepo as any).changeEmail).not.toHaveBeenCalled();
+          });
+
+          it('with the password and the code, changes it and signs the other devices out', async () => {
+            const store = memoryRedis();
+            const phone = await signIn(1);
+            const laptop = await signIn(2);
+            const res: any = await service.changeEmail({ user_id: 'user-1', new_email: 'new@test.com', token: '123456', current_password: 'pw', sid: laptop.sid });
+            expect(res).toEqual({ success: true, message: 'Email updated successfully. You’ve been signed out on your other devices.' });
+            expect((mockUserRepo as any).changeEmail).toHaveBeenCalledWith({ user_id: 'user-1', new_email: 'new@test.com' });
+            expect(store.has(`refresh_token:user-1:${phone.sid}`)).toBe(false);
+            expect(store.has(`refresh_token:user-1:${laptop.sid}`)).toBe(true);
+          });
+
+          it('stops taking codes for an address after too many wrong ones', async () => {
+            memoryRedis();
+            mockRedis.incr.mockResolvedValueOnce(6);
+            const res: any = await service.changeEmail({ user_id: 'user-1', new_email: 'new@test.com', token: '000000', current_password: 'pw' });
+            expect(res).toEqual({ success: false, message: 'Too many wrong codes. Please request a new code.' });
+            expect((mockUcodeRepo as any).validateToken).not.toHaveBeenCalled();
+          });
+        });
+
         it('a change keeps the device that made it and signs the others out', async () => {
           const store = memoryRedis();
           const phone = await signIn(1);

@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as jwt from 'jsonwebtoken';
 import * as path from 'path';
 import * as request from 'supertest';
+import { signedIn } from './e2e-sessions';
 
 const DB = process.env.CONTRACTS_E2E_DATABASE_URL;
 const run = DB ? describe : describe.skip;
@@ -57,6 +58,7 @@ run('Licence files (e2e)', () => {
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true, transformOptions: { enableImplicitConversion: true } }));
     await app.init();
+    await signedIn(app, Object.values(U));
     prisma = app.get(PrismaService);
 
     await prisma.user.createMany({

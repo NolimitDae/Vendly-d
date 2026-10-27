@@ -41,7 +41,7 @@ const SELF_SIGNUP_TYPES: string[] = [UserType.CLIENT, UserType.CUSTOMER, UserTyp
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
-import { ChangePasswordBodyDto, DeleteAccountBodyDto, EmailBodyDto, EmailTokenBodyDto, LogoutBodyDto, PushTokenBodyDto, RefreshBodyDto, ResetPasswordBodyDto, TokenBodyDto } from './dto/auth-bodies.dto';
+import { ChangeEmailBodyDto, ChangePasswordBodyDto, DeleteAccountBodyDto, EmailBodyDto, EmailTokenBodyDto, LogoutBodyDto, PushTokenBodyDto, RefreshBodyDto, RequestEmailChangeBodyDto, ResetPasswordBodyDto, TokenBodyDto } from './dto/auth-bodies.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import {
   CSRF_MESSAGE,
@@ -543,7 +543,7 @@ export class AuthController {
     description: 'Email and OTP token to verify',
     schema: {
       type: 'object',
-      required: ['email', 'token'],
+      required: ['email', 'token', 'current_password'],
       properties: {
         email: {
           type: 'string',
@@ -807,6 +807,10 @@ export class AuthController {
           example: 'newemail@example.com',
           description: 'New email address to change to',
         },
+        current_password: {
+          type: 'string',
+          description: 'The account\'s current password',
+        },
       },
     },
   })
@@ -817,7 +821,7 @@ export class AuthController {
   @Post('request-email-change')
   async requestEmailChange(
     @Req() req: Request,
-    @Body() data: EmailBodyDto,
+    @Body() data: RequestEmailChangeBodyDto,
   ) {
     try {
       const user_id = req.user.userId;
@@ -825,7 +829,7 @@ export class AuthController {
       if (!email) {
         throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
       }
-      return await this.authService.requestEmailChange(user_id, email);
+      return await this.authService.requestEmailChange(user_id, email, data.current_password);
     } catch (error) {
       return {
         success: false,
@@ -843,7 +847,7 @@ export class AuthController {
     description: 'New email address and OTP token for confirmation',
     schema: {
       type: 'object',
-      required: ['email', 'token'],
+      required: ['email', 'token', 'current_password'],
       properties: {
         email: {
           type: 'string',
@@ -856,6 +860,10 @@ export class AuthController {
           example: '123456',
           description: 'OTP token received at new email address',
         },
+        current_password: {
+          type: 'string',
+          description: 'The account\'s current password',
+        },
       },
     },
   })
@@ -866,7 +874,7 @@ export class AuthController {
   @Post('change-email')
   async changeEmail(
     @Req() req: Request,
-    @Body() data: EmailTokenBodyDto,
+    @Body() data: ChangeEmailBodyDto,
   ) {
     try {
       const user_id = req.user.userId;
@@ -883,6 +891,8 @@ export class AuthController {
         user_id: user_id,
         new_email: email,
         token: token,
+        current_password: data.current_password,
+        sid: req.user.sid,
       });
     } catch (error) {
       return {
