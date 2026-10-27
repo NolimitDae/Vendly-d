@@ -283,7 +283,7 @@ export default function VendorBookingDetail() {
             {!booking.is_rental && <Row icon="cube-outline" label="Service" value={booking.listing?.title ?? '—'} />}
             {!!booking.venue_address && <Row icon="location-outline" label="Address" value={booking.venue_address} />}
             {booking.service_at === 'VENDOR_LOCATION' ? (
-              <Row icon="storefront-outline" label="Where" value="The customer comes to you" />
+              <Row icon="storefront-outline" label="Where" value={booking.is_rental ? 'The customer picks it up from you' : booking.customer_comes ? 'The customer chose to come to you' : 'The customer comes to you'} />
             ) : (
               !!booking.venue_address && (
                 <MapPicture lat={booking.venue_lat} lng={booking.venue_lng} address={booking.venue_address} height={160} directions={st === 'CONFIRMED' || st === 'IN_PROGRESS'} label="Map of the venue" />

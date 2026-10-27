@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { addHours, format, parseISO, set } from 'date-fns';
@@ -35,10 +35,12 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const [start, setStart] = useState<{ hours: number; minutes: number } | null>(null);
   const [duration, setDuration] = useState(DURATIONS[1]);
   const [venue, setVenue] = useState('');
+  // the customer comes to the vendor instead (where the package allows it): no address then
+  const [comes, setComes] = useState(false);
   const [guests, setGuests] = useState('');
   const [notes, setNotes] = useState('');
   // the package's limits and add-ons come from the listing itself (the summary passed in doesn't carry them)
-  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null; needs_service_address?: boolean; needs_guest_count?: boolean } | null>(null);
+  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null; needs_service_address?: boolean; needs_guest_count?: boolean; customer_can_come?: boolean } | null>(null);
   const [picks, setPicks] = useState<Record<string, number>>({});
   // the package's customizations: what was picked for each
   const [choices, setChoices] = useState<Picks>({});
@@ -47,7 +49,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
     MarketplaceService.getListing(listing.id)
       .then((r) => {
         const l = r.data?.data;
-        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null, needs_service_address: l.needs_service_address, needs_guest_count: l.needs_guest_count });
+        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null, needs_service_address: l.needs_service_address, needs_guest_count: l.needs_guest_count, customer_can_come: l.customer_can_come });
       })
       .catch(() => {});
   }, [listing.id]);
@@ -80,8 +82,10 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const closedDay = hours ? (zoned ? times.length === 0 : dayHours === null) : false;
   const addOns = pkg?.add_ons ?? [];
   const picked = addOns.filter((a) => picks[a.id] != null).map((a) => ({ addOn: a, quantity: picks[a.id] }));
-  // venues and packages at the vendor's place happen there: no address to give
-  const asksAddress = (pkg?.needs_service_address ?? listing.needsServiceAddress) !== false;
+  // venues and packages at the vendor's place happen there, and so does a booking where the customer comes over: no address to give
+  const atCustomer = (pkg?.needs_service_address ?? listing.needsServiceAddress) !== false;
+  const canCome = atCustomer && !!pkg?.customer_can_come;
+  const asksAddress = atCustomer && !(canCome && comes);
   // a venue needs the guest count (for an event, the event's own count is used when none is typed)
   const venueGuests = !!(pkg?.needs_guest_count ?? listing.needsGuestCount) && !listing.eventId;
   const needsGuests = venueGuests || unit === 'person' || picked.some((p) => p.addOn.price_unit === 'PER_PERSON');
@@ -131,7 +135,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
       return Alert.alert(
         'Guest count',
         venueGuests
-          ? 'Enter how many guests are coming. The venue needs a guest count to take the booking.'
+          ? 'Enter how many guests are coming. The vendor needs a guest count to take the booking.'
           : unit === 'person'
             ? 'This package is priced per person. Enter how many guests are coming.'
             : 'Some add-ons you picked are priced per person. Enter how many guests are coming.',
@@ -150,6 +154,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
         endAt: endAt.toISOString(),
         durationLabel: duration.label,
         venue: asksAddress ? venue.trim() : '',
+        customerComes: canCome && comes ? true : undefined,
         guests: guests ? Number(guests) : undefined,
         notes: notes.trim() || undefined,
         addOns: picked.length ? picked.map(({ addOn, quantity }) => (addOn.price_unit === 'PER_ITEM' ? { add_on_id: addOn.id, quantity } : { add_on_id: addOn.id })) : undefined,
@@ -208,6 +213,15 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
             )}
           </View>
 
+          {canCome && (
+            <View style={s.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.switchLabel}>I&apos;ll come to the vendor</Text>
+                <Text style={s.hint}>For a pickup or drop-off. No address needed: you&apos;ll see where to go once they accept.</Text>
+              </View>
+              <Switch value={comes} onValueChange={setComes} trackColor={{ true: DARK.accent, false: DARK.field }} accessibilityLabel="I'll come to the vendor" />
+            </View>
+          )}
           {asksAddress ? (
             <View style={{ gap: 8 }}>
               <Text style={ui.label}>Service Address</Text>
@@ -216,7 +230,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
           ) : (
             <View style={{ gap: 8 }}>
               <Text style={ui.label}>Where</Text>
-              <Text style={s.hint}>{`This happens at ${listing.vendorName}'s place, so there's no address to add. You'll see the full address once they accept.`}</Text>
+              <Text style={s.hint}>{`${comes ? "You're going to" : 'This happens at'} ${listing.vendorName}'s place, so there's no address to add. You'll see the full address once they accept.`}</Text>
             </View>
           )}
 
@@ -325,6 +339,8 @@ const s = StyleSheet.create({
   datePillText: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   hint: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  switchLabel: { color: DARK.text, fontSize: 14, fontFamily: FONTS.semibold },
   textarea: { height: undefined, paddingVertical: 12, alignItems: 'flex-start' },
   addOn: { borderRadius: 16, backgroundColor: DARK.card, borderWidth: 1, borderColor: 'transparent' },
   addOnOn: { borderColor: DARK.border },

@@ -26,6 +26,8 @@ export interface BookingFields {
   event_start_at?: string;
   event_end_at?: string;
   venue_address?: string;
+  /** the customer comes to the vendor instead (packages that allow it): no address */
+  customer_comes?: boolean;
   guest_count?: number;
   message?: string;
   event_id?: string;

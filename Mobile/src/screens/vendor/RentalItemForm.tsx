@@ -34,6 +34,9 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
   const [quantity, setQuantity] = useState('1');
   const [turnaround, setTurnaround] = useState(24);
   const [location, setLocation] = useState('');
+  // how the customer gets it: delivered, picked up, or either
+  const [delivers, setDelivers] = useState(true);
+  const [pickup, setPickup] = useState(true);
   const [existing, setExisting] = useState<{ key: string; url: string }[]>([]);
   const [images, setImages] = useState<PickedImage[]>([]);
   const [dosDonts, setDosDonts] = useState<DosDonts>(emptyDosDonts());
@@ -50,6 +53,8 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
         setDeposit(i.deposit_amount ? String(i.deposit_amount) : '');
         setQuantity(String(i.quantity));
         setTurnaround(i.turnaround_hours);
+        setDelivers(i.offers_delivery ?? true);
+        setPickup(i.offers_pickup ?? true);
         setLocation(i.location ?? '');
         setExisting((i.image_keys ?? []).map((key, idx) => ({ key, url: i.images[idx] })));
         setDosDonts(dosDontsFrom(i));
@@ -73,6 +78,7 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
     if (!daily || daily < 0.5) return Alert.alert('Daily rate', 'Enter a daily rate of at least $0.50.');
     if (!qty || qty < 1) return Alert.alert('Quantity', 'How many of these do you have? At least 1.');
     if (Number.isNaN(dep) || dep < 0) return Alert.alert('Deposit', 'Enter a deposit amount, or leave it empty for none.');
+    if (!delivers && !pickup) return Alert.alert('Delivery or pickup', 'Offer delivery, pickup, or both.');
     const dosProblem = dosDontsError(dosDonts);
     if (dosProblem) return Alert.alert('Dos and don’ts', dosProblem);
     setSaving(true);
@@ -84,6 +90,8 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
       fd.append('deposit_amount', String(dep));
       fd.append('quantity', String(qty));
       fd.append('turnaround_hours', String(turnaround));
+      fd.append('offers_delivery', String(delivers));
+      fd.append('offers_pickup', String(pickup));
       if (location.trim()) fd.append('location', location.trim());
       if (itemId) fd.append('keep_images', JSON.stringify(existing.map((e) => e.key)));
       appendDosDonts(fd, dosDonts, !!itemId);
@@ -144,6 +152,15 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
             <Text style={ui.label}>Turnaround between rentals</Text>
             <View style={s.chips}>{TURNAROUND.map((t) => <Chip key={t.hours} label={t.label} active={turnaround === t.hours} onPress={() => setTurnaround(t.hours)} />)}</View>
             <Text style={s.hint}>Time to clean, check and deliver. The stock is blocked this long before pickup and after return.</Text>
+          </View>
+
+          <View style={{ gap: 8 }}>
+            <Text style={ui.label}>How customers get it</Text>
+            <View style={s.chips}>
+              <Chip label="I deliver it" active={delivers} onPress={() => setDelivers((v) => !v)} />
+              <Chip label="Customers pick it up" active={pickup} onPress={() => setPickup((v) => !v)} />
+            </View>
+            <Text style={s.hint}>{pickup ? 'Customers who pick up see your business address (set in Profile) once you accept.' : 'Customers enter the delivery address when they book.'}</Text>
           </View>
 
           <View style={{ gap: 8 }}>

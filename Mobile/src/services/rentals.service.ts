@@ -14,6 +14,9 @@ export interface RentalItem {
   deposit_amount: number;
   quantity: number;
   turnaround_hours: number;
+  /** how the customer gets it: the vendor delivers it, and/or they pick it up (missing on older data: both) */
+  offers_delivery?: boolean;
+  offers_pickup?: boolean;
   location?: string | null;
   status: RentalItemStatus;
   /** the vendor's instructions for using the equipment */
@@ -48,6 +51,8 @@ export interface RentalQuote {
   security_deposit: number;
   due_on_accept: number;
   available: boolean;
+  /** what every item in the order offers */
+  handover?: { delivery: boolean; pickup: boolean };
   lines: { item_id: string; title: string; quantity: number; available: number; ok: boolean; daily_rate: number; deposit_amount: number }[];
 }
 
@@ -58,7 +63,7 @@ export const RentalsService = {
     api.get<Res<RentalItem[]>>('/rentals', { params }),
   item: (id: string) => api.get<Res<RentalItem>>(`/rentals/${id}`),
   quote: (body: { lines: RentalLine[]; start_date: string; end_date: string }) => api.post<Res<RentalQuote>>('/rentals/quote', body),
-  book: (body: { lines: RentalLine[]; start_date: string; end_date: string; venue_address?: string; message?: string; payment_method_id: string }) =>
+  book: (body: { lines: RentalLine[]; start_date: string; end_date: string; venue_address?: string; customer_comes?: boolean; message?: string; payment_method_id: string }) =>
     api.post<Res<{ id: string; status: string; title: string }>>('/rentals/book', body),
 
   mine: () => api.get<Res<RentalItem[]>>('/vendor/rentals'),

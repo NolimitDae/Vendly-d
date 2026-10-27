@@ -69,6 +69,8 @@ export interface Booking {
   given_back?: number;
   /** Rentals: the "listing" is synthesised from the rented items */
   is_rental?: boolean;
+  /** the customer chose to come to the vendor (or pick up a rental) */
+  customer_comes?: boolean;
   security_deposit?: number | string | null;
   rental_reservations?: { id: string; quantity: number; start_date: string; end_date: string; status: string; item: { id: string; title: string; images?: string[]; dos?: string[] | null; donts?: string[] | null } }[];
   /** what was picked for the package's customizations, frozen when the booking was made */

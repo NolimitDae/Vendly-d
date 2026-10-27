@@ -98,6 +98,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
     event_end_at: draft.endAt,
     // venues and packages at the vendor's place: no address (the vendor's place is shown once they accept)
     venue_address: draft.venue || undefined,
+    customer_comes: draft.customerComes || undefined,
     guest_count: draft.guests,
     message: draft.notes,
     event_id: listing.eventId,
@@ -222,7 +223,7 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
           {draft.venue ? (
             <Row icon="location-outline" label="Address" value={draft.venue} />
           ) : (
-            <Row icon="storefront-outline" label="Where" value={`At ${listing.vendorName}'s place`} />
+            <Row icon="storefront-outline" label="Where" value={draft.customerComes ? `You go to ${listing.vendorName}` : `At ${listing.vendorName}'s place`} />
           )}
           <Row icon="calendar-outline" label="Date" value={format(start, 'EEE, dd MMM yyyy')} />
           <Row icon="time-outline" label="Time" value={`${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`} />

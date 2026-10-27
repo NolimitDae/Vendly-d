@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,6 +61,9 @@ export default function ListingForm() {
   const [radius, setRadius] = useState<number | null>(null);
   // where the service happens: at the customer's place, or they come to the vendor's business address
   const [serviceAt, setServiceAt] = useState<'CUSTOMER_LOCATION' | 'VENDOR_LOCATION'>('CUSTOMER_LOCATION');
+  // customers may come to the vendor instead; whether a guest count is required (null = the default: venues only)
+  const [customerCanCome, setCustomerCanCome] = useState(false);
+  const [guestRequired, setGuestRequired] = useState<boolean | null>(null);
   const [plan, setPlan] = useState<PaymentPlan>('FULL_ON_ACCEPT');
   const [minQ, setMinQ] = useState('');
   const [maxQ, setMaxQ] = useState('');
@@ -107,6 +110,8 @@ export default function ListingForm() {
             setPlace({ label: l.location ?? '', lat: l.lat ?? undefined, lng: l.lng ?? undefined });
             setRadius(l.service_radius_miles ?? null);
             setServiceAt(l.service_at === 'VENDOR_LOCATION' ? 'VENDOR_LOCATION' : 'CUSTOMER_LOCATION');
+            setCustomerCanCome(!!l.customer_can_come);
+            setGuestRequired(l.guest_count_required ?? null);
             setPlan(l.payment_plan ?? l.effective_payment_plan ?? 'FULL_ON_ACCEPT');
             setExisting(l.images ?? []);
             setMinQ(l.min_quantity ? String(l.min_quantity) : '');
@@ -173,6 +178,8 @@ export default function ListingForm() {
       }
       if (radius != null) fd.append('service_radius_miles', String(radius));
       fd.append('service_at', serviceAt);
+      fd.append('customer_can_come', String(serviceAt === 'CUSTOMER_LOCATION' && customerCanCome));
+      if (guestRequired !== null) fd.append('guest_count_required', String(guestRequired));
       fd.append('payment_plan', plan);
       // guests / hours / days limits only apply to counted prices; 0 clears one
       if (counted) {
@@ -251,6 +258,9 @@ export default function ListingForm() {
   if (loading) return <ActivityIndicator color={DARK.accent} style={s.center} />;
 
   const counted = countedUnit(priceUnit);
+  // a venue needs a guest count unless the vendor says otherwise (as the API decides)
+  const isVenue = categories.find((c) => c.id === categoryId)?.name?.trim().toLowerCase() === 'venues';
+  const guestsRequired = guestRequired ?? isVenue;
   const addOnGroup = (kind: AddOnKind) => {
     const known = library.filter((a) => a.kind === kind);
     const fresh = drafts.filter((d) => d.kind === kind);
@@ -452,7 +462,27 @@ export default function ListingForm() {
                 ? 'Customers see your business address (set in Profile) once you accept their booking. Before that they only see the area above.'
                 : 'You go to the address the customer gives when they book. You get directions on the booking.'}
             </Text>
+            {serviceAt === 'CUSTOMER_LOCATION' && !isVenue && (
+              <View style={s.switchRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.switchLabel}>Customers can come to me instead</Text>
+                  <Text style={s.hint}>For pickups and drop-offs: customers can choose to come to you and skip the address. They see your business address once you accept.</Text>
+                </View>
+                <Switch value={customerCanCome} onValueChange={setCustomerCanCome} trackColor={{ true: DARK.accent, false: DARK.field }} accessibilityLabel="Customers can come to me instead" />
+              </View>
+            )}
           </View>
+
+          {priceUnit !== 'person' && (
+            <View style={{ gap: 8 }}>
+              <Text style={ui.label}>Guest count</Text>
+              <View style={s.chips}>
+                <Chip label="Required" active={guestsRequired} onPress={() => setGuestRequired(true)} />
+                <Chip label="Optional" active={!guestsRequired} onPress={() => setGuestRequired(false)} />
+              </View>
+              <Text style={s.hint}>{guestsRequired ? 'Customers must say how many guests are coming to send a request.' : 'Customers can add a guest count, but don’t have to.'}</Text>
+            </View>
+          )}
 
           {addOnsReady && (
             <View style={{ gap: 12 }}>
@@ -495,6 +525,8 @@ const s = StyleSheet.create({
   currency: { color: DARK.muted, fontSize: 18, fontFamily: FONTS.medium },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   hint: { color: DARK.muted, fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
+  switchLabel: { color: DARK.text, fontSize: 14, fontFamily: FONTS.semibold },
   groupTitle: { color: '#fff', fontSize: 15, fontFamily: FONTS.semibold, marginTop: 4 },
   addRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
   addRowText: { color: DARK.accent, fontSize: 15, fontFamily: FONTS.semibold },

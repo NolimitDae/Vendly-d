@@ -248,9 +248,9 @@ export default function BookingDetail() {
 
           {showsTracker(booking) && <BookingProgress booking={booking} />}
 
-          {booking.service_at === 'VENDOR_LOCATION' && !booking.is_rental && (!!booking.vendor_place || ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(st)) && (
+          {booking.service_at === 'VENDOR_LOCATION' && (!!booking.vendor_place || ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(st)) && (
             <Card style={{ gap: 12 }}>
-              <Text style={s.h2}>Where to go</Text>
+              <Text style={s.h2}>{booking.is_rental ? 'Where to pick it up' : 'Where to go'}</Text>
               {booking.vendor_place ? (
                 <>
                   <Row icon="location-outline" label="Address" value={booking.vendor_place.address} />
@@ -260,7 +260,7 @@ export default function BookingDetail() {
                 <>
                   {!!booking.listing?.location && <Row icon="location-outline" label="Area" value={booking.listing.location} />}
                   <Text style={s.paidNote}>
-                    {st === 'PENDING' ? `You go to ${vendor} for this booking. You'll see their address once they accept.` : `You go to ${vendor} for this booking. They haven't added their address yet, so message them for it.`}
+                    {`${booking.is_rental ? 'You pick this up from' : 'You go to'} ${vendor}. ${st === 'PENDING' ? "You'll see their address once they accept." : "They haven't added their address yet, so message them for it."}`}
                   </Text>
                 </>
               )}

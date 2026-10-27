@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import { BrandGradient, Card, Chip, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import LocationPicker from '../../components/LocationPicker';
 import AddCardSheet from '../../components/AddCardSheet';
 import { DARK, FONTS } from '../../constants/colors';
@@ -30,6 +30,8 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
   const [quote, setQuote] = useState<RentalQuote | null>(null);
   const [quoting, setQuoting] = useState(true);
   const [venue, setVenue] = useState('');
+  // delivered to an address, or picked up from the vendor (as every item in the order allows)
+  const [handover, setHandover] = useState<'delivery' | 'pickup' | null>(null);
   const [notes, setNotes] = useState('');
   const [cards, setCards] = useState<SavedCard[]>([]);
   const [card, setCard] = useState<string | null>(null);
@@ -71,14 +73,21 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
     return () => clearTimeout(t);
   }, [refreshQuote]);
 
+  const offers = quote?.handover ?? { delivery: true, pickup: true };
+  const way = offers.delivery && offers.pickup ? handover : offers.delivery ? 'delivery' : offers.pickup ? 'pickup' : null;
+
   const send = async () => {
     if (!lines.length) return Alert.alert('Nothing selected', 'Add at least one item.');
+    if (!offers.delivery && !offers.pickup) return Alert.alert('Delivery or pickup', 'Some of these items are delivery only and some pickup only. Rent them separately.');
+    if (!way) return Alert.alert('Delivery or pickup', 'Choose how you get the items.');
+    if (way === 'delivery' && !venue.trim()) return Alert.alert('Delivery address', 'Enter where the vendor should deliver.');
     // no card yet: go straight to adding one (it's only charged once the vendor accepts)
     if (!card) return setAddingCard(true);
     if (quote && !quote.available) return Alert.alert('Not enough stock', 'Lower the quantity of the items marked in red, or pick other dates.');
     setBusy(true);
     try {
-      await RentalsService.book({ lines, start_date: startDate, end_date: endDate, venue_address: venue.trim() || undefined, message: notes.trim() || undefined, payment_method_id: card });
+      const pickup = way === 'pickup';
+      await RentalsService.book({ lines, start_date: startDate, end_date: endDate, customer_comes: pickup, venue_address: pickup ? undefined : venue.trim(), message: notes.trim() || undefined, payment_method_id: card });
       setSent(true);
       haptic.success();
     } catch (e) {
@@ -137,8 +146,19 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
         </Card>
 
         <Card style={{ gap: 14 }}>
-          <Text style={s.h2}>Delivery & notes</Text>
-          <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address (optional)" street />
+          <Text style={s.h2}>Delivery or pickup</Text>
+          {offers.delivery && offers.pickup ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+              <Chip label="Delivery" active={way === 'delivery'} onPress={() => setHandover('delivery')} />
+              <Chip label="I'll pick it up" active={way === 'pickup'} onPress={() => setHandover('pickup')} />
+            </View>
+          ) : (
+            <Text style={s.muted}>
+              {offers.delivery ? 'Delivered by the vendor.' : offers.pickup ? 'Pickup only: you collect it from the vendor.' : 'Some of these items are delivery only and some pickup only. Rent them separately.'}
+            </Text>
+          )}
+          {way === 'delivery' && <LocationPicker value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address" street />}
+          {way === 'pickup' && <Text style={s.muted}>You&apos;ll see where to pick it up once the vendor accepts.</Text>}
           <View style={[ui.field, { height: undefined, paddingVertical: 12, alignItems: 'flex-start' }]}>
             <Ionicons name="chatbox-ellipses-outline" size={20} color={DARK.muted} style={{ marginTop: 2 }} />
             <TextInput style={[ui.input, { minHeight: 70, textAlignVertical: 'top' }]} placeholder="Pickup time, colours, setup needs…" placeholderTextColor={DARK.muted} value={notes} onChangeText={setNotes} multiline />

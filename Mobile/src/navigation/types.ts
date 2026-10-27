@@ -58,6 +58,8 @@ export type BookingDraft = {
   endAt: string;
   durationLabel: string;
   venue: string;
+  /** the customer comes to the vendor instead (packages that allow it): no address */
+  customerComes?: boolean;
   guests?: number;
   notes?: string;
   /** Add-ons picked when booking; sent as-is to both the contract preview and the booking request. */
