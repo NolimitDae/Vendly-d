@@ -93,14 +93,24 @@ export class StripeController {
           // credit a deposit only on its first successful delivery; Stripe may deliver events more than once
           if (meta.type === 'deposit' && meta.userId) {
             await this.prisma.$transaction(async (tx) => {
+              // credit exactly the US-dollar deposit that was recorded for this user, never another currency
+              const row = await tx.paymentTransaction.findFirst({
+                where: { reference_number: pi.id, type: 'deposit', user_id: meta.userId },
+                select: { id: true, amount: true, currency: true },
+              });
+              const cents = row ? Math.round(Number(row.amount) * 100) : NaN;
+              if (!row || pi.currency !== 'usd' || (row.currency ?? 'usd').toLowerCase() !== 'usd' || pi.amount_received !== cents) {
+                console.error(`Deposit ${pi.id} not credited: it doesn't match the recorded US-dollar deposit`);
+                return;
+              }
               const settled = await tx.paymentTransaction.updateMany({
-                where: { reference_number: pi.id, type: 'deposit', status: { not: 'succeeded' } },
+                where: { id: row.id, status: { not: 'succeeded' } },
                 data: { status: 'succeeded' },
               });
               if (settled.count === 1) {
                 await tx.user.update({
                   where: { id: meta.userId },
-                  data: { balance: { increment: pi.amount_received / 100 } },
+                  data: { balance: { increment: cents / 100 } },
                 });
               }
             });

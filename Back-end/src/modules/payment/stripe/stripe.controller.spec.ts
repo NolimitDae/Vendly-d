@@ -19,6 +19,7 @@ const mockPrisma = {
     updateMany: jest.fn(),
   },
   paymentTransaction: {
+    findFirst: jest.fn(),
     updateMany: jest.fn(),
   },
   user: {
@@ -186,12 +187,14 @@ describe('StripeController', () => {
         data: {
           object: {
             id: 'pi_001',
+            currency: 'usd',
             amount_received: 10000,
             metadata: { type: 'deposit', userId: 'user-1' },
           },
         },
       };
       mockStripeService.handleWebhook.mockResolvedValue(event);
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({ id: 'tx-1', amount: 100, currency: 'usd' });
       mockPrisma.paymentTransaction.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.user.update.mockResolvedValue({});
 
@@ -200,8 +203,11 @@ describe('StripeController', () => {
 
       expect(result).toEqual({ received: true });
       // deposits are matched by PaymentIntent id, which is stored as the reference number
+      expect(mockPrisma.paymentTransaction.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { reference_number: 'pi_001', type: 'deposit', user_id: 'user-1' } }),
+      );
       expect(mockPrisma.paymentTransaction.updateMany).toHaveBeenCalledWith({
-        where: { reference_number: 'pi_001', type: 'deposit', status: { not: 'succeeded' } },
+        where: { id: 'tx-1', status: { not: 'succeeded' } },
         data: { status: 'succeeded' },
       });
       expect(mockPrisma.user.update).toHaveBeenCalledWith(
@@ -217,9 +223,35 @@ describe('StripeController', () => {
     it('does not credit a deposit twice when Stripe redelivers the event', async () => {
       mockStripeService.handleWebhook.mockResolvedValue({
         type: 'payment_intent.succeeded',
-        data: { object: { id: 'pi_001', amount_received: 10000, metadata: { type: 'deposit', userId: 'user-1' } } },
+        data: { object: { id: 'pi_001', currency: 'usd', amount_received: 10000, metadata: { type: 'deposit', userId: 'user-1' } } },
       });
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({ id: 'tx-1', amount: 100, currency: 'usd' });
       mockPrisma.paymentTransaction.updateMany.mockResolvedValue({ count: 0 });
+
+      await controller.handleWebhook('sig', makeRawBodyRequest('{}', 'sig'));
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('never credits a deposit paid in another currency as dollars', async () => {
+      mockStripeService.handleWebhook.mockResolvedValue({
+        type: 'payment_intent.succeeded',
+        data: { object: { id: 'pi_idr', currency: 'idr', amount_received: 99999900, metadata: { type: 'deposit', userId: 'user-1' } } },
+      });
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({ id: 'tx-2', amount: 999999, currency: 'idr' });
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await controller.handleWebhook('sig', makeRawBodyRequest('{}', 'sig'));
+      expect(mockPrisma.paymentTransaction.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it("credits only the recorded amount: a payment that doesn't match it is left alone", async () => {
+      mockStripeService.handleWebhook.mockResolvedValue({
+        type: 'payment_intent.succeeded',
+        data: { object: { id: 'pi_001', currency: 'usd', amount_received: 500000, metadata: { type: 'deposit', userId: 'user-1' } } },
+      });
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({ id: 'tx-1', amount: 100, currency: 'usd' });
+      jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
       await controller.handleWebhook('sig', makeRawBodyRequest('{}', 'sig'));
       expect(mockPrisma.user.update).not.toHaveBeenCalled();
