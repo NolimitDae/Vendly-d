@@ -279,10 +279,10 @@ export default function CustomerBookingDetailPage() {
 
       {showsTracker(booking) && <BookingProgress booking={booking} />}
 
-      {booking.service_at === "VENDOR_LOCATION" && !booking.is_rental && (!!booking.vendor_place || ["PENDING", "CONFIRMED", "IN_PROGRESS"].includes(booking.status)) && (
+      {booking.service_at === "VENDOR_LOCATION" && (!!booking.vendor_place || ["PENDING", "CONFIRMED", "IN_PROGRESS"].includes(booking.status)) && (
         <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3" aria-labelledby="where-to-go">
           <h2 id="where-to-go" className="font-semibold text-gray-900 dark:text-white">
-            Where to go
+            {booking.is_rental ? "Where to pick it up" : "Where to go"}
           </h2>
           {booking.vendor_place ? (
             <>
@@ -293,8 +293,8 @@ export default function CustomerBookingDetailPage() {
             <p className="text-sm text-gray-600 dark:text-gray-300">
               {booking.listing?.location ? `${booking.listing.location}. ` : ""}
               {booking.status === "PENDING"
-                ? `You go to ${booking.vendor?.name ?? "the vendor"} for this booking. You'll see their address once they accept.`
-                : `You go to ${booking.vendor?.name ?? "the vendor"} for this booking. They haven't added their address yet, so message them for it.`}
+                ? `${booking.is_rental ? "You pick this up from" : "You go to"} ${booking.vendor?.name ?? "the vendor"}. You'll see their address once they accept.`
+                : `${booking.is_rental ? "You pick this up from" : "You go to"} ${booking.vendor?.name ?? "the vendor"}. They haven't added their address yet, so message them for it.`}
             </p>
           )}
         </section>

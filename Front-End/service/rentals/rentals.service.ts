@@ -22,6 +22,9 @@ export interface RentalItem {
   deposit_amount: number;
   quantity: number;
   turnaround_hours: number;
+  /** how the customer gets it: the vendor delivers it, and/or they pick it up (missing on older data: both) */
+  offers_delivery?: boolean;
+  offers_pickup?: boolean;
   location?: string | null;
   status: RentalItemStatus;
   /** the vendor's instructions for using the equipment */
@@ -54,6 +57,8 @@ export interface RentalQuote {
   security_deposit: number;
   due_on_accept: number;
   available: boolean;
+  /** what every item in the order offers */
+  handover?: { delivery: boolean; pickup: boolean };
   lines: { item_id: string; title: string; quantity: number; available: number; ok: boolean; daily_rate: number; deposit_amount: number }[];
 }
 
@@ -68,7 +73,7 @@ export const RentalsService = {
     Fetch.get(`/rentals?${qs(params)}`),
   item: (id: string) => Fetch.get(`/rentals/${id}`),
   quote: (body: { lines: RentalLine[]; start_date: string; end_date: string }) => Fetch.post("/rentals/quote", body),
-  book: (body: { lines: RentalLine[]; start_date: string; end_date: string; venue_address?: string; message?: string; payment_method_id: string }) =>
+  book: (body: { lines: RentalLine[]; start_date: string; end_date: string; venue_address?: string; customer_comes?: boolean; message?: string; payment_method_id: string }) =>
     Fetch.post("/rentals/book", body, authHeaders()),
 
   mine: () => Fetch.get("/vendor/rentals", authHeaders()),

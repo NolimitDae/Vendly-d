@@ -302,14 +302,14 @@ export default function VendorBookingDetailPage() {
 
       <VendorDayPanel booking={booking} customerName={booking.customer?.name ?? "The customer"} onChanged={fetchAll} />
 
-      {!booking.is_rental && (booking.service_at === "VENDOR_LOCATION" || !!booking.venue_address) && (
+      {(booking.service_at === "VENDOR_LOCATION" || !!booking.venue_address) && (
         <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-3" aria-labelledby="booking-location">
           <h2 id="booking-location" className="font-semibold text-gray-900 dark:text-white">
             Location
           </h2>
           {booking.service_at === "VENDOR_LOCATION" ? (
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              The customer comes to you. Once you accept, they see the business address from your profile.
+              {booking.is_rental ? "The customer picks it up from you." : booking.customer_comes ? "The customer chose to come to you." : "The customer comes to you."} Once you accept, they see the business address from your profile.
             </p>
           ) : (
             <>

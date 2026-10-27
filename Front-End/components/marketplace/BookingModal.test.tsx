@@ -593,7 +593,7 @@ describe('BookingModal', () => {
       await user.type(screen.getByLabelText(/event date/i), '2030-06-01');
       await user.type(screen.getByLabelText(/start time/i), '18:00');
       await user.click(screen.getByRole('button', { name: /review contract/i }));
-      expect(toast.error).toHaveBeenCalledWith('Enter how many guests are coming. The venue needs a guest count to take the booking.');
+      expect(toast.error).toHaveBeenCalledWith('Enter how many guests are coming. The vendor needs a guest count to take the booking.');
       expect(ContractsService.bookingPreview).not.toHaveBeenCalled();
 
       await user.type(screen.getByLabelText(/guest count/i), '80');
@@ -601,6 +601,27 @@ describe('BookingModal', () => {
       await waitFor(() => expect(ContractsService.bookingPreview).toHaveBeenCalledTimes(1));
       const sent = (ContractsService.bookingPreview as jest.Mock).mock.calls[0][0];
       expect(sent).toMatchObject({ listing_id: 'listing-1', guest_count: 80 });
+      expect(sent.venue_address).toBeUndefined();
+    });
+
+    it("lets the customer come to the vendor instead where the package allows it (no address then)", async () => {
+      (ContractsService.bookingPreview as jest.Mock).mockResolvedValue({ data: { data: preview } });
+      const user = userEvent.setup();
+      const { rerender } = render(<BookingModal listing={{ ...listing, needs_service_address: true }} onClose={onClose} />);
+      expect(screen.queryByLabelText(/I'll come to the vendor/i)).not.toBeInTheDocument();
+
+      rerender(<BookingModal listing={{ ...listing, needs_service_address: true, customer_can_come: true }} onClose={onClose} />);
+      expect(screen.getByLabelText(/venue address/i)).toBeInTheDocument();
+      await user.click(screen.getByLabelText(/I'll come to the vendor/i));
+      expect(screen.queryByLabelText(/venue address/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/You're going to .*'s place, so there's no address to add/)).toBeInTheDocument();
+
+      await user.type(screen.getByLabelText(/event date/i), '2030-06-01');
+      await user.type(screen.getByLabelText(/start time/i), '18:00');
+      await user.click(screen.getByRole('button', { name: /review contract/i }));
+      await waitFor(() => expect(ContractsService.bookingPreview).toHaveBeenCalledTimes(1));
+      const sent = (ContractsService.bookingPreview as jest.Mock).mock.calls[0][0];
+      expect(sent).toMatchObject({ customer_comes: true });
       expect(sent.venue_address).toBeUndefined();
     });
 

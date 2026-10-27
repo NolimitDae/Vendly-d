@@ -11,6 +11,7 @@ import Link from "next/link";
 import CategoryCombobox from "@/components/listing/CategoryCombobox";
 import LocationField, { appendPlace, type PickedPlace } from "@/components/listing/LocationField";
 import ServiceAtField from "@/components/listing/ServiceAtField";
+import BookingAsksField, { isVenueCategory } from "@/components/listing/BookingAsksField";
 import type { ServiceAt } from "@/lib/booking-tracker";
 import type { PickerCategory } from "@/lib/categories";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
@@ -69,6 +70,9 @@ export default function EditListingPage() {
   const [radius, setRadius] = useState<number | null>(null);
   // where the service happens: at the customer's place, or they come to the vendor's business address
   const [serviceAt, setServiceAt] = useState<ServiceAt>("CUSTOMER_LOCATION");
+  // customers may come to the vendor instead; whether a guest count is required (null = the default)
+  const [customerCanCome, setCustomerCanCome] = useState(false);
+  const [guestRequired, setGuestRequired] = useState<boolean | null>(null);
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
   const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
@@ -108,6 +112,8 @@ export default function EditListingPage() {
         setPlace({ label: l.location ?? "", lat: l.lat ?? undefined, lng: l.lng ?? undefined });
         setRadius(l.service_radius_miles ?? null);
         setServiceAt(l.service_at === "VENDOR_LOCATION" ? "VENDOR_LOCATION" : "CUSTOMER_LOCATION");
+        setCustomerCanCome(!!l.customer_can_come);
+        setGuestRequired(l.guest_count_required ?? null);
         setLimits({ min: l.min_quantity ? String(l.min_quantity) : "", max: l.max_quantity ? String(l.max_quantity) : "" });
         setDetails(packageDetailsFrom(l));
         setDosDonts(dosDontsFrom(l));
@@ -169,6 +175,8 @@ export default function EditListingPage() {
       Object.entries(form).forEach(([k, v]) => { if (v || k === "category_id" || k === "sub_category_id") fd.append(k, v); });
       appendPlace(fd, place, radius, true);
       fd.append("service_at", serviceAt);
+      fd.append("customer_can_come", String(serviceAt === "CUSTOMER_LOCATION" && customerCanCome));
+      if (guestRequired !== null) fd.append("guest_count_required", String(guestRequired));
       appendLimits(fd, form.price_unit, limits, true);
       appendPackageDetails(fd, details, true);
       appendDosDonts(fd, dosDonts, true);
@@ -448,6 +456,15 @@ export default function EditListingPage() {
             <h2 className="font-semibold text-gray-900 dark:text-white">Location</h2>
             <LocationField value={place} onChange={setPlace} radius={radius} onRadiusChange={setRadius} />
             <ServiceAtField value={serviceAt} onChange={setServiceAt} />
+            <BookingAsksField
+              serviceAt={serviceAt}
+              customerCanCome={customerCanCome}
+              onCustomerCanCome={setCustomerCanCome}
+              guestRequired={guestRequired}
+              onGuestRequired={setGuestRequired}
+              isVenue={isVenueCategory(categories.find((c) => c.id === form.category_id)?.name)}
+              priceUnit={form.price_unit}
+            />
           </div>
 
           {/* Details */}

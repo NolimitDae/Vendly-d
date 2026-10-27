@@ -207,6 +207,9 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
   const [quantity, setQuantity] = useState(item ? String(item.quantity) : "1");
   const [turnaround, setTurnaround] = useState(item?.turnaround_hours ?? 24);
   const [location, setLocation] = useState(item?.location ?? "");
+  // how the customer gets it: delivered, picked up, or either
+  const [delivers, setDelivers] = useState(item?.offers_delivery ?? true);
+  const [pickup, setPickup] = useState(item?.offers_pickup ?? true);
   const [keep, setKeep] = useState<{ key: string; url: string }[]>((item?.image_keys ?? []).map((key, i) => ({ key, url: item!.images[i] })));
   const [files, setFiles] = useState<File[]>([]);
   const [dosDonts, setDosDonts] = useState<DosDonts>(dosDontsFrom(item ?? {}));
@@ -221,6 +224,7 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
     if (!daily || daily < 0.5) return toast.error("Enter a daily rate of at least $0.50");
     if (!qty || qty < 1) return toast.error("Quantity must be at least 1");
     if (Number.isNaN(dep) || dep < 0) return toast.error("Enter a valid deposit, or leave it empty");
+    if (!delivers && !pickup) return toast.error("Offer delivery, pickup, or both");
     const dosProblem = dosDontsError(dosDonts);
     if (dosProblem) return toast.error(dosProblem);
     const fd = new FormData();
@@ -230,6 +234,8 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
     fd.append("deposit_amount", String(dep));
     fd.append("quantity", String(qty));
     fd.append("turnaround_hours", String(turnaround));
+    fd.append("offers_delivery", String(delivers));
+    fd.append("offers_pickup", String(pickup));
     if (location.trim()) fd.append("location", location.trim());
     if (item) fd.append("keep_images", JSON.stringify(keep.map((k) => k.key)));
     appendDosDonts(fd, dosDonts, !!item);
@@ -279,6 +285,16 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
             ))}
           </div>
         </div>
+        <fieldset className="text-sm">
+          <legend className="text-gray-600 dark:text-gray-300">How customers get it</legend>
+          <div className="flex flex-wrap gap-4 mt-1">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={delivers} onChange={(e) => setDelivers(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />I deliver it</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={pickup} onChange={(e) => setPickup(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />Customers pick it up</label>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            {pickup ? "Customers who pick up see your business address (set in your profile) once you accept." : "Customers enter the delivery address when they book."}
+          </p>
+        </fieldset>
         <div className="block text-sm">
           <label htmlFor="rental-pickup" className="text-gray-600 dark:text-gray-300">Pickup location</label>
           <LocationField value={{ label: location }} onChange={(p) => setLocation(p.label)} inputId="rental-pickup" placeholder="City, State" />

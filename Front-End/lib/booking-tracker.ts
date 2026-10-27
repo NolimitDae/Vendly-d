@@ -6,6 +6,8 @@ export type ServiceAt = "CUSTOMER_LOCATION" | "VENDOR_LOCATION";
 export interface TrackerFields {
   status: string;
   is_rental?: boolean;
+  /** the customer chose to come to the vendor (or pick up a rental) */
+  customer_comes?: boolean;
   service_at?: ServiceAt;
   confirmed_at?: string | null;
   en_route_at?: string | null;

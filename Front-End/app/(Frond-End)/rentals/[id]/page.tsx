@@ -29,6 +29,8 @@ export default function RentalItemPage() {
   const [others, setOthers] = useState<RentalItem[]>([]);
   const [quote, setQuote] = useState<RentalQuote | null>(null);
   const [venue, setVenue] = useState("");
+  // delivered to an address, or picked up from the vendor (as every item in the order allows)
+  const [handover, setHandover] = useState<"delivery" | "pickup" | null>(null);
   const [notes, setNotes] = useState("");
   const [card, setCard] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -78,14 +80,21 @@ export default function RentalItemPage() {
     return others.find((o) => o.id === itemId)?.available ?? 0;
   };
 
+  const offers = quote?.handover ?? { delivery: item?.offers_delivery ?? true, pickup: item?.offers_pickup ?? true };
+  const way = offers.delivery && offers.pickup ? handover : offers.delivery ? "delivery" : offers.pickup ? "pickup" : null;
+
   const send = async () => {
     if (!loggedIn) return router.push(`/login?redirect=/rentals/${id}`);
     if (!start) return toast.error("Pick your dates first");
     if (!card) return toast.error("Add a card. It is only charged once the vendor accepts.");
     if (quote && !quote.available) return toast.error("Not enough stock for some items. Lower the quantity or change dates.");
+    if (!offers.delivery && !offers.pickup) return toast.error("These items can't go in one order: some are delivery only and some pickup only. Rent them separately.");
+    if (!way) return toast.error("Choose delivery or pickup");
+    if (way === "delivery" && !venue.trim()) return toast.error("Enter the delivery address");
     setSending(true);
     try {
-      const res = await RentalsService.book({ lines, start_date: startKey, end_date: endKey, venue_address: venue.trim() || undefined, message: notes.trim() || undefined, payment_method_id: card });
+      const pickup = way === "pickup";
+      const res = await RentalsService.book({ lines, start_date: startKey, end_date: endKey, customer_comes: pickup, venue_address: pickup ? undefined : venue.trim(), message: notes.trim() || undefined, payment_method_id: card });
       if (res.data?.success === false) throw new Error(res.data?.message);
       setSent(true);
     } catch (e) {
@@ -207,7 +216,34 @@ export default function RentalItemPage() {
             {start && (
               <>
                 <section className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 space-y-3">
-                  <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address (optional)" maxLength={500} street />
+                  <fieldset>
+                    <legend className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">How do you get it?</legend>
+                    {offers.delivery && offers.pickup ? (
+                      <div className="flex flex-wrap gap-2">
+                        {(["delivery", "pickup"] as const).map((w) => (
+                          <button
+                            key={w}
+                            type="button"
+                            aria-pressed={way === w}
+                            onClick={() => setHandover(w)}
+                            className={`px-3 py-1.5 rounded-full text-sm border transition ${way === w ? "bg-primary text-primary-foreground border-primary" : "border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-primary"}`}
+                          >
+                            {w === "delivery" ? "Delivery" : "I'll pick it up"}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        {offers.delivery ? "Delivered by the vendor." : offers.pickup ? "Pickup only: you collect it from the vendor." : "Some of these items are delivery only and some pickup only. Rent them separately."}
+                      </p>
+                    )}
+                  </fieldset>
+                  {way === "delivery" && (
+                    <LocationField value={{ label: venue }} onChange={(p) => setVenue(p.label)} label="Delivery address" placeholder="Delivery address" maxLength={500} street />
+                  )}
+                  {way === "pickup" && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">You&apos;ll see where to pick it up once the vendor accepts.</p>
+                  )}
                   <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Pickup time, colours, setup needs…" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 </section>
 

@@ -44,8 +44,10 @@ interface Props {
     min_notice_hours?: number | null;
     /** false for venues and packages at the vendor's place: the customer goes to them, so no address is asked */
     needs_service_address?: boolean;
-    /** venues: a guest count is needed to book */
+    /** venues, or packages where the vendor asks for it: a guest count is needed to book */
     needs_guest_count?: boolean;
+    /** the vendor comes to the customer, but lets them come to the vendor instead (pickup, drop-off) */
+    customer_can_come?: boolean;
   };
   /** Planner bookings: attach to this event (pre-fills venue and guest count). */
   eventId?: string;
@@ -115,6 +117,8 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [venue, setVenue] = useState("");
+  // the customer comes to the vendor instead (where the package allows it): no address then
+  const [comes, setComes] = useState(false);
   const [guests, setGuests] = useState("");
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -151,8 +155,9 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   // minimum notice (quotes too: a quote agrees the price, not the date)
   const notice = listing.min_notice_hours ?? null;
   const firstDay = firstBookableDay(notice);
-  // venues and packages at the vendor's place happen there: no address to give
-  const asksAddress = listing.needs_service_address !== false;
+  // venues and packages at the vendor's place happen there, and so does a booking where the customer comes over: no address to give
+  const canCome = listing.needs_service_address !== false && !!listing.customer_can_come;
+  const asksAddress = listing.needs_service_address !== false && !(canCome && comes);
   // guests are needed by venues and per person prices (an event's own count counts for venues)
   const guestsRequired = unit === "person" || (!!listing.needs_guest_count && !eventId);
 
@@ -204,6 +209,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
       event_start_at: startTime ? toIso(date, startTime) : undefined,
       event_end_at: endFixed,
       venue_address: asksAddress ? venue.trim() || undefined : undefined,
+      customer_comes: canCome && comes ? true : undefined,
       guest_count: guests ? Number(guests) : undefined,
       message: message.trim() || undefined,
       event_id: eventId,
@@ -220,7 +226,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const missingForPrice = (): string | null => {
     const g = guests ? Number(guests) : 0;
     const chosen = addOns.filter((a) => picked[a.id]);
-    if (listing.needs_guest_count && !eventId && !(g >= 1)) return "Enter how many guests are coming. The venue needs a guest count to take the booking.";
+    if (listing.needs_guest_count && !eventId && !(g >= 1)) return "Enter how many guests are coming. The vendor needs a guest count to take the booking.";
     if (unit === "person" || chosen.some((a) => a.price_unit === "PER_PERSON")) {
       if (!(g >= 1)) return unit === "person" ? "Enter how many guests are coming. This package is priced per person." : "Enter how many guests are coming.";
     }
@@ -468,6 +474,20 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                 </p>
               )}
             </div>
+            {canCome && (
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={comes}
+                  onChange={(e) => setComes(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-sm">
+                  <span className="block font-medium text-gray-700 dark:text-gray-300">I&apos;ll come to the vendor</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400">For a pickup or drop-off. No address needed: you&apos;ll see where to go once they accept.</span>
+                </span>
+              </label>
+            )}
             {asksAddress ? (
               <div>
                 <label htmlFor="venue" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
@@ -480,7 +500,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
               <p className="flex gap-2 text-sm text-gray-600 dark:text-gray-300 rounded-xl bg-gray-50 dark:bg-gray-900/40 px-3 py-2.5">
                 <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden />
                 <span>
-                  This happens at {listing.vendor?.name ?? "the vendor"}&apos;s place, so there&apos;s no address to add. You&apos;ll see the full address once they accept.
+                  {comes ? "You're going to" : "This happens at"} {listing.vendor?.name ?? "the vendor"}&apos;s place, so there&apos;s no address to add. You&apos;ll see the full address once they accept.
                 </span>
               </p>
             )}
