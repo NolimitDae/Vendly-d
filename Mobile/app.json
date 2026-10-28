@@ -2,8 +2,8 @@
   "expo": {
     "name": "Vendly",
     "slug": "vendly",
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "version": "1.1.0",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
@@ -29,7 +29,7 @@
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],
-      "versionCode": 8
+      "versionCode": 9
     },
     "plugins": [
       [
@@ -48,6 +48,12 @@
       ],
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
+        }
+      ],
       "expo-apple-authentication",
       [
         "expo-location",

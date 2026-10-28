@@ -13,6 +13,10 @@ import {
 import { AuthProvider } from './src/contexts/AuthContext';
 import RootNavigator from './src/navigation';
 import * as Sentry from '@sentry/react-native';
+import { lockPortrait } from './src/utils/orientation';
+
+// upright everywhere except the signature pad (src/utils/orientation.ts)
+lockPortrait();
 
 // Crash and error reports. Off unless EXPO_PUBLIC_SENTRY_DSN is set for the build.
 Sentry.init({

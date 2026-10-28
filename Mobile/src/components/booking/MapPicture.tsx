@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, TOKEN_KEY } from '../../services/api';
@@ -7,10 +9,62 @@ import { DARK, FONTS } from '../../constants/colors';
 import { openDirections } from '../../utils/bookingTracker';
 
 /**
- * A small picture of the map around a place, with a pin and a Directions button. It is a grid of map tiles
- * served (and cached) by the API, so it works on the current app build without a maps SDK. Everything
- * about the map lives in this one file so a live map (react-native-maps) can replace it in a later build.
+ * The map of a booking place, with a pin and a Directions button. From app 1.1.0 it is a live map
+ * (react-native-maps: Apple Maps on iPhone; Google Maps on Android once the build has a Google Maps key);
+ * otherwise a picture made of map tiles served (and cached) by the API. Everything about the map lives here.
  */
+
+// the Android build only has Google Maps when GOOGLE_MAPS_ANDROID_KEY was set (app.config.js)
+const androidLiveMap = !!(Constants.expoConfig?.extra as { androidLiveMap?: boolean } | undefined)?.androidLiveMap;
+const maps: typeof import('react-native-maps') | null = (() => {
+  if (Platform.OS !== 'ios' && !(Platform.OS === 'android' && androidLiveMap)) return null;
+  try {
+    return require('react-native-maps');
+  } catch {
+    return null;
+  }
+})();
+
+const MAP_DELTA = 0.02;
+
+/** The live map: the place's pin, and (when asked and already allowed) where you are, both in view. */
+function LiveMap({ lat, lng, height, label, showMe }: { lat: number; lng: number; height: number; label: string; showMe: boolean }) {
+  const MapView = maps!.default;
+  const { Marker } = maps!;
+  const ref = useRef<InstanceType<typeof MapView>>(null);
+  const [me, setMe] = useState<{ latitude: number; longitude: number } | null>(null);
+  const place = { latitude: lat, longitude: lng };
+
+  useEffect(() => {
+    if (!showMe) return;
+    // only when location is already allowed: the booking page never asks for it
+    Location.getForegroundPermissionsAsync()
+      .then((p) => (p.granted ? Location.getLastKnownPositionAsync() : null))
+      .then((pos) => pos && setMe({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }))
+      .catch(() => {});
+  }, [showMe]);
+
+  useEffect(() => {
+    if (me) ref.current?.fitToCoordinates([me, place], { edgePadding: { top: 48, right: 48, bottom: 48, left: 48 }, animated: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
+
+  return (
+    <MapView
+      ref={ref}
+      style={[s.map, { height }]}
+      initialRegion={{ ...place, latitudeDelta: MAP_DELTA, longitudeDelta: MAP_DELTA }}
+      showsUserLocation={!!me}
+      userInterfaceStyle="dark"
+      pitchEnabled={false}
+      rotateEnabled={false}
+      toolbarEnabled={false}
+      accessibilityLabel={label}
+    >
+      <Marker coordinate={place} pinColor={DARK.border} />
+    </MapView>
+  );
+}
 
 const TILE = 256;
 const ZOOM = 15;
@@ -67,7 +121,8 @@ export default function MapPicture({
 
   return (
     <View style={{ gap: 10 }}>
-      {known && (
+      {known && maps && <LiveMap lat={lat!} lng={lng!} height={height} label={address ? `${label}: ${address}` : label} showMe={directions} />}
+      {known && !maps && (
         <View style={[s.map, { height }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessible accessibilityRole="image" accessibilityLabel={address ? `${label}: ${address}` : label}>
           {width > 0 &&
             !!token &&
