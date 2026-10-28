@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Package, RotateCcw, ShieldCheck } from "lucide-react";
 import { toast } from "react-toastify";
 import { RentalsService, errorMessage, money } from "@/service/rentals/rentals.service";
+import { FILE_INPUT_CLASS } from "@/lib/file-input";
 
 export interface RentalBookingFields {
   id: string;
@@ -119,7 +120,7 @@ export default function RentalReturnPanel({ booking, role, onChanged }: { bookin
                 <label className="text-sm"><span className="text-gray-600 dark:text-gray-300">Late fee ($)</span><input className={input} inputMode="decimal" value={late} onChange={(e) => setLate(e.target.value.replace(/[^0-9.]/g, ""))} /></label>
               </div>
               <label className="block text-sm"><span className="text-gray-600 dark:text-gray-300">What happened?</span><textarea className={input} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. 2 chairs returned with broken legs" /></label>
-              <input type="file" accept="image/*" multiple aria-label="Return photos" onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 10))} className="text-sm" />
+              <input type="file" accept="image/*" multiple aria-label="Return photos" onChange={(e) => setPhotos(Array.from(e.target.files ?? []).slice(0, 10))} className={FILE_INPUT_CLASS} />
               <div className="flex gap-2">
                 <button onClick={submit} disabled={busy} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium flex items-center gap-2 disabled:opacity-60">
                   {busy && <Loader2 className="w-4 h-4 animate-spin" />} Record return

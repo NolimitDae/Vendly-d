@@ -30,6 +30,7 @@ import {
   buildLabelClass,
 } from "../utils/variants";
 import { UploadIcon } from "@/icons";
+import { FILE_INPUT_CLASS } from "@/lib/file-input";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TextInput
@@ -669,12 +670,8 @@ export const FileInput = forwardRef<HTMLInputElement, FileInputProps>(
             multiple={multiple}
             onChange={(e) => e.target.files && handleFiles(e.target.files)}
             className={cn(
-              "block w-full text-sm text-slate-500 dark:text-gray-400",
-              "file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0",
-              "file:text-sm file:font-medium file:bg-blush-50 file:text-plum-700",
-              "dark:file:bg-plum-900/30 dark:file:text-orchid-300",
-              "hover:file:bg-blush-100 dark:hover:file:bg-plum-900/50",
-              "file:cursor-pointer file:transition-colors",
+              FILE_INPUT_CLASS,
+              "file:transition-colors",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               inputClassName,
             )}

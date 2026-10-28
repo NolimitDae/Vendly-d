@@ -7,6 +7,7 @@ import ContractBody from "@/components/contracts/ContractBody";
 import { ContractsService, apiError, openContractFile } from "@/service/contracts/contracts.service";
 import { VendorListingService } from "@/service/vendor/vendor-listing.service";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
+import { FILE_INPUT_CLASS } from "@/lib/file-input";
 
 interface FieldDef {
   key: string;
@@ -399,8 +400,7 @@ export default function VendorContractsPage() {
               accept="application/pdf"
               aria-label="Contract PDF"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              // the browser's "Choose File" control, styled as a button so it reads as one
-              className="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:cursor-pointer file:rounded-lg file:border file:border-primary file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20 dark:file:bg-primary/20 dark:hover:file:bg-primary/30"
+              className={FILE_INPUT_CLASS}
             />
             {uploadFields.map((f) => (
               <FieldInput key={f.key} def={f} value={values[f.key] ?? ""} onChange={(v) => setValues((s) => ({ ...s, [f.key]: v }))} />

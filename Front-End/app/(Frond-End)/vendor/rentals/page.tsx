@@ -12,6 +12,7 @@ import RentalDeliveryFee from "@/components/rentals/RentalDeliveryFee";
 import LocationField from "@/components/listing/LocationField";
 import DosDontsFields from "@/components/listing/DosDontsFields";
 import { appendDosDonts, dosDontsError, dosDontsFrom, type DosDonts } from "@/lib/package-options";
+import { FILE_INPUT_CLASS } from "@/lib/file-input";
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -318,7 +319,7 @@ function ItemForm({ item, onClose, onSaved }: { item: RentalItem | null; onClose
               </div>
             ))}
           </div>
-          <input type="file" accept="image/*" multiple onChange={(e) => setFiles((p) => [...p, ...Array.from(e.target.files ?? [])].slice(0, 10 - keep.length))} className="text-sm" />
+          <input type="file" accept="image/*" multiple onChange={(e) => setFiles((p) => [...p, ...Array.from(e.target.files ?? [])].slice(0, 10 - keep.length))} className={FILE_INPUT_CLASS} />
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm">Cancel</button>
