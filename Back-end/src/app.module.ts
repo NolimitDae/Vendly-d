@@ -41,6 +41,7 @@ import { BookingModule } from './modules/booking/booking.module';
 import { ReviewModule } from './modules/review/review.module';
 import { EventPlannerModule } from './modules/event-planner/event-planner.module';
 import { SavedListingsModule } from './modules/saved-listings/saved-listings.module';
+import { SavedVendorsModule } from './modules/saved-vendors/saved-vendors.module';
 import { EventsModule } from './modules/events/events.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 
@@ -103,6 +104,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     ReviewModule,
     EventPlannerModule,
     SavedListingsModule,
+    SavedVendorsModule,
     EventsModule,
     SubscriptionsModule,
     ContractsModule,

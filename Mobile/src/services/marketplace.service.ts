@@ -135,4 +135,40 @@ export const MarketplaceService = {
   savedIds: () => api.get<{ success: boolean; data: string[] }>('/saved-listings/ids'),
   save: (listingId: string) => api.post(`/saved-listings/${listingId}`),
   unsave: (listingId: string) => api.delete(`/saved-listings/${listingId}`),
+  /** saved packages still on the marketplace, newest first (Favorites → Services) */
+  savedListings: () => api.get<{ success: boolean; data: SavedListing[] }>('/saved-listings'),
+
+  savedVendorIds: () => api.get<{ success: boolean; data: string[] }>('/saved-vendors/ids'),
+  saveVendor: (vendorId: string) => api.post(`/saved-vendors/${encodeURIComponent(vendorId)}`),
+  unsaveVendor: (vendorId: string) => api.delete(`/saved-vendors/${encodeURIComponent(vendorId)}`),
+  /** saved vendors still on the marketplace, newest first (Favorites → Vendors) */
+  savedVendors: () => api.get<{ success: boolean; data: SavedVendor[] }>('/saved-vendors'),
 };
+
+export interface SavedListing {
+  id: string;
+  created_at: string;
+  listing: Pick<Listing, 'id' | 'title' | 'price' | 'price_unit' | 'images' | 'location' | 'category' | 'avg_rating' | '_count'> & {
+    vendor?: { id: string; name: string; vendorProfile?: { business_name?: string | null } | null } | null;
+  };
+}
+
+/** A saved vendor as Favorites shows it (no contact details or business address). */
+export interface SavedVendor {
+  id: string;
+  created_at: string;
+  vendor: {
+    id: string;
+    name: string;
+    business_name?: string | null;
+    handle?: string | null;
+    avatar_url?: string | null;
+    logo_url?: string | null;
+    location?: string | null;
+    categories: string[];
+    listing_count: number;
+    avg_rating?: number | null;
+    review_count: number;
+    is_test?: boolean;
+  };
+}

@@ -9,6 +9,7 @@ import { openChatWith } from '../../navigation/openChat';
 import { MarketplaceService, type VendorProfile as Vendor } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
+import { useSavedVendors } from '../../hooks/useSavedVendors';
 import Sheet from '../../components/Sheet';
 import TestBadge from '../../components/TestBadge';
 import SocialLinks from '../../components/SocialLinks';
@@ -24,6 +25,9 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
+  // customers save vendors to Favorites (planners have teams instead)
+  const isCustomer = user?.type === 'CUSTOMER' || user?.type === 'CLIENT';
+  const saved = useSavedVendors(isCustomer);
 
   useEffect(() => {
     MarketplaceService.getVendor(vendorId)
@@ -61,9 +65,22 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
             onBack={() => navigation.goBack()}
             light
             right={
-              <Pressable onPress={() => shareLink(`Check out ${name} on Vendly`, vendorLink(vendor))} style={s.share} accessibilityRole="button" accessibilityLabel={`Share ${name}`}>
-                <Ionicons name="share-outline" size={20} color={DARK.bg} />
-              </Pressable>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Pressable onPress={() => shareLink(`Check out ${name} on Vendly`, vendorLink(vendor))} style={s.share} accessibilityRole="button" accessibilityLabel={`Share ${name}`}>
+                  <Ionicons name="share-outline" size={20} color={DARK.bg} />
+                </Pressable>
+                {isCustomer && vendor.id !== user?.id && (
+                  <Pressable
+                    onPress={() => saved.toggle(vendor.id)}
+                    style={s.share}
+                    accessibilityRole="button"
+                    accessibilityLabel={saved.has(vendor.id) ? 'Remove from favorites' : 'Save vendor'}
+                    accessibilityState={{ selected: saved.has(vendor.id) }}
+                  >
+                    <Ionicons name={saved.has(vendor.id) ? 'heart' : 'heart-outline'} size={20} color={saved.has(vendor.id) ? '#E0479E' : DARK.bg} />
+                  </Pressable>
+                )}
+              </View>
             }
           />
         </View>

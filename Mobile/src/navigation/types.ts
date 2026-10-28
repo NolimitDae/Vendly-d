@@ -113,6 +113,8 @@ export type CustomerProfileStackParams = {
   EventShared: { eventId: string; section?: 'schedule' | 'vendors' | 'files' | 'contracts' };
   PlannerPublic: { userId: string };
   Faq: undefined;
+  /** saved vendors and saved services (packages) */
+  Favorites: undefined;
 };
 
 export type CustomerMessagesStackParams = {
