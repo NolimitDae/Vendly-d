@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { AppState, Linking } from 'react-native';
 import { navigationRef } from '../navigation/navigationRef';
 import { OnboardingService, type Onboarding, type OnboardingRole } from '../services/onboarding.service';
+import { openInTab } from '../navigation/crossTab';
 
 const WEB = (process.env.EXPO_PUBLIC_WEB_URL ?? 'https://vendlymarketplace.com').replace(/\/+$/, '');
 /** Checking costs a couple of Stripe lookups, so don't re-check more often than this. */
@@ -45,7 +46,7 @@ export function openStep(role: OnboardingRole, key: string) {
   const t = TARGETS[role]?.[key];
   if (!t) return;
   if ('url' in t) return void Linking.openURL(t.url).catch(() => {});
-  if (navigationRef.isReady()) navigationRef.navigate(t.tab, { screen: t.screen, initial: false, params: t.params });
+  if (navigationRef.isReady()) openInTab(navigationRef, t.tab, t.screen, t.params);
 }
 
 interface Ctx {

@@ -31,6 +31,7 @@ import { SocketService } from '../../services/socket.service';
 import BookingProgress from '../../components/booking/BookingProgress';
 import MapPicture from '../../components/booking/MapPicture';
 import { callNumber, showsTracker } from '../../utils/bookingTracker';
+import { openInTab } from '../../navigation/crossTab';
 
 interface Proof { id: string; photos: string[]; notes?: string; created_at: string }
 interface Deliverable { id: string; title: string; message?: string; files: string[]; links: string[]; created_at: string }
@@ -321,7 +322,7 @@ export default function BookingDetail() {
               <Text style={s.h2}>Similar vendors free on your date</Text>
               {booking.similar_vendors.items.length ? (
                 booking.similar_vendors.items.map((v) => (
-                  <Pressable key={v.id} onPress={() => nav.navigate('HomeTab', { screen: 'ListingDetail', params: { listingId: v.id }, initial: false })} style={s.row} accessibilityRole="button">
+                  <Pressable key={v.id} onPress={() => openInTab(nav, 'HomeTab', 'ListingDetail', { listingId: v.id })} style={s.row} accessibilityRole="button">
                     <View style={s.thumb}>{!!v.image && <Image source={{ uri: v.image }} style={StyleSheet.absoluteFill} />}</View>
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text style={s.body} numberOfLines={1}>{v.title}</Text>
@@ -334,7 +335,7 @@ export default function BookingDetail() {
                 <Text style={s.paidNote}>We couldn’t find another vendor free on that day yet.</Text>
               )}
               <Pressable
-                onPress={() => nav.navigate('HomeTab', { screen: 'SearchResults', params: { categoryId: booking.similar_vendors!.category_id, filters: { date: booking.similar_vendors!.date } }, initial: false })}
+                onPress={() => openInTab(nav, 'HomeTab', 'SearchResults', { categoryId: booking.similar_vendors!.category_id, filters: { date: booking.similar_vendors!.date } })}
                 accessibilityRole="button"
               >
                 <Text style={s.link}>See all vendors free on your date</Text>
@@ -462,7 +463,7 @@ export default function BookingDetail() {
             </Pressable>
           )}
           {st === 'COMPLETED' && booking.listing?.id && (
-            <GradientButton title="Book Again" onPress={() => nav.navigate('HomeTab', { screen: 'ListingDetail', params: { listingId: booking.listing.id }, initial: false })} />
+            <GradientButton title="Book Again" onPress={() => openInTab(nav, 'HomeTab', 'ListingDetail', { listingId: booking.listing.id })} />
           )}
         </View>
       )}

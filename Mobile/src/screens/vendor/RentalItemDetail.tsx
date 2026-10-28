@@ -11,6 +11,7 @@ import { RentalsService, type RentalItem, type RentalReservation } from '../../s
 import { apiError } from '../../services/contracts.service';
 import type { VendorDashboardStackParams } from '../../navigation/types';
 import { SEVENTH, SEVENTH_PCT } from '../../utils/grid';
+import { openInTab } from '../../navigation/crossTab';
 
 type Detail = RentalItem & { reservations: RentalReservation[] };
 
@@ -132,11 +133,11 @@ export default function RentalItemDetail({ navigation, route }: NativeStackScree
         <Card style={{ gap: 12 }}>
           <Text style={s.h2}>Upcoming rentals</Text>
           {upcoming.length === 0 && <Text style={s.muted}>No upcoming rentals for this item.</Text>}
-          {upcoming.map((r) => <ResRow key={r.id} r={r} onPress={() => (navigation as any).navigate('BookingsTab', { screen: 'VendorBookingDetail', params: { bookingId: r.booking.id } })} />)}
+          {upcoming.map((r) => <ResRow key={r.id} r={r} onPress={() => openInTab(navigation, 'BookingsTab', 'VendorBookingDetail', { bookingId: r.booking.id })} />)}
           {past.length > 0 && (
             <>
               <Text style={[s.muted, { marginTop: 4 }]}>Returned</Text>
-              {past.slice(0, 5).map((r) => <ResRow key={r.id} r={r} onPress={() => (navigation as any).navigate('BookingsTab', { screen: 'VendorBookingDetail', params: { bookingId: r.booking.id } })} />)}
+              {past.slice(0, 5).map((r) => <ResRow key={r.id} r={r} onPress={() => openInTab(navigation, 'BookingsTab', 'VendorBookingDetail', { bookingId: r.booking.id })} />)}
             </>
           )}
         </Card>

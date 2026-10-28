@@ -12,6 +12,7 @@ import { useOnboarding } from '../../context/OnboardingContext';
 import OnboardingChecklist from '../../components/OnboardingChecklist';
 import { notificationTarget } from '../../navigation/notificationTarget';
 import { SocketService } from '../../services/socket.service';
+import { openInTab } from '../../navigation/crossTab';
 
 interface Item {
   id: string;
@@ -72,7 +73,7 @@ export default function Inbox() {
     // an ID check result keeps no status in the inbox: the rejection's wording tells them apart
     const status = type === 'identity' && /couldn.t verify/i.test(n.notification_event?.text ?? '') ? 'REJECTED' : undefined;
     const to = notificationTarget({ type, id: n.entity_id, status }, user?.type);
-    if (to) nav.navigate(to.tab, { screen: to.screen, initial: false, params: to.params });
+    if (to) openInTab(nav, to.tab, to.screen, to.params);
   };
 
   const readAll = async () => {

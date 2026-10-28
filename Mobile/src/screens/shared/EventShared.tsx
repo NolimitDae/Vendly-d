@@ -13,6 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 import { EventToolsService, type EventOverview } from '../../services/eventTools.service';
 import { ChatService } from '../../services/chat.service';
 import { apiError } from '../../services/contracts.service';
+import { openInTab } from '../../navigation/crossTab';
 
 type Section = 'schedule' | 'vendors' | 'files' | 'contracts';
 
@@ -39,7 +40,7 @@ export default function EventShared() {
   const openChat = async () => {
     try {
       const r = await ChatService.openEventChat(eventId);
-      nav.navigate('MessagesTab', { screen: 'ChatDetail', initial: false, params: { conversationId: r.data.data.conversation_id, participantName: ev?.name ?? 'Event chat' } });
+      openInTab(nav, 'MessagesTab', 'ChatDetail', { conversationId: r.data.data.conversation_id, participantName: ev?.name ?? 'Event chat' });
     } catch (e) {
       setError(apiError(e));
     }

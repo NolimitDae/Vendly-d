@@ -7,6 +7,7 @@ import { BrandGradient, ScreenHeader } from '../../components/brand';
 import TestBadge from '../../components/TestBadge';
 import { DARK, FONTS } from '../../constants/colors';
 import { MarketplaceService, type SavedListing, type SavedVendor } from '../../services/marketplace.service';
+import { openInTab } from '../../navigation/crossTab';
 
 type Tab = 'vendors' | 'services';
 const TABS: { key: Tab; label: string }[] = [
@@ -34,8 +35,8 @@ export default function Favorites() {
   useFocusEffect(load);
 
   // the vendor and package pages live on the Home tab
-  const openVendor = (vendorId: string) => nav.navigate('HomeTab', { screen: 'VendorProfile', params: { vendorId }, initial: false });
-  const openListing = (listingId: string) => nav.navigate('HomeTab', { screen: 'ListingDetail', params: { listingId }, initial: false });
+  const openVendor = (vendorId: string) => openInTab(nav, 'HomeTab', 'VendorProfile', { vendorId });
+  const openListing = (listingId: string) => openInTab(nav, 'HomeTab', 'ListingDetail', { listingId });
 
   // optimistic: the row goes at once and comes back if the server says no
   const removeVendor = async (item: SavedVendor) => {

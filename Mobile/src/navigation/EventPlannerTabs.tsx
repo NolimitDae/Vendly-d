@@ -38,6 +38,7 @@ import PaymentMethods from '../screens/customer/PaymentMethods';
 import Transactions from '../screens/shared/Transactions';
 
 import type { EPTabParams } from './types';
+import { backToOrigin } from './crossTab';
 
 const Tab = createBottomTabNavigator<EPTabParams>();
 // The home stack mixes planner screens with the customer booking screens, so it is typed loosely.
@@ -51,7 +52,7 @@ const STACK = { headerShown: false, contentStyle: { backgroundColor: DARK.bg }, 
 
 function HomeNavigator() {
   return (
-    <HomeStack.Navigator screenOptions={STACK}>
+    <HomeStack.Navigator screenListeners={backToOrigin} screenOptions={STACK}>
       <HomeStack.Screen name="EPHome" component={EPHome} />
       <HomeStack.Screen name="MyEvents" component={MyEvents} />
       <HomeStack.Screen name="CreateEvent" component={CreateEvent} />
@@ -72,7 +73,7 @@ function HomeNavigator() {
 
 function BookingsNavigator() {
   return (
-    <BookStack.Navigator screenOptions={STACK}>
+    <BookStack.Navigator screenListeners={backToOrigin} screenOptions={STACK}>
       <BookStack.Screen name="CustomerBookings" component={CustomerBookings} />
       <BookStack.Screen name="BookingDetail" component={BookingDetail} />
     </BookStack.Navigator>
@@ -81,7 +82,7 @@ function BookingsNavigator() {
 
 function MessagesNavigator() {
   return (
-    <MsgStack.Navigator screenOptions={STACK}>
+    <MsgStack.Navigator screenListeners={backToOrigin} screenOptions={STACK}>
       <MsgStack.Screen name="ChatList" component={ChatList} />
       <MsgStack.Screen name="ChatDetail" component={ChatDetail} />
       {/* booking a quote from a chat stays on this tab, so Back returns to the chat */}
@@ -94,7 +95,7 @@ function MessagesNavigator() {
 
 function ProfileNavigator() {
   return (
-    <ProfileStack.Navigator screenOptions={STACK}>
+    <ProfileStack.Navigator screenListeners={backToOrigin} screenOptions={STACK}>
       <ProfileStack.Screen name="EPProfile" component={EPProfile} />
       <ProfileStack.Screen name="PlannerProfile" component={PlannerProfile} />
       <ProfileStack.Screen name="PlannerPublic" component={PlannerPublic} />
@@ -123,6 +124,8 @@ export default function EventPlannerTabs() {
   const tabBarStyle = { backgroundColor: DARK.card, borderTopWidth: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: 64 + insets.bottom, paddingTop: 8 };
   return (
     <Tab.Navigator
+      // Android back at a tab's first page returns to the tab used before, not always the first tab
+      backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: '#fff',

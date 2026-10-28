@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FONTS } from '../constants/colors';
 import { api } from '../services/api';
 import { navigationRef } from '../navigation/navigationRef';
+import { openInTab } from '../navigation/crossTab';
 
 /** Same rule as the API: an approved licence, or an admin saying none is needed. */
 export const canPublish = (status?: string | null) => status === 'APPROVED' || status === 'NOT_APPLICABLE';
@@ -50,7 +51,7 @@ export default function LicenceNotice({ things = 'packages', style }: { things?:
       <View style={{ flex: 1, gap: 6 }}>
         <Text style={s.text}>{note.text}</Text>
         <Pressable
-          onPress={() => navigationRef.isReady() && navigationRef.navigate('ProfileTab', { screen: 'License', initial: false })}
+          onPress={() => navigationRef.isReady() && openInTab(navigationRef, 'ProfileTab', 'License')}
           accessibilityRole="link"
           hitSlop={8}
         >

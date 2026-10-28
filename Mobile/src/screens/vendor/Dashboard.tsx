@@ -11,6 +11,7 @@ import { api } from '../../services/api';
 import { BookingService, type Booking } from '../../services/booking.service';
 import { bookingWhen } from '../customer/Bookings';
 import { useFeature } from '../../hooks/useFeature';
+import { openInTab } from '../../navigation/crossTab';
 
 type Nav = NativeStackNavigationProp<any>;
 
@@ -85,8 +86,8 @@ export default function VendorDashboard() {
     { icon: 'receipt-outline', label: 'Fees', onPress: () => nav.navigate('AddOns', { tab: 'FEE' }) },
     ...(rentalsOn ? [{ icon: 'cube-outline' as const, label: 'Rental stock', onPress: () => nav.navigate('RentalInventory') }] : []),
     { icon: 'calendar-outline', label: 'Bookings', onPress: () => nav.navigate('BookingsTab') },
-    { icon: 'wallet-outline', label: 'Payouts', onPress: () => nav.navigate('ProfileTab', { screen: 'Payouts', initial: false }) },
-    { icon: 'document-text-outline', label: 'Contracts', onPress: () => nav.navigate('ProfileTab', { screen: 'VendorContracts', initial: false }) },
+    { icon: 'wallet-outline', label: 'Payouts', onPress: () => openInTab(nav, 'ProfileTab', 'Payouts') },
+    { icon: 'document-text-outline', label: 'Contracts', onPress: () => openInTab(nav, 'ProfileTab', 'VendorContracts') },
   ];
 
   return (
@@ -196,7 +197,7 @@ export default function VendorDashboard() {
           </Card>
         ) : (
           upcoming.slice(0, 3).map((b) => (
-            <Pressable key={b.id} style={s.booking} onPress={() => nav.navigate('BookingsTab', { screen: 'VendorBookingDetail', params: { bookingId: b.id }, initial: false })} accessibilityRole="button">
+            <Pressable key={b.id} style={s.booking} onPress={() => openInTab(nav, 'BookingsTab', 'VendorBookingDetail', { bookingId: b.id })} accessibilityRole="button">
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={s.bookingTitle} numberOfLines={1}>{b.listing?.title ?? 'Booking'}</Text>
                 <Text style={s.bookingMeta}>{b.customer?.name ?? 'Customer'} · {bookingWhen(b)}</Text>

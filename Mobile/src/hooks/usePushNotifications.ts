@@ -3,13 +3,14 @@ import * as Notifications from 'expo-notifications';
 import { NotificationsService } from '../services/notifications.service';
 import { navigationRef } from '../navigation/navigationRef';
 import { notificationTarget } from '../navigation/notificationTarget';
+import { openInTab } from '../navigation/crossTab';
 
 function openFromNotification(data: Record<string, unknown> | undefined, userType?: string) {
   if (!data || !navigationRef.isReady()) return;
   // the push names what it is about the same way the inbox does: booking, then conversation, then event
   const id = data.bookingId ?? data.conversationId ?? data.eventId;
   const to = notificationTarget({ type: data.type, id, status: data.status }, userType);
-  if (to) navigationRef.navigate(to.tab, { screen: to.screen, initial: false, params: to.params });
+  if (to) openInTab(navigationRef, to.tab, to.screen, to.params);
 }
 
 export function usePushNotifications(userType?: string) {

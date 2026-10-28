@@ -8,6 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Chip, ScreenHeader, ui } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { BookingMoneyService, money, type TransactionRow, type TransactionsPage, type TransactionType } from '../../services/bookingMoney.service';
+import { openInTab } from '../../navigation/crossTab';
 
 type Filter = 'all' | TransactionType;
 type Params = { Transactions: { role?: 'customer' | 'vendor' } | undefined };
@@ -88,8 +89,8 @@ export default function Transactions() {
 
   const openBooking = (id: string) => {
     // the booking lives in the Bookings tab
-    if (role === 'vendor') nav.navigate('BookingsTab', { screen: 'VendorBookingDetail', params: { bookingId: id }, initial: false });
-    else nav.navigate('BookingsTab', { screen: 'BookingDetail', params: { bookingId: id }, initial: false });
+    if (role === 'vendor') openInTab(nav, 'BookingsTab', 'VendorBookingDetail', { bookingId: id });
+    else openInTab(nav, 'BookingsTab', 'BookingDetail', { bookingId: id });
   };
 
   const header = (

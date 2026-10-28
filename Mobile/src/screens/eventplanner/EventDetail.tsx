@@ -35,6 +35,7 @@ import {
   EventTask,
 } from '../../services/events.service';
 import type { EventDetailProps } from '../../navigation/types';
+import { openInTab } from '../../navigation/crossTab';
 
 type Tab = 'overview' | 'schedule' | 'vendors' | 'budget' | 'files' | 'tasks';
 const TABS: { key: Tab; label: string }[] = [
@@ -112,7 +113,7 @@ export default function EventDetail() {
     if (!event) return;
     try {
       const res = await ChatService.openEventChat(event.id);
-      navigation.navigate('MessagesTab' as any, { screen: 'ChatDetail', initial: false, params: { conversationId: res.data.data.conversation_id, participantName: event.name } } as any);
+      openInTab(navigation, 'MessagesTab', 'ChatDetail', { conversationId: res.data.data.conversation_id, participantName: event.name });
     } catch (e) {
       Alert.alert('Event chat', apiError(e));
     }
@@ -168,7 +169,7 @@ export default function EventDetail() {
               <EventCompletedBanner
                 completedAt={event.completed_at ?? undefined}
                 bookings={event.bookings}
-                onOpenBooking={(bookingId) => navigation.navigate('BookingsTab' as any, { screen: 'BookingDetail', initial: false, params: { bookingId } } as any)}
+                onOpenBooking={(bookingId) => openInTab(navigation, 'BookingsTab', 'BookingDetail', { bookingId })}
                 onRateVendors={() => navigation.navigate('RateVendors', { eventId: event.id, eventName: event.name })}
                 toRate={toRate}
               />

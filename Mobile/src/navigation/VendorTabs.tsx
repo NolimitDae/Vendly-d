@@ -43,6 +43,7 @@ import type {
   VendorProfileStackParams,
   VendorMessagesStackParams,
 } from './types';
+import { backToOrigin } from './crossTab';
 
 const Tab = createBottomTabNavigator<VendorTabParams>();
 const DashStack = createNativeStackNavigator<VendorDashboardStackParams>();
@@ -55,7 +56,7 @@ const STACK = { headerShown: false, contentStyle: { backgroundColor: DARK.bg }, 
 
 function DashboardNavigator() {
   return (
-    <DashStack.Navigator screenOptions={STACK}>
+    <DashStack.Navigator screenListeners={backToOrigin} screenOptions={STACK}>
       <DashStack.Screen name="VendorDashboard" component={VendorDashboard} />
       <DashStack.Screen name="VendorListings" component={VendorListings} />
       <DashStack.Screen name="ListingForm" component={ListingForm} />
@@ -70,7 +71,7 @@ function DashboardNavigator() {
 
 function BookingsNavigator() {
   return (
-    <BookStack.Navigator screenOptions={STACK}>
+    <BookStack.Navigator screenListeners={backToOrigin} screenOptions={STACK}>
       <BookStack.Screen name="VendorBookings" component={VendorBookings} />
       <BookStack.Screen name="VendorBookingDetail" component={VendorBookingDetail} />
       <BookStack.Screen name="EventShared" component={EventShared} />
@@ -81,7 +82,7 @@ function BookingsNavigator() {
 
 function MessagesNavigator() {
   return (
-    <MsgStack.Navigator screenOptions={STACK}>
+    <MsgStack.Navigator screenListeners={backToOrigin} screenOptions={STACK}>
       <MsgStack.Screen name="ChatList" component={ChatList} />
       <MsgStack.Screen name="ChatDetail" component={ChatDetail} />
     </MsgStack.Navigator>
@@ -90,7 +91,7 @@ function MessagesNavigator() {
 
 function ProfileNavigator() {
   return (
-    <ProfileStack.Navigator screenOptions={STACK}>
+    <ProfileStack.Navigator screenListeners={backToOrigin} screenOptions={STACK}>
       <ProfileStack.Screen name="VendorProfile" component={VendorProfile} />
       <ProfileStack.Screen name="VendorContracts" component={VendorContracts} />
       <ProfileStack.Screen name="Payouts" component={Payouts} />
@@ -136,6 +137,8 @@ export default function VendorTabs() {
   };
   return (
     <Tab.Navigator
+      // Android back at a tab's first page returns to the tab used before, not always the first tab
+      backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: '#fff',

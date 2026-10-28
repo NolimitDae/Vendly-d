@@ -48,6 +48,7 @@ import type {
   CustomerProfileStackParams,
   CustomerMessagesStackParams,
 } from './types';
+import { backToOrigin } from './crossTab';
 
 const Tab = createBottomTabNavigator<CustomerTabParams>();
 const HomeStack = createNativeStackNavigator<CustomerHomeStackParams>();
@@ -65,7 +66,7 @@ const SLIDE = { animation: 'slide_from_right' as const };
 
 function HomeNavigator() {
   return (
-    <HomeStack.Navigator screenOptions={{ ...HEADER, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
+    <HomeStack.Navigator screenListeners={backToOrigin} screenOptions={{ ...HEADER, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
       <HomeStack.Screen name="CustomerHome" component={CustomerHome} options={{ headerShown: false }} />
       <HomeStack.Screen name="Notifications" component={Inbox} options={{ headerShown: false }} />
       <HomeStack.Screen name="FindVendors" component={FindVendors} options={{ headerShown: false }} />
@@ -86,7 +87,7 @@ function HomeNavigator() {
 
 function BookingsNavigator() {
   return (
-    <BookingsStack.Navigator screenOptions={{ ...HEADER, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
+    <BookingsStack.Navigator screenListeners={backToOrigin} screenOptions={{ ...HEADER, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
       <BookingsStack.Screen name="CustomerBookings" component={CustomerBookings} options={{ headerShown: false }} />
       <BookingsStack.Screen name="BookingDetail" component={BookingDetail} options={{ headerShown: false }} />
       <BookingsStack.Screen name="Payment" component={PaymentScreen} options={{ title: 'Secure Payment' }} />
@@ -96,7 +97,7 @@ function BookingsNavigator() {
 
 function MessagesNavigator() {
   return (
-    <MessagesStack.Navigator screenOptions={{ headerShown: false, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
+    <MessagesStack.Navigator screenListeners={backToOrigin} screenOptions={{ headerShown: false, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
       <MessagesStack.Screen name="ChatList" component={ChatList} />
       <MessagesStack.Screen name="ChatDetail" component={ChatDetail} />
       {/* booking a quote from a chat stays on this tab, so Back returns to the chat */}
@@ -109,7 +110,7 @@ function MessagesNavigator() {
 
 function ProfileNavigator() {
   return (
-    <ProfileStack.Navigator screenOptions={{ headerShown: false, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
+    <ProfileStack.Navigator screenListeners={backToOrigin} screenOptions={{ headerShown: false, ...SLIDE, contentStyle: { backgroundColor: DARK.bg } }}>
       <ProfileStack.Screen name="CustomerProfile" component={CustomerProfile} />
       <ProfileStack.Screen name="EditProfile" component={EditProfile} />
       <ProfileStack.Screen name="ChangePassword" component={ChangePassword} />
@@ -149,6 +150,8 @@ export default function CustomerTabs() {
   };
   return (
     <Tab.Navigator
+      // Android back at a tab's first page returns to the tab used before, not always the first tab
+      backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: '#fff',
