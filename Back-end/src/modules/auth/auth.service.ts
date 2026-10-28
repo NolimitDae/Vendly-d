@@ -48,6 +48,8 @@ export function heldRoles(user: { type?: string | null; roles?: string[] | null 
 const MAX_CODE_TRIES = 5;
 const CODE_TRIES_WINDOW_SECONDS = 15 * 60;
 export const TOO_MANY_CODE_TRIES = 'Too many wrong codes. Please request a new code.';
+/** How long a password-reset code works. */
+export const RESET_CODE_MINUTES = 15;
 
 /** Sign-in with an unknown email or a wrong password gets the same answer. */
 export const WRONG_LOGIN = 'Email or password is incorrect';
@@ -544,9 +546,11 @@ export class AuthService {
 
       if (user) {
         await this.clearCodeTries(email);
+        // 15 minutes: the code is checked first, then the new password is chosen on the next page
         const token = await this.ucodeRepository.createToken({
           userId: user.id,
           isOtp: true,
+          time: RESET_CODE_MINUTES,
         });
 
         await this.mailService.sendOtpCodeToEmail({

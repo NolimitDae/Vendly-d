@@ -203,6 +203,8 @@ export type AuthStackParams = {
   VerifyEmail: { email: string; password?: string };
   ForgotPassword: { email?: string } | undefined;
   ResetPassword: { email: string };
+  /** code: the emailed code, already checked on ResetPassword */
+  NewPassword: { email: string; code: string };
 };
 
 // ─── Screen props ─────────────────────────────────────────────────────────────

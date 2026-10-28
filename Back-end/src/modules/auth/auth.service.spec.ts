@@ -382,6 +382,8 @@ describe('AuthService', () => {
       const result: any = await service.forgotPassword('jane@test.com');
       expect(result.success).toBe(true);
       expect(mockMail.sendOtpCodeToEmail).toHaveBeenCalledWith({ email: 'jane@test.com', name: 'Jane Doe', otp: '123456' });
+      // long enough to check the code, then choose the password on the next page
+      expect(mockUcodeRepo.createToken).toHaveBeenCalledWith({ userId: 'user-1', isOtp: true, time: 15 });
     });
 
     it('gives the same answer for unknown emails, so accounts cannot be discovered', async () => {

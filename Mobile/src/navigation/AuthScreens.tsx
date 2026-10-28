@@ -10,6 +10,7 @@ import SignUp from '../screens/auth/SignUp';
 import VerifyEmail from '../screens/auth/VerifyEmail';
 import ForgotPassword from '../screens/auth/ForgotPassword';
 import ResetPassword from '../screens/auth/ResetPassword';
+import NewPassword from '../screens/auth/NewPassword';
 import type { AuthStackParams } from './types';
 
 const Stack = createNativeStackNavigator<AuthStackParams>();
@@ -35,6 +36,7 @@ export default function AuthScreens() {
       <Stack.Screen name="VerifyEmail" component={VerifyEmail} />
       <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
       <Stack.Screen name="ResetPassword" component={ResetPassword} />
+      <Stack.Screen name="NewPassword" component={NewPassword} />
     </Stack.Navigator>
   );
 }
