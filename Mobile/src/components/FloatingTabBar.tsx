@@ -16,7 +16,10 @@ export default function FloatingTabBar({ state, descriptors, navigation, insets,
   const count = state.routes.length;
   const slot = width ? width / count : 0;
   const boxes = state.routes.map((_, i) => (slot ? { x: i * slot, width: slot } : undefined));
-  const hl = useSlidingHighlight(boxes, state.index);
+  // the tab just tapped, ahead of the navigation by a frame (see onPress); follows it otherwise
+  const [heading, setHeading] = React.useState(state.index);
+  React.useEffect(() => setHeading(state.index), [state.index]);
+  const hl = useSlidingHighlight(boxes, heading);
 
   const focused = descriptors[state.routes[state.index].key].options;
   if ((StyleSheet.flatten(focused.tabBarStyle as ViewStyle) as ViewStyle | undefined)?.display === 'none') return null;
@@ -25,15 +28,20 @@ export default function FloatingTabBar({ state, descriptors, navigation, insets,
     <View style={[s.band, { paddingBottom: Math.max(insets.bottom - 8, 10), paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right }]}>
       <View style={s.bar}>
         <View style={s.row} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)} accessibilityRole="tablist">
-          <SlidingPill hl={hl} inset={0} radius={28} />
+          <SlidingPill pill={hl.pill} height={TAB_HEIGHT} />
           {state.routes.map((route, i) => {
             const { options } = descriptors[route.key];
             const label = typeof options.tabBarLabel === 'string' ? options.tabBarLabel : options.title ?? route.name;
             const on = state.index === i;
             const onPress = () => {
               const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-              if (!on) haptic.select();
-              if (!on && !event.defaultPrevented) navigation.navigate(route.name, route.params);
+              if (on || event.defaultPrevented) return;
+              haptic.select();
+              // the glide starts now, and the page changes a frame later, once it's under way: drawing
+              // the new page then can't hold it back or make it jump
+              hl.moveTo(i);
+              setHeading(i);
+              requestAnimationFrame(() => navigation.navigate(route.name, route.params));
             };
             const onLongPress = () => navigation.emit({ type: 'tabLongPress', target: route.key });
             const content = (lit: boolean) => (
@@ -65,6 +73,8 @@ export default function FloatingTabBar({ state, descriptors, navigation, insets,
   );
 }
 
+const TAB_HEIGHT = 56;
+
 const s = StyleSheet.create({
   band: { paddingTop: 8, backgroundColor: DARK.bg },
   bar: {
@@ -80,7 +90,7 @@ const s = StyleSheet.create({
     elevation: 8,
   },
   row: { flexDirection: 'row' },
-  tab: { flex: 1, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  tab: { flex: 1, height: TAB_HEIGHT, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center', justifyContent: 'center', gap: 3 },
   label: { fontSize: 11.5, fontFamily: FONTS.semibold },
 });

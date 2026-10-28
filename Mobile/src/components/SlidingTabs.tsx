@@ -14,79 +14,113 @@ export const SLIDE_SPRING = { stiffness: 320, damping: 30, mass: 1 } as const;
 type Box = { x: number; width: number };
 
 /**
- * The moving highlight behind a row of choices. `boxes` are the choices' measured positions; the
- * highlight glides to `index` (position on the native thread, width alongside it), with a short
- * squeeze as it leaves. With Reduce Motion it moves straight there.
+ * The moving highlight behind a row of choices. `boxes` are the choices' measured positions and
+ * `index` the one picked. Its position and width both glide on the native thread, so a busy app
+ * (a new page drawing) can't stall or jump it. Call `moveTo` from the tap itself, so the glide starts
+ * before the page changes. With Reduce Motion it moves straight there.
  */
 export function useSlidingHighlight(boxes: (Box | undefined)[], index: number) {
   const reduceMotion = useReduceMotion();
-  const x = React.useRef(new Animated.Value(0)).current;
-  const width = React.useRef(new Animated.Value(0)).current;
-  const squeeze = React.useRef(new Animated.Value(1)).current;
-  const shown = React.useRef(new Animated.Value(0)).current;
-  const placed = React.useRef(false);
-  const target = boxes[index];
+  // made once and never replaced: swapping animated values mid-glide makes the highlight blink
+  const [pill] = React.useState(() => ({
+    x: new Animated.Value(0),
+    width: new Animated.Value(0),
+    squeeze: new Animated.Value(1),
+    shown: new Animated.Value(0),
+  }));
+  const boxesRef = React.useRef(boxes);
+  boxesRef.current = boxes;
+  const aim = React.useRef<Box | null>(null);
 
-  React.useEffect(() => {
-    if (!target) return;
-    if (!placed.current || reduceMotion) {
-      // first placement (or Reduce Motion): straight there, no slide in from the left edge
-      x.setValue(target.x);
-      width.setValue(target.width);
-      if (!placed.current) {
-        placed.current = true;
-        Animated.timing(shown, { toValue: 1, duration: 120, useNativeDriver: true }).start();
+  const moveTo = React.useCallback(
+    (i: number) => {
+      const target = boxesRef.current[i];
+      if (!target) return;
+      // already there, or already gliding there: a fresh start would cost the glide its momentum
+      if (aim.current && aim.current.x === target.x && aim.current.width === target.width) return;
+      const first = !aim.current;
+      aim.current = target;
+      if (first || reduceMotion) {
+        // first placement (or Reduce Motion): straight there, no slide in from the left edge
+        pill.x.setValue(target.x);
+        pill.width.setValue(target.width);
+        if (first) Animated.timing(pill.shown, { toValue: 1, duration: 120, useNativeDriver: true }).start();
+        return;
       }
-      return;
-    }
-    const anim = Animated.parallel([
-      Animated.spring(x, { toValue: target.x, ...SLIDE_SPRING, useNativeDriver: true }),
-      Animated.spring(width, { toValue: target.width, ...SLIDE_SPRING, useNativeDriver: false }),
-      Animated.sequence([
-        Animated.timing(squeeze, { toValue: 0.94, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.spring(squeeze, { toValue: 1, ...SLIDE_SPRING, useNativeDriver: true }),
-      ]),
-    ]);
-    anim.start();
-    return () => anim.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target?.x, target?.width, reduceMotion]);
+      Animated.parallel([
+        Animated.spring(pill.x, { toValue: target.x, ...SLIDE_SPRING, useNativeDriver: true }),
+        Animated.spring(pill.width, { toValue: target.width, ...SLIDE_SPRING, useNativeDriver: true }),
+        Animated.sequence([
+          Animated.timing(pill.squeeze, { toValue: 0.94, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.spring(pill.squeeze, { toValue: 1, ...SLIDE_SPRING, useNativeDriver: true }),
+        ]),
+      ]).start();
+    },
+    [reduceMotion, pill],
+  );
 
-  /** How lit choice `i` is (0 to 1) as the highlight passes over it, for its white label. */
-  const litness = (i: number) => {
-    const me = boxes[i];
-    if (!me || boxes.some((b) => !b)) return i === index ? 1 : 0;
-    const prev = boxes[i - 1]?.x ?? me.x - Math.max(me.width, 1);
-    const next = boxes[i + 1]?.x ?? me.x + Math.max(me.width, 1);
-    if (!(prev < me.x && me.x < next)) return i === index ? 1 : 0;
-    return x.interpolate({ inputRange: [prev, me.x, next], outputRange: [0, 1, 0], extrapolate: 'clamp' });
-  };
+  // the picked choice changed some other way (the back button, a link to another tab), or was measured
+  const target = boxes[index];
+  React.useEffect(() => {
+    moveTo(index);
+  }, [moveTo, index, target?.x, target?.width]);
 
-  /** The other way round, for its grey label. */
-  const dimness = (i: number) => {
-    const lit = litness(i);
-    return typeof lit === 'number' ? 1 - lit : Animated.subtract(1, lit);
-  };
+  // How lit each choice is (0 to 1) as the highlight passes over it, for its white label, and the
+  // other way round for its grey one. Kept between renders for the same reason as the values above.
+  const complete = boxes.length > 0 && boxes.every(Boolean);
+  const layoutKey = complete ? boxes.map((b) => `${b!.x}:${b!.width}`).join('|') : `pending:${boxes.length}:${index}`;
+  const labels = React.useMemo(() => {
+    const lit = boxes.map((me, i) => {
+      if (!complete || !me) return i === index ? 1 : 0;
+      const prev = boxes[i - 1]?.x ?? me.x - Math.max(me.width, 1);
+      const next = boxes[i + 1]?.x ?? me.x + Math.max(me.width, 1);
+      if (!(prev < me.x && me.x < next)) return i === index ? 1 : 0;
+      return pill.x.interpolate({ inputRange: [prev, me.x, next], outputRange: [0, 1, 0], extrapolate: 'clamp' });
+    });
+    const dim = lit.map((l) => (typeof l === 'number' ? 1 - l : Animated.subtract(1, l)));
+    return { lit, dim };
+  }, [layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { x, width, squeeze, shown, litness, dimness };
+  const litness = (i: number) => labels.lit[i] ?? (i === index ? 1 : 0);
+  const dimness = (i: number) => labels.dim[i] ?? (i === index ? 0 : 1);
+  return { pill, moveTo, litness, dimness };
 }
 
-/** The highlight itself: the brand gradient pill, positioned by useSlidingHighlight. */
-export function SlidingPill({ hl, inset, radius }: { hl: ReturnType<typeof useSlidingHighlight>; inset: number; radius: number }) {
+/**
+ * The highlight itself: the brand gradient pill, positioned by useSlidingHighlight. It is drawn as two
+ * round ends and a stretched middle so its width can glide on the native thread too (a view's real
+ * width can't). `height` is the row's height.
+ */
+export const SlidingPill = React.memo(function SlidingPill({ pill, height }: { pill: ReturnType<typeof useSlidingHighlight>['pill']; height: number }) {
+  const parts = React.useMemo(
+    () => ({
+      // the stretched middle runs from the left end's centre to the right end's centre, covering their inner halves
+      middleX: Animated.add(pill.x, height / 2),
+      middleScale: pill.width.interpolate({ inputRange: [height, height + MIDDLE], outputRange: [0, 1], extrapolateLeft: 'clamp' }),
+      rightX: Animated.add(pill.x, Animated.add(pill.width, -height)),
+    }),
+    [pill, height],
+  );
+  const end = { width: height, height, borderRadius: height / 2 };
   return (
-    <Animated.View pointerEvents="none" style={[s.pillTrack, { top: inset, bottom: inset, opacity: hl.shown, transform: [{ translateX: hl.x }, { scaleY: hl.squeeze }] }]}>
-      <Animated.View style={[s.pillShadow, { width: hl.width, borderRadius: radius }]}>
+    <Animated.View pointerEvents="none" style={[s.pillTrack, { height, opacity: pill.shown, transform: [{ scaleY: pill.squeeze }] }]}>
+      <Animated.View style={[s.pillPart, end, { backgroundColor: BRAND_GRADIENT[0], transform: [{ translateX: pill.x }] }]} />
+      <Animated.View style={[s.pillPart, end, { backgroundColor: BRAND_GRADIENT[BRAND_GRADIENT.length - 1], transform: [{ translateX: parts.rightX }] }]} />
+      <Animated.View style={[s.pillPart, { width: MIDDLE, height, transformOrigin: 'left', transform: [{ translateX: parts.middleX }, { scaleX: parts.middleScale }] }]}>
         <LinearGradient
           colors={BRAND_GRADIENT as unknown as [string, string, string]}
           locations={BRAND_GRADIENT_STOPS as unknown as [number, number, number]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: radius }]}
+          style={StyleSheet.absoluteFill}
         />
       </Animated.View>
     </Animated.View>
   );
-}
+});
+
+/** The pill middle's drawn width, stretched to fit. */
+const MIDDLE = 100;
 
 export type SlidingTab<K extends string> = { key: K; label: string; badge?: number | string | null; accessibilityLabel?: string };
 
@@ -111,7 +145,11 @@ export default function SlidingTabs<K extends string>({
   accessibilityLabel?: string;
 }) {
   const [boxes, setBoxes] = React.useState<(Box | undefined)[]>(() => items.map(() => undefined));
-  const index = Math.max(0, items.findIndex((t) => t.key === value));
+  const valueIndex = Math.max(0, items.findIndex((t) => t.key === value));
+  // the choice just tapped, ahead of `value` by a frame (see onPress); follows `value` otherwise
+  const [heading, setHeading] = React.useState(valueIndex);
+  React.useEffect(() => setHeading(valueIndex), [valueIndex]);
+  const index = Math.min(heading, items.length - 1);
   const hl = useSlidingHighlight(boxes, index);
   const scroller = React.useRef<ScrollView>(null);
   const viewWidth = React.useRef(0);
@@ -163,7 +201,11 @@ export default function SlidingTabs<K extends string>({
         onPress={() => {
           if (on) return;
           haptic.select();
-          onChange(t.key);
+          // the glide starts now, and the page updates a frame later, once it's under way: a busy
+          // page redraw then can't hold it back
+          hl.moveTo(i);
+          setHeading(i);
+          requestAnimationFrame(() => onChange(t.key));
         }}
         style={[s.choice, !scroll && s.choiceEven]}
         accessibilityRole="tab"
@@ -190,7 +232,7 @@ export default function SlidingTabs<K extends string>({
           accessibilityRole="tablist"
           accessibilityLabel={accessibilityLabel}
         >
-          <SlidingPill hl={hl} inset={0} radius={100} />
+          <SlidingPill pill={hl.pill} height={CHOICE_HEIGHT} />
           {choices}
         </ScrollView>
       </View>
@@ -199,12 +241,14 @@ export default function SlidingTabs<K extends string>({
   return (
     <View style={[s.bar, style]} accessibilityRole="tablist" accessibilityLabel={accessibilityLabel}>
       <View style={s.row}>
-        <SlidingPill hl={hl} inset={0} radius={100} />
+        <SlidingPill pill={hl.pill} height={CHOICE_HEIGHT} />
         {choices}
       </View>
     </View>
   );
 }
+
+const CHOICE_HEIGHT = 44;
 
 const s = StyleSheet.create({
   bar: {
@@ -217,16 +261,9 @@ const s = StyleSheet.create({
   barScroll: { paddingHorizontal: 0 },
   row: { flexDirection: 'row' },
   scrollRow: { flexDirection: 'row', paddingHorizontal: 4 },
-  pillTrack: { position: 'absolute', left: 0 },
-  pillShadow: {
-    flex: 1,
-    shadowColor: '#A84AB0',
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  choice: { height: 44, paddingHorizontal: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  pillTrack: { position: 'absolute', top: 0, left: 0, right: 0 },
+  pillPart: { position: 'absolute', top: 0, left: 0 },
+  choice: { height: CHOICE_HEIGHT, paddingHorizontal: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   choiceEven: { flex: 1, paddingHorizontal: 6 },
   center: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
