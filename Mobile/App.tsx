@@ -50,8 +50,9 @@ function App() {
     <SafeAreaProvider>
       <StripeProvider publishableKey={STRIPE_PK} merchantIdentifier="merchant.com.vendly">
         <AuthProvider>
-          <RootNavigator />
+          {/* before the navigator, so a screen's own status bar (the launch screen's dark one) wins while it shows */}
           <StatusBar style="light" />
+          <RootNavigator />
         </AuthProvider>
       </StripeProvider>
     </SafeAreaProvider>

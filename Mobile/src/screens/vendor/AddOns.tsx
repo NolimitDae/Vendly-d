@@ -4,7 +4,7 @@ import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { BrandGradient, Chip, GradientButton, ScreenHeader } from '../../components/brand';
+import { Chip, GradientButton, ScreenHeader } from '../../components/brand';
 import AddOnSheet, { type AddOnDraft } from '../../components/AddOnSheet';
 import Sheet, { CheckRow } from '../../components/Sheet';
 import { DARK, FONTS } from '../../constants/colors';
@@ -13,6 +13,7 @@ import { AddOnsService, plural, type AddOn, type AddOnKind, type AddOnSuggestion
 import { apiMessage } from '../auth/SignIn';
 import { haptic } from '../../utils/haptics';
 import type { VendorDashboardStackParams } from '../../navigation/types';
+import SlidingTabs from '../../components/SlidingTabs';
 
 interface Pkg { id: string; title: string; status: string; price: number; price_unit?: string }
 
@@ -166,29 +167,7 @@ export default function AddOns() {
         }
       />
       <View style={{ paddingHorizontal: 20, gap: 14 }}>
-        <View style={s.tabs} accessibilityRole="tablist">
-          {TABS.map((t) => {
-            const on = tab === t.value;
-            return (
-              <Pressable
-                key={t.value}
-                style={{ flex: 1 }}
-                onPress={() => {
-                  haptic.select();
-                  switchTab(t.value);
-                }}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: on }}
-              >
-                {on ? (
-                  <BrandGradient style={s.tab}><Text style={[s.tabText, { color: '#fff' }]}>{t.label}</Text></BrandGradient>
-                ) : (
-                  <View style={s.tab}><Text style={s.tabText}>{t.label}</Text></View>
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
+        <SlidingTabs items={TABS.map((t) => ({ key: t.value, label: t.label }))} value={tab} onChange={switchTab} accessibilityLabel="Add-ons or fees" />
         <Text style={s.body}>
           {tab === 'FEE'
             ? 'Fees are only requested after a job, and the customer approves each one before it’s charged. Listing them on a package shows customers up front.'
@@ -334,9 +313,6 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: DARK.bg },
   headerBtn: { minWidth: 48, height: 48, alignItems: 'flex-end', justifyContent: 'center' },
   link: { color: DARK.accent, fontSize: 15, fontFamily: FONTS.semibold },
-  tabs: { flexDirection: 'row', gap: 8, padding: 4, borderRadius: 100, backgroundColor: DARK.card },
-  tab: { height: 44, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  tabText: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.medium },
   body: { color: DARK.muted, fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular },
   label: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },
   empty: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 32, gap: 8 },

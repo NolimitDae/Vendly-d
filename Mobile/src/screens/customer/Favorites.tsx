@@ -3,11 +3,12 @@ import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleShe
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { BrandGradient, ScreenHeader } from '../../components/brand';
+import { ScreenHeader } from '../../components/brand';
 import TestBadge from '../../components/TestBadge';
 import { DARK, FONTS } from '../../constants/colors';
 import { MarketplaceService, type SavedListing, type SavedVendor } from '../../services/marketplace.service';
 import { openInTab } from '../../navigation/crossTab';
+import SlidingTabs from '../../components/SlidingTabs';
 
 type Tab = 'vendors' | 'services';
 const TABS: { key: Tab; label: string }[] = [
@@ -57,19 +58,8 @@ export default function Favorites() {
   };
 
   const loading = (tab === 'vendors' ? vendors : services) === null;
-  const header = (
-    <View style={s.segment}>
-      {TABS.map((t) => {
-        const on = t.key === tab;
-        const label = <Text style={[s.segmentText, on && { color: '#fff' }]}>{t.label}</Text>;
-        return (
-          <Pressable key={t.key} onPress={() => setTab(t.key)} style={{ flex: 1 }} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-            {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+  // above the two lists (not inside them), so it stays put and its highlight slides between them
+  const header = <SlidingTabs items={TABS} value={tab} onChange={setTab} style={s.tabs} accessibilityLabel="Favorites" />;
   const empty = loading ? (
     <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
   ) : (
@@ -83,7 +73,6 @@ export default function Favorites() {
   );
   const listProps = {
     contentContainerStyle: { padding: 20, gap: 12 },
-    ListHeaderComponent: header,
     ListEmptyComponent: empty,
     refreshControl: <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />,
   };
@@ -91,6 +80,7 @@ export default function Favorites() {
   return (
     <View style={[s.root, { paddingTop: insets.top + 8 }]}>
       <ScreenHeader title="Favorites" onBack={() => nav.goBack()} />
+      {header}
       {tab === 'vendors' ? (
         <FlatList
           {...listProps}
@@ -159,9 +149,7 @@ export default function Favorites() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: DARK.bg },
-  segment: { flexDirection: 'row', padding: 4, borderRadius: 100, backgroundColor: DARK.card, marginBottom: 8 },
-  segmentItem: { height: 44, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  segmentText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium, paddingHorizontal: 4 },
+  tabs: { marginHorizontal: 20, marginTop: 12 },
   empty: { alignItems: 'center', gap: 8, padding: 28, backgroundColor: DARK.card, borderRadius: 18 },
   card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: DARK.card, borderRadius: 16, padding: 12 },
   thumb: { width: 64, height: 64, borderRadius: 12, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },

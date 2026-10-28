@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Chip, ScreenHeader, ui } from '../../components/brand';
+import { ScreenHeader, ui } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { BookingMoneyService, money, type TransactionRow, type TransactionsPage, type TransactionType } from '../../services/bookingMoney.service';
 import { openInTab } from '../../navigation/crossTab';
+import SlidingTabs from '../../components/SlidingTabs';
 
 type Filter = 'all' | TransactionType;
 type Params = { Transactions: { role?: 'customer' | 'vendor' } | undefined };
@@ -102,11 +103,7 @@ export default function Transactions() {
             In <Text style={{ color: '#6ee7c7' }}>{money(totals.in)}</Text> · Out <Text style={{ color: '#fff' }}>{money(totals.out)}</Text>
           </Text>
         )}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {FILTERS[role].map((f) => (
-            <Chip key={f.key} label={f.label} active={filter === f.key} onPress={() => setFilter(f.key)} />
-          ))}
-        </ScrollView>
+        <SlidingTabs scroll items={FILTERS[role]} value={filter} onChange={setFilter} accessibilityLabel="Show" />
         <View style={ui.field}>
           <Ionicons name="search" size={18} color={DARK.muted} />
           <TextInput

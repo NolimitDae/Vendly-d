@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import type { VendorBookingsStackParams } from '../../navigation/types';
 import { bookingWhen } from '../customer/Bookings';
 import { disputeCategoryText } from '../../components/DisputeDetails';
 import { cancellationLine, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
+import SlidingTabs from '../../components/SlidingTabs';
 
 type Tab = 'pending' | 'upcoming' | 'completed' | 'refunds' | 'complaints';
 const TABS: { key: Tab; label: string; statuses?: BookingStatus[]; filter?: 'refunds' | 'complaints' }[] = [
@@ -90,18 +91,16 @@ export default function VendorBookings() {
         ListHeaderComponent={
           <View style={{ gap: 24 }}>
             <Text style={s.title}>Booking</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.segment} accessibilityRole="tablist">
-              {TABS.map((t) => {
-                const on = t.key === tab;
+            <SlidingTabs
+              scroll
+              items={TABS.map((t) => {
                 const count = t.statuses ? all.filter((b) => t.statuses!.includes(b.status)).length : 0;
-                const label = <Text style={[s.segmentText, on && { color: '#fff' }]}>{t.label}{count && t.key !== 'completed' ? ` (${count})` : ''}</Text>;
-                return (
-                  <Pressable key={t.key} onPress={() => setTab(t.key)} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-                    {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
-                  </Pressable>
-                );
+                return { key: t.key, label: `${t.label}${count && t.key !== 'completed' ? ` (${count})` : ''}` };
               })}
-            </ScrollView>
+              value={tab}
+              onChange={setTab}
+              accessibilityLabel="Bookings"
+            />
           </View>
         }
         ListEmptyComponent={
@@ -181,13 +180,10 @@ export default function VendorBookings() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: DARK.bg },
   title: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold, textAlign: 'center' },
-  segment: { flexDirection: 'row', padding: 4, borderRadius: 100, backgroundColor: DARK.card, gap: 2 },
-  segmentItem: { height: 44, paddingHorizontal: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   badge: { fontSize: 12, fontFamily: FONTS.medium, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100, overflow: 'hidden' },
   badgeOpen: { color: '#fcd34d', backgroundColor: 'rgba(252,211,77,0.15)' },
   badgeDone: { color: DARK.text, backgroundColor: DARK.field },
-  segmentText: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.medium },
   empty: { alignItems: 'center', paddingVertical: 48, gap: 8 },
   emptyTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   emptyText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular, textAlign: 'center' },

@@ -36,6 +36,7 @@ import {
 } from '../../services/events.service';
 import type { EventDetailProps } from '../../navigation/types';
 import { openInTab } from '../../navigation/crossTab';
+import SlidingTabs from '../../components/SlidingTabs';
 
 type Tab = 'overview' | 'schedule' | 'vendors' | 'budget' | 'files' | 'tasks';
 const TABS: { key: Tab; label: string }[] = [
@@ -145,18 +146,14 @@ export default function EventDetail() {
       </View>
 
       {/* Tabs */}
-      <View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabBar}>
-          {TABS.map(({ key: t, label }) => (
-            <TouchableOpacity key={t} style={[s.tabBtn, tab === t && s.tabBtnActive]} onPress={() => setTab(t)} accessibilityRole="tab" accessibilityState={{ selected: tab === t }}>
-              <Text style={[s.tabText, tab === t && s.tabTextActive]}>
-                {label}
-                {t === 'tasks' && totalTasks > 0 ? ` (${completedTasks}/${totalTasks})` : ''}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      <SlidingTabs
+        scroll
+        items={TABS.map(({ key, label }) => ({ key, label: `${label}${key === 'tasks' && totalTasks > 0 ? ` (${completedTasks}/${totalTasks})` : ''}` }))}
+        value={tab}
+        onChange={setTab}
+        style={s.tabs}
+        accessibilityLabel="Event sections"
+      />
 
       <ScrollView
         style={{ flex: 1 }}
@@ -585,12 +582,8 @@ const s = StyleSheet.create({
   badge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, backgroundColor: DARK.field },
   badgeSmall: { paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { color: '#fff', fontSize: 12, fontFamily: FONTS.semibold },
-  tabBar: { flexDirection: 'row', marginHorizontal: 16, padding: 4, borderRadius: 100, backgroundColor: DARK.card, marginBottom: 16 },
+  tabs: { marginHorizontal: 16, marginBottom: 16 },
   sectionNote: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.medium },
-  tabBtn: { height: 40, paddingHorizontal: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  tabBtnActive: { backgroundColor: COLORS.primary },
-  tabText: { color: DARK.muted, fontSize: 13, fontFamily: FONTS.medium },
-  tabTextActive: { color: '#fff' },
   infoCard: { backgroundColor: DARK.card, borderRadius: 16, padding: 16, gap: 10, marginBottom: 12 },
   infoCardTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -4,10 +4,11 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { BrandGradient, Chip, ScreenHeader } from '../../components/brand';
+import { BrandGradient, ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { EventsService, type Event, type EventStatus } from '../../services/events.service';
 import { EventCard } from './Home';
+import SlidingTabs from '../../components/SlidingTabs';
 
 const FILTERS: { label: string; value: EventStatus | '' }[] = [
   { label: 'All', value: '' },
@@ -48,7 +49,14 @@ export default function MyEvents() {
         ListHeaderComponent={
           <View style={{ gap: 20, marginBottom: 8 }}>
             <ScreenHeader title="Events" onBack={() => nav.goBack()} />
-            <FlatList horizontal data={FILTERS} keyExtractor={(f) => f.value || 'all'} showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }} renderItem={({ item }) => <Chip label={item.label} active={filter === item.value} onPress={() => setFilter(item.value)} />} />
+            <SlidingTabs
+              scroll
+              items={FILTERS.map((f) => ({ key: f.value || 'all', label: f.label }))}
+              value={filter || 'all'}
+              onChange={(k) => setFilter(k === 'all' ? '' : (k as EventStatus))}
+              style={{ marginHorizontal: 20 }}
+              accessibilityLabel="Show events"
+            />
           </View>
         }
         ListEmptyComponent={

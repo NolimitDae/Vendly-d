@@ -44,9 +44,9 @@ export function LogoMark({ size = 40, tone = 'dark' }: { size?: number; tone?: '
   );
 }
 
-const LOGO_PATH = 'M30 28 108 191 186 28 258 125 330 28V191';
+export const LOGO_PATH = 'M30 28 108 191 186 28 258 125 330 28V191';
 // Length of LOGO_PATH (about 766): the V's two strokes, the M's two shorter ones, then the upright.
-const LOGO_LENGTH = [[30, 28], [108, 191], [186, 28], [258, 125], [330, 28], [330, 191]].reduce(
+export const LOGO_LENGTH = [[30, 28], [108, 191], [186, 28], [258, 125], [330, 28], [330, 191]].reduce(
   (sum, [x, y], i, p) => (i ? sum + Math.hypot(x - p[i - 1][0], y - p[i - 1][1]) : 0),
   0,
 );

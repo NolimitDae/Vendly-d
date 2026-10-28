@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BrandGradient, Card, Chip, GradientButton, ScreenHeader, ui } from '../../components/brand';
+import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import LocationPicker from '../../components/LocationPicker';
 import AddCardSheet from '../../components/AddCardSheet';
 import { DARK, FONTS } from '../../constants/colors';
@@ -16,6 +16,7 @@ import { apiError } from '../../services/contracts.service';
 import { openChatWith } from '../../navigation/openChat';
 import { haptic } from '../../utils/haptics';
 import type { CustomerHomeStackParams } from '../../navigation/types';
+import SlidingTabs from '../../components/SlidingTabs';
 
 const money = (n: number | undefined) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
 
@@ -151,10 +152,13 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
         <Card style={{ gap: 14 }}>
           <Text style={s.h2}>Delivery or pickup</Text>
           {offers.delivery && offers.pickup ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-              <Chip label="Delivery" active={way === 'delivery'} onPress={() => setHandover('delivery')} />
-              <Chip label="I'll pick it up" active={way === 'pickup'} onPress={() => setHandover('pickup')} />
-            </View>
+            <SlidingTabs
+              items={[{ key: 'delivery', label: 'Delivery' }, { key: 'pickup', label: "I'll pick it up" }]}
+              value={way === 'pickup' ? 'pickup' : 'delivery'}
+              onChange={(k) => setHandover(k)}
+              style={{ backgroundColor: DARK.field }}
+              accessibilityLabel="Delivery or pickup"
+            />
           ) : (
             <Text style={s.muted}>
               {offers.delivery ? 'Delivered by the vendor.' : offers.pickup ? 'Pickup only: you collect it from the vendor.' : 'Some of these items are delivery only and some pickup only. Rent them separately.'}

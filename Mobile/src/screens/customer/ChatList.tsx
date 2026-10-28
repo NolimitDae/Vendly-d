@@ -4,12 +4,12 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format, isToday, parseISO } from 'date-fns';
-import { BrandGradient } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { ChatService, type Conversation, type InboxCounts, type InboxTab } from '../../services/chat.service';
 import { SocketService } from '../../services/socket.service';
 import { apiError } from '../../services/contracts.service';
 import { useAuth } from '../../context/AuthContext';
+import SlidingTabs from '../../components/SlidingTabs';
 
 // Vendors' inbox is split so booking clients aren't buried under first questions (sorted on the server)
 const TABS: { key: InboxTab; label: string }[] = [
@@ -155,34 +155,16 @@ export default function ChatList() {
               <Text style={s.title}>Message</Text>
             )}
             {isVendor && !showArchived && (
-              <View style={s.segment} accessibilityRole="tablist">
-                {TABS.map((t) => {
-                  const on = t.key === tab;
+              <SlidingTabs
+                items={TABS.map((t) => {
                   const unread = counts?.[t.key].unread ?? 0;
-                  const label = (
-                    <>
-                      <Text style={[s.segmentText, on && { color: '#fff' }]}>{t.label}</Text>
-                      {unread > 0 && (
-                        <View style={[s.badge, s.segmentBadge, on && s.segmentBadgeOn]}>
-                          <Text style={s.badgeText}>{unread > 99 ? '99+' : unread}</Text>
-                        </View>
-                      )}
-                    </>
-                  );
-                  return (
-                    <Pressable
-                      key={t.key}
-                      style={{ flex: 1 }}
-                      onPress={() => pickTab(t.key)}
-                      accessibilityRole="tab"
-                      accessibilityState={{ selected: on }}
-                      accessibilityLabel={unread ? `${t.label}, ${unread} unread` : t.label}
-                    >
-                      {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
-                    </Pressable>
-                  );
+                  return { key: t.key, label: t.label, badge: unread > 0 ? (unread > 99 ? '99+' : unread) : null, accessibilityLabel: unread ? `${t.label}, ${unread} unread` : t.label };
                 })}
-              </View>
+                value={tab}
+                onChange={pickTab}
+                style={{ marginHorizontal: 20 }}
+                accessibilityLabel="Chats"
+              />
             )}
             <View style={s.search}>
               <Ionicons name="search-outline" size={22} color={DARK.muted} />
@@ -283,11 +265,6 @@ const s = StyleSheet.create({
   badge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: DARK.border, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: '#fff', fontSize: 12, fontFamily: FONTS.semibold },
   // the vendor Bookings screen's filter tabs
-  segment: { flexDirection: 'row', marginHorizontal: 20, padding: 4, borderRadius: 100, backgroundColor: DARK.card, gap: 2 },
-  segmentItem: { height: 44, paddingHorizontal: 16, borderRadius: 100, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
-  segmentText: { color: DARK.muted, fontSize: 15, fontFamily: FONTS.medium },
-  segmentBadge: { minWidth: 20, height: 20, borderRadius: 10 },
-  segmentBadgeOn: { backgroundColor: 'rgba(255,255,255,0.25)' },
   // archived chats
   archivedHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },

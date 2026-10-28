@@ -3,7 +3,7 @@ import { ActivityIndicator, Animated, FlatList, Image, Modal, Pressable, ScrollV
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Chip, GradientButton, ScreenHeader } from '../../components/brand';
+import { GradientButton, ScreenHeader } from '../../components/brand';
 import SearchFilters, { activeFilters, type Filters } from '../../components/SearchFilters';
 import { ResultRowSkeleton } from '../../components/Skeleton';
 import TestBadge from '../../components/TestBadge';
@@ -12,6 +12,7 @@ import { useSaved } from '../../hooks/useSaved';
 import { MarketplaceService, vendorName, type Category, type Listing } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { useSlideUp } from '../../components/useSlideUp';
+import SlidingTabs from '../../components/SlidingTabs';
 
 export default function SearchResults({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'SearchResults'>) {
   const { categoryId, categoryName, location, eventId } = route.params;
@@ -85,13 +86,13 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
               </Pressable>
             </View>
             {subs && subs.length > 0 && (
-              <FlatList
-                horizontal
-                data={[{ id: '', name: 'All' }, ...subs]}
-                keyExtractor={(c) => c.id}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
-                renderItem={({ item }) => <Chip label={item.name} active={sub === item.id} onPress={() => setSub(item.id)} />}
+              <SlidingTabs
+                scroll
+                items={[{ key: 'all', label: 'All' }, ...subs.map((c) => ({ key: c.id, label: c.name }))]}
+                value={sub || 'all'}
+                onChange={(k) => setSub(k === 'all' ? '' : k)}
+                style={{ marginHorizontal: 20 }}
+                accessibilityLabel="Kind of service"
               />
             )}
           </View>

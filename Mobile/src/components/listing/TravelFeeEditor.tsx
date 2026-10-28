@@ -1,9 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Chip, Field, ui } from '../brand';
+import { Field, ui } from '../brand';
 import { CheckRow } from '../Sheet';
 import { DARK, FONTS } from '../../constants/colors';
 import { travelExample, travelFeeError, type TravelFeeValue } from '../../utils/travelFee';
+import SlidingTabs from '../SlidingTabs';
 
 const decimal = (t: string) => t.replace(/[^0-9.]/g, '');
 
@@ -35,10 +36,13 @@ export default function TravelFeeEditor({ value, onChange, rentals = false }: { 
           <Field label="Base fee, optional ($)" placeholder="0.00" value={value.baseFee} onChangeText={(t) => set({ baseFee: decimal(t) })} keyboardType="decimal-pad" accessibilityLabel="Base travel fee" />
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Count the miles</Text>
-            <View style={s.chips}>
-              <Chip label="One way" active={!value.roundTrip} onPress={() => set({ roundTrip: false })} />
-              <Chip label="Round trip" active={value.roundTrip} onPress={() => set({ roundTrip: true })} />
-            </View>
+            <SlidingTabs
+              items={[{ key: 'one', label: 'One way' }, { key: 'round', label: 'Round trip' }]}
+              value={value.roundTrip ? 'round' : 'one'}
+              onChange={(k) => set({ roundTrip: k === 'round' })}
+              style={{ backgroundColor: DARK.field }}
+              accessibilityLabel="Count the miles"
+            />
           </View>
           <Text style={s.hint}>The first free miles cost nothing, then each mile is charged at your price. The base fee is added to every booking with an address.</Text>
           {problem ? <Text style={s.problem}>{problem}</Text> : <Text style={s.example}>{travelExample(value)}</Text>}
@@ -49,7 +53,6 @@ export default function TravelFeeEditor({ value, onChange, rentals = false }: { 
 }
 
 const s = StyleSheet.create({
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   hint: { color: DARK.muted, fontSize: 12, lineHeight: 18, fontFamily: FONTS.medium },
   problem: { color: '#F87171', fontSize: 13, lineHeight: 18, fontFamily: FONTS.medium },
   example: { color: '#fff', fontSize: 14, lineHeight: 20, fontFamily: FONTS.medium, backgroundColor: DARK.field, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },

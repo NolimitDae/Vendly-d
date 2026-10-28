@@ -13,6 +13,7 @@ import type { CustomerBookingsStackParams } from '../../navigation/types';
 import CancelBookingSheet from '../../components/booking/CancelBookingSheet';
 import { customerTabOf, type CustomerTab } from '../../utils/bookingTabs';
 import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
+import SlidingTabs from '../../components/SlidingTabs';
 
 // the order in the design; every booking is in exactly one
 const TABS: { key: CustomerTab; label: string }[] = [
@@ -89,22 +90,15 @@ export default function CustomerBookings() {
         ListHeaderComponent={
           <View style={{ gap: 24 }}>
             <Text style={s.title}>Booking</Text>
-            <View style={s.segment}>
-              {TABS.map((t) => {
-                const on = t.key === tab;
+            <SlidingTabs
+              items={TABS.map((t) => {
                 const count = all.filter((b) => customerTabOf(b, now) === t.key).length;
-                const label = (
-                  <Text style={[s.segmentText, on && { color: '#fff' }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {t.label}{count && t.key !== 'complete' ? ` (${count})` : ''}
-                  </Text>
-                );
-                return (
-                  <Pressable key={t.key} onPress={() => setTab(t.key)} style={{ flex: 1 }} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-                    {on ? <BrandGradient style={s.segmentItem}>{label}</BrandGradient> : <View style={s.segmentItem}>{label}</View>}
-                  </Pressable>
-                );
+                return { key: t.key, label: `${t.label}${count && t.key !== 'complete' ? ` (${count})` : ''}` };
               })}
-            </View>
+              value={tab}
+              onChange={setTab}
+              accessibilityLabel="Bookings"
+            />
           </View>
         }
         ListEmptyComponent={
@@ -188,9 +182,6 @@ const s = StyleSheet.create({
   closes: { color: '#fcd34d', fontSize: 12, fontFamily: FONTS.medium },
   root: { flex: 1, backgroundColor: DARK.bg },
   title: { color: '#fff', fontSize: 24, fontFamily: FONTS.semibold, textAlign: 'center' },
-  segment: { flexDirection: 'row', padding: 4, borderRadius: 100, backgroundColor: DARK.card },
-  segmentItem: { height: 44, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  segmentText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium, paddingHorizontal: 4 },
   empty: { alignItems: 'center', paddingVertical: 48, gap: 8 },
   emptyTitle: { color: '#fff', fontSize: 16, fontFamily: FONTS.semibold },
   emptyText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.regular, textAlign: 'center' },
