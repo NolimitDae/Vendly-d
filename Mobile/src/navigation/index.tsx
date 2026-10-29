@@ -19,11 +19,11 @@ import EventPlannerTabs from './EventPlannerTabs';
 export default function RootNavigator() {
   const { user, loading } = useAuth();
   usePushNotifications(user?.type);
-  // at launch the full logo plays before the app opens (about 3.4s); a timer makes sure a stalled
+  // at launch the full logo plays before the app opens (about 4.7s); a timer makes sure a stalled
   // animation can never keep the app on this screen
   const [logoDone, setLogoDone] = React.useState(false);
   React.useEffect(() => {
-    const t = setTimeout(() => setLogoDone(true), 6000);
+    const t = setTimeout(() => setLogoDone(true), 8000);
     return () => clearTimeout(t);
   }, []);
 
@@ -59,8 +59,8 @@ export default function RootNavigator() {
 
 /**
  * The launch screen, on the light brand pink: the V draws, a beat, then the rest of the M; "Vendly"
- * rises in under it, then "MARKETPLACE", and the full logo holds for a second before the app opens.
- * With Reduce Motion on, the still logo shows for that second.
+ * rises in under it, then "MARKETPLACE", and the full logo holds a moment before the app opens.
+ * With Reduce Motion on, the still logo shows for that moment.
  */
 function LaunchLogo({ onDone }: { onDone: () => void }) {
   const reduceMotion = useReduceMotion();
@@ -89,13 +89,13 @@ function LaunchLogo({ onDone }: { onDone: () => void }) {
     const anim = Animated.parallel([
       // SVG props can't use the native driver; the JS thread is mostly idle while the app loads
       Animated.sequence([
-        Animated.delay(150),
-        Animated.timing(offset, { toValue: LOGO_LENGTH - V_LENGTH, duration: 630, easing: ease, useNativeDriver: false }),
-        Animated.delay(300),
-        Animated.timing(offset, { toValue: 0, duration: 500, easing: ease, useNativeDriver: false }),
+        Animated.delay(250),
+        Animated.timing(offset, { toValue: LOGO_LENGTH - V_LENGTH, duration: 1000, easing: ease, useNativeDriver: false }),
+        Animated.delay(400),
+        Animated.timing(offset, { toValue: 0, duration: 800, easing: ease, useNativeDriver: false }),
       ]),
-      fadeIn(name, 1650, 500),
-      fadeIn(tagline, 1950, 450),
+      fadeIn(name, 2550, 650),
+      fadeIn(tagline, 2900, 600),
     ]);
     anim.start(({ finished }) => finished && hold());
     return () => {
@@ -104,44 +104,62 @@ function LaunchLogo({ onDone }: { onDone: () => void }) {
     };
   }, [reduceMotion, offset, name, tagline]);
 
-  const rise = (value: Animated.Value) => value.interpolate({ inputRange: [0, 1], outputRange: [10, 0] });
+  // made once: new ones on a re-render (the app finishing its sign-in check) would make the words blink
+  const [rise] = React.useState(() => ({
+    name: name.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }),
+    tagline: tagline.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }),
+  }));
   return (
     <View style={s.splash}>
       <StatusBar style="dark" />
       <View style={s.logo} accessible accessibilityLabel="Vendly Marketplace">
-        <Svg width={(MARK_HEIGHT * 360) / 220} height={MARK_HEIGHT} viewBox="0 0 360 220">
-          <Defs>
-            <SvgGradient id="launchMark" x1="0" y1="0" x2="360" y2="0" gradientUnits="userSpaceOnUse">
-              <Stop offset="0" stopColor="#4A1650" />
-              <Stop offset="0.5" stopColor="#7A2A82" />
-              <Stop offset="1" stopColor="#A84AB0" />
-            </SvgGradient>
-          </Defs>
-          <AnimatedPath
-            d={LOGO_PATH}
-            fill="none"
-            stroke="url(#launchMark)"
-            strokeWidth={57}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray={[LOGO_LENGTH, LOGO_LENGTH * 2]}
-            strokeDashoffset={offset}
-          />
-        </Svg>
-        <Animated.Text style={[s.wordmark, { opacity: name, transform: [{ translateY: rise(name) }] }]}>Vendly</Animated.Text>
-        <Animated.Text style={[s.tagline, { opacity: tagline, transform: [{ translateY: rise(tagline) }] }]}>MARKETPLACE</Animated.Text>
+        <LaunchMark offset={offset} />
+        <Animated.Text style={[s.wordmark, { opacity: name, transform: [{ translateY: rise.name }] }]}>Vendly</Animated.Text>
+        <Animated.Text style={[s.tagline, { opacity: tagline, transform: [{ translateY: rise.tagline }] }]}>MARKETPLACE</Animated.Text>
       </View>
     </View>
   );
 }
 
-const AnimatedPath = Animated.createAnimatedComponent(Path);
+/**
+ * The mark, drawn up to `offset`. It redraws itself with each new value: on the phone, handing the
+ * animated value straight to the SVG doesn't reliably update it, and the logo showed up undrawn.
+ */
+function LaunchMark({ offset }: { offset: Animated.Value }) {
+  const [dash, setDash] = React.useState(LOGO_LENGTH + 30);
+  React.useEffect(() => {
+    const id = offset.addListener(({ value }) => setDash(value));
+    return () => offset.removeListener(id);
+  }, [offset]);
+  return (
+    <Svg width={(MARK_HEIGHT * 360) / 220} height={MARK_HEIGHT} viewBox="0 0 360 220">
+      <Defs>
+        <SvgGradient id="launchMark" x1="0" y1="0" x2="360" y2="0" gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor="#4A1650" />
+          <Stop offset="0.5" stopColor="#7A2A82" />
+          <Stop offset="1" stopColor="#A84AB0" />
+        </SvgGradient>
+      </Defs>
+      <Path
+        d={LOGO_PATH}
+        fill="none"
+        stroke="url(#launchMark)"
+        strokeWidth={57}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={[LOGO_LENGTH, LOGO_LENGTH * 2]}
+        strokeDashoffset={dash}
+      />
+    </Svg>
+  );
+}
+
 /** The mark's height on the launch screen. */
 const MARK_HEIGHT = 80;
 /** Length of the logo path's first two strokes (the V), drawn before the pause. */
 const V_LENGTH = 2 * Math.hypot(78, 163);
 /** How long the full logo stays up before the app opens. */
-const LOGO_HOLD_MS = 1000;
+const LOGO_HOLD_MS = 1200;
 
 /** The role's "get set up" checklist (shown in notifications) and its welcome / all-set popups. */
 function WithOnboarding({ children }: { children: React.ReactNode }) {
