@@ -89,9 +89,19 @@ export function useSlidingHighlight(boxes: (Box | undefined)[], index: number) {
 /**
  * The highlight itself: the brand gradient pill, positioned by useSlidingHighlight. It is drawn as two
  * round ends and a stretched middle so its width can glide on the native thread too (a view's real
- * width can't). `height` is the row's height.
+ * width can't). Each piece shows its own stretch of one gradient laid across the whole pill, so the
+ * pieces meet without a seam at any width. `height` is the row's height and `span` the width of the
+ * choice the pill is heading to.
  */
-export const SlidingPill = React.memo(function SlidingPill({ pill, height }: { pill: ReturnType<typeof useSlidingHighlight>['pill']; height: number }) {
+export const SlidingPill = React.memo(function SlidingPill({
+  pill,
+  height,
+  span,
+}: {
+  pill: ReturnType<typeof useSlidingHighlight>['pill'];
+  height: number;
+  span: number;
+}) {
   const parts = React.useMemo(
     () => ({
       // the stretched middle runs from the left end's centre to the right end's centre, covering their inner halves
@@ -101,23 +111,42 @@ export const SlidingPill = React.memo(function SlidingPill({ pill, height }: { p
     }),
     [pill, height],
   );
-  const end = { width: height, height, borderRadius: height / 2 };
+  const w = Math.max(span, height);
+  // the part of the pill's gradient (0 = left edge, 1 = right edge) a piece covers, drawn across that piece
+  const slice = (from: number, to: number) => {
+    const points = [from, ...BRAND_GRADIENT_STOPS.filter((t) => t > from && t < to), to];
+    return (
+      <LinearGradient
+        colors={points.map(gradientAt) as unknown as [string, string, ...string[]]}
+        locations={points.map((t) => (t - from) / (to - from)) as unknown as [number, number, ...number[]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={StyleSheet.absoluteFill}
+      />
+    );
+  };
+  const end = { width: height, height, borderRadius: height / 2, overflow: 'hidden' as const };
   return (
     <Animated.View pointerEvents="none" style={[s.pillTrack, { height, opacity: pill.shown, transform: [{ scaleY: pill.squeeze }] }]}>
-      <Animated.View style={[s.pillPart, end, { backgroundColor: BRAND_GRADIENT[0], transform: [{ translateX: pill.x }] }]} />
-      <Animated.View style={[s.pillPart, end, { backgroundColor: BRAND_GRADIENT[BRAND_GRADIENT.length - 1], transform: [{ translateX: parts.rightX }] }]} />
+      <Animated.View style={[s.pillPart, end, { transform: [{ translateX: pill.x }] }]}>{slice(0, height / w)}</Animated.View>
+      <Animated.View style={[s.pillPart, end, { transform: [{ translateX: parts.rightX }] }]}>{slice(1 - height / w, 1)}</Animated.View>
       <Animated.View style={[s.pillPart, { width: MIDDLE, height, transformOrigin: 'left', transform: [{ translateX: parts.middleX }, { scaleX: parts.middleScale }] }]}>
-        <LinearGradient
-          colors={BRAND_GRADIENT as unknown as [string, string, string]}
-          locations={BRAND_GRADIENT_STOPS as unknown as [number, number, number]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
+        {slice(height / 2 / w, 1 - height / 2 / w)}
       </Animated.View>
     </Animated.View>
   );
 });
+
+/** The brand gradient's colour at `t` (0 to 1 across it). */
+function gradientAt(t: number) {
+  const stops = BRAND_GRADIENT_STOPS;
+  let i = 0;
+  while (i < stops.length - 2 && t > stops[i + 1]) i++;
+  const k = Math.min(1, Math.max(0, (t - stops[i]) / (stops[i + 1] - stops[i])));
+  const rgb = (hex: string) => [1, 3, 5].map((j) => parseInt(hex.slice(j, j + 2), 16));
+  const [a, b] = [rgb(BRAND_GRADIENT[i]), rgb(BRAND_GRADIENT[i + 1])];
+  return `rgb(${a.map((v, j) => Math.round(v + (b[j] - v) * k)).join(',')})`;
+}
 
 /** The pill middle's drawn width, stretched to fit. */
 const MIDDLE = 100;
@@ -232,7 +261,7 @@ export default function SlidingTabs<K extends string>({
           accessibilityRole="tablist"
           accessibilityLabel={accessibilityLabel}
         >
-          <SlidingPill pill={hl.pill} height={CHOICE_HEIGHT} />
+          <SlidingPill pill={hl.pill} height={CHOICE_HEIGHT} span={boxes[index]?.width ?? 0} />
           {choices}
         </ScrollView>
       </View>
@@ -241,7 +270,7 @@ export default function SlidingTabs<K extends string>({
   return (
     <View style={[s.bar, style]} accessibilityRole="tablist" accessibilityLabel={accessibilityLabel}>
       <View style={s.row}>
-        <SlidingPill pill={hl.pill} height={CHOICE_HEIGHT} />
+        <SlidingPill pill={hl.pill} height={CHOICE_HEIGHT} span={boxes[index]?.width ?? 0} />
         {choices}
       </View>
     </View>

@@ -28,7 +28,7 @@ export default function FloatingTabBar({ state, descriptors, navigation, insets,
     <View style={[s.band, { paddingBottom: Math.max(insets.bottom - 8, 10), paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right }]}>
       <View style={s.bar}>
         <View style={s.row} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)} accessibilityRole="tablist">
-          <SlidingPill pill={hl.pill} height={TAB_HEIGHT} />
+          <SlidingPill pill={hl.pill} height={TAB_HEIGHT} span={slot} />
           {state.routes.map((route, i) => {
             const { options } = descriptors[route.key];
             const label = typeof options.tabBarLabel === 'string' ? options.tabBarLabel : options.title ?? route.name;
