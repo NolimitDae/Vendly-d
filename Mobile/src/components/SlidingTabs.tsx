@@ -7,9 +7,9 @@ import { haptic } from '../utils/haptics';
 
 /**
  * How the highlight moves between choices, everywhere in the app (tab bars, segmented tabs, filter
- * rows): a spring that arrives in about a third of a second with a slight, natural settle.
+ * rows): an unhurried spring that arrives in a little over half a second and settles without bouncing.
  */
-export const SLIDE_SPRING = { stiffness: 320, damping: 30, mass: 1 } as const;
+export const SLIDE_SPRING = { stiffness: 90, damping: 18, mass: 1 } as const;
 
 type Box = { x: number; width: number };
 
@@ -51,7 +51,7 @@ export function useSlidingHighlight(boxes: (Box | undefined)[], index: number) {
         Animated.spring(pill.x, { toValue: target.x, ...SLIDE_SPRING, useNativeDriver: true }),
         Animated.spring(pill.width, { toValue: target.width, ...SLIDE_SPRING, useNativeDriver: true }),
         Animated.sequence([
-          Animated.timing(pill.squeeze, { toValue: 0.94, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(pill.squeeze, { toValue: 0.94, duration: 150, easing: Easing.out(Easing.quad), useNativeDriver: true }),
           Animated.spring(pill.squeeze, { toValue: 1, ...SLIDE_SPRING, useNativeDriver: true }),
         ]),
       ]).start();
