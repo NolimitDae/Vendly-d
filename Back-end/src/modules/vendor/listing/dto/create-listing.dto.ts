@@ -20,7 +20,7 @@ import { ListingStatus } from 'prisma/generated/client';
 import { Transform, Type } from 'class-transformer';
 import { SERVICE_AT, type ServiceAt } from 'src/modules/booking/booking-tracker';
 import { MAX_BASE_FEE, MAX_FREE_MILES, MAX_PER_MILE } from 'src/modules/booking/travel-fee';
-import { MAX_DOS, MAX_DO_LENGTH, MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readFlag, readIncludedItems, readNoticeHours } from '../package-details';
+import { MAX_DOS, MAX_DO_LENGTH, MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readFlag, readIncludedItems, readNoticeHours, readTags } from '../package-details';
 
 /** "true" / "false" from a multipart form (implicit conversion would read "false" as true). */
 const readBoolean = ({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
@@ -122,8 +122,10 @@ export class CreateVendorListingDto {
   @IsString()
   sub_category_id?: string;
 
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ type: [String], description: 'A list, or comma-separated text in multipart forms ("wedding, dj")' })
   @IsOptional()
+  // the raw value: the website sends what's typed in its tag box
+  @Transform(({ obj, key }) => readTags(obj[key]))
   @IsArray()
   @IsString({ each: true })
   tags?: string[];

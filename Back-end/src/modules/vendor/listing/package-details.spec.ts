@@ -2,7 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
-import { keptImageNames, noticeLabel, readIncludedItems, tooSoonMessage } from './package-details';
+import { keptImageNames, noticeLabel, readIncludedItems, tooSoonMessage, readTags } from './package-details';
 
 // the same options as the app's global ValidationPipe
 const parse = async (cls: any, body: Record<string, unknown>) => {
@@ -88,5 +88,15 @@ describe('photos to keep', () => {
   it("matches URLs or names to the listing's own photos, in the order sent", () => {
     expect(keptImageNames(['a.jpg', 'b.jpg', 'c.jpg'], ['https://cdn.test/listings/c.jpg?x=1', 'a.jpg', 'a.jpg', 'zzz.jpg'])).toEqual(['c.jpg', 'a.jpg']);
     expect(keptImageNames(['a.jpg'], [])).toEqual([]);
+  });
+});
+
+describe('readTags', () => {
+  it('takes the comma-separated text the website sends, a list, or a JSON list', () => {
+    expect(readTags('wedding, dj ,  , wedding')).toEqual(['wedding', 'dj']);
+    expect(readTags(['wedding', 'dj, party'])).toEqual(['wedding', 'dj', 'party']);
+    expect(readTags('["a","b"]')).toEqual(['a', 'b']);
+    expect(readTags('')).toEqual([]);
+    expect(readTags(undefined)).toBeUndefined();
   });
 });

@@ -27,6 +27,26 @@ export function readIncludedItems(value: unknown): string[] | undefined {
   return list.map((v) => (typeof v === 'string' ? v.trim() : v)).filter((v) => v !== '') as string[];
 }
 
+/**
+ * Tags as forms send them: a list, a JSON list, or the comma-separated text the website's tag box holds
+ * ("wedding, dj"). Trimmed, without empties or repeats; an empty field clears them.
+ */
+export function readTags(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  let list: unknown[];
+  if (Array.isArray(value)) list = value.flatMap((v) => (typeof v === 'string' ? v.split(',') : [v]));
+  else if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      list = Array.isArray(parsed) ? parsed : value.split(',');
+    } catch {
+      list = value.split(',');
+    }
+  } else list = [value];
+  const tags = list.map((v) => (typeof v === 'string' ? v.trim() : v)).filter((v) => v !== '');
+  return [...new Set(tags)] as string[];
+}
+
 /** An empty form field clears the notice (null); undefined means "not sent". */
 export function readNoticeHours(value: unknown): number | null | undefined {
   if (value === undefined) return undefined;
