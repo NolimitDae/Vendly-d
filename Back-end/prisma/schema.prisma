@@ -833,6 +833,10 @@ model VendorListing {
 
   // null = use the category default, else FULL_ON_ACCEPT
   payment_plan   PaymentPlan?
+  // false: the vendor sets how long the service runs (service_duration_minutes) and customers pick only a
+  // start time; hourly packages always let the customer choose (listing/package-details.ts vendorSetEnd)
+  customer_sets_duration   Boolean @default(true)
+  service_duration_minutes Int?
   // DEPOSIT_CUSTOM only: the deposit taken on accept (10 to 90 percent), and when the balance is due:
   // balance_due_days before the event, or after the service (balance_after_service)
   deposit_percent       Int?

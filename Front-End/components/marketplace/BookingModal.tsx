@@ -24,6 +24,7 @@ import type { AddOn } from "@/service/add-ons/add-ons.service";
 import { packagePriceText, perUnit, quantityRangeText } from "@/lib/addons";
 import { firstBookableDay, noticeLine, tooSoonMessage } from "@/lib/package-details";
 import { choicesPayload, missingChoice, togglePick as toggleChoice, type ChosenCustomization, type Customization, type Picks } from "@/lib/package-options";
+import { lengthText } from "@/components/addons/ServiceLengthFields";
 import { dayKeyOf, endTimesOn, formatTime, hoursMessage, isOpenDay, otherZone, startTimesOn, summariseHours, withZone, type WorkingHours } from "@/lib/working-hours";
 
 interface Props {
@@ -52,6 +53,9 @@ interface Props {
     customer_can_come?: boolean;
     /** the package's delivery / travel fee rates (null: none); the fee is worked out from the address */
     travel_fee?: { text: string } | null;
+    /** false: the vendor sets how long it runs (service_duration_minutes); the customer picks only a start time */
+    customer_sets_duration?: boolean;
+    service_duration_minutes?: number | null;
   };
   /** Planner bookings: attach to this event (pre-fills venue and guest count). */
   eventId?: string;
@@ -151,8 +155,10 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const summary = summariseHours(hours);
   // "(Chicago time)" when the vendor's hours are in another zone than the customer's
   const hoursText = summary && withZone(summary, hours);
+  // the vendor sets how long it runs (never on hourly packages): the customer picks only a start time
+  const vendorLength = unit !== "hour" && listing.customer_sets_duration === false && listing.service_duration_minutes ? listing.service_duration_minutes : null;
   // hourly packages: the booking has to fit the fewest hours inside the day, and not run past the most
-  const minMinutes = unit === "hour" && minQ ? minQ * 60 : 30;
+  const minMinutes = vendorLength ?? (unit === "hour" && minQ ? minQ * 60 : 30);
   const startOptions = startTimesOn(hours, date, 30, minMinutes);
   const endOptions = endTimesOn(hours, date, startTime)?.filter((t) => {
     if (unit !== "hour" || !startTime) return true;
@@ -209,7 +215,13 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
   const fields = () => {
     // an end time earlier than the start means the event runs past midnight: it ends the next day
     const pastMidnight = !!endTime && !!startTime && endTime < startTime;
-    const endFixed = endTime ? toIso(pastMidnight ? nextDay(date) : date, endTime) : undefined;
+    const endFixed = vendorLength
+      ? startTime
+        ? new Date(new Date(toIso(date, startTime)!).getTime() + vendorLength * 60_000).toISOString()
+        : undefined
+      : endTime
+        ? toIso(pastMidnight ? nextDay(date) : date, endTime)
+        : undefined;
     return {
       listing_id: listing.id,
       vendor_id: listing.vendor!.id,
@@ -241,7 +253,8 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
     if (unit === "person" && minQ && g < minQ) return `This package is for at least ${minQ} guests.`;
     if (unit === "person" && maxQ && g > maxQ) return `This package is for up to ${maxQ} guests. Message the vendor about a bigger event.`;
     if (unit === "hour" || chosen.some((a) => a.price_unit === "PER_HOUR")) {
-      if (!startTime || !endTime) return unit === "hour" ? "Add a start and end time. This package is priced by the hour." : "Add a start and end time for the add-ons priced by the hour.";
+      if (vendorLength && !startTime) return "Add a start time for the add-ons priced by the hour.";
+      if (!vendorLength && (!startTime || !endTime)) return unit === "hour" ? "Add a start and end time. This package is priced by the hour." : "Add a start and end time for the add-ons priced by the hour.";
     }
     return null;
   };
@@ -457,6 +470,14 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                   <input id="start-time" type="time" value={startTime} disabled={!!hours && !date} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
                 )}
               </div>
+              {vendorLength ? (
+                <div>
+                  <p className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Length</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 py-2.5" data-testid="vendor-length">
+                    {lengthText(vendorLength)}, set by the vendor{startTime ? ` (ends ${new Date(new Date(toIso(date || "2000-01-01", startTime)!).getTime() + vendorLength * 60_000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})` : ""}
+                  </p>
+                </div>
+              ) : (
               <div>
                 <label htmlFor="end-time" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   End time
@@ -480,6 +501,7 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
                   />
                 )}
               </div>
+              )}
               {hours && date && (otherZone(hours) ? isOpenDay(hours, date) : hours[dayKeyOf(date)]) && (
                 <p className="col-span-2 text-xs text-gray-500 dark:text-gray-400 -mt-1">{hoursMessage(hours, dayKeyOf(date))}</p>
               )}

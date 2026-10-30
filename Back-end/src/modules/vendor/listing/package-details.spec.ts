@@ -2,7 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
-import { keptImageNames, noticeLabel, readIncludedItems, tooSoonMessage, readTags } from './package-details';
+import { keptImageNames, noticeLabel, readIncludedItems, tooSoonMessage, readTags, serviceLengthColumns, ServiceLengthError, vendorSetEnd } from './package-details';
 
 // the same options as the app's global ValidationPipe
 const parse = async (cls: any, body: Record<string, unknown>) => {
@@ -98,5 +98,25 @@ describe('readTags', () => {
     expect(readTags('["a","b"]')).toEqual(['a', 'b']);
     expect(readTags('')).toEqual([]);
     expect(readTags(undefined)).toBeUndefined();
+  });
+});
+
+describe('service length set by the vendor', () => {
+  const start = '2026-12-05T18:00:00.000Z';
+
+  it('ends a request its length after the start, whatever end the app sent', () => {
+    expect(vendorSetEnd({ customer_sets_duration: false, service_duration_minutes: 150, price_unit: 'fixed' }, start)).toBe('2026-12-05T20:30:00.000Z');
+  });
+
+  it('leaves the end to the customer when they choose, on hourly packages, or without a start', () => {
+    expect(vendorSetEnd({ customer_sets_duration: true, service_duration_minutes: 150, price_unit: 'fixed' }, start)).toBeUndefined();
+    expect(vendorSetEnd({ customer_sets_duration: false, service_duration_minutes: 150, price_unit: 'hour' }, start)).toBeUndefined();
+    expect(vendorSetEnd({ customer_sets_duration: false, service_duration_minutes: 150, price_unit: 'fixed' }, null)).toBeUndefined();
+  });
+
+  it('needs a length when customers can\'t choose one, and keeps the saved one when only the toggle changes', () => {
+    expect(() => serviceLengthColumns({ customer_sets_duration: false })).toThrow(ServiceLengthError);
+    expect(serviceLengthColumns({ customer_sets_duration: false }, { service_duration_minutes: 120 })).toEqual({ customer_sets_duration: false, service_duration_minutes: 120 });
+    expect(serviceLengthColumns({ customer_sets_duration: true, service_duration_minutes: null }, { service_duration_minutes: 120 })).toEqual({ customer_sets_duration: true, service_duration_minutes: null });
   });
 });

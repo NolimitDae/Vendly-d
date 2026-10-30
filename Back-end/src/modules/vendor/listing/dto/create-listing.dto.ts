@@ -20,7 +20,7 @@ import { ListingStatus } from 'prisma/generated/client';
 import { Transform, Type } from 'class-transformer';
 import { SERVICE_AT, type ServiceAt } from 'src/modules/booking/booking-tracker';
 import { MAX_BASE_FEE, MAX_FREE_MILES, MAX_PER_MILE } from 'src/modules/booking/travel-fee';
-import { MAX_DOS, MAX_DO_LENGTH, MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readFlag, readIncludedItems, readNoticeHours, readTags } from '../package-details';
+import { MAX_DOS, MAX_DO_LENGTH, MAX_INCLUDED_ITEMS, MAX_INCLUDED_ITEM_LENGTH, MAX_MIN_NOTICE_HOURS, readFlag, readIncludedItems, readNoticeHours, readTags, MAX_SERVICE_MINUTES, MIN_SERVICE_MINUTES } from '../package-details';
 
 /** "true" / "false" from a multipart form (implicit conversion would read "false" as true). */
 const readBoolean = ({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
@@ -93,6 +93,21 @@ export class CreateVendorListingDto {
   @Transform(({ obj, key }) => readFlag(obj[key]))
   @IsBoolean()
   customer_can_come?: boolean;
+
+  @ApiPropertyOptional({ description: 'false: the vendor sets how long the service runs (service_duration_minutes) and customers pick only a start time. Hourly packages always let customers choose.' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readFlag(obj[key]))
+  @IsBoolean()
+  customer_sets_duration?: boolean;
+
+  @ApiPropertyOptional({ minimum: MIN_SERVICE_MINUTES, maximum: MAX_SERVICE_MINUTES, description: 'How long the service runs, in minutes, when the vendor sets it (empty clears it)' })
+  @IsOptional()
+  // an empty field clears the length
+  @Transform(({ obj, key }) => (obj[key] === '' || obj[key] === null ? null : obj[key] === undefined ? undefined : Number(obj[key])))
+  @IsInt({ message: 'The service length must be a whole number of minutes.' })
+  @Min(MIN_SERVICE_MINUTES, { message: `The service must run at least ${MIN_SERVICE_MINUTES} minutes.` })
+  @Max(MAX_SERVICE_MINUTES, { message: 'The service can run at most 7 days.' })
+  service_duration_minutes?: number | null;
 
   @ApiPropertyOptional({ description: 'Whether customers must give a guest count to book (empty = the default: venues only)' })
   @IsOptional()

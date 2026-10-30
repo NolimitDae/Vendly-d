@@ -15,7 +15,7 @@ import { assertCanPublish } from 'src/common/helper/publish-licence';
 import appConfig from 'src/config/app.config';
 import { CreateVendorListingDto } from './dto/create-listing.dto';
 import { UpdateVendorListingDto } from './dto/update-listing.dto';
-import { MAX_LISTING_PHOTOS, keptImageNames } from './package-details';
+import { MAX_LISTING_PHOTOS, keptImageNames, serviceLengthColumns, ServiceLength, ServiceLengthError } from './package-details';
 import { formatOptionGroups, OPTION_GROUPS_INCLUDE } from 'src/modules/add-ons/package-options.service';
 import { travelSettings, TravelSettingsError, TravelSettingsInput, TravelListing } from 'src/modules/booking/travel-fee';
 
@@ -25,6 +25,16 @@ function travelColumns(sent: TravelSettingsInput, saved?: TravelListing) {
     return travelSettings(sent, saved);
   } catch (e) {
     if (e instanceof TravelSettingsError) throw new BadRequestException(e.message);
+    throw e;
+  }
+}
+
+/** The service length columns to save (package-details.ts), as a 400 the vendor can act on. */
+function lengthColumns(sent: ServiceLength, saved?: ServiceLength) {
+  try {
+    return serviceLengthColumns(sent, saved);
+  } catch (e) {
+    if (e instanceof ServiceLengthError) throw new BadRequestException(e.message);
     throw e;
   }
 }
@@ -109,6 +119,7 @@ export class VendorListingService {
         images: imageNames,
         payment_plan: dto.payment_plan,
         ...depositColumns(dto.payment_plan, dto),
+        ...lengthColumns(dto),
         ...limits,
         included_items: dto.included_items ?? [],
         min_notice_hours: dto.min_notice_hours || null,
@@ -210,8 +221,12 @@ export class VendorListingService {
     // putting a package live needs an approved licence; one that's already live stays live
     if (dto.status === ListingStatus.ACTIVE && listing.status !== ListingStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
 
-    const { keep_images, travel_fee_enabled, travel_free_miles, travel_per_mile, travel_base_fee, travel_round_trip, deposit_percent, balance_due_days, balance_after_service, ...fields } = dto;
+    const { keep_images, travel_fee_enabled, travel_free_miles, travel_per_mile, travel_base_fee, travel_round_trip, deposit_percent, balance_due_days, balance_after_service, customer_sets_duration, service_duration_minutes, ...fields } = dto;
     const updateData: any = { ...fields };
+    // who sets how long the service runs, checked with the length saved
+    if (customer_sets_duration !== undefined || service_duration_minutes !== undefined) {
+      Object.assign(updateData, lengthColumns({ customer_sets_duration, service_duration_minutes }, listing));
+    }
     // a custom deposit's numbers are checked with the plan they belong to (the saved one when it isn't changing)
     if (dto.payment_plan !== undefined || deposit_percent !== undefined || balance_due_days !== undefined || balance_after_service !== undefined) {
       Object.assign(updateData, depositColumns(dto.payment_plan ?? listing.payment_plan, { deposit_percent, balance_due_days, balance_after_service }, listing));

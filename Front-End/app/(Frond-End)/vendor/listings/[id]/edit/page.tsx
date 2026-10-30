@@ -18,6 +18,7 @@ import type { ServiceAt } from "@/lib/booking-tracker";
 import type { PickerCategory } from "@/lib/categories";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
 import DepositPlanFields, { appendDepositTerms, depositTermsError, depositTermsFrom, emptyDepositTerms, type DepositTermsValue } from "@/components/addons/DepositPlanFields";
+import ServiceLengthFields, { appendServiceLength, emptyServiceLength, serviceLengthError, serviceLengthFrom, type ServiceLengthValue } from "@/components/addons/ServiceLengthFields";
 import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, packageDetailsFrom, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
 import PackageCustomizationsFields, { emptyCustomizations, saveCustomizations, type PackageCustomizationsValue } from "@/components/listing/PackageCustomizationsFields";
@@ -79,6 +80,8 @@ export default function EditListingPage() {
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
   // a custom deposit's percentage and balance timing (payment plan "Custom deposit")
   const [deposit, setDeposit] = useState<DepositTermsValue>(emptyDepositTerms());
+  // who sets how long the service runs (customers, or the vendor with a length)
+  const [length, setLength] = useState<ServiceLengthValue>(emptyServiceLength());
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
   const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
   // not saved until the package's own list has loaded
@@ -118,6 +121,7 @@ export default function EditListingPage() {
           tags: Array.isArray(l.tags) ? l.tags.join(", ") : (l.tags ?? ""),
         });
         setDeposit(depositTermsFrom(l));
+        setLength(serviceLengthFrom(l));
         setPlace({ label: l.location ?? "", lat: l.lat ?? undefined, lng: l.lng ?? undefined });
         setRadius(l.service_radius_miles ?? null);
         setServiceAt(l.service_at === "VENDOR_LOCATION" ? "VENDOR_LOCATION" : "CUSTOMER_LOCATION");
@@ -167,7 +171,7 @@ export default function EditListingPage() {
       toast.error("Title, description, and price are required");
       return;
     }
-    const limitProblem = limitsError(form.price_unit, limits) ?? depositTermsError(form.payment_plan, deposit);
+    const limitProblem = limitsError(form.price_unit, limits) ?? serviceLengthError(form.price_unit, length) ?? depositTermsError(form.payment_plan, deposit);
     if (limitProblem) {
       toast.error(limitProblem);
       return;
@@ -189,6 +193,7 @@ export default function EditListingPage() {
       if (guestRequired !== null) fd.append("guest_count_required", String(guestRequired));
       appendLimits(fd, form.price_unit, limits, true);
       appendDepositTerms(fd, form.payment_plan, deposit);
+      appendServiceLength(fd, form.price_unit, length);
       appendPackageDetails(fd, details, true);
       // hidden (the customer comes to the vendor): left as saved, and it doesn't apply to bookings
       if (travelOffered) appendTravelFee(fd, travel, true);
@@ -429,6 +434,7 @@ export default function EditListingPage() {
               </div>
             </div>
             <PackageQuantityFields unit={form.price_unit} price={form.price} limits={limits} onChange={setLimits} />
+            <ServiceLengthFields unit={form.price_unit} value={length} onChange={setLength} />
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">How customers pay</label>
               <select

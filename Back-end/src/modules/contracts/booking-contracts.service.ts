@@ -1,7 +1,7 @@
 import { eventDays } from 'src/modules/calendar-sync/busy-days';
 import { VENDOR_UNAVAILABLE, vendorIsActive } from 'src/common/helper/active-vendor';
 import { hoursZone, outsideWorkingHours, readWorkingHours } from 'src/modules/vendor/working-hours';
-import { tooSoonMessage } from 'src/modules/vendor/listing/package-details';
+import { tooSoonMessage, vendorSetEnd } from 'src/modules/vendor/listing/package-details';
 import { assertNotCancelled, CANCELLED_NO_BOOKINGS } from 'src/modules/events/event-rules';
 import {
   BadRequestException,
@@ -414,6 +414,9 @@ export class BookingContractsService {
 
   private async prepareForBooking(userId: string, dto: BookingContractFieldsDto, bookingId: string, knownPoint?: TravelPointClaim) {
     const ctx = await this.loadBookingContext(userId, dto);
+    // the vendor sets how long the service runs on this package: the request ends that long after it starts
+    const setEnd = vendorSetEnd(ctx.listing, dto.event_start_at ?? dto.scheduled_at);
+    if (setEnd) dto.event_end_at = new Date(setEnd);
     // the customer comes to the vendor instead, where the package allows it: no service address then
     let customerComes: boolean;
     try {

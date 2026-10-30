@@ -117,3 +117,36 @@ export function keptImageNames(current: string[], keep: string[]): string[] {
   });
   return [...new Set(names)].filter((n) => current.includes(n));
 }
+
+/** How long a vendor-set service can run: 15 minutes to a week. */
+export const MIN_SERVICE_MINUTES = 15;
+export const MAX_SERVICE_MINUTES = 7 * 24 * 60;
+
+/** A package's service length setting (owner's ask, Nov 2026: "let the vendor toggle if the customer can set the service duration"). */
+export interface ServiceLength {
+  customer_sets_duration?: boolean | null;
+  service_duration_minutes?: number | null;
+  price_unit?: string | null;
+}
+
+/** True when the vendor sets how long the service runs (hourly packages are always the customer's choice: they pay by the hour). */
+export const vendorSetsLength = (l: ServiceLength) => l.customer_sets_duration === false && l.price_unit !== 'hour' && !!l.service_duration_minutes;
+
+/**
+ * The end of a request on a package whose vendor sets the length: its start plus that length (whatever
+ * end the customer's app sent). Undefined when the customer chooses, or there's no start yet.
+ */
+export function vendorSetEnd(l: ServiceLength, start?: Date | string | null): string | undefined {
+  if (!vendorSetsLength(l) || !start) return undefined;
+  return new Date(new Date(start).getTime() + l.service_duration_minutes! * 60_000).toISOString();
+}
+
+export class ServiceLengthError extends Error {}
+
+/** The columns to save for the setting, checked together (the vendor needs a length when customers can't choose one). */
+export function serviceLengthColumns(sent: ServiceLength, saved?: ServiceLength) {
+  const customerSets = sent.customer_sets_duration ?? saved?.customer_sets_duration ?? true;
+  const minutes = sent.service_duration_minutes !== undefined ? sent.service_duration_minutes : saved?.service_duration_minutes ?? null;
+  if (!customerSets && !minutes) throw new ServiceLengthError('Set how long the service runs, or let customers choose.');
+  return { customer_sets_duration: customerSets, service_duration_minutes: minutes || null };
+}

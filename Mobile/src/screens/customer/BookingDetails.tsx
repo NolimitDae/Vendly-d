@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { addHours, format, parseISO, set } from 'date-fns';
+import { addMinutes, format, parseISO, set } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Chip, Field, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import LocationPicker from '../../components/LocationPicker';
@@ -13,6 +13,7 @@ import { haptic } from '../../utils/haptics';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { countedUnit, estimate, money, plural, rangeText, type AddOn } from '../../services/addons.service';
 import { tooSoonMessage } from '../../utils/packageDetails';
+import { lengthText } from '../../utils/serviceLength';
 import CustomizationPicker from '../../components/booking/CustomizationPicker';
 import { choicesPayload, missingChoice, upchargeEstimate, type Customization, type Picks } from '../../utils/packageOptions';
 import { dayKeyOf, fitsHours, hoursMessage, minutesOf, otherZone, startTimesOn, type WorkingHours } from '../../utils/workingHours';
@@ -41,7 +42,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const [guests, setGuests] = useState('');
   const [notes, setNotes] = useState('');
   // the package's limits and add-ons come from the listing itself (the summary passed in doesn't carry them)
-  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null; needs_service_address?: boolean; needs_guest_count?: boolean; customer_can_come?: boolean; travel_fee?: { text: string } | null } | null>(null);
+  const [pkg, setPkg] = useState<{ price_unit?: string; min_quantity?: number | null; max_quantity?: number | null; add_ons: AddOn[]; customizations: Customization[]; working_hours?: WorkingHours | null; needs_service_address?: boolean; needs_guest_count?: boolean; customer_can_come?: boolean; travel_fee?: { text: string } | null; customer_sets_duration?: boolean; service_duration_minutes?: number | null } | null>(null);
   const [picks, setPicks] = useState<Record<string, number>>({});
   // the package's customizations: what was picked for each
   const [choices, setChoices] = useState<Picks>({});
@@ -50,7 +51,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
     MarketplaceService.getListing(listing.id)
       .then((r) => {
         const l = r.data?.data;
-        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null, needs_service_address: l.needs_service_address, needs_guest_count: l.needs_guest_count, customer_can_come: l.customer_can_come, travel_fee: l.travel_fee ?? null });
+        if (l) setPkg({ price_unit: l.price_unit, min_quantity: l.min_quantity, max_quantity: l.max_quantity, add_ons: l.add_ons ?? [], customizations: l.customizations ?? [], working_hours: l.working_hours ?? null, needs_service_address: l.needs_service_address, needs_guest_count: l.needs_guest_count, customer_can_come: l.customer_can_come, travel_fee: l.travel_fee ?? null, customer_sets_duration: l.customer_sets_duration, service_duration_minutes: l.service_duration_minutes ?? null });
       })
       .catch(() => {});
   }, [listing.id]);
@@ -59,7 +60,13 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const unit = listing.quoteId ? null : countedUnit(pkg?.price_unit ?? listing.priceUnit);
   const min = pkg?.min_quantity && pkg.min_quantity > 0 ? pkg.min_quantity : null;
   const max = pkg?.max_quantity && pkg.max_quantity > 0 ? pkg.max_quantity : null;
-  const packageDurations = unit === 'hour' && max ? DURATIONS.filter((d) => d.hours <= max) : DURATIONS;
+  // the vendor sets how long it runs (not on hourly packages): that one length, and the customer picks only a start
+  const vendorLength = unit !== 'hour' && pkg?.customer_sets_duration === false && pkg.service_duration_minutes ? pkg.service_duration_minutes : null;
+  const packageDurations = vendorLength
+    ? [{ label: lengthText(vendorLength), hours: vendorLength / 60 }]
+    : unit === 'hour' && max
+      ? DURATIONS.filter((d) => d.hours <= max)
+      : DURATIONS;
   // the vendor's hours that day (undefined = no hours set, null = closed): start times and lengths stay inside them
   const hours = pkg?.working_hours ?? null;
   const dayHours = hours ? hours[dayKeyOf(date)] : undefined;
@@ -122,7 +129,8 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
   const upcharges = upchargeEstimate(pkg?.customizations, choices, optionUnits);
 
   const startAt = start ? set(day, { ...start, seconds: 0, milliseconds: 0 }) : null;
-  const endAt = startAt ? addHours(startAt, duration.hours) : null;
+  // in minutes: a vendor's length can be part of an hour
+  const endAt = startAt ? addMinutes(startAt, Math.round(duration.hours * 60)) : null;
 
   const proceed = () => {
     if (!startAt || !endAt) return Alert.alert('Start time', 'Choose when the service should start.');
@@ -199,11 +207,15 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
 
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>Service Duration</Text>
-            <View style={s.chips}>
-              {durations.map((d) => (
-                <Chip key={d.label} label={d.label} active={d.label === duration.label} onPress={() => setDuration(d)} />
-              ))}
-            </View>
+            {vendorLength ? (
+              <Text style={s.hint}>{`Runs ${lengthText(vendorLength)}, set by ${listing.vendorName}.`}</Text>
+            ) : (
+              <View style={s.chips}>
+                {durations.map((d) => (
+                  <Chip key={d.label} label={d.label} active={d.label === duration.label} onPress={() => setDuration(d)} />
+                ))}
+              </View>
+            )}
             {endAt && (
               <Text style={s.hint}>
                 {format(startAt!, 'h:mm a')} – {format(endAt, 'h:mm a')}

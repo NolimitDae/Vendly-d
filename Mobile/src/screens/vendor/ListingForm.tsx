@@ -25,6 +25,7 @@ import { appendTravelFee, emptyTravelFee, offersTravelFee, travelFeeError, trave
 import { appendDosDonts, customizationsError, dosDontsError, dosDontsFrom, draftsFrom, draftsToInput, emptyDosDonts, type CustomizationDraft, type DosDonts } from '../../utils/packageOptions';
 
 import DepositPlanFields from '../../components/listing/DepositPlanFields';
+import { lengthMinutes, lengthText, serviceLengthError } from '../../utils/serviceLength';
 import { appendDepositTerms, depositTermsError, depositTermsFrom, emptyDepositTerms, type DepositTermsValue } from '../../utils/depositTerms';
 
 interface PickedImage { uri: string; type: string; name: string }
@@ -70,6 +71,9 @@ export default function ListingForm() {
   // customers may come to the vendor instead; whether a guest count is required (null = the default: venues only)
   const [customerCanCome, setCustomerCanCome] = useState(false);
   const [guestRequired, setGuestRequired] = useState<boolean | null>(null);
+  // who sets how long the service runs: customers (the default), or the vendor with a length in hours
+  const [customerSetsLength, setCustomerSetsLength] = useState(true);
+  const [lengthHours, setLengthHours] = useState('');
   const [plan, setPlan] = useState<PaymentPlan>('FULL_ON_ACCEPT');
   // a custom deposit's percentage and balance timing (plan "Custom deposit")
   const [deposit, setDeposit] = useState<DepositTermsValue>(emptyDepositTerms());
@@ -122,6 +126,8 @@ export default function ListingForm() {
             setRadius(l.service_radius_miles ?? null);
             setServiceAt(l.service_at === 'VENDOR_LOCATION' ? 'VENDOR_LOCATION' : 'CUSTOMER_LOCATION');
             setCustomerCanCome(!!l.customer_can_come);
+            setCustomerSetsLength(l.customer_sets_duration !== false);
+            setLengthHours(l.service_duration_minutes ? String(Math.round((l.service_duration_minutes / 60) * 100) / 100) : '');
             setGuestRequired(l.guest_count_required ?? null);
             setPlan(l.payment_plan ?? l.effective_payment_plan ?? 'FULL_ON_ACCEPT');
             setDeposit(depositTermsFrom(l));
@@ -175,6 +181,8 @@ export default function ListingForm() {
     if (customProblem) return Alert.alert('Customizations', customProblem);
     const travelProblem = travelOffered ? travelFeeError(travel) : null;
     if (travelProblem) return Alert.alert('Travel fee', travelProblem);
+    const lengthProblem = serviceLengthError(priceUnit, customerSetsLength, lengthHours);
+    if (lengthProblem) return Alert.alert('Service length', lengthProblem);
     const depositProblem = depositTermsError(plan, deposit);
     if (depositProblem) return Alert.alert('Custom deposit', depositProblem);
     setSaving(true);
@@ -197,6 +205,11 @@ export default function ListingForm() {
       fd.append('service_at', serviceAt);
       fd.append('customer_can_come', String(serviceAt === 'CUSTOMER_LOCATION' && customerCanCome));
       if (guestRequired !== null) fd.append('guest_count_required', String(guestRequired));
+      // hourly packages: customers always choose their hours
+      if (priceUnit !== 'hour') {
+        fd.append('customer_sets_duration', String(customerSetsLength));
+        if (!customerSetsLength) fd.append('service_duration_minutes', String(lengthMinutes(lengthHours)));
+      }
       fd.append('payment_plan', plan);
       appendDepositTerms(fd, plan, deposit);
       // guests / hours / days limits only apply to counted prices; 0 clears one
@@ -396,6 +409,34 @@ export default function ListingForm() {
                       ? 'Customers pay for each hour they book. Shorter bookings pay your minimum.'
                       : 'Customers pay for each day the event runs.'}
                 </Text>
+              </>
+            )}
+            {priceUnit !== 'hour' && (
+              <>
+                <View style={s.switchRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.switchLabel}>Customers choose how long</Text>
+                    <Text style={s.hint}>
+                      {customerSetsLength ? 'Customers pick a start time and how long they need you.' : 'You set how long it runs. Customers pick only a start time.'}
+                    </Text>
+                  </View>
+                  <Switch value={customerSetsLength} onValueChange={setCustomerSetsLength} trackColor={{ true: DARK.accent, false: DARK.field }} accessibilityLabel="Customers choose how long" />
+                </View>
+                {!customerSetsLength && (
+                  <>
+                    <Field
+                      label="Service length (hours)"
+                      placeholder="e.g. 3 or 1.5"
+                      value={lengthHours}
+                      onChangeText={(t) => setLengthHours(t.replace(/[^0-9.]/g, ''))}
+                      keyboardType="decimal-pad"
+                      accessibilityLabel="How many hours the service runs"
+                    />
+                    {Number.isFinite(lengthMinutes(lengthHours)) && lengthMinutes(lengthHours) >= 15 && (
+                      <Text style={s.hint}>Every booking runs {lengthText(lengthMinutes(lengthHours))} from the start time the customer picks.</Text>
+                    )}
+                  </>
+                )}
               </>
             )}
           </View>

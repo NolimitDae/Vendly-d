@@ -37,6 +37,9 @@ export interface Listing {
   needs_guest_count?: boolean;
   /** the vendor comes to the customer, but lets them come to the vendor instead (pickup, drop-off) */
   customer_can_come?: boolean;
+  /** false: the vendor sets how long it runs (service_duration_minutes) and the customer picks only a start time */
+  customer_sets_duration?: boolean;
+  service_duration_minutes?: number | null;
   /** the delivery / travel fee rates (null: none), worked out per booking from the customer's address */
   travel_fee?: { free_miles: number; per_mile: number; base_fee: number; round_trip: boolean; text: string } | null;
   /** the vendor's weekly hours (null = any day, any time) and a short line like "Mon–Fri 9am–5pm" */
