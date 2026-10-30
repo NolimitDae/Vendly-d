@@ -1,5 +1,5 @@
 import { PaymentPlan } from 'prisma/generated/enums';
-import { buildSchedule, eventLinkedDueAt, rebasedAmounts, securityHoldAt } from './payment-schedule';
+import { buildSchedule, depositContractSentence, depositShareOf, depositTermsOf, eventLinkedDueAt, planLabel, rebasedAmounts, securityHoldAt } from './payment-schedule';
 
 const DAY = 24 * 3600 * 1000;
 const now = new Date('2026-10-14T12:00:00Z');
@@ -71,5 +71,60 @@ describe('amended price and date', () => {
     expect(eventLinkedDueAt(PaymentPlan.FULL_ON_ACCEPT, 0, inDays(30), now)).toBeNull();
     expect(securityHoldAt(inDays(10), now)).toEqual(inDays(9));
     expect(securityHoldAt(inDays(0.5), now)).toEqual(now);
+  });
+});
+
+describe('a package\'s own deposit (DEPOSIT_CUSTOM)', () => {
+  const custom = PaymentPlan.DEPOSIT_CUSTOM;
+
+  it('takes its deposit and charges the balance its own number of days before the event', () => {
+    const s = buildSchedule({ plan: custom, price: 1000, serviceFee: 50, eventStart: inDays(30), acceptedAt: now, terms: { deposit_percent: 40, balance_due_days: 10 } });
+    expect(s[0]).toMatchObject({ label: '40% deposit', amount: 450, fee_amount: 50, due_at: now });
+    expect(s[1]).toMatchObject({ label: 'Balance', amount: 600, due_at: inDays(20) });
+    expect(s[1].after_service).toBeFalsy();
+  });
+
+  it('charges in full when the event is sooner than its balance lead time', () => {
+    const s = buildSchedule({ plan: custom, price: 1000, serviceFee: 50, eventStart: inDays(5), acceptedAt: now, terms: { deposit_percent: 40, balance_due_days: 10 } });
+    expect(s).toEqual([expect.objectContaining({ label: 'Full payment', amount: 1050 })]);
+  });
+
+  it('leaves the balance for after the service, shown at the event, with or without an event date', () => {
+    const terms = { deposit_percent: 25, balance_after_service: true };
+    const s = buildSchedule({ plan: custom, price: 1000, serviceFee: 50, eventStart: inDays(3), acceptedAt: now, terms });
+    expect(s[0]).toMatchObject({ label: '25% deposit', amount: 300, due_at: now });
+    expect(s[1]).toMatchObject({ label: 'Balance (after the service)', amount: 750, fee_amount: 0, due_at: inDays(3), after_service: true, capture_manually: false });
+    const undated = buildSchedule({ plan: custom, price: 1000, serviceFee: 50, eventStart: null, acceptedAt: now, terms });
+    expect(undated[1]).toMatchObject({ amount: 750, due_at: now, after_service: true });
+  });
+
+  it('keeps its numbers inside 10 to 90 percent and 1 to 60 days', () => {
+    expect(depositTermsOf(custom, { deposit_percent: 5, balance_due_days: 99 })).toEqual({ deposit_percent: 10, balance_due_days: 60, balance_after_service: false });
+    expect(depositTermsOf(custom, { deposit_percent: 95, balance_after_service: true })).toEqual({ deposit_percent: 90, balance_due_days: null, balance_after_service: true });
+    expect(depositTermsOf(PaymentPlan.DEPOSIT_50, { deposit_percent: 30 })).toBeNull();
+    expect(depositShareOf(custom, { deposit_percent: 30 })).toBe(0.3);
+    expect(depositShareOf(PaymentPlan.DEPOSIT_25, { deposit_percent: 30 })).toBe(0.25);
+  });
+
+  it('re-splits its deposit and balance when the price changes', () => {
+    expect(rebasedAmounts({ plan: custom, count: 2, price: 2000, serviceFee: 100, terms: { deposit_percent: 30, balance_after_service: true } })).toEqual([
+      { amount: 700, fee_amount: 100 },
+      { amount: 1400, fee_amount: 0 },
+    ]);
+  });
+
+  it('moves the balance with the event: its lead time before, or the event itself when it is after the service', () => {
+    expect(eventLinkedDueAt(custom, 1, inDays(40), now, { deposit_percent: 30, balance_due_days: 10 })).toEqual(inDays(30));
+    expect(eventLinkedDueAt(custom, 1, inDays(40), now, { deposit_percent: 30, balance_after_service: true })).toEqual(inDays(40));
+    expect(eventLinkedDueAt(custom, 0, inDays(40), now, { deposit_percent: 30, balance_after_service: true })).toBeNull();
+  });
+
+  it('describes itself with its own numbers', () => {
+    expect(planLabel(custom, { deposit_percent: 30, balance_due_days: 1 })).toBe('30% deposit when you accept, balance 1 day before the event');
+    expect(planLabel(custom, { deposit_percent: 50, balance_after_service: true })).toBe('50% deposit when you accept, balance after the service');
+    expect(planLabel(PaymentPlan.DEPOSIT_50)).toBe('50% deposit when you accept, balance 7 days before the event');
+    expect(depositContractSentence({ deposit_percent: 25, balance_due_days: 14, balance_after_service: false })).toBe(
+      'A 25% deposit is paid through Vendly when the Vendor accepts and signs this agreement, and the balance is charged 14 days before the event.',
+    );
   });
 });

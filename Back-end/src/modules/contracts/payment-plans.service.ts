@@ -19,6 +19,7 @@ import {
 } from 'src/modules/payments/custom-plan';
 import { unpaidCharges } from 'src/modules/payments/custom-plan-charges';
 import { money } from 'src/modules/payments/money-text';
+import { balanceAfterService } from 'src/modules/payments/payment-schedule';
 import { AuthUser, BookingContractsService, RequestMeta, verificationCode } from './booking-contracts.service';
 import { contentHash, MergeData, missingFields, missingFieldsMessage } from './contract-merge';
 import { CONSENT_TEXT, CONSENT_TEXT_VERSION } from './contract-templates';
@@ -30,7 +31,7 @@ import { SignatureDto } from './dto/contracts.dto';
 import { requiredBookingFields } from 'src/modules/booking/booking-place';
 
 const bookingInclude = {
-  listing: { select: { title: true, payment_plan: true, guest_count_required: true, category: { select: { default_payment_plan: true } } } },
+  listing: { select: { title: true, payment_plan: true, deposit_percent: true, balance_due_days: true, balance_after_service: true, guest_count_required: true, category: { select: { default_payment_plan: true } } } },
   vendor: { select: { id: true, name: true, email: true, vendorProfile: { select: { business_name: true } } } },
   customer: { select: { id: true, name: true, email: true, type: true } },
   installments: { orderBy: { sequence: 'asc' } },
@@ -80,7 +81,14 @@ export class PaymentPlansService {
   /** The package is paid after the service: a plan may then take payments after the event. */
   private payAfter(b: PlanBooking) {
     const listingPlan = b.listing?.payment_plan ?? b.listing?.category?.default_payment_plan;
-    return b.payment_plan === PaymentPlan.PAY_AFTER_SERVICE || listingPlan === PaymentPlan.PAY_AFTER_SERVICE || !!readCustomPlan(b.custom_payment_plan)?.pay_after;
+    return (
+      b.payment_plan === PaymentPlan.PAY_AFTER_SERVICE ||
+      listingPlan === PaymentPlan.PAY_AFTER_SERVICE ||
+      // a custom deposit with its balance after the service
+      balanceAfterService(b.payment_plan, b) ||
+      (!b.payment_plan && balanceAfterService(listingPlan, b.listing)) ||
+      !!readCustomPlan(b.custom_payment_plan)?.pay_after
+    );
   }
 
   private context(b: PlanBooking, now = new Date()) {

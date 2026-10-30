@@ -303,6 +303,11 @@ export class BookingService {
     });
     const missing = place && arrivalMissing(place);
     if (missing) throw new BadRequestException(missing);
+    // a balance charged after the service: the customer confirms the work against the vendor's photo proof
+    const balanceAfter = booking.payment_plan === PaymentPlan.DEPOSIT_CUSTOM && booking.balance_after_service;
+    if (balanceAfter && !(await this.prisma.bookingProof.count({ where: { booking_id: bookingId, uploader_id: vendorId } }))) {
+      throw new BadRequestException('Add photos of the finished work first: the customer confirms the work from them before the balance is charged.');
+    }
 
     // only from IN_PROGRESS: a cancellation that landed since it was loaded must not be overwritten
     const completedAt = new Date();
@@ -319,7 +324,9 @@ export class BookingService {
       to: booking.customer.email,
       recipientName: booking.customer.name,
       subject: `Service completed — ${titleOf(booking)}`,
-      message: 'Your service has been completed! We\'d love to hear your feedback.',
+      message: balanceAfter
+        ? 'Your service has been completed! Please look over the vendor\'s photos and confirm the work in Vendly. The balance is charged when you confirm, or automatically if no problem is reported in time.'
+        : 'Your service has been completed! We\'d love to hear your feedback.',
       status: 'COMPLETED',
       listingTitle: titleOf(booking) ?? 'Service',
       ctaUrl: `${clientUrl}/bookings`,
@@ -768,7 +775,7 @@ export class BookingService {
       const split = custom || installments.some((i) => i.kind === 'charge' && i.sequence === 2);
       let depositPaid = first?.status === 'PAID' ? round2(vendorPart(first)) : 0;
       // the event was too close to split the price: the deposit's share of the full payment
-      if (!split) depositPaid = Math.min(depositPaid, round2(Number(booking.amount ?? 0) * depositShareOf(booking.payment_plan!)));
+      if (!split) depositPaid = Math.min(depositPaid, round2(Number(booking.amount ?? 0) * depositShareOf(booking.payment_plan!, booking)));
       const kept = depositPlanVendorOwed({ vendorPaid, depositPaid, feesAgreed, percent: owed.percent });
       settlement = settleAgainstPaid(owed, installments, 'CUSTOMER', kept.owed);
       depositKept = kept.depositKept;

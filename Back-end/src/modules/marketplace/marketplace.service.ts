@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { MAX_SERVICE_RADIUS, boundingBox, geocode, milesBetween, withoutPosition } from 'src/modules/geo/geo';
 import { bookingNeeds } from 'src/modules/booking/booking-place';
 import { travelSummary } from 'src/modules/booking/travel-fee';
-import { ListingStatus, VendorContractStatus } from 'prisma/generated/client';
+import { ListingStatus, PaymentPlan, VendorContractStatus } from 'prisma/generated/client';
+import { planLabel } from 'src/modules/payments/payment-schedule';
 import { formatAddOn } from 'src/modules/add-ons/add-ons.service';
 import { formatOptionGroups, OPTION_GROUPS_INCLUDE } from 'src/modules/add-ons/package-options.service';
 import { CANCELLATION_PRESETS } from 'src/modules/contracts/contract-templates';
@@ -499,6 +500,8 @@ export class MarketplaceService {
       is_test: !!listing.vendor?.is_test,
       // what the customer will be asked to pay and when (vendor's choice, else the category default)
       effective_payment_plan: listing.payment_plan ?? listing.category?.default_payment_plan ?? 'FULL_ON_ACCEPT',
+      // the same in words, with a custom deposit's own numbers (customer-facing: "the vendor accepts")
+      payment_plan_label: planLabel(listing.payment_plan ?? listing.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT, listing).replace('when you accept', 'when the vendor accepts'),
       // what booking it asks for: a service address (not for venues or the vendor's place), a guest count (venues)
       ...bookingNeeds(listing),
       images: (listing.images ?? []).map((img: string) =>

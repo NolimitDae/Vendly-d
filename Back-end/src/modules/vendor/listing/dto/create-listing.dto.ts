@@ -15,7 +15,7 @@ import {
   Min,
 } from 'class-validator';
 import { PaymentPlan } from 'prisma/generated/enums';
-import { LISTING_PAYMENT_PLANS } from 'src/modules/payments/payment-schedule';
+import { LISTING_PAYMENT_PLANS, MAX_BALANCE_DAYS, MAX_DEPOSIT_PERCENT, MIN_BALANCE_DAYS, MIN_DEPOSIT_PERCENT } from 'src/modules/payments/payment-schedule';
 import { ListingStatus } from 'prisma/generated/client';
 import { Transform, Type } from 'class-transformer';
 import { SERVICE_AT, type ServiceAt } from 'src/modules/booking/booking-tracker';
@@ -146,9 +146,33 @@ export class CreateVendorListingDto {
 
   @ApiPropertyOptional({ enum: LISTING_PAYMENT_PLANS, description: 'How customers pay; defaults to the category setting, else full payment on accept' })
   @IsOptional()
-  // a custom plan is agreed per booking, never set on a package
+  // a custom plan is agreed per booking, never set on a package (a package's own deposit is DEPOSIT_CUSTOM)
   @IsIn(LISTING_PAYMENT_PLANS)
   payment_plan?: PaymentPlan;
+
+  @ApiPropertyOptional({ minimum: MIN_DEPOSIT_PERCENT, maximum: MAX_DEPOSIT_PERCENT, description: 'DEPOSIT_CUSTOM: the deposit taken when the vendor accepts, in percent' })
+  @IsOptional()
+  // an empty field (a form sending every field) counts as not given
+  @Transform(({ obj, key }) => (obj[key] === '' || obj[key] == null ? undefined : Number(obj[key])))
+  @IsInt({ message: 'The deposit must be a whole percentage.' })
+  @Min(MIN_DEPOSIT_PERCENT, { message: `The deposit must be at least ${MIN_DEPOSIT_PERCENT}%.` })
+  @Max(MAX_DEPOSIT_PERCENT, { message: `The deposit can be at most ${MAX_DEPOSIT_PERCENT}%.` })
+  deposit_percent?: number;
+
+  @ApiPropertyOptional({ minimum: MIN_BALANCE_DAYS, maximum: MAX_BALANCE_DAYS, description: 'DEPOSIT_CUSTOM: days before the event the balance is due (unless it is after the service)' })
+  @IsOptional()
+  // an empty field (a form sending every field) counts as not given
+  @Transform(({ obj, key }) => (obj[key] === '' || obj[key] == null ? undefined : Number(obj[key])))
+  @IsInt({ message: 'The balance must be due a whole number of days before the event.' })
+  @Min(MIN_BALANCE_DAYS, { message: `The balance must be due at least ${MIN_BALANCE_DAYS} day before the event.` })
+  @Max(MAX_BALANCE_DAYS, { message: `The balance can be due at most ${MAX_BALANCE_DAYS} days before the event.` })
+  balance_due_days?: number;
+
+  @ApiPropertyOptional({ description: 'DEPOSIT_CUSTOM: the balance is charged after the service, once the customer confirms the work' })
+  @IsOptional()
+  @Transform(({ obj, key }) => readFlag(obj[key]))
+  @IsBoolean()
+  balance_after_service?: boolean;
 
   @ApiPropertyOptional({ type: [String], description: "What's included, one short line each (a JSON array in multipart forms)" })
   @IsOptional()

@@ -1,7 +1,7 @@
 import { BookingStatus, PaymentPlan } from 'prisma/generated/enums';
 
 /**
- * Deposit plans (DEPOSIT_50 / DEPOSIT_25, owner's rules of Oct 2026): when the deposit or the balance
+ * Deposit plans (DEPOSIT_50 / DEPOSIT_25, and a package's own DEPOSIT_CUSTOM; owner's rules of Oct 2026): when the deposit or the balance
  * charge fails for any reason, the customer has 12 hours to pay it (the saved card again or another
  * card). The charge is retried once on its own about 6 hours in, the customer is reminded with about
  * 2 hours left, and an unpaid booking is then cancelled for non-payment (booking/payment-deadlines.service.ts).
@@ -42,7 +42,8 @@ export const PAYMENT_STATE_LABELS: Record<PaymentState, string> = {
   pending_balance: 'Pending balance',
 };
 
-export const isDepositPlan = (plan: PaymentPlan | string | null | undefined) => plan === PaymentPlan.DEPOSIT_50 || plan === PaymentPlan.DEPOSIT_25;
+export const isDepositPlan = (plan: PaymentPlan | string | null | undefined) =>
+  plan === PaymentPlan.DEPOSIT_50 || plan === PaymentPlan.DEPOSIT_25 || plan === PaymentPlan.DEPOSIT_CUSTOM;
 
 /**
  * Which payment of a deposit plan an installment is: the first charge is the deposit (or, when the
@@ -51,8 +52,11 @@ export const isDepositPlan = (plan: PaymentPlan | string | null | undefined) => 
  */
 export function dueKindFor(
   booking: { payment_plan?: PaymentPlan | string | null; deposit_rules?: boolean | null },
-  inst: { kind: string; sequence: number; first?: boolean },
+  inst: { kind: string; sequence: number; first?: boolean; after_service?: boolean | null },
 ): PaymentDueKind | null {
+  // a balance after the service is charged once the work is done: it keeps the usual 3 tries over 48
+  // hours, and is never a reason to cancel a booking that already happened
+  if (inst.after_service) return null;
   // a custom plan (custom-plan.ts): its first charge is the deposit, every later one a balance payment
   if (booking.payment_plan === PaymentPlan.CUSTOM) return inst.kind === 'charge' ? (inst.first ? 'deposit' : 'balance') : null;
   if (!booking.deposit_rules || !isDepositPlan(booking.payment_plan) || inst.kind !== 'charge') return null;

@@ -247,7 +247,7 @@ describe('PaymentsService', () => {
 
       const rows = await service.scheduleForBooking('b1');
 
-      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { payment_plan: PaymentPlan.DEPOSIT_50 } });
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { payment_plan: PaymentPlan.DEPOSIT_50, deposit_percent: null, balance_due_days: null, balance_after_service: false } });
       expect(rows).toHaveLength(2);
       expect(charge).toHaveBeenCalledTimes(1);
       expect(charge).toHaveBeenCalledWith('i1');
@@ -257,6 +257,82 @@ describe('PaymentsService', () => {
       prisma.booking.findUnique.mockResolvedValueOnce({ id: 'b1', installments: [{ id: 'x' }], paid_at: null });
       expect(await service.scheduleForBooking('b1')).toEqual([]);
       expect(prisma.bookingInstallment.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a package\'s own deposit (DEPOSIT_CUSTOM)', () => {
+    const accepted = (over: Record<string, unknown> = {}) => ({ id: 'b1', amount: 1000, service_fee: 50, currency: 'usd', event_start_at: new Date(Date.now() + 30 * DAY), scheduled_at: null, payment_plan: null, listing_id: 'l1', paid_at: null, installments: [], ...over });
+    const created = () => {
+      let seq = 0;
+      prisma.bookingInstallment.create.mockImplementation(({ data }: any) => Promise.resolve({ id: `i${++seq}`, ...data }));
+    };
+
+    it('keeps the package\'s numbers on the booking and charges only the deposit when the balance is after the service', async () => {
+      prisma.booking.findUnique.mockResolvedValueOnce(accepted());
+      prisma.vendorListing.findUnique.mockResolvedValue({ payment_plan: PaymentPlan.DEPOSIT_CUSTOM, deposit_percent: 30, balance_due_days: null, balance_after_service: true, category: null });
+      created();
+      const charge = jest.spyOn(service, 'chargeInstallment').mockResolvedValue(null);
+
+      const rows = await service.scheduleForBooking('b1');
+
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { payment_plan: PaymentPlan.DEPOSIT_CUSTOM, deposit_percent: 30, balance_due_days: null, balance_after_service: true } });
+      expect(rows.map((r: any) => [r.amount, r.after_service])).toEqual([[350, false], [700, true]]);
+      expect(charge).toHaveBeenCalledTimes(1);
+      expect(charge).toHaveBeenCalledWith('i1');
+    });
+
+    it('never charges an after-service balance from the due-charges sweep', async () => {
+      prisma.bookingInstallment.findMany.mockResolvedValue([]);
+      await service.runDueCharges(new Date());
+      expect(prisma.bookingInstallment.findMany.mock.calls[0][0].where.OR[0]).toMatchObject({ attempts: 0, after_service: false });
+    });
+
+    it('charges the balance when the customer confirms the work, before paying the vendor', async () => {
+      const order: string[] = [];
+      prisma.booking.findUnique
+        .mockResolvedValueOnce({ customer_id: 'c1', status: BookingStatus.COMPLETED, released_at: null, dispute_opened_at: null, dispute_resolved_at: null })
+        .mockResolvedValueOnce({ status: BookingStatus.COMPLETED, dispute_opened_at: null, dispute_resolved_at: null, dispute_resolution: null, installments: [{ id: 'i2' }] });
+      prisma.booking.update.mockResolvedValue({});
+      jest.spyOn(service, 'chargeInstallment').mockImplementation(async (id: string) => (order.push(`charge ${id}`), null));
+      jest.spyOn(service, 'releaseBooking').mockImplementation(async () => (order.push('release'), null));
+
+      await service.approveBooking('b1', 'c1');
+
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: 'i2', status: InstallmentStatus.SCHEDULED, attempts: 0 }, data: { due_at: expect.any(Date) } });
+      expect(order).toEqual(['charge i2', 'release']);
+    });
+
+    it('charges the balance when the time to report a problem ends without one', async () => {
+      prisma.booking.findMany.mockResolvedValue([{ id: 'b1' }]);
+      prisma.booking.findUnique.mockResolvedValueOnce({ status: BookingStatus.COMPLETED, dispute_opened_at: null, dispute_resolved_at: null, dispute_resolution: null, installments: [{ id: 'i2' }] });
+      const charge = jest.spyOn(service, 'chargeInstallment').mockResolvedValue(null);
+      const release = jest.spyOn(service, 'releaseBooking').mockResolvedValue(null);
+
+      await service.runReleases(new Date());
+
+      expect(charge).toHaveBeenCalledWith('i2');
+      expect(charge.mock.invocationCallOrder[0]).toBeLessThan(release.mock.invocationCallOrder[0]);
+    });
+
+    it('waits while a problem report is open, and never charges a booking refunded in full', async () => {
+      const charge = jest.spyOn(service, 'chargeInstallment').mockResolvedValue(null);
+      prisma.booking.findUnique.mockResolvedValueOnce({ status: BookingStatus.COMPLETED, dispute_opened_at: new Date(), dispute_resolved_at: null, dispute_resolution: null, installments: [{ id: 'i2' }] });
+      expect(await service.chargeAfterServiceBalance('b1')).toBe(0);
+      prisma.booking.findUnique.mockResolvedValueOnce({ status: BookingStatus.COMPLETED, dispute_opened_at: new Date(), dispute_resolved_at: new Date(), dispute_resolution: 'refund', installments: [{ id: 'i2' }] });
+      expect(await service.chargeAfterServiceBalance('b1')).toBe(0);
+      expect(charge).not.toHaveBeenCalled();
+      expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['i2'] }, status: InstallmentStatus.SCHEDULED }, data: { status: InstallmentStatus.CANCELLED } });
+    });
+
+    it('lets the vendor release a custom deposit early, like the 25% and 50% ones', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', payment_plan: PaymentPlan.DEPOSIT_CUSTOM, early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null,
+        vendor: { stripe_connect_id: 'acct_1', balance: 0 }, contracts: [{ id: 'k1' }],
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 350, fee_amount: 50 }), installment({ id: 'i2', sequence: 2, amount: 700, fee_amount: 0, after_service: true })],
+      });
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_1' });
+      await service.releaseDepositEarly('b1', 'v1');
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 300 }));
     });
   });
 

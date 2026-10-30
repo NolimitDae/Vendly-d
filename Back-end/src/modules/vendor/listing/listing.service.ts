@@ -5,7 +5,8 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { ListingStatus } from 'prisma/generated/client';
+import { ListingStatus, PaymentPlan } from 'prisma/generated/client';
+import { depositTermsOf, DepositTerms } from 'src/modules/payments/payment-schedule';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
@@ -26,6 +27,20 @@ function travelColumns(sent: TravelSettingsInput, saved?: TravelListing) {
     if (e instanceof TravelSettingsError) throw new BadRequestException(e.message);
     throw e;
   }
+}
+
+/**
+ * A package's custom deposit columns, checked together: a custom deposit needs its percentage and either
+ * the days before the event its balance is due or the balance after the service; any other plan keeps none.
+ */
+export function depositColumns(plan: PaymentPlan | null | undefined, sent: DepositTerms, saved?: DepositTerms) {
+  if (plan !== PaymentPlan.DEPOSIT_CUSTOM) return { deposit_percent: null, balance_due_days: null, balance_after_service: false };
+  const percent = sent.deposit_percent ?? saved?.deposit_percent;
+  if (percent == null) throw new BadRequestException('Choose the deposit customers pay when you accept (10% to 90%).');
+  const after = sent.balance_after_service ?? saved?.balance_after_service ?? false;
+  const days = sent.balance_due_days ?? saved?.balance_due_days;
+  if (!after && days == null) throw new BadRequestException('Choose when the balance is due: some days before the event, or after the service.');
+  return depositTermsOf(plan, { deposit_percent: percent, balance_due_days: days, balance_after_service: after })!;
 }
 
 /** Minimum and maximum guests / hours / days, or nulls for a flat price. Throws if they don't make sense. */
@@ -92,6 +107,7 @@ export class VendorListingService {
         tags: dto.tags ?? [],
         images: imageNames,
         payment_plan: dto.payment_plan,
+        ...depositColumns(dto.payment_plan, dto),
         ...limits,
         included_items: dto.included_items ?? [],
         min_notice_hours: dto.min_notice_hours || null,
@@ -193,8 +209,12 @@ export class VendorListingService {
     // putting a package live needs an approved licence; one that's already live stays live
     if (dto.status === ListingStatus.ACTIVE && listing.status !== ListingStatus.ACTIVE) await assertCanPublish(this.prisma, vendorId);
 
-    const { keep_images, travel_fee_enabled, travel_free_miles, travel_per_mile, travel_base_fee, travel_round_trip, ...fields } = dto;
+    const { keep_images, travel_fee_enabled, travel_free_miles, travel_per_mile, travel_base_fee, travel_round_trip, deposit_percent, balance_due_days, balance_after_service, ...fields } = dto;
     const updateData: any = { ...fields };
+    // a custom deposit's numbers are checked with the plan they belong to (the saved one when it isn't changing)
+    if (dto.payment_plan !== undefined || deposit_percent !== undefined || balance_due_days !== undefined || balance_after_service !== undefined) {
+      Object.assign(updateData, depositColumns(dto.payment_plan ?? listing.payment_plan, { deposit_percent, balance_due_days, balance_after_service }, listing));
+    }
     // the travel fee settings are checked together with the ones saved
     Object.assign(updateData, travelColumns({ travel_fee_enabled, travel_free_miles, travel_per_mile, travel_base_fee, travel_round_trip }, listing));
     // limits only mean something for per person / hour / day prices; 0 clears one

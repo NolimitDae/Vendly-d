@@ -16,7 +16,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { withJobLock } from 'src/common/helper/job-lock';
 import { PaymentPlan, QuoteStatus } from 'prisma/generated/enums';
-import { buildSchedule, eventLinkedDueAt, rebasedAmounts, securityHoldAt } from 'src/modules/payments/payment-schedule';
+import { buildSchedule, depositContractSentence, depositTermsOf, eventLinkedDueAt, planLabel, rebasedAmounts, securityHoldAt } from 'src/modules/payments/payment-schedule';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { feeMaximum, isLargeTotal } from 'src/modules/platform/fee-config';
 import { BANK, bankNotAllowedReason, isBank, paymentMethodType } from 'src/modules/payments/bank-payments';
@@ -377,10 +377,10 @@ export class BookingContractsService {
       () => true,
     );
     if (locked) return 'settle';
-    const b = await db.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { payment_plan: true, amount: true, service_fee: true, installments: { where: { kind: 'charge' }, select: { id: true } } } });
+    const b = await db.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { payment_plan: true, amount: true, service_fee: true, deposit_percent: true, balance_due_days: true, balance_after_service: true, installments: { where: { kind: 'charge' }, select: { id: true } } } });
     // a custom payment plan's charges can't be re-spread
     const n = b.installments.length;
-    if (n && !rebasedAmounts({ plan: b.payment_plan, count: n, price: Number(b.amount ?? 0), serviceFee: Number(b.service_fee ?? 0) })) return 'settle';
+    if (n && !rebasedAmounts({ plan: b.payment_plan, count: n, price: Number(b.amount ?? 0), serviceFee: Number(b.service_fee ?? 0), terms: b })) return 'settle';
     return 'reprice';
   }
 
@@ -474,6 +474,9 @@ export class BookingContractsService {
       contractVersion: 1,
       timezone: dto.timezone,
     });
+    // a package's own deposit: the contract says when the deposit and the balance are charged
+    const depositTerms = depositTermsOf(ctx.listing.payment_plan, ctx.listing);
+    if (depositTerms) data.payment_schedule = depositContractSentence(depositTerms);
     // the package's own travel fee replaces the contract's general travel fee term for this booking
     if (travel) data.travel_fee = `${travelSummary(ctx.listing)?.text ?? 'Set on the package'}. This booking's travel fee is in Schedule A.`;
     data.pricing_schedule = buildPricingSchedule({
@@ -517,13 +520,21 @@ export class BookingContractsService {
 
   /** Numbers (not the formatted strings the contract uses) plus the charge schedule the customer will be on. */
   private async pricingFor(listingId: string, price: number, eventStart?: Date | string | null, promo?: { discount: number; code: string | null }, lines?: { pkg: PackageLine; addOns: { add_on_id: string; name: string; label: string; quantity: number; unit_price: number; amount: number }[]; options?: { groups: ChosenGroup[]; amount: number }; travel?: TravelQuote | null; fees: unknown[] }) {
-    const l = await this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { payment_plan: true, category_id: true, category: { select: { default_payment_plan: true } } } });
+    const l = await this.prisma.vendorListing.findUnique({ where: { id: listingId }, select: { payment_plan: true, deposit_percent: true, balance_due_days: true, balance_after_service: true, category_id: true, category: { select: { default_payment_plan: true } } } });
     const fee = this.serviceFee(price, l?.category_id);
     const plan = l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
-    const schedule = buildSchedule({ plan, price, serviceFee: fee, eventStart: eventStart ? new Date(eventStart) : null }).map((i) => ({ label: i.label, amount: i.amount, due_at: i.due_at, capture_manually: i.capture_manually }));
+    const terms = depositTermsOf(plan, l);
+    const schedule = buildSchedule({ plan, price, serviceFee: fee, eventStart: eventStart ? new Date(eventStart) : null, terms }).map((i) => ({
+      label: i.label, amount: i.amount, due_at: i.due_at, capture_manually: i.capture_manually,
+      // charged once the customer confirms the work, not on a date
+      after_service: !!i.after_service,
+    }));
     const total = Math.round((price + fee) * 100) / 100;
     return {
-      price, service_fee: fee, total, plan, schedule, discount: promo?.discount ?? 0, promo_code: promo?.code ?? null,
+      price, service_fee: fee, total, plan, schedule,
+      // the plan in words (a custom deposit with its own numbers), and those numbers
+      plan_label: planLabel(plan, terms),
+      deposit_terms: terms, discount: promo?.discount ?? 0, promo_code: promo?.code ?? null,
       // the fee's cap (null when there is none), and the large booking rules: 48 hours to fix a failed payment, bank payments
       fee_maximum: feeMaximum() || null,
       large: isLargeTotal(total),
@@ -1270,11 +1281,11 @@ export class BookingContractsService {
   private async applyAmendmentToCharges(tx: Tx, bookingId: string, price: { amount: number; service_fee: number } | null, dateChanged: boolean) {
     const b = await tx.booking.findUniqueOrThrow({
       where: { id: bookingId },
-      select: { payment_plan: true, custom_payment_plan: true, event_start_at: true, scheduled_at: true, payment_due_kind: true, installments: { orderBy: { sequence: 'asc' } } },
+      select: { payment_plan: true, custom_payment_plan: true, event_start_at: true, scheduled_at: true, payment_due_kind: true, deposit_percent: true, balance_due_days: true, balance_after_service: true, installments: { orderBy: { sequence: 'asc' } } },
     });
     const charges = b.installments.filter((i) => i.kind === 'charge');
     if (price && charges.length) {
-      const amounts = rebasedAmounts({ plan: b.payment_plan, count: charges.length, price: price.amount, serviceFee: price.service_fee });
+      const amounts = rebasedAmounts({ plan: b.payment_plan, count: charges.length, price: price.amount, serviceFee: price.service_fee, terms: b });
       if (!amounts) throw new BadRequestException(PRICE_LOCKED);
       for (const [k, i] of charges.entries()) {
         // only while still unpaid: a charge that started meanwhile keeps the amendment from executing
@@ -1289,7 +1300,7 @@ export class BookingContractsService {
     if (dateChanged && start) {
       const now = new Date();
       for (const [k, i] of charges.entries()) {
-        const due = eventLinkedDueAt(b.payment_plan, k, start, now);
+        const due = eventLinkedDueAt(b.payment_plan, k, start, now, b);
         // a missed balance whose due date moves later is no longer pending: it is charged on the new date
         if (due && k === 1 && b.payment_due_kind === 'balance' && due > now && (i.status === 'SCHEDULED' || i.status === 'FAILED')) {
           await tx.bookingInstallment.updateMany({ where: { id: i.id, status: { in: ['SCHEDULED', 'FAILED'] } }, data: { due_at: due, status: 'SCHEDULED', attempts: 0, next_attempt_at: null, last_error: null } });
@@ -1385,6 +1396,9 @@ export class BookingContractsService {
       contractVersion: version,
       timezone: dto.timezone || prevData?.timezone,
     });
+    // a custom deposit's payment sentence stays as the booking's terms say (the package's until the vendor accepts)
+    const depositTerms = full.payment_plan ? depositTermsOf(full.payment_plan, full) : depositTermsOf(full.listing?.payment_plan, full.listing);
+    if (depositTerms) data.payment_schedule = depositContractSentence(depositTerms);
     // Schedule A (how the price was reached at booking, add-ons, fees) carries over unchanged
     if (prevData?.pricing_schedule) data.pricing_schedule = prevData.pricing_schedule;
     // so does the package's travel fee term the booking was priced on (not the vendor's general one)

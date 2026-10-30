@@ -9,7 +9,7 @@ import { PaymentsService } from 'src/modules/payments/payments.service';
 import { ChatExtrasService } from 'src/modules/chat/extras/chat-extras.service';
 import { EventToolsService } from 'src/modules/events/tools/event-tools.service';
 import { MarketplaceService } from 'src/modules/marketplace/marketplace.service';
-import { BookingStatus, ListingStatus } from 'prisma/generated/client';
+import { PaymentPlan, BookingStatus, ListingStatus } from 'prisma/generated/client';
 import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { deadlineText } from 'src/modules/payments/payment-due';
@@ -59,6 +59,7 @@ const mockPrisma = {
   bookingProof: {
     create: jest.fn(),
     findMany: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
   bookingDeliverable: {
     create: jest.fn(),
@@ -726,6 +727,20 @@ describe('BookingService', () => {
       mockPrisma.booking.findUnique.mockResolvedValueOnce({ arrived_at: null, checked_in_at: null, rental_reservations: [], listing: { service_at: 'CUSTOMER_LOCATION', category: null } });
       await expect(service.complete('booking-1', 'vendor-1')).rejects.toThrow('Tap Arrived first');
       expect(mockPrisma.booking.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: BookingStatus.COMPLETED }) }));
+    });
+
+    it('needs the vendor\'s photo proof before completing a booking whose balance is charged after the service', async () => {
+      const afterService = { ...mockBooking, status: BookingStatus.IN_PROGRESS, payment_plan: PaymentPlan.DEPOSIT_CUSTOM, balance_after_service: true };
+      mockPrisma.booking.findFirst.mockResolvedValue(afterService);
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.bookingProof.count.mockResolvedValueOnce(0);
+      await expect(service.complete('booking-1', 'vendor-1')).rejects.toThrow('Add photos of the finished work first');
+      expect(mockPrisma.bookingProof.count).toHaveBeenCalledWith({ where: { booking_id: 'booking-1', uploader_id: 'vendor-1' } });
+      expect(mockPayments.onBookingCompleted).not.toHaveBeenCalled();
+
+      mockPrisma.bookingProof.count.mockResolvedValueOnce(2);
+      await service.complete('booking-1', 'vendor-1');
+      expect(mockPayments.onBookingCompleted).toHaveBeenCalled();
     });
 
     it('holds the money on completion and starts the release clock instead of paying the vendor at once', async () => {

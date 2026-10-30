@@ -11,7 +11,7 @@ import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { currentFees } from 'src/modules/platform/platform-settings.service';
 import { isLargeBooking } from 'src/modules/platform/fee-config';
-import { AUTO_RELEASE_DAYS, buildSchedule, MAX_ATTEMPTS, PROOF_RELEASE_HOURS, RETRY_INTERVAL_MS, securityHoldAt } from './payment-schedule';
+import { AUTO_RELEASE_DAYS, buildSchedule, depositTermsOf, DepositTerms, MAX_ATTEMPTS, planLabel, PROOF_RELEASE_HOURS, RETRY_INTERVAL_MS, securityHoldAt } from './payment-schedule';
 import { track } from 'src/common/analytics';
 import { vendorEarnings } from './vendor-earnings';
 import { bookingTitle, cardText, money, shortDate } from './money-text';
@@ -240,6 +240,17 @@ export class PaymentsService {
     return l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
   }
 
+  /** A listing's plan with its deposit terms (DEPOSIT_CUSTOM's own numbers; null for other plans). */
+  async planAndTermsForListing(listingId: string | null | undefined): Promise<{ plan: PaymentPlan; terms: Required<DepositTerms> | null }> {
+    if (!listingId) return { plan: PaymentPlan.FULL_ON_ACCEPT, terms: null };
+    const l = await this.prisma.vendorListing.findUnique({
+      where: { id: listingId },
+      select: { payment_plan: true, deposit_percent: true, balance_due_days: true, balance_after_service: true, category: { select: { default_payment_plan: true } } },
+    });
+    const plan = l?.payment_plan ?? l?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
+    return { plan, terms: depositTermsOf(plan, l) };
+  }
+
   /**
    * Called when the vendor accepts. Snapshots the plan into installments and charges whatever is
    * due now. Charge failures never block the acceptance; they go through the retry schedule.
@@ -247,15 +258,18 @@ export class PaymentsService {
   async scheduleForBooking(bookingId: string, acceptedAt = new Date()) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      select: { id: true, amount: true, service_fee: true, security_deposit: true, currency: true, event_start_at: true, scheduled_at: true, payment_plan: true, custom_payment_plan: true, listing_id: true, paid_at: true, installments: { select: { id: true } } },
+      select: { id: true, amount: true, service_fee: true, security_deposit: true, currency: true, event_start_at: true, scheduled_at: true, payment_plan: true, custom_payment_plan: true, listing_id: true, paid_at: true, deposit_percent: true, balance_due_days: true, balance_after_service: true, installments: { select: { id: true } } },
     });
     if (!booking || booking.installments.length > 0 || booking.paid_at) return [];
-    let plan = booking.payment_plan ?? (await this.planForListing(booking.listing_id));
+    // the package's plan and (a custom deposit) its numbers, unless the booking already has its own
+    const fromListing = booking.payment_plan ? null : await this.planAndTermsForListing(booking.listing_id);
+    let plan = booking.payment_plan ?? fromListing!.plan;
+    let terms = fromListing ? fromListing.terms : depositTermsOf(plan, booking);
     // a custom plan agreed on the request (custom-plan.ts); if the price moved since, the package's own plan applies
     const custom = plan === PaymentPlan.CUSTOM ? customRows(booking.custom_payment_plan, Number(booking.amount ?? 0) + Number(booking.service_fee ?? 0), acceptedAt) : null;
     if (plan === PaymentPlan.CUSTOM && !custom) {
       this.logger.warn(`Custom payment plan of ${bookingId} no longer matches its total; using the package's plan`);
-      plan = await this.planForListing(booking.listing_id);
+      ({ plan, terms } = await this.planAndTermsForListing(booking.listing_id));
     }
     const planned = custom ?? buildSchedule({
       plan,
@@ -263,9 +277,10 @@ export class PaymentsService {
       serviceFee: Number(booking.service_fee ?? 0),
       eventStart: booking.event_start_at ?? booking.scheduled_at,
       acceptedAt,
+      terms,
     });
     if (planned.length === 0 || planned.every((p) => p.amount <= 0)) return [];
-    const rows_: { sequence: number; label: string; amount: number; fee_amount: number; due_at: Date; capture_manually: boolean; kind?: string }[] = [...planned];
+    const rows_: { sequence: number; label: string; amount: number; fee_amount: number; due_at: Date; capture_manually: boolean; kind?: string; after_service?: boolean }[] = [...planned];
     const deposit = Number(booking.security_deposit ?? 0);
     if (deposit > 0) {
       // rentals: authorized shortly before pickup (card holds lapse after about 7 days), never captured unless the vendor reports fees
@@ -275,16 +290,26 @@ export class PaymentsService {
     }
 
     const rows = await this.prisma.$transaction(async (tx) => {
-      await tx.booking.update({ where: { id: bookingId }, data: { payment_plan: plan, ...(plan !== PaymentPlan.CUSTOM && booking.custom_payment_plan ? { custom_payment_plan: Prisma.DbNull } : {}) } });
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          payment_plan: plan,
+          // a custom deposit's numbers stay with the booking, whatever the package says later
+          deposit_percent: terms?.deposit_percent ?? null,
+          balance_due_days: terms?.balance_due_days ?? null,
+          balance_after_service: !!terms?.balance_after_service,
+          ...(plan !== PaymentPlan.CUSTOM && booking.custom_payment_plan ? { custom_payment_plan: Prisma.DbNull } : {}),
+        },
+      });
       return Promise.all(
         rows_.map((p) =>
           tx.bookingInstallment.create({
-            data: { booking_id: bookingId, sequence: p.sequence, label: p.label, amount: p.amount, fee_amount: p.fee_amount, currency: booking.currency ?? 'usd', due_at: p.due_at, capture_manually: p.capture_manually, kind: p.kind ?? 'charge' },
+            data: { booking_id: bookingId, sequence: p.sequence, label: p.label, amount: p.amount, fee_amount: p.fee_amount, currency: booking.currency ?? 'usd', due_at: p.due_at, capture_manually: p.capture_manually, kind: p.kind ?? 'charge', after_service: !!p.after_service },
           }),
         ),
       );
     });
-    for (const r of rows) if (r.due_at <= acceptedAt) await this.chargeInstallment(r.id).catch((e) => this.logger.error(`charge ${r.id}`, e));
+    for (const r of rows) if (r.due_at <= acceptedAt && !r.after_service) await this.chargeInstallment(r.id).catch((e) => this.logger.error(`charge ${r.id}`, e));
     return rows;
   }
 
@@ -637,7 +662,7 @@ export class PaymentsService {
 
   /** Charges a booking's payments that are due now (a custom plan's first payment once the customer agrees). */
   async chargeDueNow(bookingId: string, now = new Date()) {
-    const due = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, kind: 'charge', status: InstallmentStatus.SCHEDULED, attempts: 0, due_at: { lte: now } }, select: { id: true }, orderBy: { sequence: 'asc' } });
+    const due = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, kind: 'charge', status: InstallmentStatus.SCHEDULED, attempts: 0, due_at: { lte: now }, after_service: false }, select: { id: true }, orderBy: { sequence: 'asc' } });
     for (const d of due) await this.chargeInstallment(d.id).catch((e) => this.logger.error(`charge ${d.id}`, e));
     return due.length;
   }
@@ -658,14 +683,14 @@ export class PaymentsService {
     attempt: number,
     message: string,
     b: FailureBooking,
-    inst: { label: string; amount: unknown; kind?: string; sequence?: number },
+    inst: { label: string; amount: unknown; kind?: string; sequence?: number; after_service?: boolean },
     paymentIntentId?: string,
     needsCustomer = false,
   ) {
     // deposit plans: 12 hours to pay, then the booking is cancelled (payment-due.ts)
     // a custom plan's first charge is its deposit, the later ones balance payments
     const first = b.payment_plan === PaymentPlan.CUSTOM && inst.kind === 'charge' ? await this.isFirstCharge(b.id, installmentId) : false;
-    const dueKind = inst.kind && inst.sequence ? dueKindFor(b, { kind: inst.kind, sequence: inst.sequence, first }) : null;
+    const dueKind = inst.kind && inst.sequence ? dueKindFor(b, { kind: inst.kind, sequence: inst.sequence, first, after_service: inst.after_service }) : null;
     // once the job is done (a custom plan's payments after the service) there's no booking to cancel:
     // the usual retries and "Payment problem" instead of a deadline that would never be enforced
     const stillOn = !b.status || b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.IN_PROGRESS;
@@ -833,7 +858,8 @@ export class PaymentsService {
 
   async runDueCharges(now = new Date()) {
     const due = await this.prisma.bookingInstallment.findMany({
-      where: { status: InstallmentStatus.SCHEDULED, OR: [{ attempts: 0, due_at: { lte: now } }, { attempts: { gt: 0 }, next_attempt_at: { lte: now } }] },
+      // a balance after the service waits for the customer's confirmation (chargeAfterServiceBalance), not its date
+      where: { status: InstallmentStatus.SCHEDULED, OR: [{ attempts: 0, due_at: { lte: now }, after_service: false }, { attempts: { gt: 0 }, next_attempt_at: { lte: now } }] },
       select: { id: true },
       // oldest first; every attempt moves its row on (charged, retry later, or waiting for the customer)
       orderBy: [{ due_at: 'asc' }, { id: 'asc' }],
@@ -889,8 +915,36 @@ export class PaymentsService {
     if (b.status !== BookingStatus.COMPLETED) throw new BadRequestException('You can approve once the vendor marks the booking complete.');
     if (b.dispute_opened_at && !b.dispute_resolved_at) throw new BadRequestException('This booking has an open dispute.');
     await this.prisma.booking.update({ where: { id: bookingId }, data: { customer_approved_at: new Date(), release_at: new Date() } });
+    // a balance after the service is charged now, so the vendor is paid it with the rest
+    await this.chargeAfterServiceBalance(bookingId);
     await this.releaseBooking(bookingId);
     return { success: true };
+  }
+
+  /**
+   * A custom deposit's balance after the service (payment-schedule.ts): charged once the customer
+   * confirms the work, or when the window to report a problem closes without one (runReleases, at the
+   * booking's release time: 48 hours after the vendor's photo proof, else 3 days after completion). An
+   * open problem report holds it; a booking refunded in full never charges it. A charge that fails gets
+   * the usual retries, and is paid out to the vendor once paid (payOutLateInstallments).
+   */
+  async chargeAfterServiceBalance(bookingId: string, now = new Date()) {
+    const b = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { status: true, dispute_opened_at: true, dispute_resolved_at: true, dispute_resolution: true, installments: { where: { after_service: true, status: InstallmentStatus.SCHEDULED, attempts: 0 }, select: { id: true } } },
+    });
+    if (!b || !b.installments.length) return 0;
+    if (this.bookingEnded(b)) {
+      await this.prisma.bookingInstallment.updateMany({ where: { id: { in: b.installments.map((i) => i.id) }, status: InstallmentStatus.SCHEDULED }, data: { status: InstallmentStatus.CANCELLED } });
+      return 0;
+    }
+    if (b.status !== BookingStatus.COMPLETED || (b.dispute_opened_at && !b.dispute_resolved_at)) return 0;
+    for (const i of b.installments) {
+      // due now (the date shown until then was the event's), so a retry and the receipts read right
+      const moved = await this.prisma.bookingInstallment.updateMany({ where: { id: i.id, status: InstallmentStatus.SCHEDULED, attempts: 0 }, data: { due_at: now } });
+      if (moved.count === 1) await this.chargeInstallment(i.id).catch((e) => this.logger.error(`after-service balance ${i.id}`, e));
+    }
+    return b.installments.length;
   }
 
   /**
@@ -1081,11 +1135,14 @@ export class PaymentsService {
       orderBy: [{ release_at: 'asc' }, { id: 'asc' }],
       take: 100,
     });
-    for (const b of due)
+    for (const b of due) {
+      // a balance after the service the customer didn't confirm is charged first, so it's paid out with the rest
+      await this.chargeAfterServiceBalance(b.id, now).catch((e) => this.logger.error(`after-service balance for ${b.id}`, e));
       await this.releaseBooking(b.id).catch((e) => {
         this.logger.error(`release ${b.id}`, e);
         Sentry.captureException(e, { tags: { job: 'releases' }, extra: { booking_id: b.id } });
       });
+    }
     return due.length;
   }
 
@@ -1288,7 +1345,7 @@ export class PaymentsService {
     // only a deposit plan has a deposit: its first charge, with the balance still to come
     const charges = b.installments.filter((i) => i.kind === 'charge');
     const deposit = charges[0];
-    const depositPlan = b.payment_plan === PaymentPlan.DEPOSIT_50 || b.payment_plan === PaymentPlan.DEPOSIT_25;
+    const depositPlan = b.payment_plan === PaymentPlan.DEPOSIT_50 || b.payment_plan === PaymentPlan.DEPOSIT_25 || b.payment_plan === PaymentPlan.DEPOSIT_CUSTOM;
     if (deposit && isClearing(deposit)) throw new BadRequestException(`The customer’s bank payment for the deposit is still clearing (${BANK_CLEARING_TEXT}). You can release it once it has.`);
     if (!depositPlan || !deposit || charges.length < 2 || deposit.status !== InstallmentStatus.PAID) throw new BadRequestException('There is no paid deposit to release on this booking.');
     if (!b.vendor.stripe_connect_id) throw new BadRequestException('Connect a bank account in Payments & Payouts first.');
@@ -2036,6 +2093,7 @@ export class PaymentsService {
       where: { id: bookingId },
       select: {
         customer_id: true, vendor_id: true, status: true, amount: true, service_fee: true, security_deposit: true, currency: true, payment_plan: true, payment_method_id: true, payment_transaction_id: true,
+        deposit_percent: true, balance_due_days: true, balance_after_service: true,
         paid_at: true, release_at: true, released_at: true, customer_approved_at: true, dispute_opened_at: true, dispute_resolved_at: true, event_start_at: true, scheduled_at: true,
         payment_due_by: true, payment_due_kind: true, payment_method_type: true,
         installments: { orderBy: { sequence: 'asc' } },
@@ -2074,6 +2132,8 @@ export class PaymentsService {
       success: true,
       data: {
         plan: b.payment_plan,
+        // the plan in words (a custom deposit with its own numbers), for apps that don't know the plan
+        plan_label: b.payment_plan ? planLabel(b.payment_plan, b) : null,
         // a missed deposit or balance waiting to be paid by payment_due_by (payment-due.ts)
         payment_state: paymentState(b),
         payment_due_by: paymentState(b) ? b.payment_due_by : null,

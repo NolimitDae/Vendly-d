@@ -8,7 +8,7 @@ import { AddOnUnit, EventInput, packageUnit, PricingError, round2 } from 'src/mo
 import { GUEST_COUNT_NEEDED, needsGuestCount, requiredBookingFields } from 'src/modules/booking/booking-place';
 import { readTravel } from 'src/modules/booking/travel-fee';
 import { requestExpiresAt } from 'src/modules/booking/booking-requests';
-import { buildSchedule, PAYMENT_PLAN_LABELS } from 'src/modules/payments/payment-schedule';
+import { balanceAfterService, buildSchedule, depositTermsOf, planLabel } from 'src/modules/payments/payment-schedule';
 import { checkCustomPlan, CustomPayment, CustomPlan, MAX_PLAN_PAYMENTS, MIN_PLAN_PAYMENT, MIN_PLAN_PAYMENTS, PaymentPlanError, planSentence, readCustomPlan, withPaymentPlan } from 'src/modules/payments/custom-plan';
 import { platformServiceFee } from 'src/modules/platform/platform-settings.service';
 import { promoDiscount } from 'src/modules/platform/promo.service';
@@ -119,18 +119,24 @@ export class RequestChangesService {
     return b.listing?.payment_plan ?? b.listing?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
   }
 
+  /** A custom deposit's numbers for `plan`: the booking's once kept (accepted), else the package's. */
+  private termsOf(b: RequestRow, plan: PaymentPlan) {
+    return depositTermsOf(plan, b.payment_plan === plan ? b : b.listing);
+  }
+
   /** A custom plan's payments as the comparison shows them (the first, with no date, is taken when the vendor accepts). */
   private customSchedule(payments: CustomPayment[]) {
     return payments.map((p) => ({ label: p.label, amount: p.amount, due_at: p.due_at, capture_manually: false }));
   }
 
-  private schedule(plan: PaymentPlan, price: number, fee: number, start: Date | string | null) {
-    return buildSchedule({ plan, price, serviceFee: fee, eventStart: start ? new Date(start) : null }).map((i) => ({
+  private schedule(b: RequestRow, plan: PaymentPlan, price: number, fee: number, start: Date | string | null) {
+    return buildSchedule({ plan, price, serviceFee: fee, eventStart: start ? new Date(start) : null, terms: this.termsOf(b, plan) }).map((i) => ({
       label: i.label,
       amount: i.amount,
-      // the first charge is taken when the vendor accepts: no date to show for it yet
-      due_at: i.sequence === 1 && !i.capture_manually ? null : i.due_at.toISOString(),
+      // the first charge is taken when the vendor accepts, a balance after the service once the work is confirmed: no date for either
+      due_at: (i.sequence === 1 && !i.capture_manually) || i.after_service ? null : i.due_at.toISOString(),
       capture_manually: i.capture_manually,
+      after_service: !!i.after_service,
     }));
   }
 
@@ -193,7 +199,7 @@ export class RequestChangesService {
       service_fee: fee,
       total: round2(price + fee),
       plan,
-      schedule: custom ? this.customSchedule(custom.payments) : this.schedule(plan, price, fee, ev.event_start_at ?? null),
+      schedule: custom ? this.customSchedule(custom.payments) : this.schedule(b, plan, price, fee, ev.event_start_at ?? null),
       custom,
     };
   }
@@ -207,7 +213,8 @@ export class RequestChangesService {
     const sent = dto.payment_plan;
     if (sent === null || (sent === undefined && before.plan !== PaymentPlan.CUSTOM)) return { plan: sent === null ? packagePlan : (before.plan as PaymentPlan), custom: null };
     const inputs = sent ? sent.payments : (before.custom?.payments ?? []);
-    const payAfter = packagePlan === PaymentPlan.PAY_AFTER_SERVICE;
+    // paid after the service (or a custom deposit's balance after it): a plan may take payments after the event
+    const payAfter = packagePlan === PaymentPlan.PAY_AFTER_SERVICE || balanceAfterService(packagePlan, b.listing);
     try {
       const payments = checkCustomPlan(inputs, { owed: t.total, feeOwed: t.fee, eventStart: t.start, eventEnd: t.end, payAfter, timeZone: t.timeZone });
       return { plan: PaymentPlan.CUSTOM, custom: { pay_after: payAfter, payments } satisfies CustomPlan };
@@ -283,7 +290,7 @@ export class RequestChangesService {
         service_fee: fee,
         total: round2(price + fee),
         plan: chosen.plan,
-        schedule: chosen.custom ? this.customSchedule(chosen.custom.payments) : this.schedule(chosen.plan, price, fee, start ?? null),
+        schedule: chosen.custom ? this.customSchedule(chosen.custom.payments) : this.schedule(b, chosen.plan, price, fee, start ?? null),
         custom: chosen.custom,
       };
       return { after, promoNote: promo.note };
@@ -669,8 +676,8 @@ export class RequestChangesService {
         // the payment plan section: the package's own plan, or a custom one (payments/custom-plan.ts)
         payment_plan: {
           package_plan: this.packagePlanOf(b),
-          package_plan_label: PAYMENT_PLAN_LABELS[this.packagePlanOf(b)],
-          pay_after: this.packagePlanOf(b) === PaymentPlan.PAY_AFTER_SERVICE,
+          package_plan_label: planLabel(this.packagePlanOf(b), b.listing),
+          pay_after: this.packagePlanOf(b) === PaymentPlan.PAY_AFTER_SERVICE || balanceAfterService(this.packagePlanOf(b), b.listing),
           min_payments: MIN_PLAN_PAYMENTS,
           max_payments: MAX_PLAN_PAYMENTS,
           min_payment: MIN_PLAN_PAYMENT,

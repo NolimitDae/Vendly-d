@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { VendorListingService } from './listing.service';
+import { depositColumns, VendorListingService } from './listing.service';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ListingStatus } from 'prisma/generated/client';
+import { ListingStatus, PaymentPlan } from 'prisma/generated/client';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 
 jest.mock('src/common/lib/Disk/TanvirStorage', () => ({
@@ -92,6 +92,21 @@ describe('VendorListingService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('a package\'s own deposit', () => {
+    it('keeps the numbers a custom deposit needs, and none for any other plan', () => {
+      expect(depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { deposit_percent: 30, balance_after_service: true })).toEqual({ deposit_percent: 30, balance_due_days: null, balance_after_service: true });
+      expect(depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { deposit_percent: 40, balance_due_days: 10 })).toEqual({ deposit_percent: 40, balance_due_days: 10, balance_after_service: false });
+      expect(depositColumns(PaymentPlan.DEPOSIT_50, { deposit_percent: 40, balance_due_days: 10 })).toEqual({ deposit_percent: null, balance_due_days: null, balance_after_service: false });
+      // a change to one number keeps the saved others
+      expect(depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { deposit_percent: 60 }, { deposit_percent: 30, balance_due_days: 5, balance_after_service: false })).toEqual({ deposit_percent: 60, balance_due_days: 5, balance_after_service: false });
+    });
+
+    it('asks for the percentage and for when the balance is due', () => {
+      expect(() => depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { balance_after_service: true })).toThrow('Choose the deposit');
+      expect(() => depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { deposit_percent: 30 })).toThrow('Choose when the balance is due');
     });
   });
 

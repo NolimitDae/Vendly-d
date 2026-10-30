@@ -11,6 +11,13 @@ describe('dueKindFor', () => {
     expect(dueKindFor({ ...deposit50, payment_plan: PaymentPlan.DEPOSIT_25 }, { kind: 'charge', sequence: 2 })).toBe('balance');
   });
 
+  it('a package\'s own deposit follows the deposit rules, except a balance charged after the service', () => {
+    const custom = { payment_plan: PaymentPlan.DEPOSIT_CUSTOM, deposit_rules: true };
+    expect(dueKindFor(custom, { kind: 'charge', sequence: 1 })).toBe('deposit');
+    expect(dueKindFor(custom, { kind: 'charge', sequence: 2 })).toBe('balance');
+    expect(dueKindFor(custom, { kind: 'charge', sequence: 2, after_service: true })).toBeNull();
+  });
+
   it('other plans, add-ons, rental holds and bookings made before the rules keep the old retries', () => {
     expect(dueKindFor({ ...deposit50, payment_plan: PaymentPlan.FULL_ON_ACCEPT }, { kind: 'charge', sequence: 1 })).toBeNull();
     expect(dueKindFor({ ...deposit50, payment_plan: PaymentPlan.PAY_AFTER_SERVICE }, { kind: 'charge', sequence: 1 })).toBeNull();

@@ -83,6 +83,9 @@ enum PaymentPlan {
   DEPOSIT_50
   DEPOSIT_25
   PAY_AFTER_SERVICE
+  // a package's own deposit (deposit_percent) with the balance due balance_due_days before the event or,
+  // with balance_after_service, once the customer confirms the work (payments/payment-schedule.ts)
+  DEPOSIT_CUSTOM
   // a schedule the vendor proposed for one booking and the customer signed (payments/custom-plan.ts); never a listing's plan
   CUSTOM
 }
@@ -830,6 +833,11 @@ model VendorListing {
 
   // null = use the category default, else FULL_ON_ACCEPT
   payment_plan   PaymentPlan?
+  // DEPOSIT_CUSTOM only: the deposit taken on accept (10 to 90 percent), and when the balance is due:
+  // balance_due_days before the event, or after the service (balance_after_service)
+  deposit_percent       Int?
+  balance_due_days      Int?
+  balance_after_service Boolean @default(false)
   // per person / hour / day packages: the fewest and most a customer can book (guests, hours or days)
   min_quantity   Int?
   max_quantity   Int?
@@ -1014,6 +1022,10 @@ model Booking {
   payment_plan       PaymentPlan?
   // a CUSTOM plan's agreed payments ({ pay_after, payments: [{ amount, fee_amount, due_at, label }] }, payments/custom-plan.ts)
   custom_payment_plan Json?
+  // DEPOSIT_CUSTOM: the package's deposit terms, kept when the vendor accepts (see VendorListing)
+  deposit_percent       Int?
+  balance_due_days      Int?
+  balance_after_service Boolean @default(false)
   // Stripe PaymentMethod the customer chose when requesting; charged off-session on accept
   payment_method_id  String?
   // "us_bank_account" when that payment method is a bank account (large bookings only); null for a card
@@ -1138,6 +1150,8 @@ model BookingInstallment {
   capture_manually Boolean @default(false)
   // "charge" (the price) | "security_deposit" (rental hold, never captured on completion) | "extra" (damage / late fees)
   kind             String  @default("charge") @db.VarChar(30)
+  // a balance charged once the customer confirms the work (or the confirmation window ends), never on its due date
+  after_service    Boolean @default(false)
 
   payment_intent_id String?
   attempts          Int       @default(0)
