@@ -264,7 +264,8 @@ export class PaymentsService {
     // the package's plan and (a custom deposit) its numbers, unless the booking already has its own
     const fromListing = booking.payment_plan ? null : await this.planAndTermsForListing(booking.listing_id);
     let plan = booking.payment_plan ?? fromListing!.plan;
-    let terms = fromListing ? fromListing.terms : depositTermsOf(plan, booking);
+    // a custom deposit's numbers as the customer signed them when requesting (kept on the booking), else the package's
+    let terms = !fromListing || booking.deposit_percent != null ? depositTermsOf(plan, booking) : fromListing.terms;
     // a custom plan agreed on the request (custom-plan.ts); if the price moved since, the package's own plan applies
     const custom = plan === PaymentPlan.CUSTOM ? customRows(booking.custom_payment_plan, Number(booking.amount ?? 0) + Number(booking.service_fee ?? 0), acceptedAt) : null;
     if (plan === PaymentPlan.CUSTOM && !custom) {
@@ -830,6 +831,10 @@ export class PaymentsService {
     if (this.bookingEnded(inst.booking)) throw new BadRequestException('This booking has ended, so there is nothing more to pay.');
     if (isClearing(inst)) throw new ConflictException(`A bank payment for this is on its way. It takes ${BANK_CLEARING_TEXT} to clear.`);
     if (inst.status !== InstallmentStatus.FAILED && inst.status !== InstallmentStatus.SCHEDULED) throw new BadRequestException('This installment is not waiting for payment');
+    // a balance after the service is charged once the work is confirmed, never ahead of it (a failed one can be retried)
+    if (inst.after_service && inst.status === InstallmentStatus.SCHEDULED && inst.attempts === 0) {
+      throw new BadRequestException('This balance is charged after the service, once you confirm the work.');
+    }
     if (paymentMethodId) {
       const { type } = await this.ownedPaymentMethod(customerId, paymentMethodId);
       if (isBank(type)) {
@@ -1599,6 +1604,8 @@ export class PaymentsService {
     // outside the lock: releaseBooking takes it itself
     if (res.releaseNow) {
       await this.prisma.booking.update({ where: { id: bookingId }, data: { release_at: new Date() } });
+      // a balance after the service, held while the problem was open, is charged now so it's paid out with the rest
+      await this.chargeAfterServiceBalance(bookingId).catch((e) => this.logger.error(`after-service balance for ${bookingId}`, e));
       await this.releaseBooking(bookingId);
     }
     return { success: true, data: { refunded: res.refunded, action: input.action } };
@@ -1634,7 +1641,7 @@ export class PaymentsService {
       const amt = round2(Number(input.amount ?? 0));
       if (amt <= 0 || amt >= vendorPaid) throw new BadRequestException(`A partial refund must be more than $0 and less than $${vendorPaid.toFixed(2)} (the vendor's part of what was paid).`);
       if (checkout) refunded = await this.refundCheckout(b, round2(Math.min(amt, checkout.vendorPaid)), key);
-      if (amt > refunded) refunded = round2(refunded + (await this.refundBooking(bookingId, round2(amt - refunded), key, { keepFees: true })));
+      if (amt > refunded) refunded = round2(refunded + (await this.refundBooking(bookingId, round2(amt - refunded), key, { keepFees: true, keepAfterService: true })));
     }
     const note = `${input.action}${refunded ? ` ($${refunded.toFixed(2)} refunded)` : ''} by admin ${adminId}: ${input.note}`;
     await this.prisma.booking.update({ where: { id: bookingId }, data: { dispute_resolved_at: new Date(), dispute_resolution: note } });
@@ -1998,14 +2005,14 @@ export class PaymentsService {
    * uncaptured hold. Returns what was actually refunded. With `keepFees`, the Vendly Protection fee
    * stays paid and only the vendor's part of each installment is refunded.
    */
-  async refundBooking(bookingId: string, amount: number, reasonKey: string, opts: { keepFees?: boolean } = {}) {
+  async refundBooking(bookingId: string, amount: number, reasonKey: string, opts: { keepFees?: boolean; keepAfterService?: boolean } = {}) {
     const parts = await this.refundParts(bookingId, amount, reasonKey, { ...opts, voidOpen: true });
     return round2(parts.reduce((s, p) => s + p.amount, 0));
   }
 
   /** The refund behind refundBooking, reporting which installments it came from. */
   /** `heldFirst`: installments not yet paid out to the vendor are refunded before paid-out ones. */
-  private async refundParts(bookingId: string, amount: number, reasonKey: string, opts: { keepFees?: boolean; voidOpen?: boolean; stateKey?: boolean; heldFirst?: boolean }): Promise<RefundPart[]> {
+  private async refundParts(bookingId: string, amount: number, reasonKey: string, opts: { keepFees?: boolean; voidOpen?: boolean; stateKey?: boolean; heldFirst?: boolean; keepAfterService?: boolean }): Promise<RefundPart[]> {
     const insts = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId }, orderBy: { sequence: 'desc' } });
     if (opts.heldFirst) insts.sort((x, y) => Number(!!x.paid_out_at) - Number(!!y.paid_out_at));
     let remaining = Math.round(amount * 100) / 100;
@@ -2018,7 +2025,8 @@ export class PaymentsService {
         continue;
       }
       if (i.status === InstallmentStatus.SCHEDULED || i.status === InstallmentStatus.FAILED) {
-        await this.prisma.bookingInstallment.update({ where: { id: i.id }, data: { status: InstallmentStatus.CANCELLED } });
+        // a partial refund after a reported problem keeps the balance after the service: it's charged once the problem is closed
+        if (!(opts.keepAfterService && i.after_service)) await this.prisma.bookingInstallment.update({ where: { id: i.id }, data: { status: InstallmentStatus.CANCELLED } });
         continue;
       }
       if (i.status !== InstallmentStatus.PAID || !i.payment_intent_id || remaining <= 0) continue;

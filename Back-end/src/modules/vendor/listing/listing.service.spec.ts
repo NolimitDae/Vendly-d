@@ -104,6 +104,10 @@ describe('VendorListingService', () => {
       expect(depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { deposit_percent: 60 }, { deposit_percent: 30, balance_due_days: 5, balance_after_service: false })).toEqual({ deposit_percent: 60, balance_due_days: 5, balance_after_service: false });
     });
 
+    it('days sent on their own move a saved after-service balance to before the event', () => {
+      expect(depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { balance_due_days: 5 }, { deposit_percent: 30, balance_after_service: true })).toEqual({ deposit_percent: 30, balance_due_days: 5, balance_after_service: false });
+    });
+
     it('asks for the percentage and for when the balance is due', () => {
       expect(() => depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { balance_after_service: true })).toThrow('Choose the deposit');
       expect(() => depositColumns(PaymentPlan.DEPOSIT_CUSTOM, { deposit_percent: 30 })).toThrow('Choose when the balance is due');

@@ -703,6 +703,9 @@ export class BookingContractsService {
           ...(p.options.groups.length ? { chosen_options: p.options.groups as unknown as Prisma.InputJsonValue, options_amount: p.options.amount } : {}),
           // the travel fee (already in amount) and how it was worked out; not worked out: the vendor can add it
           ...(p.travel ? { travel_fee: p.travel.quote.fee, travel_details: p.travel.quote as unknown as Prisma.InputJsonValue } : {}),
+          // a package's own deposit as the contract the customer signs states it: the vendor editing the package later
+          // doesn't change it (taken when the vendor accepts, if the package is still on a custom deposit)
+          ...(depositTermsOf(p.listing.payment_plan, p.listing) ?? {}),
           status: BookingStatus.PENDING,
         },
       });
@@ -1397,7 +1400,7 @@ export class BookingContractsService {
       timezone: dto.timezone || prevData?.timezone,
     });
     // a custom deposit's payment sentence stays as the booking's terms say (the package's until the vendor accepts)
-    const depositTerms = full.payment_plan ? depositTermsOf(full.payment_plan, full) : depositTermsOf(full.listing?.payment_plan, full.listing);
+    const depositTerms = full.payment_plan ? depositTermsOf(full.payment_plan, full) : depositTermsOf(full.listing?.payment_plan, full.deposit_percent != null ? full : full.listing);
     if (depositTerms) data.payment_schedule = depositContractSentence(depositTerms);
     // Schedule A (how the price was reached at booking, add-ons, fees) carries over unchanged
     if (prevData?.pricing_schedule) data.pricing_schedule = prevData.pricing_schedule;

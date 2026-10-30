@@ -86,7 +86,7 @@ export class PaymentPlansService {
       listingPlan === PaymentPlan.PAY_AFTER_SERVICE ||
       // a custom deposit with its balance after the service
       balanceAfterService(b.payment_plan, b) ||
-      (!b.payment_plan && balanceAfterService(listingPlan, b.listing)) ||
+      (!b.payment_plan && balanceAfterService(listingPlan, b.deposit_percent != null ? b : b.listing)) ||
       !!readCustomPlan(b.custom_payment_plan)?.pay_after
     );
   }

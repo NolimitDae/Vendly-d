@@ -119,9 +119,9 @@ export class RequestChangesService {
     return b.listing?.payment_plan ?? b.listing?.category?.default_payment_plan ?? PaymentPlan.FULL_ON_ACCEPT;
   }
 
-  /** A custom deposit's numbers for `plan`: the booking's once kept (accepted), else the package's. */
+  /** A custom deposit's numbers for `plan`: the booking's (kept when it was requested, or accepted), else the package's. */
   private termsOf(b: RequestRow, plan: PaymentPlan) {
-    return depositTermsOf(plan, b.payment_plan === plan ? b : b.listing);
+    return depositTermsOf(plan, b.payment_plan === plan || b.deposit_percent != null ? b : b.listing);
   }
 
   /** A custom plan's payments as the comparison shows them (the first, with no date, is taken when the vendor accepts). */
@@ -214,7 +214,7 @@ export class RequestChangesService {
     if (sent === null || (sent === undefined && before.plan !== PaymentPlan.CUSTOM)) return { plan: sent === null ? packagePlan : (before.plan as PaymentPlan), custom: null };
     const inputs = sent ? sent.payments : (before.custom?.payments ?? []);
     // paid after the service (or a custom deposit's balance after it): a plan may take payments after the event
-    const payAfter = packagePlan === PaymentPlan.PAY_AFTER_SERVICE || balanceAfterService(packagePlan, b.listing);
+    const payAfter = packagePlan === PaymentPlan.PAY_AFTER_SERVICE || balanceAfterService(packagePlan, this.termsOf(b, packagePlan));
     try {
       const payments = checkCustomPlan(inputs, { owed: t.total, feeOwed: t.fee, eventStart: t.start, eventEnd: t.end, payAfter, timeZone: t.timeZone });
       return { plan: PaymentPlan.CUSTOM, custom: { pay_after: payAfter, payments } satisfies CustomPlan };
@@ -676,8 +676,8 @@ export class RequestChangesService {
         // the payment plan section: the package's own plan, or a custom one (payments/custom-plan.ts)
         payment_plan: {
           package_plan: this.packagePlanOf(b),
-          package_plan_label: planLabel(this.packagePlanOf(b), b.listing),
-          pay_after: this.packagePlanOf(b) === PaymentPlan.PAY_AFTER_SERVICE || balanceAfterService(this.packagePlanOf(b), b.listing),
+          package_plan_label: planLabel(this.packagePlanOf(b), this.termsOf(b, this.packagePlanOf(b))),
+          pay_after: this.packagePlanOf(b) === PaymentPlan.PAY_AFTER_SERVICE || balanceAfterService(this.packagePlanOf(b), this.termsOf(b, this.packagePlanOf(b))),
           min_payments: MIN_PLAN_PAYMENTS,
           max_payments: MAX_PLAN_PAYMENTS,
           min_payment: MIN_PLAN_PAYMENT,

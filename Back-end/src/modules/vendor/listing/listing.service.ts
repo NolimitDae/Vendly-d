@@ -37,7 +37,8 @@ export function depositColumns(plan: PaymentPlan | null | undefined, sent: Depos
   if (plan !== PaymentPlan.DEPOSIT_CUSTOM) return { deposit_percent: null, balance_due_days: null, balance_after_service: false };
   const percent = sent.deposit_percent ?? saved?.deposit_percent;
   if (percent == null) throw new BadRequestException('Choose the deposit customers pay when you accept (10% to 90%).');
-  const after = sent.balance_after_service ?? saved?.balance_after_service ?? false;
+  // days sent without the after-service choice mean the balance is before the event
+  const after = sent.balance_after_service ?? (sent.balance_due_days != null ? false : (saved?.balance_after_service ?? false));
   const days = sent.balance_due_days ?? saved?.balance_due_days;
   if (!after && days == null) throw new BadRequestException('Choose when the balance is due: some days before the event, or after the service.');
   return depositTermsOf(plan, { deposit_percent: percent, balance_due_days: days, balance_after_service: after })!;

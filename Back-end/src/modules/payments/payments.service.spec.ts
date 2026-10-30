@@ -324,6 +324,53 @@ describe('PaymentsService', () => {
       expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['i2'] }, status: InstallmentStatus.SCHEDULED }, data: { status: InstallmentStatus.CANCELLED } });
     });
 
+    it('charges the held balance when Vendly decides a reported problem for the vendor', async () => {
+      prisma.booking.findUnique.mockResolvedValueOnce({
+        id: 'b1', status: BookingStatus.COMPLETED, dispute_opened_at: new Date(), dispute_resolved_at: null, released_at: null, vendor_id: 'v1', customer_id: 'c1', currency: 'usd', early_released_amount: 0,
+        amount: 1000, service_fee: 50, paid_at: new Date(), payment_transaction_id: null, listing: { title: 'Bar' }, customer: { email: 'c@x.com', name: 'C' }, vendor: { email: 'v@x.com', name: 'V' },
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 350, fee_amount: 50, payment_intent_id: 'pi_1' }), installment({ id: 'i2', sequence: 2, amount: 700, fee_amount: 0, after_service: true })],
+      });
+      prisma.booking.update.mockResolvedValue({});
+      const after = jest.spyOn(service, 'chargeAfterServiceBalance').mockResolvedValue(1);
+      const release = jest.spyOn(service, 'releaseBooking').mockResolvedValue(null);
+
+      await service.resolveDispute('b1', 'admin', { action: 'release', note: 'Work was done' });
+
+      expect(after).toHaveBeenCalledWith('b1');
+      expect(after.mock.invocationCallOrder[0]).toBeLessThan(release.mock.invocationCallOrder[0]);
+    });
+
+    it('keeps the balance after the service when a reported problem ends in a partial refund', async () => {
+      prisma.bookingInstallment.findMany.mockResolvedValue([
+        installment({ id: 'i2', sequence: 2, amount: 700, fee_amount: 0, after_service: true }),
+        installment({ status: InstallmentStatus.PAID, amount: 350, fee_amount: 50, payment_intent_id: 'pi_1' }),
+      ]);
+      (StripePayment.refundPaymentIntent as jest.Mock).mockResolvedValue({ id: 're_1' });
+
+      await service.refundBooking('b1', 50, 'dispute-b1', { keepFees: true, keepAfterService: true });
+
+      expect(prisma.bookingInstallment.update).not.toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'i2' }, data: { status: InstallmentStatus.CANCELLED } }));
+      expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_1', expect.any(String), 50);
+    });
+
+    it('won\'t let the customer pay the balance after the service before confirming the work', async () => {
+      prisma.bookingInstallment.findFirst.mockResolvedValue({ ...installment({ id: 'i2', sequence: 2, amount: 700, after_service: true }), booking: { customer_id: 'c1', status: BookingStatus.CONFIRMED, dispute_resolution: null, amount: 1000, service_fee: 50, payment_plan: PaymentPlan.DEPOSIT_CUSTOM, security_deposit: null } });
+      const charge = jest.spyOn(service, 'chargeInstallment');
+      await expect(service.retryInstallment('b1', 'i2', 'c1')).rejects.toThrow('once you confirm the work');
+      expect(charge).not.toHaveBeenCalled();
+    });
+
+    it('uses the numbers the customer signed for when requesting, even if the package changed since', async () => {
+      prisma.booking.findUnique.mockResolvedValueOnce(accepted({ deposit_percent: 30, balance_due_days: null, balance_after_service: true }));
+      prisma.vendorListing.findUnique.mockResolvedValue({ payment_plan: PaymentPlan.DEPOSIT_CUSTOM, deposit_percent: 80, balance_due_days: 3, balance_after_service: false, category: null });
+      created();
+      jest.spyOn(service, 'chargeInstallment').mockResolvedValue(null);
+
+      const rows = await service.scheduleForBooking('b1');
+
+      expect(rows.map((r: any) => [r.amount, r.after_service])).toEqual([[350, false], [700, true]]);
+    });
+
     it('lets the vendor release a custom deposit early, like the 25% and 50% ones', async () => {
       prisma.booking.findUnique.mockResolvedValue({
         vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', payment_plan: PaymentPlan.DEPOSIT_CUSTOM, early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null,
