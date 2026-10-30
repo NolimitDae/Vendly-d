@@ -7,7 +7,7 @@ import AddCardSheet from './AddCardSheet';
 import AddBankSheet from './AddBankSheet';
 import { Card, GradientButton } from './brand';
 import { DARK, FONTS } from '../constants/colors';
-import { BANK_CLEARING_TEXT, isBankAccount, PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline, type SavedCard } from '../services/payments.service';
+import { BANK_CLEARING_TEXT, isBankAccount, PaymentsService, planText, type Installment, type PaymentTimeline as Timeline, type SavedCard } from '../services/payments.service';
 import { apiMessage } from '../screens/auth/SignIn';
 import ReportProblemForm from './ReportProblemForm';
 import DisputeDetails from './DisputeDetails';
@@ -82,6 +82,8 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
   if (!t) return null;
 
   const canApprove = bookingStatus === 'COMPLETED' && !t.customer_approved_at && !t.released_at && !t.dispute;
+  // a balance charged after the service: confirming charges it
+  const balanceAfter = t.installments.filter((i) => i.after_service && i.status === 'SCHEDULED' && i.attempts === 0).reduce((sum, i) => sum + i.amount, 0);
   // the API says when (it also allows a confirmed booking past its start: a no-show); older APIs don't
   const canDispute = t.can_dispute ?? (['IN_PROGRESS', 'COMPLETED'].includes(bookingStatus) && !t.released_at && !t.dispute);
   // paid in one go through Checkout: no plan to show, only the report
@@ -91,7 +93,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
   return (
     <Card style={{ gap: 14, borderWidth: 1, borderColor: DARK.field }}>
       <Text style={s.h2}>Payments</Text>
-      {t.plan && <Text style={s.muted}>{PLAN_LABELS[t.plan]}</Text>}
+      {t.plan && <Text style={s.muted}>{planText(t.plan, t.plan_label)}</Text>}
       {!!t.payment_state && !!t.payment_due_by && (
         <View style={s.note}>
           <Ionicons name="alarm-outline" size={16} color="#fcd34d" />
@@ -113,7 +115,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
                 {st.label}
                 {i.clearing ? ` · bank payment, clears in ${BANK_CLEARING_TEXT}` : ''}
                 {i.status === 'PAID' && i.paid_at ? ` · ${format(parseISO(i.paid_at), 'dd MMM')}` : ''}
-                {i.status === 'SCHEDULED' && i.attempts === 0 ? ` · due ${format(parseISO(i.due_at), 'dd MMM yyyy')}` : ''}
+                {i.status === 'SCHEDULED' && i.attempts === 0 ? (i.after_service ? ' · after the service, once the work is confirmed' : ` · due ${format(parseISO(i.due_at), 'dd MMM yyyy')}`) : ''}
                 {i.status === 'SCHEDULED' && i.attempts > 0 && i.next_attempt_at ? ` · retrying ${format(parseISO(i.next_attempt_at), 'dd MMM, h:mm a')}` : ''}
                 {i.refunded_amount > 0 ? ` · ${money(i.refunded_amount)} refunded` : ''}
               </Text>
@@ -197,7 +199,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
       )}
 
       {canApprove && (
-        <GradientButton title="Confirm work was done" onPress={() => Alert.alert('Confirm and pay the vendor?', 'Only confirm once you are happy with the service.', [{ text: 'Not yet', style: 'cancel' }, { text: 'Confirm', onPress: () => run(() => PaymentsService.approve(bookingId), 'Could not confirm') }])} loading={busy} />
+        <GradientButton title="Confirm work was done" onPress={() => Alert.alert('Confirm and pay the vendor?', balanceAfter > 0 ? `Only confirm once you are happy with the service. The balance of ${money(balanceAfter)} is then charged to your card.` : 'Only confirm once you are happy with the service.', [{ text: 'Not yet', style: 'cancel' }, { text: 'Confirm', onPress: () => run(() => PaymentsService.approve(bookingId), 'Could not confirm') }])} loading={busy} />
       )}
       {canDispute && !disputing && (
         <Pressable onPress={() => setDisputing(true)} hitSlop={8} style={{ alignSelf: 'center' }}>

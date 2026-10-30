@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { AlertCircle, CheckCircle2, Clock, Landmark, Loader2, Lock, RotateCcw, ShieldCheck, XCircle } from "lucide-react";
 import { toast } from "react-toastify";
-import { BANK_CLEARING_TEXT, PaymentsService, PLAN_LABELS, type Installment, type PaymentTimeline as Timeline } from "@/service/payments/payments.service";
+import { BANK_CLEARING_TEXT, PaymentsService, planText, type Installment, type PaymentTimeline as Timeline } from "@/service/payments/payments.service";
 import { BookingService } from "@/service/booking/booking.service";
 import ReportProblemForm from "@/components/disputes/ReportProblemForm";
 import SavedCards from "@/components/payments/SavedCards";
@@ -74,6 +74,8 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
   if (!t) return null;
 
   const canApprove = bookingStatus === "COMPLETED" && !t.customer_approved_at && !t.released_at && !t.dispute;
+  // a balance charged after the service: confirming charges it
+  const balanceAfter = t.installments.filter((i) => i.after_service && i.status === "SCHEDULED" && i.attempts === 0).reduce((s, i) => s + i.amount, 0);
   // the API says when (it also allows a confirmed booking past its start: a no-show); older APIs don't
   const canDispute = t.can_dispute ?? (["IN_PROGRESS", "COMPLETED"].includes(bookingStatus) && !t.released_at && !t.dispute);
   // paid in one go through Checkout: no plan to show, only the report
@@ -84,7 +86,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
     <section id="booking-payments" className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-4">
       <div>
         <h2 className="font-semibold text-gray-900 dark:text-white">Payments</h2>
-        {t.plan && <p className="text-xs text-gray-500 dark:text-gray-400">{PLAN_LABELS[t.plan]}</p>}
+        {t.plan && <p className="text-xs text-gray-500 dark:text-gray-400">{planText(t.plan, t.plan_label)}</p>}
       </div>
 
       {t.payment_state && t.payment_due_by && (
@@ -110,7 +112,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
                       {st.label}
                       {i.clearing ? ` · bank payment, clears in ${BANK_CLEARING_TEXT}` : ""}
                       {i.status === "PAID" && i.paid_at ? ` · ${dayjs(i.paid_at).format("MMM D")}` : ""}
-                      {i.status === "SCHEDULED" && i.attempts === 0 ? ` · due ${dayjs(i.due_at).format("MMM D, YYYY")}` : ""}
+                      {i.status === "SCHEDULED" && i.attempts === 0 ? (i.after_service ? " · after the service, once the work is confirmed" : ` · due ${dayjs(i.due_at).format("MMM D, YYYY")}`) : ""}
                       {i.status === "SCHEDULED" && i.attempts > 0 && i.next_attempt_at ? ` · retrying ${dayjs(i.next_attempt_at).format("MMM D, h:mm A")}` : ""}
                       {i.refunded_amount > 0 ? ` · ${money(i.refunded_amount)} refunded` : ""}
                     </p>
@@ -186,7 +188,7 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
             <button
               type="button"
               disabled={busy}
-              onClick={() => confirm("Confirm the work was done and pay the vendor?") && run(() => PaymentsService.approve(bookingId), "Could not confirm")}
+              onClick={() => confirm(balanceAfter > 0 ? `Confirm the work was done? The balance of ${money(balanceAfter)} is charged to your card and the vendor is paid.` : "Confirm the work was done and pay the vendor?") && run(() => PaymentsService.approve(bookingId), "Could not confirm")}
               className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60"
             >
               Confirm work was done

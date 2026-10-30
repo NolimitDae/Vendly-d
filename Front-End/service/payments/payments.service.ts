@@ -22,7 +22,7 @@ export interface SavedCard {
 
 export const isBankAccount = (m?: { type?: string } | null) => m?.type === "us_bank_account";
 
-export type PaymentPlan = "FULL_ON_ACCEPT" | "DEPOSIT_50" | "DEPOSIT_25" | "PAY_AFTER_SERVICE" | "CUSTOM";
+export type PaymentPlan = "FULL_ON_ACCEPT" | "DEPOSIT_50" | "DEPOSIT_25" | "PAY_AFTER_SERVICE" | "DEPOSIT_CUSTOM" | "CUSTOM";
 export type InstallmentStatus = "SCHEDULED" | "PROCESSING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED";
 
 export interface Installment {
@@ -42,10 +42,14 @@ export interface Installment {
   clearing?: boolean;
   clearing_since?: string | null;
   by_bank?: boolean;
+  /** a balance charged once the customer confirms the work, not on its date */
+  after_service?: boolean;
 }
 
 export interface PaymentTimeline {
   plan: PaymentPlan | null;
+  /** the plan in words (a package's own deposit with its numbers) */
+  plan_label?: string | null;
   /** deposit plans: a missed deposit or balance to pay by payment_due_by, or the booking is cancelled */
   payment_state?: "pending_deposit" | "pending_balance" | null;
   payment_due_by?: string | null;
@@ -116,6 +120,8 @@ export interface ScheduleLine {
   amount: number;
   due_at: string;
   capture_manually: boolean;
+  /** charged once the customer confirms the work, not on a date */
+  after_service?: boolean;
 }
 
 export const PLAN_LABELS: Record<PaymentPlan, string> = {
@@ -123,11 +129,17 @@ export const PLAN_LABELS: Record<PaymentPlan, string> = {
   DEPOSIT_50: "50% deposit when the vendor accepts, balance 7 days before the event",
   DEPOSIT_25: "25% deposit when the vendor accepts, balance 14 days before the event",
   PAY_AFTER_SERVICE: "Card held at the event, charged after the service",
+  // the vendor's own numbers come with it from the API (plan_label)
+  DEPOSIT_CUSTOM: "A deposit when the vendor accepts, balance later",
   CUSTOM: "A payment plan agreed with the vendor: each payment is charged on its date",
 };
 
 /** Deposit plans: the deposit isn't refunded when the customer cancels or a payment isn't made in time (docs/PAYMENTS.md). */
-export const isDepositPlan = (plan?: string | null) => plan === "DEPOSIT_50" || plan === "DEPOSIT_25";
+export const isDepositPlan = (plan?: string | null) => plan === "DEPOSIT_50" || plan === "DEPOSIT_25" || plan === "DEPOSIT_CUSTOM";
+
+/** The plan in words: the API's (a package's own deposit, with its numbers) when there is one. */
+export const planText = (plan?: PaymentPlan | null, label?: string | null) =>
+  (label?.replace("when you accept", "when the vendor accepts") || (plan ? PLAN_LABELS[plan] : "")) ?? "";
 /** "$5,000" (cents only when there are some). */
 export const wholeMoney = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 

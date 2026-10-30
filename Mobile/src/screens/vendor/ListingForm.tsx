@@ -24,6 +24,9 @@ import TravelFeeEditor from '../../components/listing/TravelFeeEditor';
 import { appendTravelFee, emptyTravelFee, offersTravelFee, travelFeeError, travelFeeFrom, type TravelFeeValue } from '../../utils/travelFee';
 import { appendDosDonts, customizationsError, dosDontsError, dosDontsFrom, draftsFrom, draftsToInput, emptyDosDonts, type CustomizationDraft, type DosDonts } from '../../utils/packageOptions';
 
+import DepositPlanFields from '../../components/listing/DepositPlanFields';
+import { appendDepositTerms, depositTermsError, depositTermsFrom, emptyDepositTerms, type DepositTermsValue } from '../../utils/depositTerms';
+
 interface PickedImage { uri: string; type: string; name: string }
 /** A custom add-on or fee made in this form, created once the package is saved. */
 type NewAddOn = AddOnDraft & { tempId: string };
@@ -33,6 +36,7 @@ const PLANS: { value: PaymentPlan; label: string }[] = [
   { value: 'DEPOSIT_50', label: '50% deposit' },
   { value: 'DEPOSIT_25', label: '25% deposit' },
   { value: 'PAY_AFTER_SERVICE', label: 'Pay after service' },
+  { value: 'DEPOSIT_CUSTOM', label: 'Custom deposit' },
 ];
 
 const PRICE_UNITS = [
@@ -67,6 +71,8 @@ export default function ListingForm() {
   const [customerCanCome, setCustomerCanCome] = useState(false);
   const [guestRequired, setGuestRequired] = useState<boolean | null>(null);
   const [plan, setPlan] = useState<PaymentPlan>('FULL_ON_ACCEPT');
+  // a custom deposit's percentage and balance timing (plan "Custom deposit")
+  const [deposit, setDeposit] = useState<DepositTermsValue>(emptyDepositTerms());
   const [minQ, setMinQ] = useState('');
   const [maxQ, setMaxQ] = useState('');
   // "What's included" lines and the minimum notice (a number of days or hours)
@@ -118,6 +124,7 @@ export default function ListingForm() {
             setCustomerCanCome(!!l.customer_can_come);
             setGuestRequired(l.guest_count_required ?? null);
             setPlan(l.payment_plan ?? l.effective_payment_plan ?? 'FULL_ON_ACCEPT');
+            setDeposit(depositTermsFrom(l));
             setExisting(l.images ?? []);
             setMinQ(l.min_quantity ? String(l.min_quantity) : '');
             setMaxQ(l.max_quantity ? String(l.max_quantity) : '');
@@ -168,6 +175,8 @@ export default function ListingForm() {
     if (customProblem) return Alert.alert('Customizations', customProblem);
     const travelProblem = travelOffered ? travelFeeError(travel) : null;
     if (travelProblem) return Alert.alert('Travel fee', travelProblem);
+    const depositProblem = depositTermsError(plan, deposit);
+    if (depositProblem) return Alert.alert('Custom deposit', depositProblem);
     setSaving(true);
     try {
       const fd = new FormData();
@@ -189,6 +198,7 @@ export default function ListingForm() {
       fd.append('customer_can_come', String(serviceAt === 'CUSTOMER_LOCATION' && customerCanCome));
       if (guestRequired !== null) fd.append('guest_count_required', String(guestRequired));
       fd.append('payment_plan', plan);
+      appendDepositTerms(fd, plan, deposit);
       // guests / hours / days limits only apply to counted prices; 0 clears one
       if (counted) {
         fd.append('min_quantity', String(lo));
@@ -453,7 +463,11 @@ export default function ListingForm() {
           <View style={{ gap: 8 }}>
             <Text style={ui.label}>How customers pay</Text>
             <View style={s.chips}>{PLANS.map((p) => <Chip key={p.value} label={p.label} active={plan === p.value} onPress={() => setPlan(p.value)} />)}</View>
-            <Text style={s.hint}>{PLAN_LABELS[plan]}. Vendly holds the money until the job is done.</Text>
+            {plan === 'DEPOSIT_CUSTOM' ? (
+              <DepositPlanFields value={deposit} onChange={setDeposit} />
+            ) : (
+              <Text style={s.hint}>{PLAN_LABELS[plan]}. Vendly holds the money until the job is done.</Text>
+            )}
           </View>
 
           <View style={{ gap: 8 }}>

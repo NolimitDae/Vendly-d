@@ -31,7 +31,7 @@ export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = { fee_percent: 5, fee_m
 /** "$5,000" (cents only when there are some). */
 export const wholeMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
-export type PaymentPlan = 'FULL_ON_ACCEPT' | 'DEPOSIT_50' | 'DEPOSIT_25' | 'PAY_AFTER_SERVICE' | 'CUSTOM';
+export type PaymentPlan = 'FULL_ON_ACCEPT' | 'DEPOSIT_50' | 'DEPOSIT_25' | 'PAY_AFTER_SERVICE' | 'DEPOSIT_CUSTOM' | 'CUSTOM';
 export type InstallmentStatus = 'SCHEDULED' | 'PROCESSING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUNDED';
 
 export interface Installment {
@@ -51,10 +51,14 @@ export interface Installment {
   clearing?: boolean;
   clearing_since?: string | null;
   by_bank?: boolean;
+  /** a balance charged once the customer confirms the work, not on its date */
+  after_service?: boolean;
 }
 
 export interface PaymentTimeline {
   plan: PaymentPlan | null;
+  /** the plan in words (a package's own deposit with its numbers) */
+  plan_label?: string | null;
   /** deposit plans: a missed deposit or balance to pay by payment_due_by, or the booking is cancelled */
   payment_state?: 'pending_deposit' | 'pending_balance' | null;
   payment_due_by?: string | null;
@@ -127,8 +131,14 @@ export const PLAN_LABELS: Record<PaymentPlan, string> = {
   DEPOSIT_50: '50% deposit when the vendor accepts, balance 7 days before',
   DEPOSIT_25: '25% deposit when the vendor accepts, balance 14 days before',
   PAY_AFTER_SERVICE: 'Card held at the event, charged after the service',
+  // the vendor's own numbers come with it from the API (plan_label)
+  DEPOSIT_CUSTOM: 'A deposit when the vendor accepts, balance later',
   CUSTOM: 'A payment plan agreed with the vendor: each payment is charged on its date',
 };
+
+/** The plan in words: the API's (a package's own deposit, with its numbers) when there is one. */
+export const planText = (plan?: PaymentPlan | null, label?: string | null) =>
+  label?.replace('when you accept', 'when the vendor accepts') || (plan ? PLAN_LABELS[plan] : '') || '';
 
 export const PaymentsService = {
   /** A card form's client secret, or with 'us_bank_account' one for connecting a bank account. */

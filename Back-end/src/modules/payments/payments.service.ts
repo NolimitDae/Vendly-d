@@ -2183,6 +2183,8 @@ export class PaymentsService {
           clearing: isClearing(i),
           clearing_since: i.clearing_since,
           by_bank: isBank(i.payment_method_type),
+          // charged once the customer confirms the work, not on its date
+          after_service: i.after_service,
         })),
       },
     };

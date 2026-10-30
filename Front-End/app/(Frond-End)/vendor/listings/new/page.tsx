@@ -18,6 +18,7 @@ import type { ServiceAt } from "@/lib/booking-tracker";
 import type { PickerCategory } from "@/lib/categories";
 import { SubscriptionService } from "@/service/subscription/subscription.service";
 import PackageQuantityFields, { appendLimits, limitsError, type QuantityLimits } from "@/components/addons/PackageQuantityFields";
+import DepositPlanFields, { appendDepositTerms, depositTermsError, depositTermsFrom, emptyDepositTerms, type DepositTermsValue } from "@/components/addons/DepositPlanFields";
 import PackageDetailsFields, { appendPackageDetails, emptyPackageDetails, packageDetailsError, type PackageDetails } from "@/components/listing/PackageDetailsFields";
 import PackageAddOns, { emptyPackageAddOns, savePackageAddOns, type PackageAddOnsValue } from "@/components/addons/PackageAddOns";
 import PackageCustomizationsFields, { emptyCustomizations, saveCustomizations, type PackageCustomizationsValue } from "@/components/listing/PackageCustomizationsFields";
@@ -56,6 +57,8 @@ export default function NewListingPage() {
   const [customerCanCome, setCustomerCanCome] = useState(false);
   const [guestRequired, setGuestRequired] = useState<boolean | null>(null);
   const [limits, setLimits] = useState<QuantityLimits>({ min: "", max: "" });
+  // a custom deposit's percentage and balance timing (payment plan "Custom deposit")
+  const [deposit, setDeposit] = useState<DepositTermsValue>(emptyDepositTerms());
   const [addOns, setAddOns] = useState<PackageAddOnsValue>(emptyPackageAddOns());
   const [details, setDetails] = useState<PackageDetails>(emptyPackageDetails());
   const [customizations, setCustomizations] = useState<PackageCustomizationsValue>(emptyCustomizations());
@@ -123,7 +126,7 @@ export default function NewListingPage() {
       toast.error("Title, description, and price are required");
       return;
     }
-    const limitProblem = limitsError(form.price_unit, limits);
+    const limitProblem = limitsError(form.price_unit, limits) ?? depositTermsError(form.payment_plan, deposit);
     if (limitProblem) {
       toast.error(limitProblem);
       return;
@@ -143,6 +146,7 @@ export default function NewListingPage() {
       fd.append("customer_can_come", String(serviceAt === "CUSTOMER_LOCATION" && customerCanCome));
       if (guestRequired !== null) fd.append("guest_count_required", String(guestRequired));
       appendLimits(fd, form.price_unit, limits, false);
+      appendDepositTerms(fd, form.payment_plan, deposit);
       appendPackageDetails(fd, details, false);
       if (travelOffered) appendTravelFee(fd, travel, false);
       appendDosDonts(fd, dosDonts, false);
@@ -338,8 +342,10 @@ export default function NewListingPage() {
                 <option value="DEPOSIT_50">50% deposit, balance 7 days before</option>
                 <option value="DEPOSIT_25">25% deposit, balance 14 days before</option>
                 <option value="PAY_AFTER_SERVICE">Pay after the service</option>
+                <option value="DEPOSIT_CUSTOM">Custom deposit (choose % and when the balance is due)</option>
               </select>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Vendly holds the money until the job is done, then pays you.</p>
+              <DepositPlanFields plan={form.payment_plan} value={deposit} onChange={setDeposit} />
             </div>
           </div>
 

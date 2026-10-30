@@ -241,6 +241,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
             <Card style={{ gap: 6 }}>
               <Text style={s.cardTitle}>Cancellation policy: {listing.cancellation_policy.label}</Text>
               <Text style={s.muted}>{listing.cancellation_policy.text}</Text>
+              {listing.effective_payment_plan === 'DEPOSIT_CUSTOM' && !!listing.payment_plan_label && <Text style={s.muted}>How you pay: {listing.payment_plan_label}.</Text>}
               {isDepositPlan(listing.effective_payment_plan) && <Text style={[s.muted, { color: '#fcd34d' }]}>{depositRuleText(paymentSettings.large_payment_threshold)}</Text>}
               <Text style={s.muted}>The Vendly Protection fee isn’t refunded when you cancel. If the vendor cancels, you get everything back.</Text>
             </Card>

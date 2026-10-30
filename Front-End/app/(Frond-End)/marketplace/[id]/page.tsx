@@ -59,6 +59,8 @@ interface Listing {
   cancellation_policy?: { key: string; label: string; text: string } | null;
   /** the payment plan a booking would use (deposit plans keep the deposit when the customer cancels) */
   effective_payment_plan?: string | null;
+  /** the plan in words, with a package's own deposit numbers */
+  payment_plan_label?: string | null;
   /** "What's included" lines, and how many hours ahead it must be booked */
   included_items?: string[] | null;
   min_notice_hours?: number | null;
@@ -513,6 +515,7 @@ export default function ListingDetailPage() {
                   Cancellation policy: {listing.cancellation_policy.label}
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-300">{listing.cancellation_policy.text}</p>
+                {listing.effective_payment_plan === "DEPOSIT_CUSTOM" && listing.payment_plan_label && <p className="text-sm text-gray-600 dark:text-gray-300">How you pay: {listing.payment_plan_label}.</p>}
                 {isDepositPlan(listing.effective_payment_plan) && <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="deposit-rule">{depositRuleText(paymentSettings.large_payment_threshold)}</p>}
                 <p className="text-xs text-gray-500 dark:text-gray-400">The Vendly Protection fee isn’t refunded when you cancel. If the vendor cancels, you get everything back.</p>
               </section>

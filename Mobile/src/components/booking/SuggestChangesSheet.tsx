@@ -28,7 +28,7 @@ import SignContractView from '../contracts/SignContractView';
 import PaymentPlanEditor from './PaymentPlanEditor';
 import { addDays, parseISO } from 'date-fns';
 import { planError, planPayload, startingPlan, type PlanDraftRow } from '../../utils/paymentPlan';
-import { PLAN_LABELS, type PaymentPlan } from '../../services/payments.service';
+import { planText, type PaymentPlan } from '../../services/payments.service';
 
 interface Review extends Comparison {
   title: string;
@@ -319,7 +319,7 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
                     {custom
                       ? 'Split the total into 2 to 12 payments, each charged on its date.'
                       : editor.payment_plan
-                        ? PLAN_LABELS[editor.payment_plan.package_plan as PaymentPlan] ?? editor.payment_plan.package_plan_label
+                        ? planText(editor.payment_plan.package_plan as PaymentPlan, editor.payment_plan.package_plan === 'DEPOSIT_CUSTOM' ? editor.payment_plan.package_plan_label : null) || editor.payment_plan.package_plan_label
                         : ''}
                   </Text>
                 </View>

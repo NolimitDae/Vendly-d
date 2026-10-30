@@ -17,7 +17,7 @@ import LocationField from "@/components/listing/LocationField";
 import TravelFeeQuote from "@/components/marketplace/TravelFeeQuote";
 import type { TravelQuote } from "@/lib/travel-fee";
 import { InspirationPhotosPicker } from "@/components/bookings/InspirationPhotos";
-import { BANK_CLEARING_TEXT, depositRuleText, feeRuleText, isDepositPlan, PLAN_LABELS, wholeMoney, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
+import { BANK_CLEARING_TEXT, depositRuleText, feeRuleText, isDepositPlan, planText, wholeMoney, type PaymentPlan, type ScheduleLine } from "@/service/payments/payments.service";
 import { usePaymentSettings } from "@/hooks/usePaymentSettings";
 import { toast } from "react-toastify";
 import type { AddOn } from "@/service/add-ons/add-ons.service";
@@ -76,6 +76,8 @@ interface Preview {
     service_fee: number;
     total: number;
     plan?: PaymentPlan;
+    /** the plan in words, with a package's own deposit numbers */
+    plan_label?: string | null;
     schedule?: ScheduleLine[];
     discount?: number;
     promo_code?: string | null;
@@ -372,10 +374,10 @@ export default function BookingModal({ listing, eventId, quote, onClose, onBooki
             <div className="flex justify-between"><span>Vendor price</span><span>{money(preview.pricing.price)}</span></div>
             <div className="flex justify-between"><span>Vendly Protection fee</span><span>{money(preview.pricing.service_fee)}</span></div>
             <div className="flex justify-between font-bold"><span>Total</span><span>{money(preview.pricing.total)}</span></div>
-            {preview.pricing.plan && <p className="text-xs text-primary pt-2">{PLAN_LABELS[preview.pricing.plan]}</p>}
+            {preview.pricing.plan && <p className="text-xs text-primary pt-2">{planText(preview.pricing.plan, preview.pricing.plan_label)}</p>}
             {preview.pricing.schedule?.map((line, i) => (
               <div key={i} className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
-                <span>{line.label} · {i === 0 && !line.capture_manually ? "when the vendor accepts" : new Date(line.due_at).toLocaleDateString()}</span>
+                <span>{line.label} · {i === 0 && !line.capture_manually ? "when the vendor accepts" : line.after_service ? "after the service, when you confirm the work" : new Date(line.due_at).toLocaleDateString()}</span>
                 <span>{money(line.amount)}</span>
               </div>
             ))}

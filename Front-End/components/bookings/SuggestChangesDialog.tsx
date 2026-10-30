@@ -26,7 +26,7 @@ import ChangesComparison from "./ChangesComparison";
 import PaymentPlanEditor from "./PaymentPlanEditor";
 import dayjs from "dayjs";
 import { planError, planPayload, startingPlan, type PlanDraftRow } from "@/lib/payment-plan";
-import { PLAN_LABELS, type PaymentPlan } from "@/service/payments/payments.service";
+import { planText, type PaymentPlan } from "@/service/payments/payments.service";
 
 const inputCls =
   "w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary";
@@ -350,7 +350,7 @@ export default function SuggestChangesDialog({ bookingId, editor, customerName, 
                   <input type="radio" name="plan-mode" checked={!customPlan} onChange={() => setCustomPlan(false)} className="w-4 h-4 mt-0.5 accent-primary" />
                   <span className="text-gray-900 dark:text-white">
                     The package’s plan
-                    {editor.payment_plan && <span className="block text-xs text-gray-500 dark:text-gray-400">{PLAN_LABELS[editor.payment_plan.package_plan as PaymentPlan] ?? editor.payment_plan.package_plan_label}</span>}
+                    {editor.payment_plan && <span className="block text-xs text-gray-500 dark:text-gray-400">{planText(editor.payment_plan.package_plan as PaymentPlan, editor.payment_plan.package_plan === "DEPOSIT_CUSTOM" ? editor.payment_plan.package_plan_label : null) || editor.payment_plan.package_plan_label}</span>}
                   </span>
                 </label>
                 <label className={`flex items-start gap-3 p-2 rounded-lg border text-sm cursor-pointer ${customPlan ? "border-primary bg-primary/5" : "border-gray-200 dark:border-gray-700"}`}>

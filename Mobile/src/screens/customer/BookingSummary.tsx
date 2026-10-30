@@ -11,7 +11,7 @@ import AddCardSheet from '../../components/AddCardSheet';
 import AddBankSheet from '../../components/AddBankSheet';
 import { InspirationPhotosPicker, type PickedPhoto } from '../../components/booking/InspirationPhotos';
 import { CardRow } from './PaymentMethods';
-import { BANK_CLEARING_TEXT, isBankAccount, PaymentsService, PLAN_LABELS, wholeMoney, type PaymentPlan, type SavedCard } from '../../services/payments.service';
+import { BANK_CLEARING_TEXT, isBankAccount, PaymentsService, planText, wholeMoney, type PaymentPlan, type SavedCard } from '../../services/payments.service';
 import { usePaymentSettings } from '../../hooks/usePaymentSettings';
 import { openChatWith } from '../../navigation/openChat';
 import { haptic } from '../../utils/haptics';
@@ -40,7 +40,9 @@ interface Pricing {
   service_fee: number;
   total: number;
   plan?: PaymentPlan;
-  schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean }[];
+  /** the plan in words, with a package's own deposit numbers */
+  plan_label?: string | null;
+  schedule?: { label: string; amount: number; due_at: string; capture_manually: boolean; after_service?: boolean }[];
   discount?: number;
   promo_code?: string | null;
   quote?: { id: string; title: string; amount: number } | null;
@@ -268,10 +270,10 @@ export default function BookingSummary({ navigation, route }: NativeStackScreenP
           )}
           {price?.schedule && price.schedule.length > 0 && (
             <View style={{ gap: 6, marginTop: 4 }}>
-              {price.plan && <Text style={s.planText}>{PLAN_LABELS[price.plan]}</Text>}
+              {price.plan && <Text style={s.planText}>{planText(price.plan, price.plan_label)}</Text>}
               {price.schedule.map((i, idx) => (
                 <View key={idx} style={s.row}>
-                  <Text style={s.rowLabel}>{i.label} · {idx === 0 && !i.capture_manually ? 'when the vendor accepts' : format(parseISO(i.due_at), 'dd MMM yyyy')}</Text>
+                  <Text style={s.rowLabel}>{i.label} · {idx === 0 && !i.capture_manually ? 'when the vendor accepts' : i.after_service ? 'after the service, when you confirm the work' : format(parseISO(i.due_at), 'dd MMM yyyy')}</Text>
                   <Text style={s.rowValue}>{money(i.amount)}</Text>
                 </View>
               ))}

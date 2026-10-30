@@ -15,7 +15,7 @@ export const PAYMENT_STATE_LABELS: Record<PaymentState, string> = {
 export const dueByText = (at: string) => format(parseISO(at), "h:mm a 'on' EEE, MMM d");
 
 /** Deposit plans: the deposit isn't refunded when the customer cancels or a payment isn't made in time (docs/PAYMENTS.md). */
-export const isDepositPlan = (plan?: string | null) => plan === 'DEPOSIT_50' || plan === 'DEPOSIT_25';
+export const isDepositPlan = (plan?: string | null) => plan === 'DEPOSIT_50' || plan === 'DEPOSIT_25' || plan === 'DEPOSIT_CUSTOM';
 /** The deposit rule, with the large booking deadline when there is one (Admin → Settings, $5,000 by default). */
 export const depositRuleText = (largeFrom: number | null | undefined = 5000) =>
   `The deposit is non-refundable if you cancel, or if a payment isn't made within 12 hours of failing${largeFrom ? ` (48 hours on bookings of $${largeFrom.toLocaleString('en-US')} or more)` : ''} (the booking is then cancelled). Anything paid beyond the deposit is refunded under the cancellation policy.`;

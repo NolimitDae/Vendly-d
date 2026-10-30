@@ -26,6 +26,8 @@ export interface Listing {
   cancellation_policy?: { key: string; label: string; text: string } | null;
   /** the payment plan a booking would use (deposit plans keep the deposit when the customer cancels) */
   effective_payment_plan?: string | null;
+  /** the same in words, with a package's own deposit numbers */
+  payment_plan_label?: string | null;
   /** "What's included" lines, and how many hours ahead it must be booked */
   included_items?: string[] | null;
   min_notice_hours?: number | null;
