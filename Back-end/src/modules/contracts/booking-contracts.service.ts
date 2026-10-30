@@ -21,7 +21,7 @@ import { platformServiceFee } from 'src/modules/platform/platform-settings.servi
 import { feeMaximum, isLargeTotal } from 'src/modules/platform/fee-config';
 import { BANK, bankNotAllowedReason, isBank, paymentMethodType } from 'src/modules/payments/bank-payments';
 import { paymentDueRules } from 'src/modules/payments/payment-due';
-import { PromoService } from 'src/modules/platform/promo.service';
+import { PromoScope, PromoService } from 'src/modules/platform/promo.service';
 import { checkRequestPhotos, removeRequestPhotos, storeRequestPhotos } from 'src/modules/booking/request-photos';
 import { CustomerCantComeError, customerComesFor, GUEST_COUNT_NEEDED, needsGuestCount, needsServiceAddress, requiredBookingFields, vendorPlaceVenueText } from 'src/modules/booking/booking-place';
 import { GeocodeService } from 'src/modules/geo/geocode.service';
@@ -228,10 +228,11 @@ export class BookingContractsService {
   }
 
   /** Listing price after an optional promo code. Throws a friendly 400 for a bad code (or one this customer can't use). */
-  private async priceAfterPromo(price: unknown, promoCode: string | null | undefined, customerId: string) {
+  private async priceAfterPromo(price: unknown, promoCode: string | null | undefined, customerId: string, scope: PromoScope) {
     const base = Number(price ?? 0);
     if (!promoCode?.trim()) return { price: base, discount: 0, code: null as string | null };
-    const q = await this.promos.quote(promoCode, base, customerId);
+    // a vendor's own code works only on their packages
+    const q = await this.promos.quote(promoCode, base, customerId, new Date(), scope);
     return { price: Math.round((base - q.discount) * 100) / 100, discount: q.discount, code: q.code };
   }
 
@@ -451,7 +452,7 @@ export class BookingContractsService {
     // address the contract names: the one given, or the planner's event venue. Promo codes never discount it.
     const travel = await this.travelFor(ctx.listing, { venue_address: dto.venue_address?.trim() || ctx.event?.venue, customer_comes: customerComes }, knownPoint);
     const subtotal = round2(pkg.amount + addOnLines.reduce((s, l) => s + l.amount, 0) + options.amount);
-    const promoted = await this.priceAfterPromo(subtotal, dto.promo_code, userId);
+    const promoted = await this.priceAfterPromo(subtotal, dto.promo_code, userId, { vendorId: ctx.listing.vendor_id, listingId: ctx.listing.id });
     const priced = { ...promoted, price: round2(promoted.price + (travel?.quote.fee ?? 0)) };
     const data = buildMergeData({
       booking: {

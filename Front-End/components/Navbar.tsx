@@ -8,7 +8,7 @@ import { HiOutlineMenu, HiX } from "react-icons/hi";
 import Image from "next/image";
 import Logo from "@/components/brand/Logo";
 import { nav, VENDOR_SIGNUP_HREF } from "@/components/landing/content";
-import { ClipboardList, FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Heart, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat, PlusSquare, Receipt, Star } from "lucide-react";
+import { ClipboardList, FileSignature, Package, LogOut, LayoutDashboard, ShoppingBag, Calendar, BookOpen, Store, Heart, Bell, Check, MessageSquare, Wallet, TrendingUp, CreditCard, Settings, Repeat, PlusSquare, Receipt, Star, Tag } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import Container from "@/app/_components/Container";
@@ -352,6 +352,14 @@ export default function Navbar() {
                         <Receipt className="w-4 h-4" />
                         Fees
                       </Link>
+                      <Link
+                        href="/vendor/promos"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                      >
+                        <Tag className="w-4 h-4" />
+                        Promo codes
+                      </Link>
                       {plansOn && (
                         <Link
                           href="/vendor/subscription"
@@ -612,6 +620,14 @@ export default function Navbar() {
                     >
                       <Receipt className="w-4 h-4" />
                       Fees
+                    </Link>
+                    <Link
+                      href="/vendor/promos"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 text-sm py-2.5 px-3 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <Tag className="w-4 h-4" />
+                      Promo codes
                     </Link>
                     {plansOn && (
                       <Link

@@ -3,12 +3,13 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 import { PlatformSettingsService } from './platform-settings.service';
 import { PromoService } from './promo.service';
 import { FlagsController } from './flags.controller';
+import { VendorPromosController } from './vendor-promos.controller';
 
 /** Database-backed platform settings (fees), promo codes and feature flags. */
 @Global()
 @Module({
   imports: [PrismaModule],
-  controllers: [FlagsController],
+  controllers: [FlagsController, VendorPromosController],
   providers: [PlatformSettingsService, PromoService],
   exports: [PlatformSettingsService, PromoService],
 })

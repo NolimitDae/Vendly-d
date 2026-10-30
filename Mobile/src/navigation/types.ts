@@ -175,6 +175,8 @@ export type VendorProfileStackParams = {
   Inbox: undefined;
   /** the vendor's reviews, with replies */
   VendorReviews: undefined;
+  /** promo codes for the vendor's own packages */
+  PromoCodes: undefined;
 };
 
 export type VendorMessagesStackParams = {

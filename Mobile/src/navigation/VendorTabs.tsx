@@ -25,6 +25,7 @@ import License from '../screens/vendor/License';
 import CalendarSync from '../screens/vendor/CalendarSync';
 import WorkingHours from '../screens/vendor/WorkingHours';
 import VendorReviews from '../screens/vendor/Reviews';
+import PromoCodes from '../screens/vendor/PromoCodes';
 import ChatList from '../screens/customer/ChatList';
 import ChatDetail from '../screens/customer/ChatDetail';
 import EditProfile from '../screens/customer/EditProfile';
@@ -105,6 +106,7 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="Notifications" component={NotificationSettings} />
       <ProfileStack.Screen name="Inbox" component={Inbox} />
       <ProfileStack.Screen name="VendorReviews" component={VendorReviews} />
+      <ProfileStack.Screen name="PromoCodes" component={PromoCodes} />
     </ProfileStack.Navigator>
   );
 }

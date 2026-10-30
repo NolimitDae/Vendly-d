@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { PlatformSettingsService, __setFeeCache, currentFees, platformServiceFee } from './platform-settings.service';
 import { BookingStatus } from 'prisma/generated/client';
-import { PROMO_ALREADY_USED, PROMO_FIRST_BOOKING_ONLY, PromoService, earlierBookingWhere, promoDiscount, promoUsedWhere } from './promo.service';
+import { PROMO_ALREADY_USED, PROMO_FIRST_BOOKING_ONLY, PROMO_NOT_THIS_PACKAGE, PROMO_NOT_THIS_VENDOR, PromoService, earlierBookingWhere, promoDiscount, promoUsedWhere } from './promo.service';
 
 jest.mock('src/config/app.config', () => ({ __esModule: true, default: () => ({ fees: { customer_service_fee_percent: 5, customer_service_fee_minimum: 3 } }) }));
 
@@ -133,5 +133,43 @@ describe('promo codes', () => {
     const s = new PromoService({ promoCode: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn() } } as any);
     await expect(s.create({ code: 'BOTH', percent_off: 10, amount_off: 5 })).rejects.toThrow(BadRequestException);
     await expect(s.create({ code: 'NONE' })).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('vendors\' own promo codes', () => {
+  const code = { id: 'p1', code: 'GLAM10', active: true, uses: 0, max_uses: null, min_amount: null, expires_at: null, percent_off: 10, amount_off: null, vendor_id: 'v1', listing_ids: [] as string[] };
+  const svc = (promo: any, extra: any = {}) => new PromoService({ promoCode: { findUnique: jest.fn().mockResolvedValue(promo), create: jest.fn(({ data }) => data), update: jest.fn(({ data }) => data) }, ...extra } as any);
+
+  it('works only on that vendor\'s packages, and only the ones it names', async () => {
+    await expect(svc(code).quote('glam10', 200, undefined, new Date(), { vendorId: 'v1', listingId: 'l1' })).resolves.toEqual({ code: 'GLAM10', discount: 20 });
+    await expect(svc(code).quote('GLAM10', 200, undefined, new Date(), { vendorId: 'v2', listingId: 'l9' })).rejects.toThrow(PROMO_NOT_THIS_VENDOR);
+    await expect(svc(code).quote('GLAM10', 200)).rejects.toThrow(PROMO_NOT_THIS_VENDOR);
+    const narrow = { ...code, listing_ids: ['l1'] };
+    await expect(svc(narrow).quote('GLAM10', 200, undefined, new Date(), { vendorId: 'v1', listingId: 'l2' })).rejects.toThrow(PROMO_NOT_THIS_PACKAGE);
+    // Vendly's own codes still work on any package
+    await expect(svc({ ...code, vendor_id: null }).quote('GLAM10', 200, undefined, new Date(), { vendorId: 'v2', listingId: 'l9' })).resolves.toMatchObject({ discount: 20 });
+  });
+
+  it('always leaves 10% of the price to charge', () => {
+    expect(promoDiscount({ amount_off: 500, vendor_id: 'v1' }, 200)).toBe(180);
+    expect(promoDiscount({ amount_off: 500 }, 200)).toBe(200);
+  });
+
+  it('is made for the vendor\'s own packages only, with at most 90% off', async () => {
+    const count = jest.fn().mockResolvedValue(1);
+    const s = svc(null, { vendorListing: { count } });
+    const res = await s.createForVendor('v1', { code: 'summer-15', percent_off: 15, listing_ids: ['l1'] });
+    expect(res.data).toMatchObject({ code: 'SUMMER-15', vendor_id: 'v1', listing_ids: ['l1'] });
+    expect(count).toHaveBeenCalledWith({ where: { id: { in: ['l1'] }, vendor_id: 'v1', deleted_at: null } });
+
+    count.mockResolvedValue(0);
+    await expect(s.createForVendor('v1', { code: 'OTHERS', percent_off: 10, listing_ids: ['not-mine'] })).rejects.toThrow('from your list');
+    await expect(svc(null).createForVendor('v1', { code: 'FREE', percent_off: 100 })).rejects.toThrow('between 0 and 90');
+  });
+
+  it('won\'t take a code someone else already uses, or touch another vendor\'s code', async () => {
+    await expect(svc({ id: 'x', code: 'TAKEN' }).createForVendor('v1', { code: 'taken', percent_off: 10 })).rejects.toThrow('already taken');
+    await expect(svc({ ...code, vendor_id: 'v2' }).updateForVendor('v1', 'p1', { active: false })).rejects.toThrow('not found');
+    await expect(svc({ ...code, vendor_id: null }).removeForVendor('v1', 'p1')).rejects.toThrow('not found');
   });
 });

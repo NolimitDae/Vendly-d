@@ -281,6 +281,8 @@ model User {
   // Saved vendors (favourites): vendors this user saved, and the users who saved this vendor
   savedVendors  SavedVendor[]  @relation("UserSavedVendors")
   savedByUsers  SavedVendor[]  @relation("VendorSavedBy")
+  // promo codes the vendor made for their own packages
+  promoCodes    PromoCode[]    @relation("VendorPromoCodes")
 
   // Event planner profile
   eventPlannerProfile EventPlannerProfile? @relation("UserToEventPlannerProfile")
@@ -1987,7 +1989,13 @@ model PromoCode {
   // each customer can use it once; only on a customer's first booking
   once_per_customer  Boolean @default(false)
   first_booking_only Boolean @default(false)
+  // a vendor's own code (platform/promo.service.ts): only for their packages, the discount coming off their
+  // price; listing_ids narrows it to some of them (empty = all). Null vendor: Vendly's code, for any package.
+  vendor_id   String?
+  vendor      User?     @relation("VendorPromoCodes", fields: [vendor_id], references: [id], onDelete: Cascade)
+  listing_ids String[]  @default([])
 
+  @@index([vendor_id])
   @@map("promo_codes")
 }
 
