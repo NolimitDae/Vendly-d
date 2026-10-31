@@ -52,7 +52,7 @@ const COPY: Record<StepKey, { title: string; description: string }> = {
 
 /** Vendors need the licence approved before they can publish, so their step says so. */
 const VENDOR_COPY: Partial<Record<StepKey, { title: string; description: string }>> = {
-  business_license: { title: 'Upload your business licence', description: 'You need an approved licence to publish packages. Vendly reviews it once you upload it.' },
+  business_license: { title: 'Upload your business licence', description: 'You need an approved licence to publish packages (no licence? a screenshot of your business’s social media page or website). Vendly reviews it once you upload it.' },
 };
 
 const STEPS: Record<OnboardingRole, StepKey[]> = {
@@ -210,8 +210,8 @@ export class OnboardingService {
     else if (licence?.license_status === 'SUSPENDED') out.business_license = { state: 'todo', note: 'Your licence needs attention. Please upload it again.' };
     else if (licence?.license_photo?.length) out.business_license = { state: 'pending', note: 'In review' };
     else out.business_license = { state: 'todo' };
-    // nothing can go live until the licence is approved
-    if (role === 'VENDOR' && !published && !canPublish(vendor)) out.first_package = { state: 'todo', note: 'You can publish once your business licence is approved.' };
+    // nothing can go live until the licence and the ID are approved
+    if (role === 'VENDOR' && !published && !canPublish(vendor && { ...vendor, user: { id_verified_at: user.id_verified_at } })) out.first_package = { state: 'todo', note: 'You can publish once your business licence (or social page / website screenshot) and your ID are approved.' };
     else if (role === 'VENDOR' && !published && !vendor?.business_address?.trim()) out.first_package = { state: 'todo', note: 'Add your business address first.' };
 
     return out;

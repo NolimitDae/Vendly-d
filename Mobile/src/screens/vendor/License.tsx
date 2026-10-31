@@ -16,7 +16,7 @@ const STATUS: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: stri
   APPROVED: { icon: 'shield-checkmark', color: '#5BD69A', title: 'Verified', body: 'Your business is verified. Customers see the verified badge on your profile.' },
   REJECTED: { icon: 'close-circle', color: '#FF8A8A', title: 'Not approved', body: 'We couldn’t verify the document you sent. Upload a clear, current business licence or permit and we’ll review it again.' },
   PENDING: { icon: 'time', color: '#F5B700', title: 'In review', body: 'Vendly reviews licences within two business days. You can keep setting up your packages meanwhile.' },
-  NONE: { icon: 'cloud-upload-outline', color: DARK.accent, title: 'Not uploaded yet', body: 'Upload your business licence or permit (photo or PDF) to get the verified badge.' },
+  NONE: { icon: 'cloud-upload-outline', color: DARK.accent, title: 'Not uploaded yet', body: 'Upload your business licence or permit (photo or PDF) to get the verified badge and publish packages.' },
 };
 
 /** Vendor business verification: upload a licence (up to 2 files, images or PDF, 5 MB each). */
@@ -69,6 +69,15 @@ export default function License() {
 
         {status !== 'APPROVED' && (
           <>
+            <View style={s.note}>
+              <Ionicons name="information-circle-outline" size={18} color={DARK.accent} />
+              <Text style={s.noteText}>
+                No business licence? Upload a screenshot of your business’s social media page or website instead. To publish packages you need this approved and a verified photo ID (driver’s licence, passport or another government ID).
+              </Text>
+            </View>
+            <Pressable onPress={() => nav.navigate('VerifyIdentity' as never)} accessibilityRole="link" hitSlop={6}>
+              <Text style={s.noteLink}>Verify your ID</Text>
+            </Pressable>
             <Pressable style={s.drop} onPress={pick} accessibilityRole="button">
               <Ionicons name="document-attach-outline" size={28} color={DARK.accent} />
               <Text style={s.dropTitle}>{docs.length ? 'Change files' : 'Choose your licence'}</Text>
@@ -94,6 +103,9 @@ export default function License() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: DARK.bg },
+  note: { flexDirection: 'row', gap: 8, padding: 12, borderRadius: 14, backgroundColor: DARK.card, borderWidth: 1, borderColor: 'rgba(217,166,221,0.2)' },
+  noteText: { flex: 1, color: '#fff', fontSize: 13, lineHeight: 19, fontFamily: FONTS.regular },
+  noteLink: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold, textDecorationLine: 'underline', marginTop: -6 },
   status: { alignItems: 'center', gap: 8, paddingVertical: 24 },
   title: { fontSize: 20, fontFamily: FONTS.semibold },
   body: { color: '#E9DDEB', fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular, textAlign: 'center' },

@@ -39,7 +39,7 @@ describe('RentalsService', () => {
     prisma.$transaction.mockImplementation((fn: any) => (typeof fn === 'function' ? fn(prisma) : Promise.all(fn)));
     prisma.rentalItem.findMany.mockResolvedValue([chairs, arch]);
     prisma.rentalReservation.findMany.mockResolvedValue([]);
-    prisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'APPROVED', license_photo: ['l.pdf'] });
+    prisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'APPROVED', license_photo: ['l.pdf'], user: { id_verified_at: new Date(), identityVerifications: [] } });
     prisma.booking.create.mockImplementation(({ data }: any) =>
       Promise.resolve({ id: 'b1', status: BookingStatus.PENDING, vendor_id: data.vendor_id, amount: data.amount, rental_reservations: [{ item: { title: 'Chiavari chair' } }, { item: { title: 'Flower arch' } }], vendor: { email: 'v@x.com', name: 'Nia' }, customer: { name: 'Amara' } }),
     );

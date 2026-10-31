@@ -10,14 +10,18 @@ import { openInTab } from '../navigation/crossTab';
 /** Same rule as the API: an approved licence, or an admin saying none is needed. */
 export const canPublish = (status?: string | null) => status === 'APPROVED' || status === 'NOT_APPLICABLE';
 
-type Licence = { status: string | null; uploaded: boolean };
+type Licence = { status: string | null; uploaded: boolean; idVerified?: boolean };
 
-/** What the note says, or null when the vendor can publish. */
-export function licenceNote(licence: Licence | null, things = 'packages'): { text: string; action: string } | null {
-  if (!licence || canPublish(licence.status)) return null;
-  if (licence.status === 'SUSPENDED') return { text: `Your business licence needs attention. Upload it again so you can publish ${things}; drafts still save.`, action: 'Upload your licence' };
-  if (licence.uploaded) return { text: `Vendly is reviewing your business licence. You can save ${things} as drafts now and publish them once it’s approved.`, action: 'View your licence' };
-  return { text: `You need an approved business licence to publish ${things}. You can still save drafts.`, action: 'Upload your licence' };
+/** What the note says, or null when the vendor can publish (an approved licence and a verified photo ID). */
+export function licenceNote(licence: Licence | null, things = 'packages'): { text: string; action: string; screen: 'License' | 'VerifyIdentity' } | null {
+  if (!licence) return null;
+  if (canPublish(licence.status)) {
+    if (licence.idVerified !== false) return null;
+    return { text: `To publish ${things} you also need a verified photo ID: a driver’s licence, passport or another government ID. You can still save drafts.`, action: 'Verify your ID', screen: 'VerifyIdentity' };
+  }
+  if (licence.status === 'SUSPENDED') return { text: `Your business licence needs attention. Upload it again so you can publish ${things}; drafts still save.`, action: 'Upload your licence', screen: 'License' };
+  if (licence.uploaded) return { text: `Vendly is reviewing your business licence. You can save ${things} as drafts now and publish them once it’s approved.`, action: 'View your licence', screen: 'License' };
+  return { text: `You need an approved business licence to publish ${things} (no licence? a screenshot of your business’s social media page or website works). You can still save drafts.`, action: 'Upload your licence', screen: 'License' };
 }
 
 /**
@@ -34,7 +38,7 @@ export default function LicenceNotice({ things = 'packages', style }: { things?:
         .get('/auth/me')
         .then((res) => {
           const d = res.data?.success ? res.data.data : null;
-          if (alive && d?.type === 'VENDOR') setLicence({ status: d.license_status ?? null, uploaded: !!d.license_uploaded });
+          if (alive && d?.type === 'VENDOR') setLicence({ status: d.license_status ?? null, uploaded: !!d.license_uploaded, idVerified: d.id_verified !== false });
         })
         .catch(() => undefined);
       return () => {
@@ -51,7 +55,7 @@ export default function LicenceNotice({ things = 'packages', style }: { things?:
       <View style={{ flex: 1, gap: 6 }}>
         <Text style={s.text}>{note.text}</Text>
         <Pressable
-          onPress={() => navigationRef.isReady() && openInTab(navigationRef, 'ProfileTab', 'License')}
+          onPress={() => navigationRef.isReady() && openInTab(navigationRef, 'ProfileTab', note.screen)}
           accessibilityRole="link"
           hitSlop={8}
         >

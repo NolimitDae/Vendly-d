@@ -57,7 +57,7 @@ describe('VendorListingService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockPrisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'APPROVED', license_photo: ['l.pdf'], business_address: '1 Main St, Austin, TX' });
+    mockPrisma.vendorProfile.findUnique.mockResolvedValue({ license_status: 'APPROVED', license_photo: ['l.pdf'], business_address: '1 Main St, Austin, TX', user: { id_verified_at: new Date(), identityVerifications: [] } });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         VendorListingService,
@@ -415,12 +415,24 @@ describe('VendorListingService', () => {
       mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce(null);
       await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(ForbiddenException);
       expect(mockPrisma.vendorListing.update).not.toHaveBeenCalled();
-      expect(mockPrisma.vendorProfile.findUnique).toHaveBeenCalledWith({ where: { user_id: 'vendor-1' }, select: { license_status: true, license_photo: true } });
+      expect(mockPrisma.vendorProfile.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { user_id: 'vendor-1' } }));
+    });
+
+    it('needs an approved photo ID too, and says where the check stands', async () => {
+      mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['img.jpg'] });
+      const approved = { license_status: 'APPROVED', license_photo: ['l.pdf'] };
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ ...approved, user: { id_verified_at: null, identityVerifications: [] } });
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(/Verify your ID before you publish: add a driver’s license, passport or other photo ID/);
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ ...approved, user: { id_verified_at: null, identityVerifications: [{ status: 'PENDING' }] } });
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(/Vendly is reviewing your ID/);
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ ...approved, user: { id_verified_at: null, identityVerifications: [{ status: 'REJECTED' }] } });
+      await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(/Your ID couldn’t be verified/);
+      expect(mockPrisma.vendorListing.update).not.toHaveBeenCalled();
     });
 
     it('needs a business address on file to publish', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['img.jpg'] });
-      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'APPROVED', license_photo: ['l.pdf'] }).mockResolvedValueOnce({ business_address: '  ' });
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'APPROVED', license_photo: ['l.pdf'], user: { id_verified_at: new Date(), identityVerifications: [] } }).mockResolvedValueOnce({ business_address: '  ' });
       await expect(service.publishListing('listing-1', 'vendor-1')).rejects.toThrow(/Add your business address in your profile before you publish/);
       expect(mockPrisma.vendorListing.update).not.toHaveBeenCalled();
     });
@@ -428,7 +440,7 @@ describe('VendorListingService', () => {
     it('lets vendors who need no licence publish', async () => {
       mockPrisma.vendorListing.findFirst.mockResolvedValue({ ...mockListing, images: ['img.jpg'] });
       mockPrisma.vendorListing.update.mockResolvedValue({ ...mockListing, status: ListingStatus.ACTIVE });
-      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'NOT_APPLICABLE', license_photo: [] });
+      mockPrisma.vendorProfile.findUnique.mockResolvedValueOnce({ license_status: 'NOT_APPLICABLE', license_photo: [], user: { id_verified_at: new Date(), identityVerifications: [] } });
       await expect(service.publishListing('listing-1', 'vendor-1')).resolves.toMatchObject({ success: true });
     });
 

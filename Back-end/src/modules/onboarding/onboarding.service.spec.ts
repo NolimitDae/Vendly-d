@@ -107,13 +107,13 @@ describe('OnboardingService.get', () => {
   });
 
   it('tells vendors the licence is needed to publish', async () => {
-    const steps = async (vendor: any, listings = 0) => {
-      const { service } = setup({ type: 'VENDOR' }, { vendor, listings });
+    const steps = async (vendor: any, listings = 0, idVerified = true) => {
+      const { service } = setup({ type: 'VENDOR', id_verified_at: idVerified ? new Date() : null }, { vendor, listings });
       return Object.fromEntries((await service.get('u1')).data!.steps.map((s) => [s.key, s]));
     };
     const pending = await steps({ license_photo: ['l.jpg'], license_status: 'PENDING' });
     expect(pending.business_license.description).toMatch(/approved licence to publish packages/);
-    expect(pending.first_package).toMatchObject({ state: 'todo', note: 'You can publish once your business licence is approved.' });
+    expect(pending.first_package).toMatchObject({ state: 'todo', note: 'You can publish once your business licence (or social page / website screenshot) and your ID are approved.' });
     // approved, or no licence needed, with a business address: no note
     expect((await steps({ license_photo: [], license_status: 'APPROVED', business_address: '1 Main St' })).first_package.note).toBeUndefined();
     expect((await steps({ license_photo: [], license_status: 'NOT_APPLICABLE', business_address: '1 Main St' })).first_package.note).toBeUndefined();
@@ -121,6 +121,8 @@ describe('OnboardingService.get', () => {
     const noAddress = await steps({ license_photo: [], license_status: 'APPROVED' });
     expect(noAddress.business_address.state).toBe('todo');
     expect(noAddress.first_package).toMatchObject({ state: 'todo', note: 'Add your business address first.' });
+    // an approved licence without an approved ID: still can't publish
+    expect((await steps({ license_photo: [], license_status: 'APPROVED', business_address: '1 Main St' }, 0, false)).first_package).toMatchObject({ state: 'todo', note: expect.stringMatching(/your ID are approved/) });
     // a package already live stays done
     expect((await steps({ license_photo: [], license_status: 'PENDING' }, 1)).first_package).toEqual(expect.objectContaining({ state: 'done' }));
   });

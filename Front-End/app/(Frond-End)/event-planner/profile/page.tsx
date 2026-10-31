@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { EventPlannerService } from "@/service/event-planner/event-planner.service";
 import { toast } from "react-toastify";
@@ -293,6 +294,10 @@ export default function EventPlannerProfilePage() {
             <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">
               Upload supporting documents for admin verification. Your profile becomes publicly
               visible once approved.
+            </p>
+            <p className="text-sm text-gray-600 mb-4 dark:text-gray-300 rounded-xl bg-primary/5 border border-primary/20 px-3 py-2">
+              No business license? Upload a screenshot of your business&apos;s social media page or website instead. Please also verify your photo ID (driver&apos;s license, passport or another government ID) from{" "}
+              <Link href="/settings/verify-id" className="font-semibold text-primary underline">Verify your ID</Link>.
             </p>
 
             <button

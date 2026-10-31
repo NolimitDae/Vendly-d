@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AuthService } from "@/service/auth/auth.service";
 import { toast } from "react-toastify";
@@ -450,7 +451,11 @@ export default function VendorProfilePage() {
         <div id="licence" className="mt-6 bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 scroll-mt-24">
           <h2 className="font-semibold text-gray-900 dark:text-white mb-2">License / Verification</h2>
           <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">
-            Upload your business license or certification documents for admin verification. You need it approved before you can publish packages.
+            Upload your business license or certification documents for admin verification.
+          </p>
+          <p className="text-sm text-gray-600 mb-4 dark:text-gray-300 rounded-xl bg-primary/5 border border-primary/20 px-3 py-2">
+            No business license? Upload a screenshot of your business&apos;s social media page or website instead. To publish packages you need this approved and a verified photo ID (driver&apos;s license, passport or another government ID) from{" "}
+            <Link href="/settings/verify-id" className="font-semibold text-primary underline">Verify your ID</Link>.
           </p>
 
           <button

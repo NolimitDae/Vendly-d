@@ -23,7 +23,7 @@ describe("LicenceNotice", () => {
   it("asks a vendor with no licence to upload one, and says drafts still save", async () => {
     me({ license_status: "PENDING", license_uploaded: false });
     render(<LicenceNotice />);
-    expect(await screen.findByText(/You need an approved business licence to publish packages\. You can still save drafts\./)).toBeInTheDocument();
+    expect(await screen.findByText(/You need an approved business licence to publish packages \(no licence\? a screenshot of your business's social media page or website works\)\. You can still save drafts\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Upload your licence" })).toHaveAttribute("href", "/vendor/profile#licence");
   });
 
@@ -39,6 +39,13 @@ describe("LicenceNotice", () => {
     render(<LicenceNotice />);
     expect(await screen.findByText(/needs attention/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Upload your licence" })).toBeInTheDocument();
+  });
+
+  it("asks a vendor with an approved licence to verify their ID", async () => {
+    me({ license_status: "APPROVED", id_verified: false });
+    render(<LicenceNotice />);
+    expect(await screen.findByText(/you also need a verified photo ID: a driver's license, passport or another government ID/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Verify your ID" })).toHaveAttribute("href", "/settings/verify-id");
   });
 
   it("shows nothing to approved vendors, vendors who need no licence, or other accounts", async () => {
