@@ -190,8 +190,12 @@ const placeCache = new Map<string, Place[]>();
 const censusCache = new Map<string, Place[]>();
 const PHOTON = () => (process.env.PLACES_URL ?? 'https://photon.komoot.io').replace(/\/+$/, '');
 const CENSUS = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress';
-/** The Census geocoder usually answers in well under a second; past this the suggestions go out without it. */
+/** The Census geocoder usually answers in well under a second; past this the lookup gives up. */
 const CENSUS_TIMEOUT_MS = 2500;
+/** While typing, suggestions wait this long for the Census matches; a later answer is kept for the next keystroke. */
+const SUGGEST_CENSUS_BUDGET_MS = 900;
+/** Photon (OpenStreetMap search) normally answers in under a second. */
+const PHOTON_TIMEOUT_MS = 3000;
 const MAX_SUGGESTIONS = 6;
 const headers = () => ({ 'User-Agent': `Vendly/1.0 (${process.env.GEOCODER_CONTACT_EMAIL ?? 'support@vendly.app'})`, Accept: 'application/json' });
 const round5 = (n: number) => Math.round(n * 1e5) / 1e5;
@@ -259,10 +263,101 @@ async function photonFeatures(text: string, near: { lat: number; lng: number } |
   }
   // street addresses are US only (towns can be anywhere, US first)
   if (street) params.set('countrycode', 'US');
-  const res = await fetchImpl(`${PHOTON()}/api/?${params}`, { headers: headers() });
+  const res = await fetchImpl(`${PHOTON()}/api/?${params}`, { headers: headers(), signal: AbortSignal.timeout(PHOTON_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Place search answered ${res.status}`);
   const body = await res.json();
   return preferUS(body?.features ?? []);
+}
+
+const townCache = new Map<string, { city: string; state: string; stateName: string } | null>();
+
+/**
+ * The US town and state around a position ("Smyrna", "DE"), from Photon's reverse lookup, cached by
+ * area (about 7 miles). The Census geocoder needs a town to match a street address, and people rarely
+ * type theirs. Null outside the US, or when the lookup fails or is slow.
+ */
+export async function townNear(near: { lat: number; lng: number }, fetchImpl: typeof fetch = fetch): Promise<{ city: string; state: string; stateName: string } | null> {
+  const key = `${near.lat.toFixed(1)},${near.lng.toFixed(1)}`;
+  if (townCache.has(key)) return townCache.get(key)!;
+  try {
+    const params = new URLSearchParams({ lat: String(near.lat), lon: String(near.lng), lang: 'en' });
+    const res = await fetchImpl(`${PHOTON()}/reverse?${params}`, { headers: headers(), signal: AbortSignal.timeout(PHOTON_TIMEOUT_MS) });
+    if (!res.ok) return null;
+    const p = (await res.json())?.features?.[0]?.properties ?? {};
+    const city = p.city ?? (isTown(p) ? p.name : undefined) ?? p.county;
+    const state = US_STATES[p.state] ?? null;
+    const town = p.countrycode === 'US' && city && state ? { city: String(city), state, stateName: String(p.state) } : null;
+    if (townCache.size > 2000) townCache.clear();
+    townCache.set(key, town);
+    return town;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a typed address already says where it is: a comma, a ZIP code or a state at the end. */
+export function namesItsTown(text: string): boolean {
+  const t = text.trim();
+  if (t.includes(',') || /\b\d{5}(?:-\d{4})?$/.test(t)) return true;
+  const last = t.split(/\s+/).pop() ?? '';
+  return last.length === 2 && Object.values(US_STATES).includes(last.toUpperCase());
+}
+
+/** A house number and at least a street name ("123 Main St"): worth asking the Census geocoder once the town is known. */
+const startsLikeAnAddress = (text: string) => !!typedHouseNumber(text) && text.trim().split(/[\s,]+/).length >= 3;
+
+/** Resolves with the promise's value, or null once `ms` have passed (the promise carries on). */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(null), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(t);
+        resolve(null);
+      },
+    );
+  });
+}
+
+/**
+ * Census matches for what's typed: as typed when it names its town, and, near a known position, with that
+ * state added ("123 Main St" -> "123 Main St, DE"), which is how most people type their address; the
+ * matches come nearest first. A match on the other side of a street than typed ("100 W" answered with
+ * "100 E") is left out: the Census geocoder fills in a missing number from the nearest one.
+ */
+async function censusForTyping(text: string, near: { lat: number; lng: number } | null | undefined, fetchImpl: typeof fetch): Promise<{ places: Place[]; complete: boolean }> {
+  const typed = looksLikeStreetAddress(text) || (namesItsTown(text) && startsLikeAnAddress(text)) ? censusMatches(text, near, fetchImpl) : Promise.resolve([] as Place[]);
+  const withTown =
+    near && !namesItsTown(text) && startsLikeAnAddress(text)
+      ? townNear(near, fetchImpl).then((town) => (town ? censusMatches(`${text}, ${town.state}`, near, fetchImpl) : ([] as Place[])))
+      : Promise.resolve([] as Place[]);
+  const [a, b] = await Promise.all([typed, withTown]);
+  const dir = typedDirection(text);
+  const sameSide = (p: Place) => !dir || !SHORT_DIRECTIONS.has(p.label.split(' ')[1] ?? '') || p.label.split(' ')[1] === dir;
+  // the local match first: it's the one being typed. A lookup that failed makes the answer incomplete (not remembered).
+  return { places: [...(b ?? []), ...(a ?? [])].filter(sameSide), complete: a !== null && b !== null };
+}
+
+/** The street address part of a label ("Empire State Building, 350 5th Ave, New York, NY 10118" -> "350 5th Ave, New York, NY 10118"). */
+function addressKey(label: string): string {
+  const parts = label.split(', ');
+  const at = parts.findIndex((x) => /^\d/.test(x));
+  return (at > 0 ? parts.slice(at) : parts).join(', ').toLowerCase();
+}
+
+/** One suggestion per street address: businesses and offices at an address already listed are left out. */
+function distinctAddresses(places: Place[]): Place[] {
+  const seen = new Set<string>();
+  return places.filter((p) => {
+    const key = addressKey(p.label);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** Photon's street-mode answers as labels, ranked for the house number typed (if any). */
@@ -301,17 +396,30 @@ export async function suggestPlaces(q: string, near?: { lat: number; lng: number
   if (!street) {
     places = distinct(toPlaces(await photonFeatures(text, near, false, fetchImpl), placeLabel));
   } else {
-    // asked together: the Census geocoder only knows full US addresses, Photon knows places and partial streets
-    const [photon, census] = await Promise.all([
+    // asked together: the Census geocoder only knows full US addresses, Photon knows places and partial streets.
+    // The Census matches get a short wait while typing; a later answer is cached for the next keystroke.
+    // no town typed: the same search within the person's state too (Photon's own nearness is only a nudge)
+    const inState =
+      near && !namesItsTown(text)
+        ? within(
+            townNear(near, fetchImpl).then((town) => (town ? photonFeatures(`${text} ${town.stateName}`, near, true, fetchImpl) : [])),
+            SUGGEST_CENSUS_BUDGET_MS,
+          )
+        : Promise.resolve(null);
+    const [photon, found, local] = await Promise.all([
       photonFeatures(text, near, true, fetchImpl).catch((err: Error) => err),
-      looksLikeStreetAddress(text) ? censusMatches(text, near, fetchImpl) : Promise.resolve([] as Place[]),
+      within(censusForTyping(text, near, fetchImpl), SUGGEST_CENSUS_BUDGET_MS),
+      inState,
     ]);
+    // null: slow (still on its way) or failed
+    const census = found?.complete ? found.places : null;
+    const censusSoFar = found?.places ?? [];
     if (photon instanceof Error) {
       // the Census matches alone are still worth showing (not cached: the next keystroke asks Photon again)
-      if (census?.length) return census.slice(0, MAX_SUGGESTIONS);
+      if (censusSoFar.length) return censusSoFar.slice(0, MAX_SUGGESTIONS);
       throw photon;
     }
-    places = distinct([...(census ?? []), ...streetPlaces(photon, text)]);
+    places = distinct(distinctAddresses([...censusSoFar, ...streetPlaces(local ?? [], text), ...streetPlaces(photon, text)]));
     // a slow or failed Census lookup isn't remembered as "no exact match": the next time asks again
     if (census === null) return places;
   }

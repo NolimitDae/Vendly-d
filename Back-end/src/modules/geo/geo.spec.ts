@@ -235,8 +235,40 @@ describe('street address suggestions', () => {
     ]);
     const labels = (await suggestPlaces('100 S Main', near, fetchMock as any, true)).map((p) => p.label);
     expect(labels).toEqual(['Smyrna Health Center, 100 S Main St, Smyrna, DE 19977', 'The Skyline Cafe, 7 S Main St, Smyrna, DE 19977']);
-    // too short to be a full address: the Census geocoder isn't asked
-    expect(fetchMock.mock.calls.some(([u]) => u.includes('census'))).toBe(false);
+    // no town typed: the Census geocoder is asked with the town the person is in
+    const census = fetchMock.mock.calls.map(([u]) => u).filter((u) => u.includes('census'));
+    expect(census).toHaveLength(1);
+    expect(decodeURIComponent(census[0]).replace(/\+/g, ' ')).toContain('address=100 S Main, DE');
+  });
+
+  it('finds a street address typed without its town, from the town the person is in', async () => {
+    const fetchMock = jest.fn((url: string) => {
+      if (url.includes('/reverse')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ features: [feature({ name: 'Sunnyside Road', type: 'street', ...delaware }, -75.6, 39.29)] }) });
+      if (url.includes('census.gov')) {
+        const withTown = decodeURIComponent(url).replace(/\+/g, ' ').includes('St, DE');
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ result: { addressMatches: withTown ? [{ matchedAddress: '123 W MAIN ST, SMYRNA, DE, 19977', coordinates: { x: -75.61, y: 39.3 } }] : [] } }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ features: [] }) });
+    });
+    const labels = (await suggestPlaces('123 W Main St', near, fetchMock as any, true)).map((p) => p.label);
+    expect(labels).toEqual(['123 W Main St, Smyrna, DE 19977']);
+  });
+
+  it('leaves out a Census match on the other side of the street than typed', async () => {
+    const fetchMock = jest.fn((url: string) => {
+      if (url.includes('/reverse')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ features: [feature({ name: 'Sunnyside Road', type: 'street', ...delaware }, -75.6, 39.29)] }) });
+      if (url.includes('census.gov')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ result: { addressMatches: [{ matchedAddress: '100 E GLENWOOD AVE, SMYRNA, DE, 19977', coordinates: { x: -75.6, y: 39.3 } }] } }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ features: [feature({ name: 'West Glenwood Avenue', type: 'street', ...delaware }, -75.6111, 39.30286)] }) });
+    });
+    const labels = (await suggestPlaces('100 W Glenwood Ave', near, fetchMock as any, true)).map((p) => p.label);
+    expect(labels).toEqual(['100 W Glenwood Ave, Smyrna, DE 19977']);
+  });
+
+  it('lists one suggestion per street address', async () => {
+    const at = (name: string) => feature({ name, housenumber: '350', street: '5th Avenue', type: 'house', city: 'New York', state: 'New York', postcode: '10118', countrycode: 'US' }, -73.98, 40.75);
+    const fetchMock = mockFetch([at('Empire State Building'), at('WNEW-FM (New York)'), at('WCBS-FM (New York)')]);
+    const labels = (await suggestPlaces('350 5th Ave New York NY', null, fetchMock as any, true)).map((p) => p.label);
+    expect(labels).toEqual(['Empire State Building, 350 5th Ave, New York, NY 10118']);
   });
 
   it('orders Census matches by distance and de-duplicates them against Photon', async () => {

@@ -1,12 +1,25 @@
-import { BadRequestException, Controller, Get, Logger, NotFoundException, Param, Query, Res, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Logger, NotFoundException, Param, Query, Req, Res, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { reversePlace, suggestPlaces } from './geo';
 import { loadTile, MemoryTileCache, parseTile, TILE_CACHE_SECONDS } from './tiles';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 
 const num = (v: unknown) => (v === undefined || v === '' ? undefined : Number(v));
+
+const validPoint = (la?: number, ln?: number) => (la !== undefined && ln !== undefined && Number.isFinite(la) && Number.isFinite(ln) && Math.abs(la) <= 90 && Math.abs(ln) <= 180 ? { lat: la, lng: ln } : null);
+
+/**
+ * Roughly where the person typing is, from Cloudflare's visitor location headers (city level, from the
+ * IP address; Cloudflare → Rules → Managed Transforms → "Add visitor location headers"). Only used to
+ * put nearby suggestions first when the device hasn't shared its location.
+ */
+export function visitorPoint(req: Pick<Request, 'headers'> | undefined) {
+  const h = req?.headers ?? {};
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  return validPoint(num(one(h['cf-iplatitude'])), num(one(h['cf-iplongitude'])));
+}
 
 @ApiTags('Places')
 @Controller('geo')
@@ -19,10 +32,9 @@ export class GeoController {
   @ApiOperation({ summary: 'Address suggestions while typing a location (optionally biased to lat/lng; street=1 for a full street address)' })
   @Throttle({ short: { limit: 10, ttl: 1000 } })
   @Get('suggest')
-  async suggest(@Query('q') q = '', @Query('lat') lat?: string, @Query('lng') lng?: string, @Query('street') street?: string) {
-    const la = num(lat);
-    const ln = num(lng);
-    const near = la !== undefined && ln !== undefined && Math.abs(la) <= 90 && Math.abs(ln) <= 180 ? { lat: la, lng: ln } : null;
+  async suggest(@Query('q') q = '', @Query('lat') lat?: string, @Query('lng') lng?: string, @Query('street') street?: string, @Req() req?: Request) {
+    // the device's position when it shared one, else roughly where the visitor is: nearby places first
+    const near = validPoint(num(lat), num(lng)) ?? visitorPoint(req);
     try {
       // street addresses (a venue, a business address) get exact matches with street and ZIP; anything else stays town level
       return { success: true, data: await suggestPlaces(String(q), near, fetch, street === '1' || street === 'true') };
