@@ -21,173 +21,116 @@ interface NavItem {
   children?: NavItem[];
 }
 
-export const navItems: NavItem[] = [
-  {
-    icon: OverviewIcon,
-    label: "Overview",
-    href: "/dashboard",
-    type: "admin",
-  },
-  {
-    icon: VendorsIcon,
-    label: "Vendors",
-    href: "/dashboard/vendors",
-    type: "admin",
-    children: [
-      {
-        label: "All Vendors",
-        href: "/dashboard/vendors",
-        icon: EventPlannersIcon,
-      },
-      {
-        label: "Pending Requests",
-        href: "/dashboard/vendors/pending-requests",
-        icon: PendingApprovalIcon,
-      },
-    ],
-  },
+const item = (
+  label: string,
+  href: string,
+  icon: any,
+  extra: Partial<NavItem> = {},
+): NavItem => ({ icon, label, href, type: "admin", ...extra });
 
+/** The admin menu, in labelled groups (Sidebar.tsx). */
+export interface NavSection {
+  title: string | null;
+  items: NavItem[];
+}
+
+export const navSections: NavSection[] = [
+  { title: null, items: [item("Overview", "/dashboard", OverviewIcon)] },
   {
-    icon: EventPlannersIcon,
-    label: "Event Planners",
-    href: "/dashboard/event-planners",
-    type: "admin",
-    children: [
-      {
-        label: "All Event Planners",
-        href: "/dashboard/event-planners",
-        icon: EventPlannersIcon,
-      },
-      {
-        label: "Pending Requests",
-        href: "/dashboard/event-planners/pending-requests",
-        icon: PendingApprovalIcon,
-      },
+    title: "People",
+    items: [
+      item("Vendors", "/dashboard/vendors", VendorsIcon, {
+        children: [
+          {
+            label: "All Vendors",
+            href: "/dashboard/vendors",
+            icon: EventPlannersIcon,
+          },
+          {
+            label: "Pending Requests",
+            href: "/dashboard/vendors/pending-requests",
+            icon: PendingApprovalIcon,
+          },
+        ],
+      }),
+      item("Event Planners", "/dashboard/event-planners", EventPlannersIcon, {
+        children: [
+          {
+            label: "All Event Planners",
+            href: "/dashboard/event-planners",
+            icon: EventPlannersIcon,
+          },
+          {
+            label: "Pending Requests",
+            href: "/dashboard/event-planners/pending-requests",
+            icon: PendingApprovalIcon,
+          },
+        ],
+      }),
+      item("ID checks", "/dashboard/identity", PendingApprovalIcon),
     ],
   },
   {
-    icon: ServicesIcon,
-    label: "Listings",
-    href: "/dashboard/listings",
-    type: "admin",
+    title: "Marketplace",
+    items: [
+      item("Listings", "/dashboard/listings", ServicesIcon),
+      item("Bookings", "/dashboard/bookings", BookingIcon),
+      item("Contracts", "/dashboard/contracts", PrivacyPolicyIcon),
+    ],
   },
   {
-    icon: BookingIcon,
-    label: "Bookings",
-    href: "/dashboard/bookings",
-    type: "admin",
+    title: "Money",
+    items: [
+      item("Transactions", "/dashboard/transactions", TransactionsIcon),
+      item("Revenue", "/dashboard/revenue", TransactionsIcon),
+      item("Wallet", "/wallet", WalletIcon),
+    ],
   },
   {
-    icon: PrivacyPolicyIcon,
-    label: "Contracts",
-    href: "/dashboard/contracts",
-    type: "admin",
+    title: "Reviews & reports",
+    items: [
+      item("Disputes", "/dashboard/disputes", PendingApprovalIcon),
+      item("Fee reviews", "/dashboard/fee-reviews", PendingApprovalIcon),
+      item("Chat reports", "/dashboard/chat-reports", MessageIcon),
+    ],
   },
   {
-    icon: TransactionsIcon,
-    label: "Transactions",
-    href: "/dashboard/transactions",
-    type: "admin",
+    title: "Admin controls",
+    items: [
+      item("Settings", "/dashboard/settings", SettingIcon),
+      item("Service categories", "/dashboard/services", ServicesIcon),
+      item("Promo codes", "/dashboard/promos", WalletIcon),
+      item("Privacy Policy", "/dashboard/privacy", PrivacyPolicyIcon),
+    ],
   },
   {
-    icon: TransactionsIcon,
-    label: "Revenue",
-    href: "/dashboard/revenue",
-    type: "admin",
+    title: "Vendor & planner pages",
+    items: [
+      item("Earnings", "/vendor/earnings", TransactionsIcon, {
+        type: "vendor",
+      }),
+      item("Subscription", "/vendor/subscription", WalletIcon, {
+        type: "vendor",
+      }),
+      item("Planner dashboard", "/event-planner/dashboard", OverviewIcon, {
+        type: "event_planner",
+      }),
+      item("My Events", "/event-planner/events", EventPlannersIcon, {
+        type: "event_planner",
+      }),
+      item("My Profile", "/event-planner/profile", BookingIcon, {
+        type: "event_planner",
+      }),
+    ],
   },
-  {
-    icon: PendingApprovalIcon,
-    label: "Disputes",
-    href: "/dashboard/disputes",
-    type: "admin",
-  },
-  {
-    icon: PendingApprovalIcon,
-    label: "Fee reviews",
-    href: "/dashboard/fee-reviews",
-    type: "admin",
-  },
-  {
-    icon: PendingApprovalIcon,
-    label: "ID checks",
-    href: "/dashboard/identity",
-    type: "admin",
-  },
-  {
-    icon: MessageIcon,
-    label: "Chat reports",
-    href: "/dashboard/chat-reports",
-    type: "admin",
-  },
-  {
-    icon: WalletIcon,
-    label: "Promo codes",
-    href: "/dashboard/promos",
-    type: "admin",
-  },
-  {
-    icon: ServicesIcon,
-    label: "Services",
-    href: "/dashboard/services",
-    type: "admin",
-  },
-  {
-    icon: MessageIcon,
-    label: "Messages",
-    href: "/chat",
-    type: "admin",
-  },
-  {
-    icon: WalletIcon,
-    label: "Wallet",
-    href: "/wallet",
-    type: "admin",
-  },
-  {
-    icon: TransactionsIcon,
-    label: "Earnings",
-    href: "/vendor/earnings",
-    type: "vendor",
-  },
-  {
-    icon: WalletIcon,
-    label: "Subscription",
-    href: "/vendor/subscription",
-    type: "vendor",
-  },
-  {
-    icon: OverviewIcon,
-    label: "Dashboard",
-    href: "/event-planner/dashboard",
-    type: "event_planner",
-  },
-  {
-    icon: EventPlannersIcon,
-    label: "My Events",
-    href: "/event-planner/events",
-    type: "event_planner",
-  },
-  {
-    icon: BookingIcon,
-    label: "My Profile",
-    href: "/event-planner/profile",
-    type: "event_planner",
-  },
+  { title: "Account", items: [item("Messages", "/chat", MessageIcon)] },
 ];
 
+/** Every menu link, in menu order. */
+export const navItems: NavItem[] = navSections.flatMap((s) => s.items);
+
+/** Signing out, at the foot of the menu. */
 export const otherItems = [
-  {
-    icon: SettingIcon,
-    label: "Settings",
-    href: "/dashboard/settings",
-    type: "admin",
-  },
-  {
-    icon: PrivacyPolicyIcon,
-    label: "Privacy Policy",
-    href: "/dashboard/privacy",
-    type: "admin",
-  },
   {
     icon: LogoutIcon,
     label: "Logout",

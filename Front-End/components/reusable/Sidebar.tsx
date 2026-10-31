@@ -10,7 +10,7 @@ import { SidebarIcon } from "@/icons";
 import { ChevronDown } from "lucide-react";
 import { useActiveNav, useModal } from "@/hooks";
 import { cn } from "@/lib/utils";
-import { navItems, otherItems } from "@/data/sidebar";
+import { navSections, otherItems } from "@/data/sidebar";
 import { useFeatureOptIn } from "@/hooks/useFeature";
 import LogoutModal from "../Dashboard/auth/LogoutModal";
 
@@ -69,8 +69,18 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
         {/* Navigation Section */}
         <div className="flex-1 pb-5">
-          <div className="space-y-2 mb-8">
-            {navItems.filter((item) => plansOn || item.href !== "/vendor/subscription").map((item, idx) => {
+          {navSections.map((section, sectionIdx) => {
+            const items = section.items.filter((item) => plansOn || item.href !== "/vendor/subscription");
+            if (!items.length) return null;
+            return (
+          <div key={section.title ?? sectionIdx} className="mb-5" role="group" aria-label={section.title ?? "Overview"}>
+            {section.title && (
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-descriptionColor/80 mb-1.5 px-3">
+                {section.title}
+              </h3>
+            )}
+            <div className="space-y-1">
+            {items.map((item, idx) => {
               const active = isActive(item.href, true);
               const isOpenMenu = openMenu === item.label;
               const showChevron = item.children;
@@ -92,7 +102,6 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           flex items-center group gap-3 px-3 py-2.5 lg:py-3 rounded-lg 
           hover:bg-whiteColor text-blackColor transition-all duration-200
           ${active ? "gradient-bg opacity-100 text-white" : ""}
-          ${idx === 0 ? "mb-4" : ""}
           cursor-pointer
         `}
                   >
@@ -165,14 +174,14 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                 </div>
               );
             })}
+            </div>
           </div>
+            );
+          })}
 
           <div className="h-[1px] w-full bg-borderColor" />
-          {/* Log out section */}
-          <div className="mt-8">
-            <h3 className="text-sm font-bold text-blackColor mb-2 px-3">
-              Others
-            </h3>
+          {/* Log out */}
+          <div className="mt-5">
             {otherItems.map((item, idx) => {
               const active = isActive(item.href, false);
 
