@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { pageMetadata } from "@/lib/seo";
 import Container from "@/app/_components/Container";
 
-export const metadata: Metadata = {
-  title: "Terms of Service | Vendly",
+export const metadata: Metadata = pageMetadata({
+  title: "Terms of Service",
   description: "The terms that govern your use of Vendly, including bookings, contracts, payments, refunds and disputes.",
-};
+  path: "/terms",
+});
 
 const LAST_UPDATED = "October 24, 2026";
 const COMPANY = "ADEJORO HOLDINGS LLC";

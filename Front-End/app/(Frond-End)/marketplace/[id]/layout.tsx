@@ -1,33 +1,52 @@
 import type { Metadata } from "next";
-import { AppConfig } from "@/config/app.config";
+import { JsonLd, missingMetadata, pageMetadata, publicData, ratingOf, SITE_URL, snippet } from "@/lib/seo";
 
 // Next 16: route params arrive as a Promise.
 type Props = { params: Promise<{ id: string }>; children: React.ReactNode };
 
-/** Link previews (iMessage, WhatsApp, socials) for a shared package show its title, vendor, price and photo. */
+const listing = async (params: Props["params"]) => publicData(`/marketplace/listings/${encodeURIComponent((await params).id)}`);
+const vendorName = (l: any) => l?.vendor?.vendorProfile?.business_name || l?.vendor?.name;
+
+/** Search results and link previews (iMessage, WhatsApp, socials) show the package's title, vendor, price and photo. */
 export async function generateMetadata({ params }: Omit<Props, "children">): Promise<Metadata> {
-  try {
-    const { id } = await params;
-    const res = await fetch(`${AppConfig().app.apiUrl}/marketplace/listings/${encodeURIComponent(id)}`, {
-      next: { revalidate: 300 },
-    });
-    if (!res.ok) return { title: "Service not found" };
-    const { data } = await res.json();
-    const title = data?.title || "A service on Vendly";
-    const vendor = data?.vendor?.vendorProfile?.business_name || data?.vendor?.name;
-    const price = data?.price != null ? `From $${Number(data.price).toLocaleString("en-US")}` : null;
-    const description = [vendor && `By ${vendor}`, price, data?.description].filter(Boolean).join(" · ").slice(0, 160);
-    const image = data?.images?.[0];
-    return {
-      title,
-      description,
-      openGraph: { title, description, ...(image ? { images: [image] } : {}) },
-    };
-  } catch {
-    return {};
-  }
+  const data = await listing(params);
+  if (data === null) return missingMetadata("Service not found");
+  if (!data) return {};
+  const title = data.title || "A service on Vendly";
+  const vendor = vendorName(data);
+  const price = data.price != null ? `From $${Number(data.price).toLocaleString("en-US")}` : null;
+  return pageMetadata({
+    title: vendor ? `${title} by ${vendor}` : title,
+    description: snippet([vendor && `By ${vendor}`, price, data.description].filter(Boolean).join(" · ")),
+    path: `/marketplace/${data.id}`,
+    image: data.images?.[0],
+  });
 }
 
-export default function ListingLayout({ children }: Props) {
-  return children;
+/** The package as a product with its price and star rating, for Google's rich results. */
+export default async function ListingLayout({ params, children }: Props) {
+  const data = await listing(params);
+  return (
+    <>
+      {data && (
+        <JsonLd
+          data={{
+            "@context": "https://schema.org",
+            "@type": "Product",
+            name: data.title,
+            ...(data.description ? { description: snippet(data.description, 500) } : {}),
+            ...(data.images?.length ? { image: data.images.slice(0, 5) } : {}),
+            ...(data.category?.name ? { category: data.category.name } : {}),
+            ...(vendorName(data) ? { brand: { "@type": "Brand", name: vendorName(data) } } : {}),
+            url: `${SITE_URL}/marketplace/${data.id}`,
+            ...(data.price != null
+              ? { offers: { "@type": "Offer", price: Number(data.price), priceCurrency: "USD", availability: "https://schema.org/InStock", url: `${SITE_URL}/marketplace/${data.id}` } }
+              : {}),
+            ...ratingOf(data.avg_rating, data._count?.reviews),
+          }}
+        />
+      )}
+      {children}
+    </>
+  );
 }

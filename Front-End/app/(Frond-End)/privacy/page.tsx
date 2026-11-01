@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { pageMetadata } from "@/lib/seo";
 import Container from "@/app/_components/Container";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy | Vendly",
+export const metadata: Metadata = pageMetadata({
+  title: "Privacy Policy",
   description: "How Vendly collects, uses, shares and protects your personal information.",
-};
+  path: "/privacy",
+});
 
 const LAST_UPDATED = "October 9, 2026";
 

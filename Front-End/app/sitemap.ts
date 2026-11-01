@@ -1,8 +1,9 @@
 import type { MetadataRoute } from "next";
 import { AppConfig } from "@/config/app.config";
+import { SITE_URL } from "@/lib/seo";
 
-/** The public site's address (search engines need full links). */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://vendlymarketplace.com").replace(/\/+$/, "");
+// robots.ts reads the site address from here
+export { SITE_URL };
 
 // rebuilt at most once an hour: new packages show up without a deploy
 export const revalidate = 3600;
