@@ -43,6 +43,7 @@ jest.mock('@/components/payments/StripeOnboardingDialog', () => ({
     </div>
   ),
 }));
+jest.mock('@/components/payments/StripePayoutsPanel', () => ({ __esModule: true, default: () => <div data-testid="bank-payouts" /> }));
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() },
 }));

@@ -144,14 +144,18 @@ export class StripePayment {
   }
 
   /**
-   * Embedded onboarding (the website): a short-lived session whose client secret lets Stripe's onboarding
-   * form run inside Vendly's page for this one connected account. The secret key needs the
-   * "Account Sessions: write" permission.
+   * Stripe's embedded components on the website, for this one connected account: the onboarding form,
+   * alerts about details Stripe still needs, and the account's balance and payouts to the bank. The
+   * session's client secret is short-lived. The secret key needs the "Account Sessions: write" permission.
    */
   static async createAccountSession(account_id: string) {
     return getStripe().accountSessions.create({
       account: account_id,
-      components: { account_onboarding: { enabled: true } },
+      components: {
+        account_onboarding: { enabled: true },
+        notification_banner: { enabled: true },
+        payouts: { enabled: true },
+      },
     });
   }
 

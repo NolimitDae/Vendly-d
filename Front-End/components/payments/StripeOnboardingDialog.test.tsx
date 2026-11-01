@@ -2,7 +2,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import StripeOnboardingDialog from "./StripeOnboardingDialog";
 import { Fetch } from "@/lib/Fetch";
 
-jest.mock("@/lib/Fetch", () => ({ Fetch: { post: jest.fn() } }));
+jest.mock("@/lib/Fetch", () => ({ Fetch: { post: jest.fn(), get: jest.fn() } }));
 jest.mock("@/helper/cookie.helper", () => ({ CookieHelper: { get: () => "token-1" } }));
 const loadConnectAndInitialize = jest.fn();
 jest.mock("@stripe/connect-js/pure", () => ({ loadConnectAndInitialize: (o: any) => loadConnectAndInitialize(o) }));
@@ -37,11 +37,26 @@ describe("StripeOnboardingDialog", () => {
     expect(post).toHaveBeenCalledTimes(2);
   });
 
-  it("shows the server's reason when payout setup can't open", async () => {
-    post.mockRejectedValue({ response: { data: { message: "Payouts are for vendors." } } });
+  it("shows the server's reason when payout setup is refused, with no way around it", async () => {
+    post.mockRejectedValue({ response: { status: 403, data: { message: "Payouts are for vendors." } } });
     render(<StripeOnboardingDialog onClose={jest.fn()} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Payouts are for vendors.");
     expect(loadConnectAndInitialize).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /continue on stripe/i })).not.toBeInTheDocument();
+  });
+
+  it("offers Stripe's own setup page when the embedded form can't open", async () => {
+    post.mockRejectedValueOnce({ response: { status: 500, data: { message: "Could not open payout setup. Please try again later." } } });
+    (Fetch.get as jest.Mock).mockResolvedValue({ data: { data: { accountId: "acct_1" } } });
+    post.mockResolvedValueOnce({ data: { data: { url: "https://connect.stripe.com/setup/x" } } });
+    // jsdom can't navigate; it only reports that it was asked to
+    const spy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    render(<StripeOnboardingDialog onClose={jest.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /continue on stripe/i }));
+    await waitFor(() => expect(post).toHaveBeenLastCalledWith("/withdraw/onboarding/acct_1", {}, expect.anything()));
+    // an existing account is reused, not made again
+    expect(post).not.toHaveBeenCalledWith("/withdraw/create-connected-account", {}, expect.anything());
+    spy.mockRestore();
   });
 
   it("says so when the site has no Stripe key", async () => {

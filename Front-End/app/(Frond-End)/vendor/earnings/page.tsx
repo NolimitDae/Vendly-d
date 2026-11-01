@@ -29,6 +29,7 @@ import {
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
 import StripeOnboardingDialog from "@/components/payments/StripeOnboardingDialog";
+import StripePayoutsPanel from "@/components/payments/StripePayoutsPanel";
 import { EarningsService } from "@/service/earnings/earnings.service";
 import TransactionsList from "@/components/payments/TransactionsList";
 import { cn } from "@/lib/utils";
@@ -890,6 +891,9 @@ export default function VendorEarningsPage() {
             )}
           </div>
         </div>
+
+        {/* ── What Stripe needs from the vendor, and payouts to their bank (Stripe's embedded components) ── */}
+        {accountInfo?.hasConnectedAccount && <StripePayoutsPanel key={accountInfo.accountId ?? ""} />}
 
       </div>
       {onboarding && <StripeOnboardingDialog onClose={closeOnboarding} />}
