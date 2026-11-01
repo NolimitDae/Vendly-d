@@ -1073,6 +1073,8 @@ model Booking {
   // reference photos the customer attached to the request (private storage keys)
   request_photos     String[]
   installments       BookingInstallment[]
+  // customers' bank disputes (chargebacks) on this booking's payments; one still open holds the payout
+  chargebacks        Chargeback[]
   // rentals: refundable hold authorized before pickup, captured only for damage / late fees
   security_deposit   Decimal?  @db.Decimal(10, 2)
   rental_reservations RentalReservation[]
@@ -2083,4 +2085,29 @@ model CalendarBusyBlock {
 
   @@index([user_id, end_date])
   @@map("calendar_busy_blocks")
+}
+
+/// A customer's bank dispute (chargeback) on a payment, from Stripe's charge.dispute.* events. While one is
+/// open (closed_at null) the booking's payout is held; a loss counts the returned money as refunded.
+model Chargeback {
+  // Stripe's dispute id (du_...)
+  id                String    @id
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  booking_id        String?
+  booking           Booking?  @relation(fields: [booking_id], references: [id], onDelete: SetNull)
+  installment_id    String?
+  payment_intent_id String?
+  amount            Decimal   @db.Decimal(10, 2)
+  currency          String    @default("usd") @db.VarChar(10)
+  reason            String?   @db.VarChar(100)
+  // Stripe's dispute status (needs_response, under_review, won, lost, ...)
+  status            String    @db.VarChar(40)
+  // when the respond-by deadline is (Stripe's evidence due date)
+  respond_by        DateTime?
+  closed_at         DateTime?
+
+  @@index([booking_id])
+  @@map("chargebacks")
 }

@@ -5,7 +5,7 @@ import { StripePayment } from 'src/common/lib/Payment/stripe/StripePayment';
 import { MailService } from 'src/mail/mail.service';
 import { PushService } from 'src/modules/push/push.service';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { PaymentsService, EARLY_RELEASE_OWING } from './payments.service';
+import { PaymentsService, EARLY_RELEASE_OWING, CHARGEBACK_HOLD } from './payments.service';
 import { __setFeeCache } from 'src/modules/platform/platform-settings.service';
 
 jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
@@ -24,15 +24,18 @@ jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
     cancelPaymentIntent: jest.fn(),
     transferForBooking: jest.fn(),
     chargeOf: jest.fn(),
+    retrievePaymentIntent: jest.fn(),
     refundPaymentIntent: jest.fn(),
     retrieveCheckoutSession: jest.fn(),
   },
 }));
-jest.mock('src/config/app.config', () => ({ __esModule: true, default: () => ({ app: { client_app_url: 'https://app.test' } }) }));
+jest.mock('src/config/app.config', () => ({ __esModule: true, default: () => ({ app: { client_app_url: 'https://app.test' }, support: { email: 'support@vendlymarketplace.com' } }) }));
 
 const DAY = 24 * 3600 * 1000;
 
 const prisma = {
+
+  chargeback: { count: jest.fn().mockResolvedValue(0) },
   user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
   booking: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), update: jest.fn(), updateMany: jest.fn(), count: jest.fn(), findMany: jest.fn() },
   bookingInstallment: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
@@ -1292,6 +1295,88 @@ describe('PaymentsService', () => {
       // the vendor never gets the customer's actions
       const vendorView: any = await service.timeline('b1', 'v1');
       expect(vendorView.data.can_dispute).toBe(false);
+    });
+  });
+  describe('chargebacks (customer bank disputes)', () => {
+    const dispute = (over: Record<string, unknown> = {}) => ({ id: 'du_1', amount: 24750, currency: 'usd', reason: 'fraudulent', status: 'needs_response', payment_intent: 'pi_dep', evidence_details: { due_by: 1_800_000_000 }, ...over });
+    const vendorBooking = { id: 'b1', vendor_id: 'v1', listing: { title: 'Bridal Glam' }, rental_reservations: [], vendor: { email: 'vee@x.com', name: 'Vee' } };
+    beforeEach(() => {
+      (prisma as any).chargeback = { count: jest.fn().mockResolvedValue(0), findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn() };
+      prisma.bookingInstallment.findFirst.mockResolvedValue({ id: 'i1', booking_id: 'b1' });
+      prisma.booking.findUnique.mockResolvedValue(vendorBooking);
+    });
+
+    it('records the dispute against the payment, tells the vendor their payout is on hold and tells Vendly to respond', async () => {
+      const res = await service.chargebackOpened(dispute());
+      expect(res).toEqual({ bookingId: 'b1', held: true });
+      expect((prisma as any).chargeback.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ id: 'du_1', booking_id: 'b1', installment_id: 'i1', amount: 247.5, status: 'needs_response' }) }));
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'vee@x.com', subject: 'Payout on hold — Bridal Glam' }));
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'support@vendlymarketplace.com', subject: 'Chargeback opened', message: expect.stringContaining('Respond in Stripe') }));
+      expect(push.sendToUser).toHaveBeenCalledWith('admin1', expect.objectContaining({ title: 'Chargeback opened' }));
+
+      // Stripe sends it again: nothing new is sent
+      jest.clearAllMocks();
+      (prisma as any).chargeback.findUnique.mockResolvedValue({ id: 'du_1' });
+      await service.chargebackOpened(dispute());
+      expect(mail.sendBookingNotification).not.toHaveBeenCalled();
+    });
+
+    it("holds the booking's payout and an early deposit release while the dispute is open", async () => {
+      (prisma as any).chargeback.count.mockResolvedValue(1);
+      prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), vendor_id: 'v1', currency: 'usd', vendor: { stripe_connect_id: 'acct_1', balance: 0 }, installments: [installment({ status: InstallmentStatus.PAID })] });
+      expect(await service.releaseBooking('b1')).toBeNull();
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+
+      prisma.booking.findUnique.mockResolvedValue({
+        vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', payment_plan: PaymentPlan.DEPOSIT_50, early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null,
+        vendor: { stripe_connect_id: 'acct_1' }, contracts: [{ id: 'c1' }],
+        installments: [installment({ status: InstallmentStatus.PAID }), installment({ id: 'i2', sequence: 2, status: InstallmentStatus.SCHEDULED })],
+      });
+      await expect(service.releaseDepositEarly('b1', 'v1')).rejects.toThrow(CHARGEBACK_HOLD);
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+    });
+
+    it('a won dispute lets the payout go ahead and changes nothing on the payment', async () => {
+      (prisma as any).chargeback.findUnique.mockResolvedValue({ id: 'du_1', booking_id: 'b1', installment_id: 'i1', closed_at: null });
+      const res = await service.chargebackClosed(dispute({ status: 'won' }));
+      expect(res).toEqual({ lost: false, recovered: 0, manual: false });
+      expect((prisma as any).chargeback.updateMany).toHaveBeenCalledWith({ where: { id: 'du_1', closed_at: null }, data: { status: 'won', closed_at: expect.any(Date) } });
+      expect(prisma.bookingInstallment.update).not.toHaveBeenCalled();
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'vee@x.com', subject: 'Payout released from hold — Bridal Glam' }));
+    });
+
+    it("a lost dispute counts the money as refunded, so the vendor isn't paid for it, and the customer isn't charged again", async () => {
+      (prisma as any).chargeback.findUnique.mockResolvedValue({ id: 'du_1', booking_id: 'b1', installment_id: 'i1', closed_at: null });
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ status: InstallmentStatus.PAID, paid_out_at: null }));
+      prisma.booking.findUnique.mockResolvedValueOnce({ vendor_id: 'v1', early_released_amount: 0, released_gross: null, commission_amount: null }).mockResolvedValue(vendorBooking);
+      const res = await service.chargebackClosed(dispute({ status: 'lost' }));
+      expect(res).toEqual({ lost: true, recovered: 0, manual: false });
+      expect(prisma.bookingInstallment.update).toHaveBeenCalledWith({ where: { id: 'i1' }, data: { refunded_amount: { increment: 247.5 } } });
+      expect(prisma.paymentTransaction.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'chargeback_lost', amount: -247.5 }) }));
+      expect(StripePayment.chargeSavedCard).not.toHaveBeenCalled();
+      expect(StripePayment.reverseTransfer).not.toHaveBeenCalled();
+    });
+
+    it('a lost dispute on a deposit already paid out early takes it back from the vendor', async () => {
+      (prisma as any).chargeback.findUnique.mockResolvedValue({ id: 'du_1', booking_id: 'b1', installment_id: 'i1', closed_at: null });
+      prisma.bookingInstallment.findUnique.mockResolvedValue(installment({ status: InstallmentStatus.PAID, paid_out_at: null }));
+      prisma.booking.findUnique.mockResolvedValueOnce({ vendor_id: 'v1', early_released_amount: 225, released_gross: null, commission_amount: null }).mockResolvedValue(vendorBooking);
+      prisma.paymentTransaction.findMany.mockResolvedValue([{ reference_number: 'tr_early' }]);
+      (StripePayment.retrieveTransfer as jest.Mock).mockResolvedValue({ amount: 22500, amount_reversed: 0 });
+      (StripePayment.reverseTransfer as jest.Mock).mockResolvedValue({ id: 'trr_1' });
+      const res = await service.chargebackClosed(dispute({ status: 'lost' }));
+      expect(res?.recovered).toBe(225);
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { early_released_amount: { decrement: 225 } } });
+      expect(StripePayment.reverseTransfer).toHaveBeenCalledWith('tr_early', 225, 'chargeback-du_1-tr_early');
+    });
+
+    it('a dispute on a payment that is not a booking (a wallet top-up) only alerts Vendly', async () => {
+      prisma.bookingInstallment.findFirst.mockResolvedValue(null);
+      (StripePayment.retrievePaymentIntent as jest.Mock).mockResolvedValue({ metadata: { type: 'deposit' } });
+      const res = await service.chargebackOpened(dispute({ payment_intent: 'pi_topup' }));
+      expect(res).toEqual({ bookingId: null, held: false });
+      expect(mail.sendBookingNotification).toHaveBeenCalledTimes(1);
+      expect(mail.sendBookingNotification).toHaveBeenCalledWith(expect.objectContaining({ to: 'support@vendlymarketplace.com', message: expect.stringContaining('not linked to a booking') }));
     });
   });
 });

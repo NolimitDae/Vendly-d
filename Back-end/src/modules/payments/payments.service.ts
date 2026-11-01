@@ -46,6 +46,9 @@ export const vendorPortion = (i: { amount: unknown; fee_amount: unknown; refunde
 
 const isPaid = (i: { status: InstallmentStatus }) => i.status === InstallmentStatus.PAID || i.status === InstallmentStatus.REFUNDED;
 
+/** Why money on a booking can't move while the customer's bank reviews one of its payments. */
+export const CHARGEBACK_HOLD = "The customer's bank is reviewing a payment on this booking, so its money can't move until the bank decides.";
+
 /** Why a give-back is capped below what the customer paid. */
 export const GIVE_BACK_PAID_OUT = 'The rest has already been paid out to you, so it can be given back once your Vendly balance covers it. Contact Vendly support if the customer needs it sooner.';
 
@@ -635,6 +638,172 @@ export class PaymentsService {
     });
   }
 
+  // ─── Chargebacks (customers' bank disputes) ───────────────────────────────
+
+  /** True while a customer's bank dispute on one of the booking's payments is open: its payout waits. */
+  private async chargebackOpen(bookingId: string) {
+    return (await this.prisma.chargeback.count({ where: { booking_id: bookingId, closed_at: null } })) > 0;
+  }
+
+  /**
+   * Stripe's charge.dispute.created: a customer asked their bank to take a payment back. Vendly is
+   * liable, so the booking's payout (and an early deposit release, and later extras) waits until the
+   * bank decides. The vendor is told why; Vendly's admins and the support inbox are told to respond in
+   * Stripe before the deadline. Safe to repeat.
+   */
+  async chargebackOpened(d: { id: string; amount: number; currency: string; reason?: string | null; status: string; payment_intent?: string | { id: string } | null; evidence_details?: { due_by?: number | null } | null }) {
+    const piId = typeof d.payment_intent === 'string' ? d.payment_intent : (d.payment_intent?.id ?? null);
+    const { bookingId, installmentId } = await this.bookingForPayment(piId);
+    const amount = round2(d.amount / 100);
+    const respondBy = d.evidence_details?.due_by ? new Date(d.evidence_details.due_by * 1000) : null;
+    const existing = await this.prisma.chargeback.findUnique({ where: { id: d.id }, select: { id: true } });
+    await this.prisma.chargeback.upsert({
+      where: { id: d.id },
+      create: { id: d.id, booking_id: bookingId, installment_id: installmentId, payment_intent_id: piId, amount, currency: d.currency, reason: d.reason ?? null, status: d.status, respond_by: respondBy },
+      update: { status: d.status, respond_by: respondBy },
+    });
+    if (existing) return { bookingId, held: !!bookingId };
+
+    const b = bookingId ? await this.chargebackBooking(bookingId) : null;
+    const title = b ? bookingTitle(b) : null;
+    if (b?.vendor) {
+      const message = `The customer's bank is reviewing a payment of ${money(amount, d.currency)} on ${title}. Your payout for this booking is on hold until the bank decides, which can take a few weeks. Vendly answers the bank for you; if Vendly needs anything from you (photos, messages, the signed contract), we'll be in touch.`;
+      if (b.vendor.email) await this.mail.sendBookingNotification({ to: b.vendor.email, recipientName: b.vendor.name ?? '', subject: `Payout on hold — ${title}`, message, status: 'CHARGEBACK', listingTitle: title ?? '' }).catch(() => null);
+      void this.push.sendToUser(b.vendor_id, { title: 'Payout on hold', body: message, data: { type: 'booking', bookingId: b.id } }, 'payments');
+    }
+    const due = respondBy ? ` Respond in Stripe (Payments → Disputes) by ${shortDate(respondBy)}, or it's lost automatically.` : ' Respond in Stripe (Payments → Disputes).';
+    await this.tellAdminsAboutChargeback(
+      'Chargeback opened',
+      `A customer's bank disputed ${money(amount, d.currency)} (${d.reason ?? 'no reason given'})${b ? ` on booking ${b.id} (${title})` : ` on a payment not linked to a booking (${piId ?? d.id})`}.${b ? " The vendor's payout for it is on hold." : ''}${due}`,
+      b?.id,
+      d.id,
+    );
+    return { bookingId, held: !!bookingId };
+  }
+
+  /**
+   * Stripe's charge.dispute.closed. Won (or an inquiry that closed): the payout goes ahead with the next
+   * hourly run. Lost: the bank gave that money back to the customer, so it counts as refunded on the
+   * payment (the vendor isn't paid for it, and what they were already paid for it comes back from their
+   * balance), then the rest of the payout goes ahead. The customer isn't asked to pay again. Safe to repeat.
+   */
+  async chargebackClosed(d: { id: string; amount: number; currency: string; status: string; reason?: string | null; payment_intent?: string | { id: string } | null; evidence_details?: { due_by?: number | null } | null }) {
+    let row = await this.prisma.chargeback.findUnique({ where: { id: d.id } });
+    // the opening event never arrived (or arrived out of order): record it first
+    if (!row) {
+      await this.chargebackOpened({ ...d, status: 'needs_response' });
+      row = await this.prisma.chargeback.findUnique({ where: { id: d.id } });
+    }
+    if (!row || row.closed_at) return null;
+    const lost = d.status === 'lost';
+    const lostAmount = round2(d.amount / 100);
+    let recovered = 0;
+    let manual = false;
+    const close = async () => {
+      const c = await this.prisma.chargeback.updateMany({ where: { id: d.id, closed_at: null }, data: { status: d.status, closed_at: new Date() } });
+      return c.count === 1;
+    };
+    if (!row.booking_id) {
+      if (!(await close())) return null;
+    } else if (!lost) {
+      if (!(await close())) return null;
+    } else if (!row.installment_id) {
+      // paid in one go through Checkout (no installment to mark): the payout stays on hold for an admin
+      manual = true;
+      await this.prisma.chargeback.update({ where: { id: d.id }, data: { status: d.status } });
+    } else {
+      const done = await withBookingLock(this.prisma, row.booking_id, async () => {
+        if (!(await close())) return false;
+        recovered = await this.applyLostChargeback(row!.booking_id!, row!.installment_id!, lostAmount, d.currency, d.id);
+        return true;
+      });
+      if (!done) return null;
+    }
+
+    const b = row.booking_id ? await this.chargebackBooking(row.booking_id) : null;
+    const title = b ? bookingTitle(b) : null;
+    if (b?.vendor && !manual) {
+      const message = lost
+        ? `The customer's bank decided to return ${money(lostAmount, d.currency)} to the customer on ${title}. That money isn't part of your payout${recovered > 0 ? `, and the ${money(recovered, d.currency)} you were already paid for it comes back from your Vendly balance` : ''}. The rest of your payout for this booking goes ahead as normal.`
+        : `The customer's bank reviewed the payment on ${title} and decided for Vendly. Your payout for this booking goes ahead as normal.`;
+      if (b.vendor.email) await this.mail.sendBookingNotification({ to: b.vendor.email, recipientName: b.vendor.name ?? '', subject: lost ? `Bank dispute lost — ${title}` : `Payout released from hold — ${title}`, message, status: 'CHARGEBACK', listingTitle: title ?? '' }).catch(() => null);
+      void this.push.sendToUser(b.vendor_id, { title: lost ? 'Bank dispute lost' : 'Payout no longer on hold', body: message, data: { type: 'booking', bookingId: b.id } }, 'payments');
+    }
+    const outcome = manual
+      ? `Lost: ${money(lostAmount, d.currency)} went back to the customer. This booking was paid through Checkout, so its payout stays on hold until an admin settles it.`
+      : lost
+        ? `Lost: ${money(lostAmount, d.currency)} went back to the customer and counts as refunded on the booking.${recovered > 0 ? ` ${money(recovered, d.currency)} is being recovered from the vendor.` : ''}`
+        : `${d.status === 'won' ? 'Won' : `Closed (${d.status})`}: the payout goes ahead.`;
+    await this.tellAdminsAboutChargeback(`Chargeback ${lost ? 'lost' : 'closed'}`, `Bank dispute ${d.id}${b ? ` on booking ${b.id} (${title})` : ''}. ${outcome}`, b?.id, d.id);
+    return { lost, recovered, manual };
+  }
+
+  /**
+   * A lost chargeback on one installment: the returned amount counts as refunded (so the payout no
+   * longer includes it), and what the vendor was already paid for it (or got early as their deposit)
+   * comes back from them, as for a bank payment returned after it cleared. Under the booking lock.
+   * Returns what is being recovered from the vendor.
+   */
+  private async applyLostChargeback(bookingId: string, installmentId: string, lostAmount: number, currency: string, disputeId: string) {
+    const inst = await this.prisma.bookingInstallment.findUnique({ where: { id: installmentId } });
+    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId }, select: { vendor_id: true, early_released_amount: true, released_gross: true, commission_amount: true } });
+    if (!inst || !booking) return 0;
+    const take = round2(Math.min(lostAmount, Number(inst.amount) - Number(inst.refunded_amount)));
+    if (take <= 0) return 0;
+    const before = vendorPortion(inst);
+    await this.prisma.bookingInstallment.update({ where: { id: inst.id }, data: { refunded_amount: { increment: take } } });
+    const partLost = round2(before - vendorPortion({ ...inst, refunded_amount: Number(inst.refunded_amount) + take }));
+    await this.prisma.paymentTransaction.create({
+      data: { user_id: booking.vendor_id, type: 'chargeback_lost', provider: 'stripe', reference_number: disputeId, order_id: bookingId, status: 'succeeded', amount: -take, currency },
+    });
+    let recovered = 0;
+    if (inst.paid_out_at && partLost > 0) {
+      // already paid out: the vendor's part comes back (less Vendly's commission on it, which Vendly gives up)
+      const rate = Number(booking.released_gross ?? 0) > 0 ? Number(booking.commission_amount ?? 0) / Number(booking.released_gross) : currentFees().commission / 100;
+      recovered = round2(partLost * (1 - rate));
+      const commissionBack = round2(partLost - recovered);
+      if (recovered > 0) await this.takeBackPaidOut(booking.vendor_id, bookingId, recovered, currency, `chargeback-${disputeId}`);
+      if (commissionBack > 0) {
+        await this.prisma.paymentTransaction.create({ data: { user_id: booking.vendor_id, type: 'vendly_commission', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount: -commissionBack, currency } });
+      }
+    } else if (inst.kind === 'charge' && inst.sequence === 1 && Number(booking.early_released_amount ?? 0) > 0 && partLost > 0) {
+      // the deposit was paid out early: what the bank took back is owed now; the final payout no longer takes it off
+      recovered = round2(Math.min(partLost, Number(booking.early_released_amount)));
+      await this.prisma.booking.update({ where: { id: bookingId }, data: { early_released_amount: { decrement: recovered } } });
+      await this.takeBackPaidOut(booking.vendor_id, bookingId, recovered, currency, `chargeback-${disputeId}`);
+    }
+    return recovered;
+  }
+
+  /** The booking (and installment) a payment belongs to: its installment, else the booking named on the PaymentIntent. */
+  private async bookingForPayment(paymentIntentId: string | null): Promise<{ bookingId: string | null; installmentId: string | null }> {
+    if (!paymentIntentId) return { bookingId: null, installmentId: null };
+    const inst = await this.prisma.bookingInstallment.findFirst({ where: { payment_intent_id: paymentIntentId }, select: { id: true, booking_id: true } });
+    if (inst) return { bookingId: inst.booking_id, installmentId: inst.id };
+    const pi = await StripePayment.retrievePaymentIntent(paymentIntentId).catch(() => null);
+    const id = pi?.metadata?.booking_id;
+    if (!id) return { bookingId: null, installmentId: null };
+    const exists = await this.prisma.booking.findUnique({ where: { id }, select: { id: true } });
+    return { bookingId: exists?.id ?? null, installmentId: null };
+  }
+
+  private chargebackBooking(bookingId: string) {
+    return this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, vendor_id: true, listing: { select: { title: true } }, rental_reservations: { select: { item: { select: { title: true } } } }, vendor: { select: { email: true, name: true } } },
+    });
+  }
+
+  /** Vendly's admins (push), the support inbox (email) and error tracking hear about a chargeback. */
+  private async tellAdminsAboutChargeback(title: string, body: string, bookingId: string | undefined, disputeId: string) {
+    const admins = await this.prisma.user.findMany({ where: { type: 'ADMIN', deleted_at: null }, select: { id: true } });
+    for (const a of admins) void this.push.sendToUser(a.id, { title, body, data: bookingId ? { type: 'booking', bookingId } : {} });
+    await this.mail
+      .sendBookingNotification({ to: appConfig().support.email, recipientName: 'Vendly support', subject: title, message: body, status: 'CHARGEBACK', listingTitle: '' })
+      .catch(() => null);
+    Sentry.captureMessage(title, { level: 'warning', tags: { job: 'chargeback' }, extra: { booking_id: bookingId, dispute_id: disputeId } });
+  }
+
   /** What recordFailure needs about a booking. */
   private failureBooking(bookingId: string) {
     return this.prisma.booking.findUnique({
@@ -1130,6 +1299,8 @@ export class PaymentsService {
         released_at: null,
         release_at: { lte: now },
         OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }],
+        // a customer's bank dispute still open holds the payout
+        chargebacks: { none: { closed_at: null } },
         // only what releaseBooking would act on, so bookings it skips can't fill the batch: something
         // was paid, and no rented item is still out
         paid_at: { not: null },
@@ -1170,6 +1341,8 @@ export class PaymentsService {
     });
     if (!b || b.status !== BookingStatus.COMPLETED || b.released_at) return null;
     if (b.dispute_opened_at && !b.dispute_resolved_at) return null;
+    // a customer's bank dispute is open: paid out once the bank decides (chargebackClosed)
+    if (await this.chargebackOpen(bookingId)) return null;
     // nothing paid yet (a failed charge, an unpaid checkout): nothing to release. It stays unreleased so
     // it is paid out once the customer pays (the sweep only picks paid bookings)
     if (!b.paid_at) return null;
@@ -1344,6 +1517,7 @@ export class PaymentsService {
     if (!([BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] as BookingStatus[]).includes(b.status)) throw new BadRequestException('Deposits can be released once the booking is confirmed.');
     if (!b.contracts.length) throw new BadRequestException('The contract must be signed by both sides first.');
     if (b.dispute_opened_at && !b.dispute_resolved_at) throw new BadRequestException('This booking has an open dispute.');
+    if (await this.chargebackOpen(bookingId)) throw new BadRequestException(CHARGEBACK_HOLD);
     if (Number(b.early_released_amount ?? 0) > 0) throw new BadRequestException('The deposit for this booking was already released.');
     // money already owed to Vendly (from an earlier refund) is settled before another deposit goes out early
     if (Number(b.vendor.balance ?? 0) < 0) throw new BadRequestException(EARLY_RELEASE_OWING);
@@ -1395,6 +1569,7 @@ export class PaymentsService {
         throw new BadRequestException('You can give money back once the booking is confirmed.');
       }
       if (b.dispute_opened_at && !b.dispute_resolved_at) throw new BadRequestException('This booking has an open dispute. Vendly will settle the money when it is resolved.');
+      if (await this.chargebackOpen(bookingId)) throw new BadRequestException(CHARGEBACK_HOLD);
 
       // what the customer hasn't paid yet: scheduled or failed charges, and card holds not captured yet
       const unpaid = b.installments
@@ -1496,7 +1671,7 @@ export class PaymentsService {
   /** Pays vendors for add-ons and fees the customer paid after the booking itself was paid out. */
   async payOutLateInstallments() {
     const due = await this.prisma.bookingInstallment.findMany({
-      where: { status: InstallmentStatus.PAID, paid_out_at: null, booking: { status: BookingStatus.COMPLETED, released_at: { not: null }, OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }] } },
+      where: { status: InstallmentStatus.PAID, paid_out_at: null, booking: { status: BookingStatus.COMPLETED, released_at: { not: null }, OR: [{ dispute_opened_at: null }, { dispute_resolved_at: { not: null } }], chargebacks: { none: { closed_at: null } } } },
       select: { booking_id: true },
       distinct: ['booking_id'],
       take: 100,
@@ -1518,6 +1693,7 @@ export class PaymentsService {
       });
       if (!b || b.status !== BookingStatus.COMPLETED || !b.released_at || this.bookingEnded(b)) return null;
       if (b.dispute_opened_at && !b.dispute_resolved_at) return null;
+      if (await this.chargebackOpen(bookingId)) return null;
       const insts = await this.prisma.bookingInstallment.findMany({ where: { booking_id: bookingId, status: InstallmentStatus.PAID, paid_out_at: null } });
       if (!insts.length) return null;
       // under the booking lock nothing else pays these out, so marking them first is enough

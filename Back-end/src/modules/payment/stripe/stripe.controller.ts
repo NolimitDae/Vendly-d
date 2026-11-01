@@ -85,6 +85,16 @@ export class StripeController {
           break;
         }
 
+        // a customer's bank disputes a payment (chargeback): the booking's payout waits for the decision
+        case 'charge.dispute.created': {
+          await this.payments.chargebackOpened(event.data.object as Stripe.Dispute);
+          break;
+        }
+        case 'charge.dispute.closed': {
+          await this.payments.chargebackClosed(event.data.object as Stripe.Dispute);
+          break;
+        }
+
         case 'payment_intent.succeeded': {
           const pi = event.data.object as Stripe.PaymentIntent;
           const meta = pi.metadata || {};

@@ -56,6 +56,7 @@ describe('the Vendly Protection fee cap', () => {
 
   it('loads the admin settings: an empty maximum is no cap, and the large booking threshold', async () => {
     const prisma: any = {
+      chargeback: { count: jest.fn().mockResolvedValue(0) },
       platformSetting: {
         findMany: jest.fn().mockResolvedValue([
           { key: 'customer_service_fee_maximum', value: '' },
@@ -133,6 +134,7 @@ describe('publishing the 48-hour deadline in the contract templates', () => {
     const t = defaultTemplates()[0];
     const v2 = { id: 't2', category: t.category, title: t.title, body: t.body.replace(LARGE, ''), required_fields: t.required_fields, version: 2, status: 'ACTIVE' };
     const prisma: any = {
+      chargeback: { count: jest.fn().mockResolvedValue(0) },
       contractTemplate: {
         findFirst: jest.fn().mockResolvedValue(v2),
         findMany: jest.fn().mockImplementation(({ where }: any) => Promise.resolve(where.category === t.category ? [v2] : [{ ...v2, category: where.category, body: defaultTemplates().find((d) => d.category === where.category)!.body }])),
@@ -168,6 +170,7 @@ const inst = (over: Record<string, unknown> = {}) => ({
 
 function setup() {
   const prisma: any = {
+    chargeback: { count: jest.fn().mockResolvedValue(0) },
     user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     booking: { findUnique: jest.fn().mockResolvedValue(BANK_BOOKING), update: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }), findMany: jest.fn().mockResolvedValue([]) },
     bookingInstallment: {
@@ -394,6 +397,7 @@ describe('dispute refunds are limited by what was paid, not a fixed amount', () 
   });
   const setupDispute = (paid: number) => {
     const prisma: any = {
+      chargeback: { count: jest.fn().mockResolvedValue(0) },
       booking: {
         findUnique: jest.fn().mockResolvedValueOnce(booking(paid)).mockResolvedValue({ vendor_id: 'v1', listing: { title: 'Estate wedding' }, customer: { name: 'Cee' }, vendor: { email: null, name: 'Vee' } }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
