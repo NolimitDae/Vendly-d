@@ -17,6 +17,7 @@ import { WalletService } from "@/service/wallet/wallet.service";
 import { AuthService } from "@/service/auth/auth.service";
 import { cn } from "@/lib/utils";
 import TransactionsList from "@/components/payments/TransactionsList";
+import StripeOnboardingDialog from "@/components/payments/StripeOnboardingDialog";
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface AccountInfo {
@@ -71,8 +72,6 @@ export default function WalletPage() {
   const [withdrawing, setWithdrawing] = useState(false);
 
   /* Connect account state */
-  const [connectingAccount, setConnectingAccount] = useState(false);
-  const [gettingLink, setGettingLink] = useState(false);
 
   /* ─── Load page data ─────────────────────────────────────────── */
   const loadData = useCallback(async () => {
@@ -141,47 +140,14 @@ export default function WalletPage() {
   };
 
   /* ─── Connect Stripe account ─────────────────────────────────── */
-  const handleConnectAccount = async () => {
-    setConnectingAccount(true);
-    try {
-      const res = await WalletService.createConnectedAccount();
-      if (res.data?.success) {
-        const accountId = res.data.data?.accountId;
-        toast.success("Connected account created. Redirecting to onboarding…");
-        if (accountId) {
-          setGettingLink(true);
-          const linkRes = await WalletService.getOnboardingLink(accountId);
-          if (linkRes.data?.success && linkRes.data.data?.url) {
-            window.location.href = linkRes.data.data.url;
-          }
-          setGettingLink(false);
-        }
-        await loadData();
-      } else {
-        toast.error(res.data?.message ?? "Failed to create account");
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? "Failed to create connected account");
-    } finally {
-      setConnectingAccount(false);
-    }
-  };
-
-  const handleGetOnboardingLink = async () => {
-    if (!accountInfo?.accountId) return;
-    setGettingLink(true);
-    try {
-      const res = await WalletService.getOnboardingLink(accountInfo.accountId);
-      if (res.data?.success && res.data.data?.url) {
-        window.location.href = res.data.data.url;
-      } else {
-        toast.error("Could not get onboarding link");
-      }
-    } catch {
-      toast.error("Could not get onboarding link");
-    } finally {
-      setGettingLink(false);
-    }
+  // Stripe's payout setup opens in a window here (embedded onboarding); it makes the account when there is none
+  const [onboarding, setOnboarding] = useState(false);
+  const handleConnectAccount = () => setOnboarding(true);
+  const handleGetOnboardingLink = () => setOnboarding(true);
+  const closeOnboarding = () => {
+    setOnboarding(false);
+    // the account's status, as Stripe has it now
+    loadData();
   };
 
   const isVendor = userType === "VENDOR";
@@ -281,17 +247,10 @@ export default function WalletPage() {
                   </div>
                   <button
                     onClick={handleConnectAccount}
-                    disabled={connectingAccount || gettingLink}
+                    disabled={onboarding}
                     className="w-full py-2.5 gradient-bg text-white text-sm font-medium rounded-xl hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {(connectingAccount || gettingLink) && (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    )}
-                    {connectingAccount
-                      ? "Creating account…"
-                      : gettingLink
-                      ? "Redirecting…"
-                      : "Connect Stripe Account"}
+                    Connect Stripe Account
                   </button>
                 </div>
               ) : (
@@ -335,7 +294,7 @@ export default function WalletPage() {
                   <button
                     type="button"
                     onClick={handleGetOnboardingLink}
-                    disabled={gettingLink}
+                    disabled={onboarding}
                     className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-primary transition py-1"
                   >
                     <ExternalLink className="w-3 h-3" />
@@ -445,6 +404,7 @@ export default function WalletPage() {
           )}
         </div>
       </div>
+      {onboarding && <StripeOnboardingDialog onClose={closeOnboarding} />}
     </div>
   );
 }

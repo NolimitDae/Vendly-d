@@ -14,6 +14,7 @@ jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
   StripePayment: {
     createConnectedAccount: jest.fn(),
     createOnboardingAccountLink: jest.fn(),
+    createAccountSession: jest.fn(),
     createTransfer: jest.fn(),
     checkBalance: jest.fn(),
     retrieveAccount: jest.fn(),
@@ -195,6 +196,49 @@ describe('WithdrawService', () => {
         service.createOnboardingLink('acct_someone_else', 'user-1'),
       ).rejects.toThrow(NotFoundException);
       expect(StripePayment.createOnboardingAccountLink).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── createAccountSession (embedded onboarding) ────────────────────────────
+
+  describe('createAccountSession', () => {
+    it("opens onboarding for the vendor's own payout account", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
+      (StripePayment.createAccountSession as jest.Mock).mockResolvedValue({ client_secret: 'accs_secret_1' });
+
+      const result = await service.createAccountSession('user-1', 'jane@test.com');
+
+      expect(result.data).toEqual({ accountId: 'acct_connect_123', clientSecret: 'accs_secret_1' });
+      expect(StripePayment.createAccountSession).toHaveBeenCalledWith('acct_connect_123');
+      expect(StripePayment.createConnectedAccount).not.toHaveBeenCalled();
+    });
+
+    it('makes the payout account first when the vendor has none', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      (StripePayment.createConnectedAccount as jest.Mock).mockResolvedValue({ id: 'acct_new_456' });
+      mockPrisma.user.update.mockResolvedValue({});
+      (StripePayment.createAccountSession as jest.Mock).mockResolvedValue({ client_secret: 'accs_secret_2' });
+
+      const result = await service.createAccountSession('user-1', 'jane@test.com');
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: { stripe_connect_id: 'acct_new_456' } }));
+      expect(StripePayment.createAccountSession).toHaveBeenCalledWith('acct_new_456');
+      expect(result.data.clientSecret).toBe('accs_secret_2');
+    });
+
+    it('refuses test accounts and customers', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, is_test: true });
+      await expect(service.createAccountSession('user-1', 'jane@test.com')).rejects.toThrow(BadRequestException);
+      mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, type: 'CUSTOMER', roles: ['CUSTOMER'] });
+      await expect(service.createAccountSession('user-1', 'jane@test.com')).rejects.toThrow(ForbiddenException);
+      expect(StripePayment.createAccountSession).not.toHaveBeenCalled();
+    });
+
+    it('says so when Stripe fails', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
+      (StripePayment.createAccountSession as jest.Mock).mockRejectedValue(new Error('no permission'));
+      jest.spyOn(console, 'error').mockImplementationOnce(() => undefined);
+      await expect(service.createAccountSession('user-1', 'jane@test.com')).rejects.toThrow(HttpException);
     });
   });
 

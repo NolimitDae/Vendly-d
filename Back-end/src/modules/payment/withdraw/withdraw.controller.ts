@@ -54,7 +54,15 @@ export class WithdrawController {
     }
   }
 
-  //Withdraw Request 
+  // Embedded onboarding: client secret for Stripe's onboarding form on the website
+  // (makes the payout account first when the vendor has none)
+  @UseGuards(JwtAuthGuard)
+  @Post('account-session')
+  async createAccountSession(@Req() req: any) {
+    return this.withdrawService.createAccountSession(req.user.userId, req.user.email);
+  }
+
+  //Withdraw Request
   @UseGuards(JwtAuthGuard)
   @Post('request')
   async requestWithdraw(

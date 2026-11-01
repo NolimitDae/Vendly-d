@@ -143,6 +143,18 @@ export class StripePayment {
     return getStripe().accounts.retrieve(account_id);
   }
 
+  /**
+   * Embedded onboarding (the website): a short-lived session whose client secret lets Stripe's onboarding
+   * form run inside Vendly's page for this one connected account. The secret key needs the
+   * "Account Sessions: write" permission.
+   */
+  static async createAccountSession(account_id: string) {
+    return getStripe().accountSessions.create({
+      account: account_id,
+      components: { account_onboarding: { enabled: true } },
+    });
+  }
+
   // Stripe Connect onboarding.
   static async createOnboardingAccountLink(account_id: string) {
     // Stripe sends the vendor back to the website's earnings page (not the API) when they finish or the link expires.

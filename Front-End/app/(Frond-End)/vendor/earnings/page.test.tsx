@@ -35,6 +35,14 @@ jest.mock('@/service/earnings/earnings.service', () => ({
   },
 }));
 
+jest.mock('@/components/payments/StripeOnboardingDialog', () => ({
+  __esModule: true,
+  default: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="payout-setup">
+      <button onClick={onClose}>close payout setup</button>
+    </div>
+  ),
+}));
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() },
 }));
@@ -264,15 +272,18 @@ describe('EarningsPage', () => {
       expect(screen.getByText(/from 2 reviews/)).toHaveTextContent('Average rating 4.5 from 2 reviews');
     });
 
-    it('says when the Stripe link could not be made, instead of doing nothing', async () => {
+    it("opens Stripe's payout setup on the page, and reloads the status when it closes", async () => {
       setupMocks({ account: { hasConnectedAccount: false, accountId: null, email: 'vendor@test.com', name: 'Test Vendor' } });
-      (EarningsService.createConnectedAccount as jest.Mock).mockResolvedValue({ data: { success: true, data: { accountId: 'acct_new' } } });
-      (EarningsService.getOnboardingLink as jest.Mock).mockRejectedValue({ response: { data: { message: 'Failed to create onboarding link' } } });
-      const { toast } = jest.requireMock('react-toastify');
       render(<EarningsPage />);
       await userEvent.click(await screen.findByRole('button', { name: /connect stripe account/i }));
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to create onboarding link'));
-      expect(EarningsService.getOnboardingLink).toHaveBeenCalledWith('acct_new');
+      expect(screen.getByTestId('payout-setup')).toBeInTheDocument();
+      // the payout account is made by the setup's session, not by a redirect
+      expect(EarningsService.createConnectedAccount).not.toHaveBeenCalled();
+      expect(EarningsService.getOnboardingLink).not.toHaveBeenCalled();
+      const loads = (EarningsService.getAccountInfo as jest.Mock).mock.calls.length;
+      await userEvent.click(screen.getByRole('button', { name: 'close payout setup' }));
+      expect(screen.queryByTestId('payout-setup')).not.toBeInTheDocument();
+      await waitFor(() => expect((EarningsService.getAccountInfo as jest.Mock).mock.calls.length).toBeGreaterThan(loads));
     });
 
     it('asks to finish the Stripe setup while payouts are off', async () => {

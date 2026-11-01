@@ -130,6 +130,38 @@ export class WithdrawService {
     }
   }
 
+  /**
+   * Embedded onboarding (the website): sets up the vendor's payout account if they have none, then gives
+   * the page a client secret for Stripe's onboarding form for that account. Only the signed-in vendor's
+   * own account is ever used.
+   */
+  async createAccountSession(userId: string, email: string): Promise<{
+    success: boolean;
+    message: string;
+    data: { accountId: string; clientSecret: string };
+  }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { stripe_connect_id: true, is_test: true, type: true, roles: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.is_test) throw new BadRequestException(TEST_ACCOUNT_NO_PAYOUTS);
+    if (!isPayee(user)) throw new ForbiddenException(PAYOUTS_FOR_PAYEES);
+
+    const accountId = user.stripe_connect_id ?? (await this.createConnectedAccount(userId, email)).data.accountId;
+    try {
+      const session = await StripePayment.createAccountSession(accountId);
+      return {
+        success: true,
+        message: 'Account session created successfully',
+        data: { accountId, clientSecret: session.client_secret },
+      };
+    } catch (error) {
+      console.error('Account session error:', error);
+      throw new HttpException('Could not open payout setup. Please try again later.', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   //Withdraw Request
   async processWithdraw(
     userId: string,

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "react-toastify";
+import StripeOnboardingDialog from "@/components/payments/StripeOnboardingDialog";
 import { EarningsService } from "@/service/earnings/earnings.service";
 import TransactionsList from "@/components/payments/TransactionsList";
 import { cn } from "@/lib/utils";
@@ -171,8 +172,6 @@ export default function VendorEarningsPage() {
   /* Payout state */
   const [payoutAmount, setPayoutAmount] = useState("");
   const [requestingPayout, setRequestingPayout] = useState(false);
-  const [connectingAccount, setConnectingAccount] = useState(false);
-  const [gettingLink, setGettingLink] = useState(false);
 
   /* Table state */
   const [txPage, setTxPage] = useState(1);
@@ -364,41 +363,14 @@ export default function VendorEarningsPage() {
     }
   };
 
-  /** Sends the vendor to Stripe's payout setup for this account. */
-  const goToOnboarding = async (accountId: string) => {
-    setGettingLink(true);
-    try {
-      const res = await EarningsService.getOnboardingLink(accountId);
-      const url = res.data?.data?.url;
-      if (url) window.location.href = url;
-      else toast.error(res.data?.message ?? "Could not retrieve onboarding link");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? "Could not retrieve onboarding link");
-    } finally {
-      setGettingLink(false);
-    }
-  };
-
-  const handleConnectAccount = async () => {
-    setConnectingAccount(true);
-    try {
-      const res = await EarningsService.createConnectedAccount();
-      const accountId = res.data?.data?.accountId;
-      if (res.data?.success && accountId) {
-        await goToOnboarding(accountId);
-      } else {
-        toast.error(res.data?.message ?? "Failed to create account");
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? "Failed to create payout account");
-    } finally {
-      setConnectingAccount(false);
-    }
-  };
-
-  const handleGetOnboardingLink = async () => {
-    if (!accountInfo?.accountId) return;
-    await goToOnboarding(accountInfo.accountId);
+  /** Stripe's payout setup opens in a window here (embedded onboarding); it makes the account when there is none. */
+  const [onboarding, setOnboarding] = useState(false);
+  const handleConnectAccount = () => setOnboarding(true);
+  const handleGetOnboardingLink = () => setOnboarding(true);
+  const closeOnboarding = () => {
+    setOnboarding(false);
+    // the account's status, as Stripe has it now
+    loadData();
   };
 
   /* ── Render ───────────────────────────────────────────────── */
@@ -816,10 +788,10 @@ export default function VendorEarningsPage() {
                 </div>
                 <button
                   onClick={handleConnectAccount}
-                  disabled={connectingAccount || gettingLink}
+                  disabled={onboarding}
                   className="gradient-bg text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
                 >
-                  {(connectingAccount || gettingLink) && (
+                  {onboarding && (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   )}
                   Connect Stripe Account
@@ -862,7 +834,7 @@ export default function VendorEarningsPage() {
                   )}
                   <button
                     onClick={handleGetOnboardingLink}
-                    disabled={gettingLink}
+                    disabled={onboarding}
                     className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-primary transition"
                   >
                     <ExternalLink className="w-3 h-3" />
@@ -920,6 +892,7 @@ export default function VendorEarningsPage() {
         </div>
 
       </div>
+      {onboarding && <StripeOnboardingDialog onClose={closeOnboarding} />}
     </div>
   );
 }
