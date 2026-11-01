@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { contactSupport } from '../../utils/support';
 import { Animated, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,6 +48,7 @@ export default function EPProfile() {
     { title: 'Manage Requests', items: [
       { icon: 'mail-unread-outline', label: 'Inbox', onPress: () => (nav as any).navigate('Inbox') },
       { icon: 'notifications-outline', label: 'Notification settings', onPress: () => nav.navigate('Notifications') },
+      { icon: 'mail-outline', label: 'Contact support', onPress: () => contactSupport() },
     ] },
     { title: 'Security', items: [{ icon: 'lock-closed-outline', label: 'Change Password', onPress: () => nav.navigate('ChangePassword') }, { icon: 'swap-horizontal-outline', label: 'Switch role', onPress: () => nav.navigate('SwitchRole') }] },
   ];

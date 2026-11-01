@@ -66,6 +66,7 @@ export class MailProcessor extends WorkerHost {
             subject: job.data.subject,
             template: job.data.template,
             context: job.data.context,
+            ...(job.data.replyTo ? { replyTo: job.data.replyTo } : {}),
           });
           break;
         default:

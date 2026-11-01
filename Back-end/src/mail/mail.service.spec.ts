@@ -63,6 +63,17 @@ describe('MailService', () => {
     });
   });
 
+  describe('sendContactMessage', () => {
+    it('sends a Contact us message to the support inbox, with Reply going to the sender', async () => {
+      expect(await service.sendContactMessage({ name: 'Ada Obi', email: 'ada@example.com', message: 'Help with my booking' })).toBe(true);
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'sendBookingNotification',
+        expect.objectContaining({ to: 'support@vendlymarketplace.com', replyTo: 'ada@example.com', subject: 'Contact us: Ada Obi', template: 'booking-notification' }),
+      );
+      expect(mockQueue.add.mock.calls[0][1].context.message).toBe('Help with my booking');
+    });
+  });
+
   describe('test accounts', () => {
     it('never emails a @vendly.test address or a test vendor, whatever the email', async () => {
       const log = jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined);

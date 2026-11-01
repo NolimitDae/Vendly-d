@@ -147,4 +147,37 @@ export class MailService {
       return false;
     }
   }
+
+  /** A Contact us message, to Vendly's support inbox; pressing Reply answers the person who sent it. */
+  async sendContactMessage(params: { name: string; email: string; phone?: string | null; message: string }): Promise<boolean> {
+    try {
+      const to = appConfig().support.email;
+      const from = `${process.env.APP_NAME} <${appConfig().mail.from}>`;
+      await this.queue.add('sendBookingNotification', {
+        to,
+        from,
+        replyTo: params.email,
+        subject: `Contact us: ${params.name || params.email}`,
+        template: 'booking-notification',
+        context: {
+          recipientName: 'Vendly support',
+          subject: 'New Contact us message',
+          message: params.message,
+          status: 'CONTACT',
+          listingTitle: 'Contact us',
+          lines: [
+            { label: 'From', value: params.name || '—' },
+            { label: 'Email', value: params.email },
+            ...(params.phone ? [{ label: 'Phone', value: params.phone }] : []),
+          ],
+          ctaUrl: `${appConfig().app.client_app_url}/dashboard/contact-messages`,
+          ctaLabel: 'Open in the dashboard',
+        },
+      });
+      return true;
+    } catch (error) {
+      this.logger.error('Contact us email could not be queued', error as Error);
+      return false;
+    }
+  }
 }

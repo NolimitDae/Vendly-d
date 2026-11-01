@@ -27,6 +27,12 @@ describe('resendTransport', () => {
     expect(info.messageId).toBe('msg_1');
   });
 
+  it('passes a reply-to address on, so Reply answers that person', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ id: 'msg_2' }), { status: 200 }));
+    await createTransport(resendTransport('re_key')).sendMail({ from: 'Vendly <noreply@vendlymarketplace.com>', to: 'support@vendlymarketplace.com', replyTo: 'ada@example.com', subject: 'Contact us', html: '<p>Hi</p>' });
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string).reply_to).toBe('ada@example.com');
+  });
+
   it('fails the send when Resend rejects it, so the queue logs the error', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ message: 'domain not verified' }), { status: 403 }),

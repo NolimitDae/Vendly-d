@@ -1,4 +1,5 @@
 "use client";
+import { SUPPORT_EMAIL } from "@/lib/support";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Container from "@/app/_components/Container";
@@ -24,6 +25,7 @@ const columns = [
     title: "Support",
     links: [
       { name: "Contact us", href: "/contact-us" },
+      { name: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
       { name: "Privacy policy", href: "/privacy" },
       { name: "Terms & conditions", href: "/terms" },
     ],

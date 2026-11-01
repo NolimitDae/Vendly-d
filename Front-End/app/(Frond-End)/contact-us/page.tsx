@@ -1,5 +1,6 @@
 "use client";
 
+import { SUPPORT_EMAIL } from "@/lib/support";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -60,6 +61,12 @@ export default function ContactUsPage() {
               Have a question or need help? We&apos;d love to hear from you.
               Send us a message and we&apos;ll get back to you as soon as
               possible.
+            </p>
+            <p className="mt-3 text-sm text-descriptionColor dark:text-gray-400">
+              Or email us at{" "}
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold text-primary underline">
+                {SUPPORT_EMAIL}
+              </a>
             </p>
           </div>
 

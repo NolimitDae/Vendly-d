@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { contactSupport, SUPPORT_EMAIL } from '../../utils/support';
 import { FlatList, LayoutAnimation, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -152,6 +153,12 @@ export default function FaqScreen() {
         </View>
       </View>
       {body()}
+      <Pressable onPress={() => contactSupport()} style={[s.help, { marginBottom: insets.bottom + 12 }]} accessibilityRole="button" accessibilityLabel={`Still need help? Email ${SUPPORT_EMAIL}`}>
+        <Ionicons name="mail-outline" size={20} color={DARK.accent} />
+        <Text style={s.helpText}>
+          Still need help? Email <Text style={s.helpLink}>{SUPPORT_EMAIL}</Text>
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -167,5 +174,8 @@ const s = StyleSheet.create({
   state: { alignItems: 'center', gap: 8, padding: 28, backgroundColor: DARK.card, borderRadius: 18 },
   stateTitle: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold, textAlign: 'center' },
   stateBody: { color: DARK.muted, fontSize: 14, lineHeight: 21, fontFamily: FONTS.regular, textAlign: 'center' },
+  help: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginTop: 8, padding: 14, borderRadius: 16, backgroundColor: DARK.card },
+  helpText: { flex: 1, color: DARK.muted, fontSize: 14, lineHeight: 20, fontFamily: FONTS.regular },
+  helpLink: { color: DARK.accent, fontFamily: FONTS.semibold },
   inlineError: { color: '#fca5a5', fontSize: 13, fontFamily: FONTS.medium, marginBottom: 6 },
 });

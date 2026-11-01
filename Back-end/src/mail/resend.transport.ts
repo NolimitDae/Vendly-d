@@ -5,11 +5,12 @@ export function resendTransport(apiKey: string) {
     name: 'resend',
     version: '1.0.0',
     send(mail: any, callback: (err: Error | null, info?: any) => void) {
-      const { from, to, subject, html, text } = mail.data;
+      const { from, to, subject, html, text, replyTo } = mail.data;
       fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to: Array.isArray(to) ? to : [to], subject, html, text }),
+        // replyTo: pressing Reply answers this person (a Contact us message), not Vendly's no-reply address
+        body: JSON.stringify({ from, to: Array.isArray(to) ? to : [to], subject, html, text, ...(replyTo ? { reply_to: replyTo } : {}) }),
       })
         .then(async (res) => {
           const body = await res.json().catch(() => ({}));

@@ -71,6 +71,11 @@ export default () => ({
     expiry: process.env.JWT_EXPIRY,
   },
 
+  // where customers reach Vendly: shown on the site, the app and emails; Contact us messages are sent here
+  support: {
+    email: process.env.SUPPORT_EMAIL || 'support@vendlymarketplace.com',
+  },
+
   mail: {
     host: process.env.MAIL_HOST || 'smtp.gmail.com',
     port: process.env.MAIL_PORT || 587,

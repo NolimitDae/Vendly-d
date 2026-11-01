@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { contactSupport } from '../../utils/support';
 import { Animated, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +32,7 @@ export default function CustomerProfile() {
         { icon: 'wallet-outline', label: 'Payments & Payouts', onPress: () => nav.navigate('PaymentMethods') },
         { icon: 'sparkles-outline', label: 'Events shared with me', onPress: () => nav.navigate('SharedEvents') },
         { icon: 'help-circle-outline', label: 'FAQs', onPress: () => nav.navigate('Faq') },
+        { icon: 'mail-outline', label: 'Contact support', onPress: () => contactSupport() },
       ],
     },
     {

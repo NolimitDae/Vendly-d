@@ -77,7 +77,8 @@
       <% } %>
     </div>
     <div class="footer">
-      &copy; <%= new Date().getFullYear() %> <%= process.env.APP_NAME || 'Vendly' %> &middot; All rights reserved
+      &copy; <%= new Date().getFullYear() %> <%= process.env.APP_NAME || 'Vendly' %> &middot; All rights reserved<br />
+      Questions? Email <a href="mailto:<%= process.env.SUPPORT_EMAIL || 'support@vendlymarketplace.com' %>" style="color: inherit;"><%= process.env.SUPPORT_EMAIL || 'support@vendlymarketplace.com' %></a>
     </div>
   </div>
 </body>

@@ -92,6 +92,7 @@ export const navSections: NavSection[] = [
       item("Disputes", "/dashboard/disputes", PendingApprovalIcon),
       item("Fee reviews", "/dashboard/fee-reviews", PendingApprovalIcon),
       item("Chat reports", "/dashboard/chat-reports", MessageIcon),
+      item("Contact messages", "/dashboard/contact-messages", MessageIcon),
     ],
   },
   {

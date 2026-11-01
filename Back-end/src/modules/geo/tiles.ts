@@ -86,7 +86,7 @@ export async function loadTile(t: Tile, cache: TileCache | null, fetchImpl: type
     const nl = hit.indexOf(10);
     if (nl > 0) return { type: hit.subarray(0, nl).toString(), body: hit.subarray(nl + 1) };
   }
-  const contact = process.env.GEOCODER_CONTACT_EMAIL ?? 'support@vendly.app';
+  const contact = process.env.GEOCODER_CONTACT_EMAIL ?? 'support@vendlymarketplace.com';
   const res = await fetchImpl(tileUrl(t), {
     headers: { 'User-Agent': `Vendly/1.0 (${contact})`, Accept: 'image/png,image/*' },
     signal: AbortSignal.timeout(8000),

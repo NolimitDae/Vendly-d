@@ -1,12 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ContactService } from './contact.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { MailService } from 'src/mail/mail.service';
 
 const mockPrisma = {
   contact: {
     create: jest.fn(),
   },
 };
+const mockMail = { sendContactMessage: jest.fn().mockResolvedValue(true) };
 
 describe('ContactService', () => {
   let service: ContactService;
@@ -17,6 +19,7 @@ describe('ContactService', () => {
       providers: [
         ContactService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: MailService, useValue: mockMail },
       ],
     }).compile();
 
@@ -51,6 +54,15 @@ describe('ContactService', () => {
           }),
         }),
       );
+    });
+
+    it('sends the message to the support inbox, and still saves it when email fails', async () => {
+      mockPrisma.contact.create.mockResolvedValue({ id: 'contact-3' });
+      await service.create({ first_name: 'Ada', last_name: 'Obi', email: 'ada@example.com', phone_number: '555', message: 'Help with my booking' });
+      expect(mockMail.sendContactMessage).toHaveBeenCalledWith({ name: 'Ada Obi', email: 'ada@example.com', phone: '555', message: 'Help with my booking' });
+
+      mockMail.sendContactMessage.mockRejectedValueOnce(new Error('mail down'));
+      expect((await service.create({ email: 'b@example.com', message: 'Hi' })).success).toBe(true);
     });
 
     it('should return success false when prisma throws', async () => {

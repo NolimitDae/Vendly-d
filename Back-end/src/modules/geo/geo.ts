@@ -32,7 +32,7 @@ export async function geocode(text: string, fetchImpl: typeof fetch = fetch): Pr
   if (!q) return null;
   if (cache.has(q)) return cache.get(q)!;
   const base = (process.env.GEOCODER_URL ?? 'https://nominatim.openstreetmap.org').replace(/\/+$/, '');
-  const contact = process.env.GEOCODER_CONTACT_EMAIL ?? 'support@vendly.app';
+  const contact = process.env.GEOCODER_CONTACT_EMAIL ?? 'support@vendlymarketplace.com';
   const res = await fetchImpl(`${base}/search?format=json&limit=1&q=${encodeURIComponent(text)}`, {
     headers: { 'User-Agent': `Vendly/1.0 (${contact})`, Accept: 'application/json' },
   });
@@ -197,7 +197,7 @@ const SUGGEST_CENSUS_BUDGET_MS = 900;
 /** Photon (OpenStreetMap search) normally answers in under a second. */
 const PHOTON_TIMEOUT_MS = 3000;
 const MAX_SUGGESTIONS = 6;
-const headers = () => ({ 'User-Agent': `Vendly/1.0 (${process.env.GEOCODER_CONTACT_EMAIL ?? 'support@vendly.app'})`, Accept: 'application/json' });
+const headers = () => ({ 'User-Agent': `Vendly/1.0 (${process.env.GEOCODER_CONTACT_EMAIL ?? 'support@vendlymarketplace.com'})`, Accept: 'application/json' });
 const round5 = (n: number) => Math.round(n * 1e5) / 1e5;
 
 /** Vendly is in the US: when anything found is in the US, places elsewhere are left out. */

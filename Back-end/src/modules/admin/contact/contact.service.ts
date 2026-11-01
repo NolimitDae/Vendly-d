@@ -56,13 +56,17 @@ export class ContactService {
           { phone_number: { contains: q, mode: 'insensitive' } },
         ];
       }
-      if (status) {
-        whereClause['status'] = Number(status);
-      }
+      // messages have no status; deleted ones are left out
+      whereClause['deleted_at'] = null;
 
       const contacts = await this.prisma.contact.findMany({
+        where: whereClause,
+        // newest first, as the dashboard lists them
+        orderBy: { created_at: 'desc' },
+        take: 500,
         select: {
           id: true,
+          created_at: true,
           first_name: true,
           last_name: true,
           email: true,
