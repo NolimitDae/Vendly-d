@@ -14,6 +14,9 @@ function getStripe(): stripe {
   return _stripe;
 }
 
+/** Which mode a Stripe secret key is for: full (sk_) and restricted (rk_) keys both say. */
+export const stripeKeyMode = (key: string) => (/^(sk|rk)_live_/.test(key) ? 'live' : /^(sk|rk)_test_/.test(key) ? 'test' : 'unknown');
+
 export class StripePayment {
   /**
    * Which Stripe account the server's secret key belongs to (an id, not a secret). The apps' publishable
@@ -22,7 +25,7 @@ export class StripePayment {
    */
   static async accountSummary(): Promise<string> {
     const key = appConfig().payment.stripe.secret_key ?? '';
-    const mode = key.startsWith('sk_live_') ? 'live' : key.startsWith('sk_test_') ? 'test' : 'unknown';
+    const mode = stripeKeyMode(key);
     const account = await getStripe().accounts.retrieve();
     return `${account.id} (${mode} mode)`;
   }
