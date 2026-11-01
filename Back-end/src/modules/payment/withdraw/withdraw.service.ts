@@ -148,15 +148,28 @@ export class WithdrawService {
     if (user.is_test) throw new BadRequestException(TEST_ACCOUNT_NO_PAYOUTS);
     if (!isPayee(user)) throw new ForbiddenException(PAYOUTS_FOR_PAYEES);
 
-    const accountId = user.stripe_connect_id ?? (await this.createConnectedAccount(userId, email)).data.accountId;
+    let accountId = user.stripe_connect_id ?? (await this.createConnectedAccount(userId, email)).data.accountId;
     try {
-      const session = await StripePayment.createAccountSession(accountId);
+      let session: Awaited<ReturnType<typeof StripePayment.createAccountSession>>;
+      try {
+        session = await StripePayment.createAccountSession(accountId);
+      } catch (error) {
+        // the saved account is gone (made with the test-mode keys, or deleted in Stripe): forget it and
+        // set up a new one, as the account info does
+        // ("account_invalid": the key can't see that account, which is how another mode's account can look)
+        const gone = isStripeMissing(error) || (error as any)?.code === 'account_invalid' || (error as any)?.raw?.code === 'account_invalid';
+        if (!user.stripe_connect_id || !gone) throw error;
+        await this.prisma.user.updateMany({ where: { id: userId, stripe_connect_id: accountId }, data: { stripe_connect_id: null } });
+        accountId = (await this.createConnectedAccount(userId, email)).data.accountId;
+        session = await StripePayment.createAccountSession(accountId);
+      }
       return {
         success: true,
         message: 'Account session created successfully',
         data: { accountId, clientSecret: session.client_secret },
       };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       console.error('Account session error:', error);
       throw new HttpException('Could not open payout setup. Please try again later.', HttpStatus.INTERNAL_SERVER_ERROR);
     }

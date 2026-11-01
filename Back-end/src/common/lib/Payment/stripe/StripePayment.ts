@@ -710,8 +710,19 @@ export class StripePayment {
     return getStripe().paymentIntents.retrieve(id);
   }
 
-  /** Pays the vendor for one booking out of the held funds. */
-  static transferForBooking(opts: { amount: number; currency: string; accountId: string; bookingId: string; idempotencyKey: string }): Promise<stripe.Transfer> {
+  /** The charge behind a paid PaymentIntent (its id), or null when there is none. */
+  static async chargeOf(paymentIntentId: string): Promise<string | null> {
+    const pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
+    const c = pi.latest_charge;
+    return typeof c === 'string' ? c : (c?.id ?? null);
+  }
+
+  /**
+   * Pays the vendor for one booking out of the held funds. With `sourceTransaction` (the customer's charge)
+   * the money is taken from that charge, so it can go out before the charge has settled into Vendly's
+   * available balance (an early deposit release a day after the customer paid).
+   */
+  static transferForBooking(opts: { amount: number; currency: string; accountId: string; bookingId: string; idempotencyKey: string; sourceTransaction?: string }): Promise<stripe.Transfer> {
     return getStripe().transfers.create(
       {
         amount: Math.round(opts.amount * 100),
@@ -719,6 +730,7 @@ export class StripePayment {
         destination: opts.accountId,
         transfer_group: `booking_${opts.bookingId}`,
         metadata: { booking_id: opts.bookingId },
+        ...(opts.sourceTransaction && { source_transaction: opts.sourceTransaction }),
       },
       { idempotencyKey: opts.idempotencyKey },
     );

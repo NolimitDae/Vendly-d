@@ -1360,8 +1360,11 @@ export class PaymentsService {
     const claimed = await this.prisma.booking.updateMany({ where: { id: bookingId, early_released_amount: 0 }, data: { early_released_amount: amount } });
     if (claimed.count !== 1) throw new BadRequestException('The deposit for this booking was already released.');
     const currency = b.currency ?? 'usd';
+    // sent from the customer's deposit charge itself, so it works even before that charge has settled
+    // into Vendly's balance; without the charge id it comes from the balance as before
+    const sourceTransaction = deposit.payment_intent_id ? await StripePayment.chargeOf(deposit.payment_intent_id).catch(() => null) : null;
     try {
-      const transfer = await StripePayment.transferForBooking({ amount, currency, accountId: b.vendor.stripe_connect_id, bookingId, idempotencyKey: `early-${bookingId}` });
+      const transfer = await StripePayment.transferForBooking({ amount, currency, accountId: b.vendor.stripe_connect_id, bookingId, idempotencyKey: `early-${bookingId}`, ...(sourceTransaction && { sourceTransaction }) });
       await this.prisma.paymentTransaction.create({ data: { user_id: vendorId, type: 'deposit_early_release', provider: 'stripe', reference_number: transfer.id, order_id: bookingId, status: 'succeeded', amount, currency } });
       return { success: true, data: { amount, transfer_id: transfer.id } };
     } catch (e: any) {

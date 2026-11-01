@@ -234,6 +234,23 @@ describe('WithdrawService', () => {
       expect(StripePayment.createAccountSession).not.toHaveBeenCalled();
     });
 
+    it('replaces a payout account Stripe no longer has (made with the test keys)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+      (StripePayment.createAccountSession as jest.Mock)
+        .mockRejectedValueOnce(Object.assign(new Error('No such account'), { type: 'StripeInvalidRequestError', code: 'resource_missing', statusCode: 404, raw: { code: 'resource_missing' } }))
+        .mockResolvedValueOnce({ client_secret: 'accs_live' });
+      // createConnectedAccount reads the user again, now without an account
+      mockPrisma.user.findUnique.mockResolvedValueOnce(mockUserWithConnect).mockResolvedValueOnce(mockUser);
+      (StripePayment.createConnectedAccount as jest.Mock).mockResolvedValue({ id: 'acct_live_1' });
+      mockPrisma.user.update.mockResolvedValue({});
+
+      const result = await service.createAccountSession('user-1', 'jane@test.com');
+
+      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'user-1', stripe_connect_id: 'acct_connect_123' }, data: { stripe_connect_id: null } });
+      expect(result.data).toEqual({ accountId: 'acct_live_1', clientSecret: 'accs_live' });
+    });
+
     it('says so when Stripe fails', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUserWithConnect);
       (StripePayment.createAccountSession as jest.Mock).mockRejectedValue(new Error('no permission'));

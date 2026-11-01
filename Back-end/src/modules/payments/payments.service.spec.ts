@@ -23,6 +23,7 @@ jest.mock('src/common/lib/Payment/stripe/StripePayment', () => ({
     capturePaymentIntent: jest.fn(),
     cancelPaymentIntent: jest.fn(),
     transferForBooking: jest.fn(),
+    chargeOf: jest.fn(),
     refundPaymentIntent: jest.fn(),
     retrieveCheckoutSession: jest.fn(),
   },
@@ -488,6 +489,26 @@ describe('PaymentsService', () => {
       expect(res.data.amount).toBe(225);
       expect(prisma.booking.updateMany).toHaveBeenCalledWith({ where: { id: 'b1', early_released_amount: 0 }, data: { early_released_amount: 225 } });
       expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 225, idempotencyKey: 'early-b1' }));
+    });
+
+    it("sends an early deposit from the customer's own charge, so it works before the charge settles", async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        vendor_id: 'v1', status: BookingStatus.CONFIRMED, currency: 'usd', payment_plan: PaymentPlan.DEPOSIT_50, early_released_amount: 0, dispute_opened_at: null, dispute_resolved_at: null,
+        vendor: { stripe_connect_id: 'acct_1' }, contracts: [{ id: 'c1' }],
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 247.5, fee_amount: 22.5, payment_intent_id: 'pi_dep' }), installment({ id: 'i2', sequence: 2, status: InstallmentStatus.SCHEDULED })],
+      });
+      (StripePayment.chargeOf as jest.Mock).mockResolvedValue('ch_dep');
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_early' });
+      await service.releaseDepositEarly('b1', 'v1');
+      expect(StripePayment.chargeOf).toHaveBeenCalledWith('pi_dep');
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 225, sourceTransaction: 'ch_dep' }));
+
+      // the charge can't be looked up: the transfer still goes, from Vendly's balance
+      prisma.booking.updateMany.mockResolvedValue({ count: 1 });
+      (StripePayment.chargeOf as jest.Mock).mockRejectedValueOnce(new Error('stripe down'));
+      (StripePayment.transferForBooking as jest.Mock).mockClear();
+      await service.releaseDepositEarly('b1', 'v1');
+      expect((StripePayment.transferForBooking as jest.Mock).mock.calls[0][0]).not.toHaveProperty('sourceTransaction');
     });
 
     it('will not release a deposit early while the vendor owes Vendly money', async () => {
