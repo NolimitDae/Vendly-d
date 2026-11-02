@@ -20,8 +20,8 @@ export default function StripePayoutsPanel() {
         <h2 className="font-semibold text-gray-900 dark:text-white">Bank payouts</h2>
         <p className="text-xs text-gray-400 mt-0.5">Money you&apos;ve withdrawn, and when Stripe sends it to your bank</p>
       </div>
-      {/* Stripe's components are drawn on white, so the panel stays light in dark mode */}
-      <div className="p-6 bg-white rounded-b-2xl space-y-4">
+      {/* Stripe's components are drawn in the site's colours (useStripeConnect), on the card itself */}
+      <div className="p-6 space-y-4">
         {!connect ? (
           <div className="flex justify-center py-6">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />

@@ -3,10 +3,11 @@ import { Alert, Platform } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { api } from '../services/api';
 import { apiMessage } from '../screens/auth/SignIn';
+import { DARK } from '../constants/colors';
 
 // Stripe's native module isn't in Expo Go (or on web): the payout screen then uses Stripe's setup page instead
 let connect: {
-  loadConnectAndInitialize: (p: { publishableKey: string; fetchClientSecret: () => Promise<string>; appearance?: unknown }) => unknown;
+  loadConnectAndInitialize: (p: { publishableKey: string; fetchClientSecret: () => Promise<string>; appearance?: unknown; fonts?: unknown }) => unknown;
   ConnectComponentsProvider: React.ComponentType<{ connectInstance: any; children: React.ReactNode }>;
   ConnectAccountOnboarding: React.ComponentType<{ title?: string; onExit: () => void; onLoadError?: (e: unknown) => void }>;
 } | null = null;
@@ -56,7 +57,31 @@ export default function StripePayoutSetup({ onDone, onFallback }: { onDone: () =
               }
               return sessionSecret();
             },
-            appearance: { variables: { colorPrimary: '#5E1B66', borderRadius: '12px' } },
+            // the app's dark plum look and font (Stripe's screens are web pages, so the font is loaded for them)
+            fonts: [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap' }],
+            appearance: {
+              variables: {
+                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                borderRadius: '12px',
+                colorPrimary: DARK.accent,
+                colorBackground: DARK.bg,
+                colorText: DARK.text,
+                colorSecondaryText: DARK.muted,
+                colorBorder: '#3B2C42',
+                colorDanger: '#FCA5A5',
+                actionPrimaryColorText: DARK.accent,
+                buttonPrimaryColorBackground: DARK.accent,
+                buttonPrimaryColorBorder: DARK.accent,
+                buttonPrimaryColorText: '#1E0822',
+                buttonSecondaryColorBackground: DARK.field,
+                buttonSecondaryColorBorder: DARK.field,
+                buttonSecondaryColorText: DARK.text,
+                badgeNeutralColorBackground: DARK.field,
+                badgeNeutralColorText: DARK.text,
+                offsetBackgroundColor: DARK.card,
+                formBackgroundColor: DARK.card,
+              },
+            },
           }),
         );
       })

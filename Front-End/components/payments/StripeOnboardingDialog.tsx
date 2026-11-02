@@ -29,15 +29,15 @@ export default function StripeOnboardingDialog({ onClose }: { onClose: () => voi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="payout-setup-title">
-      <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+      <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-800 p-6 shadow-xl">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 id="payout-setup-title" className="text-lg font-semibold text-gray-900">
+            <h2 id="payout-setup-title" className="text-lg font-semibold text-gray-900 dark:text-white">
               Set up payouts
             </h2>
-            <p className="mt-1 text-sm text-gray-500">Stripe, Vendly&apos;s payment partner, verifies your details and sends your earnings to your bank.</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Stripe, Vendly&apos;s payment partner, verifies your details and sends your earnings to your bank.</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
