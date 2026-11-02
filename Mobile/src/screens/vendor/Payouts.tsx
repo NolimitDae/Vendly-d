@@ -9,6 +9,7 @@ import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../com
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
+import StripePayoutSetup, { canSetUpPayoutsInApp } from '../../components/StripePayoutSetup';
 
 interface Account { accountId?: string | null; payouts_enabled?: boolean; charges_enabled?: boolean; details_submitted?: boolean }
 interface Transaction { id: string; amount: number | string; status?: string; type?: string; created_at: string; currency?: string }
@@ -52,7 +53,10 @@ export default function Payouts() {
   // Ready only once Stripe says payouts are on. payouts_enabled is missing only when Stripe couldn't be reached.
   const connected = !!account?.accountId && account.payouts_enabled !== false;
 
-  const setUp = async () => {
+  // Stripe's setup inside the app (embedded); Stripe's own page in the browser only if that can't open
+  const [inApp, setInApp] = useState(false);
+  const setUp = () => (canSetUpPayoutsInApp() ? setInApp(true) : setUpOnStripe());
+  const setUpOnStripe = async () => {
     setBusy(true);
     try {
       let id = account?.accountId;
@@ -162,6 +166,12 @@ export default function Payouts() {
           </View>
         )}
       </ScrollView>
+      {inApp && (
+        <StripePayoutSetup
+          onDone={() => { setInApp(false); load(); }}
+          onFallback={() => { setInApp(false); setUpOnStripe(); }}
+        />
+      )}
     </View>
   );
 }
