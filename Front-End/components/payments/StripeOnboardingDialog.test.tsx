@@ -9,6 +9,7 @@ jest.mock("@stripe/connect-js/pure", () => ({ loadConnectAndInitialize: (o: any)
 jest.mock("@stripe/react-connect-js", () => ({
   ConnectComponentsProvider: ({ children }: any) => <div data-testid="provider">{children}</div>,
   ConnectAccountOnboarding: ({ onExit }: any) => <button onClick={onExit}>stripe-onboarding</button>,
+  ConnectAccountManagement: () => <div>stripe-account-management</div>,
 }));
 
 const post = Fetch.post as jest.Mock;
@@ -35,6 +36,15 @@ describe("StripeOnboardingDialog", () => {
     post.mockResolvedValue({ data: { data: { clientSecret: "accs_secret_2" } } });
     expect(await fetchClientSecret()).toBe("accs_secret_2");
     expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows Stripe's account management for a vendor who has finished setup", async () => {
+    post.mockResolvedValue({ data: { data: { clientSecret: "accs_secret_1" } } });
+    loadConnectAndInitialize.mockReturnValue({});
+    render(<StripeOnboardingDialog onClose={jest.fn()} manage />);
+    expect(await screen.findByText("stripe-account-management")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Payout details" })).toBeInTheDocument();
+    expect(screen.queryByText("stripe-onboarding")).not.toBeInTheDocument();
   });
 
   it("shows the server's reason when payout setup is refused, with no way around it", async () => {

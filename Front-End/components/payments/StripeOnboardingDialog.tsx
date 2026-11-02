@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ExternalLink, Loader2, X } from "lucide-react";
-import { ConnectAccountOnboarding, ConnectComponentsProvider } from "@stripe/react-connect-js";
+import { ConnectAccountManagement, ConnectAccountOnboarding, ConnectComponentsProvider } from "@stripe/react-connect-js";
 import { openHostedOnboarding, useStripeConnect } from "./useStripeConnect";
 
 /**
@@ -10,8 +10,10 @@ import { openHostedOnboarding, useStripeConnect } from "./useStripeConnect";
  * the vendor to Stripe's site. The server makes the vendor's payout account if they have none yet.
  * `onClose` runs when the vendor finishes or leaves; the page then reloads the account's status from
  * Stripe. If the embedded form can't open, the vendor can continue on Stripe's own setup page.
+ * With `manage` (a vendor who has finished setup) it shows Stripe's account management instead, to
+ * change the bank account and details later.
  */
-export default function StripeOnboardingDialog({ onClose }: { onClose: () => void }) {
+export default function StripeOnboardingDialog({ onClose, manage = false }: { onClose: () => void; manage?: boolean }) {
   const { connect, error } = useStripeConnect();
   const [leaving, setLeaving] = useState(false);
   const [hostedError, setHostedError] = useState<string | null>(null);
@@ -33,9 +35,13 @@ export default function StripeOnboardingDialog({ onClose }: { onClose: () => voi
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 id="payout-setup-title" className="text-lg font-semibold text-gray-900 dark:text-white">
-              Set up payouts
+              {manage ? "Payout details" : "Set up payouts"}
             </h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Stripe, Vendly&apos;s payment partner, verifies your details and sends your earnings to your bank.</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {manage
+                ? "Change the bank account your earnings go to, or update your details. Stripe, Vendly's payment partner, keeps them safe."
+                : "Stripe, Vendly's payment partner, verifies your details and sends your earnings to your bank."}
+            </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200" aria-label="Close">
             <X className="h-5 w-5" />
@@ -67,7 +73,7 @@ export default function StripeOnboardingDialog({ onClose }: { onClose: () => voi
           </div>
         ) : (
           <ConnectComponentsProvider connectInstance={connect}>
-            <ConnectAccountOnboarding onExit={onClose} />
+            {manage ? <ConnectAccountManagement /> : <ConnectAccountOnboarding onExit={onClose} />}
           </ConnectComponentsProvider>
         )}
       </div>

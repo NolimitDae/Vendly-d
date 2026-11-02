@@ -9,7 +9,7 @@ import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../com
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
-import StripePayoutSetup, { canSetUpPayoutsInApp } from '../../components/StripePayoutSetup';
+import StripePayoutSetup, { canSetUpPayoutsInApp, canShowPayoutDetailsInApp, StripePayoutDetails } from '../../components/StripePayoutSetup';
 
 interface Account { accountId?: string | null; payouts_enabled?: boolean; charges_enabled?: boolean; details_submitted?: boolean }
 interface Transaction { id: string; amount: number | string; status?: string; type?: string; created_at: string; currency?: string }
@@ -55,6 +55,8 @@ export default function Payouts() {
 
   // Stripe's setup inside the app (embedded); Stripe's own page in the browser only if that can't open
   const [inApp, setInApp] = useState(false);
+  // payout details (change the bank account) once set up
+  const [details, setDetails] = useState(false);
   const setUp = () => (canSetUpPayoutsInApp() ? setInApp(true) : setUpOnStripe());
   const setUpOnStripe = async () => {
     setBusy(true);
@@ -122,6 +124,12 @@ export default function Payouts() {
                   <TextInput style={ui.input} placeholder="0.00" placeholderTextColor={DARK.muted} value={amount} onChangeText={(t) => setAmount(t.replace(/[^0-9.]/g, ''))} keyboardType="decimal-pad" />
                 </View>
                 <GradientButton title="Withdraw" onPress={withdraw} loading={busy} disabled={!amount} />
+                {canShowPayoutDetailsInApp() && (
+                  <Pressable style={s.detailsLink} onPress={() => setDetails(true)} accessibilityRole="button" accessibilityLabel="Update payout details">
+                    <Ionicons name="card-outline" size={16} color={DARK.accent} />
+                    <Text style={s.detailsText}>Update payout details</Text>
+                  </Pressable>
+                )}
               </Card>
             ) : (
               <Card style={{ gap: 12 }}>
@@ -166,6 +174,7 @@ export default function Payouts() {
           </View>
         )}
       </ScrollView>
+      {details && <StripePayoutDetails onClose={() => { setDetails(false); load(); }} />}
       {inApp && (
         <StripePayoutSetup
           onDone={() => { setInApp(false); load(); }}
@@ -177,6 +186,8 @@ export default function Payouts() {
 }
 
 const s = StyleSheet.create({
+  detailsLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: 4 },
+  detailsText: { color: DARK.accent, fontFamily: FONTS.semibold, fontSize: 14 },
   root: { flex: 1, backgroundColor: DARK.bg },
   balance: { borderRadius: 20, padding: 24, gap: 6 },
   balanceLabel: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },

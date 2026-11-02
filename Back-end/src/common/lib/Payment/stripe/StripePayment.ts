@@ -144,8 +144,9 @@ export class StripePayment {
   }
 
   /**
-   * Stripe's embedded components on the website, for this one connected account: the onboarding form,
-   * alerts about details Stripe still needs, and the account's balance and payouts to the bank. The
+   * Stripe's embedded components (website and app), for this one connected account: the onboarding form,
+   * changing payout details later, alerts about details Stripe still needs, and the account's balance and
+   * payouts to the bank. The
    * session's client secret is short-lived. The secret key needs the "Account Sessions: write" permission.
    */
   static async createAccountSession(account_id: string) {
@@ -153,7 +154,10 @@ export class StripePayment {
       account: account_id,
       components: {
         account_onboarding: { enabled: true },
+        // changing the bank account and details after setup
+        account_management: { enabled: true },
         notification_banner: { enabled: true },
+        // balance and payouts, and changing the bank they go to
         payouts: { enabled: true },
       },
     });

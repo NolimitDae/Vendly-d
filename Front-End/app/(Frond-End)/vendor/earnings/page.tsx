@@ -365,9 +365,10 @@ export default function VendorEarningsPage() {
   };
 
   /** Stripe's payout setup opens in a window here (embedded onboarding); it makes the account when there is none. */
-  const [onboarding, setOnboarding] = useState(false);
-  const handleConnectAccount = () => setOnboarding(true);
-  const handleGetOnboardingLink = () => setOnboarding(true);
+  // "setup" (Stripe's setup form) or "manage" (change bank account / details once set up)
+  const [onboarding, setOnboarding] = useState<false | "setup" | "manage">(false);
+  const handleConnectAccount = () => setOnboarding("setup");
+  const handleGetOnboardingLink = () => setOnboarding(accountInfo?.details_submitted && accountInfo?.payouts_enabled ? "manage" : "setup");
   const closeOnboarding = () => {
     setOnboarding(false);
     // the account's status, as Stripe has it now
@@ -789,7 +790,7 @@ export default function VendorEarningsPage() {
                 </div>
                 <button
                   onClick={handleConnectAccount}
-                  disabled={onboarding}
+                  disabled={!!onboarding}
                   className="gradient-bg text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
                 >
                   {onboarding && (
@@ -835,7 +836,7 @@ export default function VendorEarningsPage() {
                   )}
                   <button
                     onClick={handleGetOnboardingLink}
-                    disabled={onboarding}
+                    disabled={!!onboarding}
                     className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-primary transition"
                   >
                     <ExternalLink className="w-3 h-3" />
@@ -896,7 +897,7 @@ export default function VendorEarningsPage() {
         {accountInfo?.hasConnectedAccount && <StripePayoutsPanel key={accountInfo.accountId ?? ""} />}
 
       </div>
-      {onboarding && <StripeOnboardingDialog onClose={closeOnboarding} />}
+      {onboarding && <StripeOnboardingDialog onClose={closeOnboarding} manage={onboarding === "manage"} />}
     </div>
   );
 }

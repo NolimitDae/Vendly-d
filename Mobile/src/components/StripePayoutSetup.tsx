@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Sentry from '@sentry/react-native';
 import { api } from '../services/api';
 import { apiMessage } from '../screens/auth/SignIn';
-import { DARK } from '../constants/colors';
+import { DARK, FONTS } from '../constants/colors';
 
 // Stripe's native module isn't in Expo Go (or on web): the payout screen then uses Stripe's setup page instead
 let connect: {
   loadConnectAndInitialize: (p: { publishableKey: string; fetchClientSecret: () => Promise<string>; appearance?: unknown; fonts?: unknown }) => unknown;
   ConnectComponentsProvider: React.ComponentType<{ connectInstance: any; children: React.ReactNode }>;
   ConnectAccountOnboarding: React.ComponentType<{ title?: string; onExit: () => void; onLoadError?: (e: unknown) => void }>;
+  ConnectPayouts?: React.ComponentType<{ onLoadError?: (e: unknown) => void; style?: object }>;
 } | null = null;
 try {
   const stripe = require('@stripe/stripe-react-native');
@@ -29,12 +32,11 @@ const sessionSecret = async () => {
 };
 
 /**
- * Stripe's payout setup (Connect embedded onboarding) as a full-screen sheet inside the app, so the vendor
- * never leaves Vendly. The server makes their payout account if they have none yet. `onDone` runs when
- * they finish or close it (the screen then reloads their status); `onFallback` when the embedded form
- * can't open, so the screen can use Stripe's setup page instead.
+ * A Connect instance for the vendor's own payout account (the server makes a short-lived session for it,
+ * and the account if there is none). A refusal (a test account, not a vendor) is shown and closes
+ * (`onDone`); anything else calls `onFallback`.
  */
-export default function StripePayoutSetup({ onDone, onFallback }: { onDone: () => void; onFallback: () => void }) {
+function useConnectInstance(onDone: () => void, onFallback: () => void) {
   const [instance, setInstance] = useState<unknown>(null);
 
   useEffect(() => {
@@ -100,6 +102,18 @@ export default function StripePayoutSetup({ onDone, onFallback }: { onDone: () =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  return instance;
+}
+
+/**
+ * Stripe's payout setup (Connect embedded onboarding) as a full-screen sheet inside the app, so the vendor
+ * never leaves Vendly. The server makes their payout account if they have none yet. `onDone` runs when
+ * they finish or close it (the screen then reloads their status); `onFallback` when the embedded form
+ * can't open, so the screen can use Stripe's setup page instead.
+ */
+export default function StripePayoutSetup({ onDone, onFallback }: { onDone: () => void; onFallback: () => void }) {
+  const instance = useConnectInstance(onDone, onFallback);
+
   if (!connect || !instance) return null;
   const { ConnectComponentsProvider, ConnectAccountOnboarding } = connect;
   return (
@@ -115,3 +129,53 @@ export default function StripePayoutSetup({ onDone, onFallback }: { onDone: () =
     </ConnectComponentsProvider>
   );
 }
+
+/** Whether this build can show the vendor's payout details inside the app. */
+export const canShowPayoutDetailsInApp = () => canSetUpPayoutsInApp() && !!connect?.ConnectPayouts;
+
+/**
+ * The vendor's payout details inside the app (Stripe's embedded Payouts): their Stripe balance, payouts to
+ * their bank, and changing the bank account they go to. `onClose` when they close it (or it can't open).
+ */
+export function StripePayoutDetails({ onClose }: { onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  const fail = () => {
+    Alert.alert('Payout details', "Couldn't open your payout details. Try again in a moment, or update them on vendlymarketplace.com.");
+    onClose();
+  };
+  const instance = useConnectInstance(onClose, fail);
+  const Payouts = connect?.ConnectPayouts;
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={[d.root, { paddingBottom: insets.bottom }]}>
+        <View style={d.header}>
+          <Text style={d.title}>Payout details</Text>
+          <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
+            <Ionicons name="close" size={24} color={DARK.text} />
+          </Pressable>
+        </View>
+        <Text style={d.sub}>Change the bank account your earnings go to, and see payouts on their way to your bank.</Text>
+        {!connect || !instance || !Payouts ? (
+          <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
+        ) : (
+          <connect.ConnectComponentsProvider connectInstance={instance}>
+            <Payouts
+              style={{ flex: 1 }}
+              onLoadError={(e) => {
+                Sentry.captureMessage(`Embedded payout details failed to load: ${String((e as any)?.error?.message ?? e)}`, 'warning');
+                fail();
+              }}
+            />
+          </connect.ConnectComponentsProvider>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+const d = StyleSheet.create({
+  root: { flex: 1, backgroundColor: DARK.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20 },
+  title: { color: DARK.text, fontFamily: FONTS.bold, fontSize: 20 },
+  sub: { color: DARK.muted, fontFamily: FONTS.regular, fontSize: 14, paddingHorizontal: 20, paddingTop: 6, paddingBottom: 12 },
+});

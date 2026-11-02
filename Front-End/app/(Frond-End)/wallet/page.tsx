@@ -25,6 +25,9 @@ interface AccountInfo {
   accountId: string | null;
   email: string;
   name: string;
+  // from Stripe: setup finished (missing when Stripe couldn't be reached)
+  details_submitted?: boolean;
+  payouts_enabled?: boolean;
 }
 
 interface StripeBalance {
@@ -141,9 +144,10 @@ export default function WalletPage() {
 
   /* ─── Connect Stripe account ─────────────────────────────────── */
   // Stripe's payout setup opens in a window here (embedded onboarding); it makes the account when there is none
-  const [onboarding, setOnboarding] = useState(false);
-  const handleConnectAccount = () => setOnboarding(true);
-  const handleGetOnboardingLink = () => setOnboarding(true);
+  // "setup" (Stripe's setup form) or "manage" (change bank account / details once set up)
+  const [onboarding, setOnboarding] = useState<false | "setup" | "manage">(false);
+  const handleConnectAccount = () => setOnboarding("setup");
+  const handleGetOnboardingLink = () => setOnboarding(accountInfo?.details_submitted && accountInfo?.payouts_enabled ? "manage" : "setup");
   const closeOnboarding = () => {
     setOnboarding(false);
     // the account's status, as Stripe has it now
@@ -247,7 +251,7 @@ export default function WalletPage() {
                   </div>
                   <button
                     onClick={handleConnectAccount}
-                    disabled={onboarding}
+                    disabled={!!onboarding}
                     className="w-full py-2.5 gradient-bg text-white text-sm font-medium rounded-xl hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     Connect Stripe Account
@@ -294,7 +298,7 @@ export default function WalletPage() {
                   <button
                     type="button"
                     onClick={handleGetOnboardingLink}
-                    disabled={onboarding}
+                    disabled={!!onboarding}
                     className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-primary transition py-1"
                   >
                     <ExternalLink className="w-3 h-3" />
@@ -404,7 +408,7 @@ export default function WalletPage() {
           )}
         </div>
       </div>
-      {onboarding && <StripeOnboardingDialog onClose={closeOnboarding} />}
+      {onboarding && <StripeOnboardingDialog onClose={closeOnboarding} manage={onboarding === "manage"} />}
     </div>
   );
 }
