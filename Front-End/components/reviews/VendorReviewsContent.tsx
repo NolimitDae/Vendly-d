@@ -133,7 +133,7 @@ function ReviewCard({ review: r, onReplied }: { review: VendorReview; onReplied:
       <div className="flex items-start gap-3">
         {r.author?.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element -- avatar from storage
-          <img src={r.author.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+          <img loading="lazy" decoding="async" src={r.author.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
         ) : (
           <div className="w-10 h-10 rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center" aria-hidden>{name[0]?.toUpperCase()}</div>
         )}

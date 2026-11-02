@@ -31,7 +31,8 @@ export class PrismaService
       throw new Error('DATABASE_URL is not defined in environment variables');
     }
 
-    const adapter = new PrismaPg({ connectionString: datasourceUrl });
+    // the app's connection pool: a request waits at most 10 s for a free connection instead of hanging
+    const adapter = new PrismaPg({ connectionString: datasourceUrl, max: 20, connectionTimeoutMillis: 10_000, idleTimeoutMillis: 30_000 });
 
     super({
       adapter,

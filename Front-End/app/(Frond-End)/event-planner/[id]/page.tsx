@@ -226,7 +226,6 @@ export default function EventPlannerDetailPage() {
                         alt=""
                         fill
                         className="object-cover group-hover:scale-105 transition duration-300"
-                        unoptimized
                       />
                     </button>
                   ))}
@@ -256,7 +255,6 @@ export default function EventPlannerDetailPage() {
               alt=""
               fill
               className="object-contain"
-              unoptimized
             />
           </div>
           <div className="absolute top-4 right-4 flex gap-3">

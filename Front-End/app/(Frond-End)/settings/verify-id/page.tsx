@@ -180,7 +180,7 @@ function PhotoSlot({ label, hint, preview, onPick, selfie }: { label: string; hi
     >
       {preview ? (
         // eslint-disable-next-line @next/next/no-img-element -- local blob preview
-        <img src={preview} alt={label} className="absolute inset-0 w-full h-full object-cover" />
+        <img loading="lazy" decoding="async" src={preview} alt={label} className="absolute inset-0 w-full h-full object-cover" />
       ) : (
         <>
           {selfie ? <Camera className="w-7 h-7 text-gray-400" /> : <IdCard className="w-7 h-7 text-gray-400" />}

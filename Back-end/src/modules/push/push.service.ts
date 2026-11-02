@@ -57,6 +57,8 @@ export class PushService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ to: user.push_token, sound: 'default', ...payload }),
+        // a slow push service never holds up the request that sent the notification
+        signal: AbortSignal.timeout(10_000),
       });
       const json: any = await res.json().catch(() => null);
       if (json?.data?.details?.error === 'DeviceNotRegistered') {

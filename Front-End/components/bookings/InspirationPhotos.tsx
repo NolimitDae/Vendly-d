@@ -81,7 +81,7 @@ export function InspirationPhotosPicker({ onChange }: { onChange: (files: File[]
           {picked.map((p, i) => (
             <div key={p.url} className="relative w-16 h-16">
               {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
-              <img src={p.url} alt={`Inspiration photo ${i + 1}`} className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
+              <img loading="lazy" decoding="async" src={p.url} alt={`Inspiration photo ${i + 1}`} className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
               <button
                 type="button"
                 onClick={() => remove(i)}
@@ -111,7 +111,7 @@ export function InspirationPhotos({ urls, title = "Inspiration photos" }: { urls
           <li key={url}>
             <a href={url} target="_blank" rel="noopener noreferrer" title="Open full size" className="block">
               {/* eslint-disable-next-line @next/next/no-img-element -- private, short-lived signed link */}
-              <img src={url} alt={`Inspiration photo ${i + 1} of ${photos.length}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900" />
+              <img loading="lazy" decoding="async" src={url} alt={`Inspiration photo ${i + 1} of ${photos.length}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900" />
             </a>
           </li>
         ))}

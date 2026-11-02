@@ -17,6 +17,8 @@ import appConfig from '../../config/app.config';
 
 const Stripe = new stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-03-31.basil',
+  // well under the 80 s default, as for the rest of Vendly's Stripe calls
+  timeout: 30_000,
 });
 
 const PLANS = [

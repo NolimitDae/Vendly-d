@@ -127,11 +127,11 @@ describe('ListingDetailPage', () => {
   beforeEach(() => jest.clearAllMocks());
 
   describe('loading state', () => {
-    it('shows a spinner while loading', () => {
+    it('shows the outline of the page while loading', () => {
       (MarketplaceService.getListing as jest.Mock).mockReturnValue(new Promise(() => {}));
       setupNotLoggedIn();
       render(<ListingDetailPage />);
-      expect(document.querySelector('.animate-spin')).toBeInTheDocument();
+      expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true');
     });
   });
 

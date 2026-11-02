@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { EventPlannerService } from "@/service/event-planner/event-planner.service";
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, Users, Calendar } from "lucide-react";
+import { Users, Calendar } from "lucide-react";
+import { CardGridSkeleton } from "@/components/marketplace/PageSkeletons";
 
 const EVENT_TYPES = [
   "WEDDING",
@@ -82,9 +83,7 @@ export default function EventPlannerPage() {
         <p className="text-sm text-gray-500 mb-4 dark:text-gray-400">{meta.total} planners found</p>
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
+          <CardGridSkeleton />
         ) : planners.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
             <Calendar className="w-12 h-12 mx-auto mb-4 opacity-40" />

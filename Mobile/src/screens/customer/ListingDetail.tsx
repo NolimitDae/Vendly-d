@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DetailScreenSkeleton } from '../../components/Skeleton';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BrandGradient, Card, ChatBubble, GradientButton, ScreenHeader } from '../../components/brand';
@@ -53,7 +54,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
       .finally(() => setLoading(false));
   }, [listingId]);
 
-  if (loading) return <ActivityIndicator color={DARK.accent} style={s.center} />;
+  if (loading) return <DetailScreenSkeleton />;
   if (!listing) {
     return (
       <View style={[s.center, { paddingTop: insets.top }]}>

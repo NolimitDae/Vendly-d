@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { AdminService } from "@/service/admin/admin.service";
 import { Loader2, Trash2, Eye, ToggleLeft, ToggleRight } from "lucide-react";
 import Image from "next/image";
@@ -18,6 +19,8 @@ export default function AdminListingsPage() {
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // asks the server once typing pauses, not on every key
+  const debouncedSearch = useDebounce(search, 350);
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ total: 0, last_page: 1 });
@@ -29,7 +32,7 @@ export default function AdminListingsPage() {
         page,
         limit: 20,
         status: statusFilter || undefined,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
       });
       if (res.data?.success) {
         setListings(res.data.data);
@@ -40,7 +43,7 @@ export default function AdminListingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, search]);
+  }, [page, statusFilter, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -48,7 +48,7 @@ export default function DisputeDetails({ d, who = "The customer" }: { d: Dispute
             <li key={url}>
               <a href={url} target="_blank" rel="noopener noreferrer" title="Open full size" className="block">
                 {/* eslint-disable-next-line @next/next/no-img-element -- private, short-lived signed link */}
-                <img src={url} alt={`Photo ${i + 1} of ${photos.length}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900" />
+                <img loading="lazy" decoding="async" src={url} alt={`Photo ${i + 1} of ${photos.length}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900" />
               </a>
             </li>
           ))}

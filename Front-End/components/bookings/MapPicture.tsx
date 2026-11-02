@@ -54,7 +54,7 @@ export default function MapPicture({
           {width > 0 &&
             tilesAround(lat!, lng!, width, height).map((t) => (
               // eslint-disable-next-line @next/next/no-img-element -- map tiles from the API's proxy, positioned by hand
-              <img
+              <img loading="lazy" decoding="async"
                 key={t.key}
                 src={t.url}
                 alt=""

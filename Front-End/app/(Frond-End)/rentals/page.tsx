@@ -96,7 +96,7 @@ export default function RentalsPage() {
                   <div className={`bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition border border-gray-100 dark:border-gray-700 ${soldOut ? "opacity-60" : ""}`}>
                     <div className="relative h-44 bg-gray-100 dark:bg-gray-700 overflow-hidden">
                       {item.images[0] ? (
-                        <Image src={item.images[0]} alt={item.title} fill className="object-cover group-hover:scale-105 transition duration-300" unoptimized />
+                        <Image src={item.images[0]} alt={item.title} fill className="object-cover group-hover:scale-105 transition duration-300" />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center text-gray-300 dark:text-gray-600">
                           <Package className="w-10 h-10" />

@@ -25,7 +25,7 @@ export default function BookingContact({
         <span className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-lg font-semibold text-gray-600 dark:text-gray-200">
           {person.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- avatar from the API's storage
-            <img src={person.avatar_url} alt="" className="w-full h-full object-cover" />
+            <img loading="lazy" decoding="async" src={person.avatar_url} alt="" className="w-full h-full object-cover" />
           ) : (
             person.name?.[0]?.toUpperCase()
           )}

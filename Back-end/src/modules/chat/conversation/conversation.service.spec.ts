@@ -17,6 +17,8 @@ jest.mock('src/config/app.config', () =>
 );
 
 const mockPrisma = {
+  // unread counts for the inbox, one query for every conversation
+  $queryRaw: jest.fn().mockResolvedValue([]),
   userBlock: { findMany: jest.fn().mockResolvedValue([]) },
   conversation: {
     findFirst: jest.fn(),
@@ -52,6 +54,10 @@ const mockParticipant = (userId: string) => ({
   userId,
   user: { id: userId, name: `User ${userId}`, avatar: null },
 });
+
+
+/** The conversation ids in the inbox's unread-count query (the Prisma.join list among its values). */
+const queriedIds = (values: any[]): string[] => values.find((v) => Array.isArray(v?.values))?.values ?? [];
 
 describe('ConversationService', () => {
   let service: ConversationService;
@@ -187,14 +193,16 @@ describe('ConversationService', () => {
 
       beforeEach(() => {
         mockPrisma.conversation.findMany.mockResolvedValue(list);
-        mockPrisma.message.count.mockImplementation(async ({ where }: any) => unreadBy[where.conversationId] ?? 0);
+        mockPrisma.$queryRaw.mockImplementation(async (_strings: any, ...values: any[]) =>
+          queriedIds(values).map((id) => ({ id, n: unreadBy[id] ?? 0 })),
+        );
         mockPrisma.user.findUnique.mockResolvedValue({ type: 'VENDOR' });
         mockPrisma.booking.findMany.mockResolvedValue([
           { customer_id: 'past', status: 'COMPLETED' },
           { customer_id: 'current', status: 'CONFIRMED' },
         ]);
       });
-      afterEach(() => mockPrisma.message.count.mockReset().mockResolvedValue(0));
+      afterEach(() => mockPrisma.$queryRaw.mockReset().mockResolvedValue([]));
 
       it('Clients: people with a booking with me, current bookings first; counts for both tabs', async () => {
         const result: any = await service.findAll('vendor', { tab: 'clients' });
@@ -287,7 +295,8 @@ describe('ConversationService', () => {
 
       it('does not count unread messages in archived chats', async () => {
         await service.findAll('user-1');
-        const counted = mockPrisma.message.count.mock.calls.map((c: any) => c[0].where.conversationId);
+        expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(1);
+        const counted = queriedIds(mockPrisma.$queryRaw.mock.calls[0].slice(1));
         expect(counted.sort()).toEqual(['c-1', 'c-3']);
       });
     });

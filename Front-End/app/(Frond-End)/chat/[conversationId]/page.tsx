@@ -375,7 +375,7 @@ export default function ConversationPage() {
                           {msg.attachments_url.map((url, n) => (
                             <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block" aria-label={`Open photo ${n + 1} of ${msg.attachments_url!.length} from ${name}`}>
                               {/* eslint-disable-next-line @next/next/no-img-element -- user photo from storage */}
-                              <img
+                              <img loading="lazy" decoding="async"
                                 src={url}
                                 alt={`Photo ${n + 1} from ${name}`}
                                 className={cn("rounded-2xl object-cover bg-gray-100 dark:bg-gray-800", msg.attachments_url!.length === 1 ? "max-w-[240px] max-h-[240px]" : "w-24 h-24 sm:w-28 sm:h-28")}
@@ -457,7 +457,7 @@ export default function ConversationPage() {
             {photos.map((p, n) => (
               <li key={p.url} className="relative flex-shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
-                <img src={p.url} alt={`Photo ${n + 1} to send`} className="w-16 h-16 rounded-xl object-cover" />
+                <img loading="lazy" decoding="async" src={p.url} alt={`Photo ${n + 1} to send`} className="w-16 h-16 rounded-xl object-cover" />
                 <button onClick={() => removePhoto(p.url)} aria-label={`Remove photo ${n + 1}`} className="absolute -top-2 -right-2 p-0.5 rounded-full bg-gray-900/80 text-white">
                   <X className="w-3.5 h-3.5" />
                 </button>

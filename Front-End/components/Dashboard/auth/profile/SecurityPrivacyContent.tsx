@@ -190,7 +190,7 @@ const SecurityPrivacyContent = () => {
             </p>
             {qrCode && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={qrCode} alt="2FA QR code" width={160} height={160} className="rounded-lg bg-white p-2" />
+              <img loading="lazy" decoding="async" src={qrCode} alt="2FA QR code" width={160} height={160} className="rounded-lg bg-white p-2" />
             )}
             {secret && (
               <p className="text-xs text-descriptionColor break-all">

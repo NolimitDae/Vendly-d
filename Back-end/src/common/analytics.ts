@@ -14,5 +14,6 @@ export function track(event: string, distinctId: string | null | undefined, prop
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ api_key: key, event, distinct_id: distinctId, timestamp: new Date().toISOString(), properties: { ...properties, $lib: 'vendly-api' } }),
+    signal: AbortSignal.timeout(5_000),
   }).catch(() => {});
 }

@@ -140,7 +140,7 @@ export default function IdentityReviewContent() {
                       <a key={label} href={url} target="_blank" rel="noopener noreferrer" className="block">
                         <p className="text-xs text-gray-500 mb-1">{label} (opens full size)</p>
                         {/* eslint-disable-next-line @next/next/no-img-element -- private, short-lived signed link */}
-                        <img src={url} alt={`${label} of ID check for ${r.legal_name}`} className="w-full aspect-[4/3] object-contain rounded-lg bg-gray-100 dark:bg-gray-900" />
+                        <img loading="lazy" decoding="async" src={url} alt={`${label} of ID check for ${r.legal_name}`} className="w-full aspect-[4/3] object-contain rounded-lg bg-gray-100 dark:bg-gray-900" />
                       </a>
                     ) : null,
                   )}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DetailScreenSkeleton } from '../../components/Skeleton';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ChatBubble, ScreenHeader } from '../../components/brand';
@@ -36,7 +37,7 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
       .finally(() => setLoading(false));
   }, [vendorId]);
 
-  if (loading) return <ActivityIndicator color={DARK.accent} style={s.center} />;
+  if (loading) return <DetailScreenSkeleton />;
   if (!vendor) {
     return (
       <View style={[s.center, { paddingTop: insets.top }]}>

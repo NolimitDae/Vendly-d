@@ -44,7 +44,28 @@ export function ResultRowSkeleton() {
   );
 }
 
+/** Placeholder for a full detail screen (a listing or a vendor): photo, title, lines and a card. */
+export function DetailScreenSkeleton({ topInset = 0 }: { topInset?: number }) {
+  return (
+    <View style={[s.detail, { paddingTop: topInset }]} accessibilityLabel="Loading">
+      <Skeleton height={280} radius={0} />
+      <View style={{ padding: 20, gap: 10 }}>
+        <Skeleton width="75%" height={24} />
+        <Skeleton width="40%" height={14} />
+        <Skeleton width="100%" height={12} style={{ marginTop: 12 }} />
+        <Skeleton width="92%" height={12} />
+        <Skeleton width="80%" height={12} />
+        <View style={[s.card, { marginTop: 16, gap: 10 }]}>
+          <Skeleton width="50%" height={18} />
+          <Skeleton width="100%" height={44} radius={12} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   card: { padding: 12, borderRadius: 16, backgroundColor: DARK.card },
+  detail: { flex: 1, backgroundColor: DARK.bg },
   row: { flexDirection: 'row', gap: 12, marginHorizontal: 20, padding: 12, borderRadius: 16, backgroundColor: DARK.card },
 });

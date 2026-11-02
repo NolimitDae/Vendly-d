@@ -128,7 +128,6 @@ export default function SavedServices() {
                       alt={listing.title}
                       fill
                       className="object-cover group-hover:scale-105 transition duration-300"
-                      unoptimized
                     />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-4xl text-gray-300">

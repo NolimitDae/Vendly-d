@@ -11,6 +11,7 @@ export class NotificationService {
     const notifications = await this.prisma.notification.findMany({
       where: { receiver_id: userId },
       orderBy: { created_at: 'desc' },
+      take: 200,
     });
 
     return {

@@ -11,6 +11,8 @@ export function resendTransport(apiKey: string) {
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         // replyTo: pressing Reply answers this person (a Contact us message), not Vendly's no-reply address
         body: JSON.stringify({ from, to: Array.isArray(to) ? to : [to], subject, html, text, ...(replyTo ? { reply_to: replyTo } : {}) }),
+        // a stuck request fails the mail job, which the queue retries
+        signal: AbortSignal.timeout(20_000),
       })
         .then(async (res) => {
           const body = await res.json().catch(() => ({}));

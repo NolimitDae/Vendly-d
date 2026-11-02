@@ -471,6 +471,8 @@ export class WithdrawService {
       orderBy: {
         created_at: 'desc',
       },
+      // the most recent ones (the full record is in Transactions)
+      take: 200,
     });
 
     return {

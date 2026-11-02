@@ -360,6 +360,8 @@ model Ucode {
   expired_at  DateTime?
   verified_at DateTime?
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([user_id])
   @@map("ucodes")
 }
 
@@ -604,6 +606,8 @@ model Quote {
 
   @@index([conversation_id])
   @@index([customer_id, status])
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([vendor_id])
   @@map("quotes")
 }
 
@@ -753,6 +757,8 @@ model UserPaymentMethod {
   payment_method_id String?
   checkout_id       String?
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([user_id])
   @@map("user_payment_methods")
 }
 
@@ -779,6 +785,10 @@ model PaymentTransaction {
   paid_amount      Decimal?
   paid_currency    String?
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([user_id, type])
+  @@index([order_id])
+  @@index([reference_number])
   @@map("payment_transactions")
 }
 
@@ -872,6 +882,9 @@ model VendorListing {
   option_groups  ListingOptionGroup[]
 
   @@index([lat, lng])
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([vendor_id])
+  @@index([category_id])
   @@map("vendor_listings")
 }
 
@@ -931,6 +944,8 @@ model ListingAvailability {
   end_date   DateTime @db.Date
   reason     String?  @db.VarChar(255)
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([listing_id])
   @@map("listing_availability")
 }
 
@@ -1134,6 +1149,9 @@ model Booking {
   @@index([status, completed_at])
   @@index([payment_due_by])
   @@index([vendor_id, cancelled_at])
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([customer_id])
+  @@index([listing_id])
   @@map("bookings")
 }
 
@@ -1179,6 +1197,8 @@ model BookingInstallment {
 
   @@index([booking_id])
   @@index([status, next_attempt_at])
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([payment_intent_id])
   @@map("booking_installments")
 }
 
@@ -1300,6 +1320,8 @@ model ListingAddOn {
 
   @@id([listing_id, add_on_id])
   @@index([add_on_id])
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([listing_id])
   @@map("listing_add_ons")
 }
 
@@ -1445,6 +1467,8 @@ model BookingProof {
   photos      String[]
   notes       String?  @db.Text
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([booking_id])
   @@map("booking_proofs")
 }
 
@@ -1463,6 +1487,8 @@ model BookingDeliverable {
   files   String[]
   links   String[]
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([booking_id])
   @@map("booking_deliverables")
 }
 
@@ -1500,6 +1526,10 @@ model Review {
   comment String? @db.Text
   reply   String? @db.Text
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([vendor_id])
+  @@index([listing_id])
+  @@index([author_id])
   @@map("reviews")
 }
 
@@ -1548,6 +1578,8 @@ model Event {
   client_sees_budget Boolean @default(false)
 
   @@index([client_email])
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([event_planner_id])
   @@map("events")
 }
 
@@ -1580,6 +1612,8 @@ model BudgetItem {
   // a line backed by a real booking: spent follows what has been paid on it
   booking_id String? @unique
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([event_id])
   @@map("budget_items")
 }
 
@@ -1649,6 +1683,8 @@ model EventTask {
   due_date  DateTime?
   completed Boolean   @default(false)
 
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([event_id])
   @@map("event_tasks")
 }
 
@@ -1868,6 +1904,9 @@ model VendorContractListing {
   listing            VendorListing  @relation(fields: [listing_id], references: [id], onDelete: Cascade)
 
   @@id([vendor_contract_id, listing_id])
+  // the columns the app looks these up by (Postgres doesn't index foreign keys by itself)
+  @@index([vendor_contract_id])
+  @@index([listing_id])
   @@map("vendor_contract_listings")
 }
 

@@ -13,7 +13,7 @@ import { MessageGateway } from '../message/message.gateway';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { paginateResponse } from 'src/common/pagination';
 import { assertCanMessage, blockSets, blockState } from '../safety/block';
-import { BookingStatus, UserType } from 'prisma/generated/client';
+import { BookingStatus, Prisma, UserType } from 'prisma/generated/client';
 import { classifyConversation, clientBookingWhere, CURRENT_BOOKING_STATUSES, InboxTab } from '../extras/inbox';
 
 @Injectable()
@@ -170,17 +170,20 @@ export class ConversationService {
     const archivedCount = all.filter(isArchived).length;
     const conversations = all.filter((conv) => isArchived(conv) === !!opts.archived);
 
-    // unread = messages from others since this user last read the chat
+    // unread = messages from others since this user last read the chat, counted for every conversation
+    // in one query (not one per conversation)
     const unread = new Map<string, number>();
-    await Promise.all(
-      conversations.map(async (conv) => {
-        const me = conv.participants.find((p) => p.userId === userId);
-        const n = await this.prisma.message.count({
-          where: { conversationId: conv.id, senderId: { not: userId }, createdAt: { gt: me?.lastReadAt ?? new Date(0) } },
-        });
-        unread.set(conv.id, n);
-      }),
-    );
+    if (conversations.length) {
+      const rows = await this.prisma.$queryRaw<{ id: string; n: number }[]>`
+        SELECT m."conversationId" AS id, COUNT(*)::int AS n
+        FROM "Message" m
+        JOIN "Participant" p ON p."conversationId" = m."conversationId" AND p."userId" = ${userId}
+        WHERE m."conversationId" IN (${Prisma.join(conversations.map((c) => c.id))})
+          AND m."senderId" <> ${userId}
+          AND m."createdAt" > COALESCE(p."lastReadAt", 'epoch'::timestamp)
+        GROUP BY m."conversationId"`;
+      for (const r of rows) unread.set(r.id, Number(r.n));
+    }
 
     const blocks = await blockSets(this.prisma, userId);
 

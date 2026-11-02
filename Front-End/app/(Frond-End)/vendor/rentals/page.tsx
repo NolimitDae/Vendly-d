@@ -103,7 +103,7 @@ export default function VendorRentalsPage() {
                   <div key={item.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
                     <div className="p-4 flex gap-4">
                       <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
-                        {item.images[0] ? <Image src={item.images[0]} alt={item.title} fill className="object-cover" unoptimized /> : <Package className="w-7 h-7 text-gray-400 absolute inset-0 m-auto" />}
+                        {item.images[0] ? <Image src={item.images[0]} alt={item.title} fill className="object-cover" /> : <Package className="w-7 h-7 text-gray-400 absolute inset-0 m-auto" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">

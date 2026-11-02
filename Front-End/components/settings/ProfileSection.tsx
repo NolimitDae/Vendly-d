@@ -111,7 +111,7 @@ export default function ProfileSection() {
         >
           {avatar ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatar} alt="" className="w-full h-full object-cover" />
+            <img loading="lazy" decoding="async" src={avatar} alt="" className="w-full h-full object-cover" />
           ) : (
             <User className="w-8 h-8 text-gray-400" />
           )}

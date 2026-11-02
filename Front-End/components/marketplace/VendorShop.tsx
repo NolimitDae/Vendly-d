@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Star, Package, Loader2, Store } from "lucide-react";
+import { ArrowLeft, Star, Package, Store } from "lucide-react";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import ReviewList from "@/components/marketplace/ReviewList";
 import { AddToTeamButton } from "@/components/events/VendorTeams";
@@ -11,6 +11,7 @@ import TestBadge from "@/components/marketplace/TestBadge";
 import ShareButton from "@/components/marketplace/ShareButton";
 import SaveVendorButton from "@/components/marketplace/SaveVendorButton";
 import SocialLinks, { type SocialLinksData } from "@/components/marketplace/SocialLinks";
+import { ShopPageSkeleton } from "@/components/marketplace/PageSkeletons";
 
 export interface VendorShopData {
   id: string;
@@ -62,13 +63,7 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
     };
   }, [idOrHandle]);
 
-  if (state === "loading") {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" aria-label="Loading" />
-      </div>
-    );
-  }
+  if (state === "loading") return <ShopPageSkeleton />;
 
   if (state === "missing" || !vendor) {
     return (
@@ -106,7 +101,7 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
           {/* Cover: the vendor's banner, else the brand gradient */}
           <div className="relative h-40 sm:h-56 bg-gradient-to-r from-[#4A1650] via-[#7A2A82] to-[#A84AB0]">
             {vendor.banner_url && (
-              <Image src={vendor.banner_url} alt={`${displayName} banner`} fill className="object-cover" unoptimized priority />
+              <Image src={vendor.banner_url} alt={`${displayName} banner`} fill className="object-cover" priority />
             )}
           </div>
 
@@ -201,7 +196,6 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
                         alt={listing.title}
                         fill
                         className="object-cover group-hover:scale-105 transition duration-300"
-                        unoptimized
                       />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">

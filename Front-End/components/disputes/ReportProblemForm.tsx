@@ -140,7 +140,7 @@ export default function ReportProblemForm({ bookingId, paid, limit, category: in
           {photos.map((p, i) => (
             <div key={p.url} className="relative w-20 h-20">
               {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
-              <img src={p.url} alt={`Photo ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
+              <img loading="lazy" decoding="async" src={p.url} alt={`Photo ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
               <button
                 type="button"
                 onClick={() => remove(i)}

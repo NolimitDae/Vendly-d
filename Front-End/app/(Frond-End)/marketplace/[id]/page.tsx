@@ -38,6 +38,7 @@ import TestBadge from "@/components/marketplace/TestBadge";
 import ShareButton from "@/components/marketplace/ShareButton";
 import DosDontsList from "@/components/listing/DosDontsList";
 import type { Customization } from "@/lib/package-options";
+import { ListingPageSkeleton } from "@/components/marketplace/PageSkeletons";
 
 interface Listing {
   id: string;
@@ -236,13 +237,7 @@ export default function ListingDetailPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
-      </div>
-    );
-  }
+  if (loading) return <ListingPageSkeleton />;
 
   if (!listing) {
     return (

@@ -76,6 +76,8 @@ const nextConfig: NextConfig = {
   },
 
   images: {
+    // photos are sent as AVIF (smallest) or WebP to browsers that take them, else as uploaded
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       { protocol: "https", hostname: "maps.googleapis.com" },
       // Backend local storage (development)
@@ -88,6 +90,8 @@ const nextConfig: NextConfig = {
       // Cloudflare R2 public buckets, and the API on Railway (files it serves itself)
       { protocol: "https", hostname: "*.r2.dev" },
       { protocol: "https", hostname: "*.up.railway.app" },
+      // Vendly's media domain (uploaded photos), whatever NEXT_PUBLIC_MEDIA_URL is set to
+      { protocol: "https", hostname: "media.vendlymarketplace.com" },
       // a custom media domain (NEXT_PUBLIC_MEDIA_URL) and the API domain
       ...extraImageHosts.map((hostname) => ({ protocol: "https" as const, hostname })),
     ],

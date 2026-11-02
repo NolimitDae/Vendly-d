@@ -149,7 +149,7 @@ export default function RentalItemPage() {
           <div className="space-y-6">
             <div className="relative aspect-[16/10] rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800">
               {item.images[photo] ? (
-                <Image src={item.images[photo]} alt={item.title} fill className="object-cover" unoptimized />
+                <Image src={item.images[photo]} alt={item.title} fill className="object-cover" />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-300 dark:text-gray-600"><Package className="w-16 h-16" /></div>
               )}
@@ -158,7 +158,7 @@ export default function RentalItemPage() {
               <div className="flex gap-2">
                 {item.images.map((src, i) => (
                   <button key={src} onClick={() => setPhoto(i)} aria-label={`Photo ${i + 1}`} className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 ${i === photo ? "border-primary" : "border-transparent"}`}>
-                    <Image src={src} alt="" fill className="object-cover" unoptimized />
+                    <Image src={src} alt="" fill className="object-cover" />
                   </button>
                 ))}
               </div>

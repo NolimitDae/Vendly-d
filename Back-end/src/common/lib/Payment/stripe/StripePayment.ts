@@ -9,6 +9,9 @@ function getStripe(): stripe {
   if (!_stripe) {
     _stripe = new stripe(appConfig().payment.stripe.secret_key, {
       apiVersion: '2025-03-31.basil',
+      // well under the 80 s default: money code treats a request with no answer as "unknown" and checks
+      // again with the same idempotency key
+      timeout: 30_000,
     });
   }
   return _stripe;
