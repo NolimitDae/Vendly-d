@@ -16,7 +16,7 @@ import { withJobLock } from 'src/common/helper/job-lock';
 import { PushService } from 'src/modules/push/push.service';
 import { TEST_ACCOUNT_NO_PAYOUTS } from 'src/common/helper/test-accounts';
 import * as Sentry from '@sentry/nestjs';
-import { isStripeMissing } from 'src/common/lib/Payment/stripe/stripe-errors';
+import { isStripeAccountGone } from 'src/common/lib/Payment/stripe/stripe-errors';
 
 /** Smallest withdrawal in dollars (the website says the same). */
 export const MIN_WITHDRAW = 20;
@@ -156,9 +156,7 @@ export class WithdrawService {
       } catch (error) {
         // the saved account is gone (made with the test-mode keys, or deleted in Stripe): forget it and
         // set up a new one, as the account info does
-        // ("account_invalid": the key can't see that account, which is how another mode's account can look)
-        const gone = isStripeMissing(error) || (error as any)?.code === 'account_invalid' || (error as any)?.raw?.code === 'account_invalid';
-        if (!user.stripe_connect_id || !gone) throw error;
+        if (!user.stripe_connect_id || !isStripeAccountGone(error)) throw error;
         await this.prisma.user.updateMany({ where: { id: userId, stripe_connect_id: accountId }, data: { stripe_connect_id: null } });
         accountId = (await this.createConnectedAccount(userId, email)).data.accountId;
         session = await StripePayment.createAccountSession(accountId);
@@ -508,8 +506,9 @@ export class WithdrawService {
           charges_enabled: !!account.charges_enabled,
         };
       } catch (error) {
-        if (isStripeMissing(error)) {
-          // the payout account is gone (deleted in Stripe, or made with other Stripe keys): forget it so
+        if (isStripeAccountGone(error)) {
+          // the payout account is gone (deleted in Stripe, or made with other Stripe keys, such as a
+          // test-mode account after the switch to live keys): forget it so
           // the vendor can set payouts up again
           await this.prisma.user.updateMany({ where: { id: userId, stripe_connect_id: user.stripe_connect_id }, data: { stripe_connect_id: null } });
           user.stripe_connect_id = null;

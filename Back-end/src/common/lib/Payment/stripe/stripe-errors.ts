@@ -8,6 +8,16 @@ export function isStripeMissing(err: unknown): boolean {
 }
 
 /**
+ * A saved payout (connected) account the server's Stripe keys can't use: gone ("No such account"), or
+ * made under other keys, such as a test-mode account after the switch to live keys. Stripe answers
+ * that with "does not have access to account" (code account_invalid). The stored id should be replaced.
+ */
+export function isStripeAccountGone(err: unknown): boolean {
+  const e = err as { code?: string; raw?: { code?: string } } | null;
+  return isStripeMissing(err) || e?.code === 'account_invalid' || e?.raw?.code === 'account_invalid';
+}
+
+/**
  * Stripe refused bank payments (ACH Direct Debit) because they aren't switched on for the account:
  * "The payment method type provided: us_bank_account is invalid. Please ensure the provided type is
  * activated in your dashboard".

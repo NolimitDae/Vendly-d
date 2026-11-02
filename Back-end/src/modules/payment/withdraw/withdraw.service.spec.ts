@@ -529,6 +529,17 @@ describe('WithdrawService', () => {
       expect(result.data).toMatchObject({ hasConnectedAccount: false, accountId: null });
     });
 
+    it('forgets a test-mode payout account the live keys cannot see, so the vendor sets payouts up again', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ stripe_connect_id: 'acct_testmode', email: 'jane@test.com', name: 'Jane Doe' });
+      // what Stripe answers a live key asking about a test-mode account
+      (StripePayment.retrieveAccount as jest.Mock).mockRejectedValue({ type: 'StripePermissionError', code: 'account_invalid', raw: { code: 'account_invalid' } });
+
+      const result: any = await service.getConnectedAccountInfo('user-1');
+
+      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({ where: { id: 'user-1', stripe_connect_id: 'acct_testmode' }, data: { stripe_connect_id: null } });
+      expect(result.data).toMatchObject({ hasConnectedAccount: false, accountId: null });
+    });
+
     it('should return hasConnectedAccount false when stripe_connect_id is null', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         stripe_connect_id: null,
