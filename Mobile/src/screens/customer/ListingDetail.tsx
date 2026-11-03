@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DetailScreenSkeleton } from '../../components/Skeleton';
+import PhotoViewer from '../../components/PhotoViewer';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BrandGradient, Card, ChatBubble, GradientButton, ScreenHeader } from '../../components/brand';
@@ -44,6 +45,8 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
   const [loading, setLoading] = useState(true);
   const paymentSettings = usePaymentSettings();
   const [slide, setSlide] = useState(0);
+  // the photo shown full screen (tap a photo)
+  const [viewing, setViewing] = useState<number | null>(null);
   const saved = useSaved();
   const { user } = useAuth();
 
@@ -75,6 +78,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
   return (
     <View style={s.root}>
       {/* room for the whole bottom bar (question bubble + Book button), so nothing hides behind it */}
+      {viewing != null && <PhotoViewer photos={images} start={viewing} onClose={() => setViewing(null)} title={listing.title} />}
       <ScrollView contentContainerStyle={{ paddingBottom: (footerHeight || insets.bottom + 170) + 16 }}>
         <View style={s.hero}>
           {images.length > 0 ? (
@@ -85,7 +89,11 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
               showsHorizontalScrollIndicator={false}
               keyExtractor={(_, i) => String(i)}
               onMomentumScrollEnd={(e) => setSlide(Math.round(e.nativeEvent.contentOffset.x / width))}
-              renderItem={({ item }) => <Image source={{ uri: item }} style={{ width, height: 315 }} resizeMode="cover" />}
+              renderItem={({ item, index }) => (
+                <Pressable onPress={() => setViewing(index)} accessibilityRole="imagebutton" accessibilityLabel="View the photo full screen">
+                  <Image source={{ uri: item }} style={{ width, height: 315 }} resizeMode="cover" />
+                </Pressable>
+              )}
             />
           ) : (
             <View style={[StyleSheet.absoluteFill, s.center]}>

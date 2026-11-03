@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { differenceInCalendarDays, format, isBefore, isSameDay } from 'date-fns';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Card, GradientButton, ScreenHeader } from '../../components/brand';
+import PhotoViewer from '../../components/PhotoViewer';
 import MonthCalendar from '../../components/MonthCalendar';
 import { DARK, FONTS } from '../../constants/colors';
 import { dayKey, RentalsService, type RentalItem as Item } from '../../services/rentals.service';
@@ -24,6 +25,8 @@ export default function RentalItem({ navigation, route }: NativeStackScreenProps
   const [end, setEnd] = useState<Date | null>(null);
   const [qty, setQty] = useState(1);
   const [photo, setPhoto] = useState(0);
+  // the photo shown full screen (tap a photo)
+  const [viewing, setViewing] = useState<number | null>(null);
 
   useEffect(() => {
     RentalsService.item(route.params.itemId)
@@ -69,11 +72,16 @@ export default function RentalItem({ navigation, route }: NativeStackScreenProps
 
   return (
     <View style={s.root}>
+      {viewing != null && <PhotoViewer photos={item.images} start={viewing} onClose={() => setViewing(null)} title={item.title} />}
       <ScrollView contentContainerStyle={{ paddingBottom: (footerH || insets.bottom + 110) + 16 }}>
         <View style={s.hero}>
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setPhoto(Math.round(e.nativeEvent.contentOffset.x / W))}>
             {item.images.length ? (
-              item.images.map((uri) => <Image key={uri} source={{ uri }} style={{ width: W, height: 300 }} resizeMode="cover" />)
+              item.images.map((uri, i) => (
+                <Pressable key={uri} onPress={() => setViewing(i)} accessibilityRole="imagebutton" accessibilityLabel="View the photo full screen">
+                  <Image source={{ uri }} style={{ width: W, height: 300 }} resizeMode="cover" />
+                </Pressable>
+              ))
             ) : (
               <View style={[s.noPhoto, { width: W }]}><Ionicons name="cube-outline" size={48} color={DARK.muted} /></View>
             )}

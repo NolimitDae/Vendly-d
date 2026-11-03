@@ -12,6 +12,7 @@ import SavedCards from "@/components/payments/SavedCards";
 import { RentalsService, dayKey, errorMessage, money, type RentalItem, type RentalQuote } from "@/service/rentals/rentals.service";
 import LocationField from "@/components/listing/LocationField";
 import DosDontsList from "@/components/listing/DosDontsList";
+import PhotoViewer from "@/components/shared/PhotoViewer";
 
 const parse = (s: string | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10))) : null);
 
@@ -22,6 +23,8 @@ export default function RentalItemPage() {
   const [item, setItem] = useState<RentalItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState(0);
+  // the photo shown full size (tap the main photo)
+  const [viewing, setViewing] = useState(false);
   const [start, setStart] = useState<Date | null>(parse(query.get("from")));
   const [end, setEnd] = useState<Date | null>(parse(query.get("to")));
   // item_id → quantity, starting with this item; other items from the vendor can be added
@@ -149,11 +152,14 @@ export default function RentalItemPage() {
           <div className="space-y-6">
             <div className="relative aspect-[16/10] rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800">
               {item.images[photo] ? (
-                <Image src={item.images[photo]} alt={item.title} fill className="object-cover" />
+                <button type="button" onClick={() => setViewing(true)} className="absolute inset-0 cursor-zoom-in" aria-label="View the photo full size">
+                  <Image src={item.images[photo]} alt={item.title} fill className="object-cover" />
+                </button>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-300 dark:text-gray-600"><Package className="w-16 h-16" /></div>
               )}
             </div>
+            {viewing && <PhotoViewer photos={item.images} index={photo} onIndex={setPhoto} onClose={() => setViewing(false)} title={item.title} />}
             {item.images.length > 1 && (
               <div className="flex gap-2">
                 {item.images.map((src, i) => (

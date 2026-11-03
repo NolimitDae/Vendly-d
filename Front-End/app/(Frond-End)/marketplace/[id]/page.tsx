@@ -39,6 +39,7 @@ import ShareButton from "@/components/marketplace/ShareButton";
 import DosDontsList from "@/components/listing/DosDontsList";
 import type { Customization } from "@/lib/package-options";
 import { ListingPageSkeleton } from "@/components/marketplace/PageSkeletons";
+import PhotoViewer from "@/components/shared/PhotoViewer";
 
 interface Listing {
   id: string;
@@ -113,6 +114,8 @@ export default function ListingDetailPage() {
   const [loading, setLoading] = useState(true);
   const paymentSettings = usePaymentSettings();
   const [activeImage, setActiveImage] = useState(0);
+  // the photo shown full size (tap the main photo)
+  const [viewing, setViewing] = useState(false);
   const [showBooking, setShowBooking] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [savingToggle, setSavingToggle] = useState(false);
@@ -271,16 +274,21 @@ export default function ListingDetailPage() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden">
               <div className="relative h-80 md:h-96 bg-gray-100 dark:bg-gray-700">
                 {listing.images?.[activeImage] ? (
-                  <Image
-                    src={listing.images[activeImage]}
-                    alt={listing.title}
-                    fill
-                    className="object-cover"
-                  />
+                  <button type="button" onClick={() => setViewing(true)} className="absolute inset-0 cursor-zoom-in" aria-label="View the photo full size">
+                    <Image
+                      src={listing.images[activeImage]}
+                      alt={listing.title}
+                      fill
+                      className="object-cover"
+                    />
+                  </button>
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-6xl">🖼️</div>
                 )}
               </div>
+              {viewing && (
+                <PhotoViewer photos={listing.images} index={activeImage} onIndex={setActiveImage} onClose={() => setViewing(false)} title={listing.title} />
+              )}
               {listing.images.length > 1 && (
                 <div className="flex gap-2 p-3 overflow-x-auto">
                   {listing.images.map((img, i) => (

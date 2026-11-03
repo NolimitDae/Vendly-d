@@ -106,7 +106,8 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
           </div>
 
           <div className="px-6 sm:px-8 pb-8">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-12">
+            {/* above the banner it overlaps (the banner is a positioned layer, so it would paint over the logo) */}
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-end gap-4 -mt-12">
               {mark ? (
                 <Image
                   src={mark}
