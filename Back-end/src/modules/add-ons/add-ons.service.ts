@@ -104,8 +104,9 @@ export class AddOnsService {
     const unit = dto.price_unit ?? AddOnPriceUnit.FIXED;
     this.checkUnit(unit, dto.max_quantity);
     const listingIds = await this.ownListings(vendorId, dto.listing_ids ?? []);
-    const inLibrary = dto.in_library ?? true;
-    if (!inLibrary && !listingIds.length) throw new BadRequestException('Choose the package for this custom add-on.');
+    // every add-on and fee goes in the vendor's library, also one made while editing a package (and
+    // whatever an older app asks), so it can be found, edited and reused there
+    const inLibrary = true;
     await this.assertRoom(listingIds, 1);
     const created = await this.prisma.vendorAddOn.create({
       data: {

@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Pencil, Plus, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { AddOnsService, type AddOn, type AddOnKind } from "@/service/add-ons/add-ons.service";
 import { addOnPriceText } from "@/lib/addons";
-import AddOnFields, { draftToInput, emptyDraft, type AddOnDraft } from "./AddOnFields";
+import AddOnFields, { draftFrom, draftToInput, emptyDraft, type AddOnDraft } from "./AddOnFields";
 
 /** Most add-ons and fees one package can offer. */
 const MAX_PER_PACKAGE = 40;
@@ -15,8 +15,6 @@ export interface NewAddOn {
   key: string;
   kind: AddOnKind;
   draft: AddOnDraft;
-  /** true: also saved to the library for other packages */
-  in_library: boolean;
 }
 
 export interface PackageAddOnsValue {
@@ -43,7 +41,8 @@ export async function savePackageAddOns(listingId: string, v: PackageAddOnsValue
   for (const n of v.added) {
     const body = draftToInput(n.draft, n.kind);
     if (typeof body === "string") throw new Error(body);
-    const res = await AddOnsService.create({ ...body, in_library: n.in_library, listing_ids: [listingId] });
+    // saved to the vendor's library too, so it can be found, edited and reused there
+    const res = await AddOnsService.create({ ...body, in_library: true, listing_ids: [listingId] });
     const id = res.data?.data?.id;
     if (id) ids.push(id);
   }
@@ -69,8 +68,11 @@ export default function PackageAddOns({
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<AddOnKind | null>(null);
   const [draft, setDraft] = useState<AddOnDraft>(emptyDraft());
-  const [toLibrary, setToLibrary] = useState(false);
   const [failed, setFailed] = useState(false);
+  // an add-on or fee being edited (it changes in the library, so on every package using it)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<AddOnDraft>(emptyDraft());
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -117,7 +119,28 @@ export default function PackageAddOns({
   const startCreate = (kind: AddOnKind) => {
     setCreating(kind);
     setDraft(emptyDraft());
-    setToLibrary(false);
+  };
+
+  const startEdit = (o: AddOn) => {
+    setEditingId(o.id);
+    setEditDraft(draftFrom(o));
+  };
+
+  const saveEdit = async (o: AddOn) => {
+    const body = draftToInput(editDraft, o.kind);
+    if (typeof body === "string") return toast.error(body);
+    setSavingEdit(true);
+    try {
+      const res = await AddOnsService.update(o.id, body);
+      const updated: AddOn | undefined = res.data?.data;
+      if (updated) setOptions((prev) => prev.map((x) => (x.id === o.id ? { ...x, ...updated } : x)));
+      setEditingId(null);
+      toast.success("Saved. Every package using it shows the change.");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? "Couldn't save the change");
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const addNew = () => {
@@ -125,7 +148,7 @@ export default function PackageAddOns({
     const body = draftToInput(draft, creating);
     if (typeof body === "string") return toast.error(body);
     if (total >= MAX_PER_PACKAGE) return toast.error(`A package can have up to ${MAX_PER_PACKAGE} add-ons and fees.`);
-    onChange({ ...value, added: [...value.added, { key: `${Date.now()}-${value.added.length}`, kind: creating, draft, in_library: toLibrary }] });
+    onChange({ ...value, added: [...value.added, { key: `${Date.now()}-${value.added.length}`, kind: creating, draft }] });
     setCreating(null);
   };
 
@@ -142,7 +165,7 @@ export default function PackageAddOns({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-semibold text-gray-900 dark:text-white">Add-ons and fees</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Choose from your library or make one just for this package.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Choose from your library, or make a new one: it&apos;s saved to your library too.</p>
         </div>
         <Link href="/vendor/add-ons" className="text-sm text-primary hover:underline">Manage library</Link>
       </div>
@@ -162,26 +185,41 @@ export default function PackageAddOns({
               {opts.length === 0 && fresh.length === 0 && (
                 <p className="text-sm text-gray-400">None yet.</p>
               )}
-              {opts.map((o) => (
-                <label key={o.id} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-700 cursor-pointer">
-                  <input type="checkbox" checked={value.chosen.includes(o.id)} onChange={() => toggle(o.id)} className="w-4 h-4 mt-0.5 accent-primary" />
-                  <span className="flex-1 min-w-0">
-                    <span className="flex flex-wrap justify-between gap-2 text-sm">
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {o.name}
-                        {!o.in_library && <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">this package only</span>}
+              {opts.map((o) =>
+                editingId === o.id ? (
+                  <div key={o.id} className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
+                    <AddOnFields draft={editDraft} onChange={setEditDraft} idPrefix={`edit-${o.id}`} kind={o.kind} />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Changes apply to every package using it. Bookings already made keep what they were booked with.</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setEditingId(null)} className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">Cancel</button>
+                      <button type="button" onClick={() => saveEdit(o)} disabled={savingEdit} className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+                        {savingEdit ? "Saving…" : "Save changes"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={o.id} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <label className="flex flex-1 min-w-0 items-start gap-3 cursor-pointer">
+                      <input type="checkbox" checked={value.chosen.includes(o.id)} onChange={() => toggle(o.id)} className="w-4 h-4 mt-0.5 accent-primary" />
+                      <span className="flex-1 min-w-0">
+                        <span className="flex flex-wrap justify-between gap-2 text-sm">
+                          <span className="font-medium text-gray-900 dark:text-white">{o.name}</span>
+                          <span className="text-gray-700 dark:text-gray-300">{o.price_text}</span>
+                        </span>
+                        {o.description && <span className="block text-xs text-gray-500 dark:text-gray-400">{o.description}</span>}
                       </span>
-                      <span className="text-gray-700 dark:text-gray-300">{o.price_text}</span>
-                    </span>
-                    {o.description && <span className="block text-xs text-gray-500 dark:text-gray-400">{o.description}</span>}
-                  </span>
-                </label>
-              ))}
+                    </label>
+                    <button type="button" onClick={() => startEdit(o)} aria-label={`Edit ${o.name}`} className="p-1 text-gray-400 hover:text-primary">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  </div>
+                ),
+              )}
               {fresh.map((n) => (
                 <div key={n.key} className="flex items-start gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5">
                   <span className="flex-1 text-sm">
                     <span className="font-medium text-gray-900 dark:text-white">{n.draft.name}</span>
-                    <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">new{n.in_library ? ", saved to library" : ", this package only"}</span>
+                    <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">new, saved to your library when you save the package</span>
                     <span className="block text-gray-700 dark:text-gray-300">{addOnPriceText(n.draft.price, n.draft.price_unit)}</span>
                   </span>
                   <button type="button" aria-label={`Remove ${n.draft.name}`} onClick={() => removeNew(n.key)} className="text-gray-400 hover:text-red-500">
@@ -192,10 +230,6 @@ export default function PackageAddOns({
               {creating === g.kind ? (
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 space-y-3">
                   <AddOnFields draft={draft} onChange={setDraft} idPrefix={`pkg-${g.kind}`} kind={g.kind} />
-                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input type="checkbox" checked={toLibrary} onChange={(e) => setToLibrary(e.target.checked)} className="w-4 h-4 accent-primary" />
-                    Also save to my library to use on other packages
-                  </label>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setCreating(null)} className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">Cancel</button>
                     <button type="button" onClick={addNew} className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Add {g.one}</button>
@@ -203,7 +237,7 @@ export default function PackageAddOns({
                 </div>
               ) : (
                 <button type="button" onClick={() => startCreate(g.kind)} className="flex items-center gap-1.5 text-sm font-medium text-primary">
-                  <Plus className="w-4 h-4" /> New {g.one} for this package
+                  <Plus className="w-4 h-4" /> New {g.one}
                 </button>
               )}
             </fieldset>

@@ -412,7 +412,7 @@ describe('NewListingPage', () => {
 
       await user.click(await screen.findByRole('checkbox', { name: /cleaning/i }));
       await user.click(screen.getByRole('checkbox', { name: /bartender/i }));
-      await user.click(screen.getByRole('button', { name: /new add-on for this package/i }));
+      await user.click(screen.getByRole('button', { name: /^new add-on$/i }));
       await user.type(screen.getByLabelText('Name'), 'Churro bar');
       await user.type(screen.getByLabelText('Price'), '6');
       await user.selectOptions(screen.getByLabelText(/how the add-on is priced/i), 'PER_PERSON');
@@ -427,7 +427,8 @@ describe('NewListingPage', () => {
         description: undefined,
         price: 6,
         price_unit: 'PER_PERSON',
-        in_library: false,
+        // saved to the vendor's library too
+        in_library: true,
         listing_ids: ['new-1'],
       });
       // order kept: picked first, then the new one

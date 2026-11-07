@@ -90,6 +90,8 @@ export default function ListingForm() {
   const [addOnsReady, setAddOnsReady] = useState(false);
   const [addOnsTouched, setAddOnsTouched] = useState(false);
   const [newKind, setNewKind] = useState<AddOnKind | null>(null);
+  // an add-on or fee being edited (it changes in the library, so on every package using it)
+  const [editingAddOn, setEditingAddOn] = useState<AddOn | null>(null);
   // customizations (dropdowns customers answer when booking); an edit only saves them once they've loaded
   const [custom, setCustom] = useState<CustomizationDraft[]>([]);
   const [customLoaded, setCustomLoaded] = useState(!isEdit);
@@ -252,7 +254,8 @@ export default function ListingForm() {
       for (const d of drafts) {
         if (!chosen.includes(d.tempId)) continue;
         const { tempId, ...body } = d;
-        const res = await AddOnsService.create({ ...body, in_library: !!d.in_library, listing_ids: [id] });
+        // saved to the vendor's library too, so it can be found, edited and reused there
+        const res = await AddOnsService.create({ ...body, in_library: true, listing_ids: [id] });
         if (res.data?.data?.id) ids[tempId] = res.data.data.id;
       }
       const final = chosen.map((c) => ids[c] ?? c).filter((c) => !c.startsWith('new:'));
@@ -308,7 +311,12 @@ export default function ListingForm() {
             checked={chosen.includes(a.id)}
             onPress={() => toggleAddOn(a.id)}
             title={a.name}
-            subtitle={`${a.price_text}${a.in_library ? '' : ' · Just this package (removed if unticked)'}`}
+            subtitle={a.price_text}
+            right={
+              <Pressable onPress={() => setEditingAddOn(a)} hitSlop={10} style={s.editAddOn} accessibilityRole="button" accessibilityLabel={`Edit ${a.name}`}>
+                <Ionicons name="create-outline" size={20} color={DARK.accent} />
+              </Pressable>
+            }
           />
         ))}
         {fresh.map((d) => (
@@ -317,12 +325,12 @@ export default function ListingForm() {
             checked={chosen.includes(d.tempId)}
             onPress={() => toggleAddOn(d.tempId)}
             title={d.name}
-            subtitle={`${priceText(d.price, d.price_unit ?? 'FIXED')} · New${d.in_library ? ', saved to your library' : ', just this package'}`}
+            subtitle={`${priceText(d.price, d.price_unit ?? 'FIXED')} · New, saved to your library with the package`}
           />
         ))}
         <Pressable onPress={() => setNewKind(kind)} style={s.addRow} accessibilityRole="button">
           <Ionicons name="add-circle-outline" size={22} color={DARK.accent} />
-          <Text style={s.addRowText}>{kind === 'FEE' ? 'Custom fee' : 'Custom add-on'}</Text>
+          <Text style={s.addRowText}>{kind === 'FEE' ? 'New fee' : 'New add-on'}</Text>
         </Pressable>
       </View>
     );
@@ -570,7 +578,20 @@ export default function ListingForm() {
           <GradientButton title={isEdit ? 'Save Changes' : 'Create Package'} onPress={save} loading={saving} style={{ marginTop: 12 }} />
         </View>
       </ScrollView>
-      <AddOnSheet visible={!!newKind} kind={newKind ?? 'ADD_ON'} libraryToggle onClose={() => setNewKind(null)} onSubmit={addDraft} />
+      <AddOnSheet visible={!!newKind} kind={newKind ?? 'ADD_ON'} onClose={() => setNewKind(null)} onSubmit={addDraft} />
+      <AddOnSheet
+        visible={!!editingAddOn}
+        kind={editingAddOn?.kind ?? 'ADD_ON'}
+        initial={editingAddOn ?? undefined}
+        onClose={() => setEditingAddOn(null)}
+        onSubmit={async (d) => {
+          if (!editingAddOn) return;
+          // the same change as in the library: every package using it shows it; bookings keep what they were made with
+          const res = await AddOnsService.update(editingAddOn.id, { name: d.name, description: d.description ?? '', price: d.price, price_unit: d.price_unit, max_quantity: d.max_quantity ?? null });
+          const updated = res.data?.data;
+          if (updated) setLibrary((prev) => prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)));
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -587,6 +608,7 @@ function Thumb({ uri, onRemove }: { uri: string; onRemove: () => void }) {
 }
 
 const s = StyleSheet.create({
+  editAddOn: { padding: 6 },
   root: { flex: 1, backgroundColor: DARK.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: DARK.bg },
   addImage: { height: 56, borderRadius: 28, backgroundColor: DARK.field, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
