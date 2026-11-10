@@ -270,6 +270,25 @@
     /* gray-900 matches the logged-in pages' existing dark styling (cards sit on it in gray-800) */
     @apply bg-white text-blackColor dark:bg-gray-900;
   }
+
+  /* iPhone Safari draws date and time boxes with a built-in minimum width (wider than a half-width
+     column, so side-by-side boxes spill past the card) and its own height: size them like the text
+     boxes around them instead */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* an empty box keeps one line's height, and the value lines up on the left like other fields */
+  input::-webkit-date-and-time-value {
+    min-height: 1.5em;
+    margin: 0;
+    text-align: left;
+  }
 }
 
 .pointer-events-none {
