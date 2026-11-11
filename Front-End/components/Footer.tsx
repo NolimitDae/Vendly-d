@@ -12,10 +12,12 @@ import { cn } from "@/lib/utils";
 const columns = [
   {
     title: "Explore",
-    links: nav.map((item) => ({ name: item.label, href: `/#${item.hash}` })),
+    links: nav.map((item) => ({ name: item.label, href: `/#${item.hash}`, vendorPitch: item.vendorPitch })),
   },
   {
     title: "Vendors",
+    // vendor sign-up: for visitors only (hidden once someone is logged in)
+    vendorPitch: true,
     links: [
       { name: "List your business free", href: VENDOR_SIGNUP_HREF },
       { name: "Log in", href: "/login" },
@@ -51,11 +53,11 @@ export default function Footer() {
 
           <div className="grid grid-cols-2 gap-10 sm:grid-cols-3">
             {columns.map((col) => (
-              <div key={col.title}>
+              <div key={col.title} className={cn("vendorPitch" in col && col.vendorPitch && "vendor-pitch")}>
                 <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-plum-500 dark:text-orchid-300">{col.title}</h3>
                 <ul className="mt-6 space-y-3">
                   {col.links.map((link) => (
-                    <li key={link.name}>
+                    <li key={link.name} className={cn("vendorPitch" in link && link.vendorPitch && "vendor-pitch")}>
                       <Link href={link.href} className="text-base text-plum-900 transition-colors hover:text-orchid-500 dark:text-white dark:hover:text-orchid-300">
                         {link.name}
                       </Link>

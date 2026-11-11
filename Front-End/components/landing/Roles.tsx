@@ -47,7 +47,7 @@ export default function Roles() {
               <TabsTrigger
                 key={r.key}
                 value={r.key}
-                className="cursor-pointer rounded-full px-5 py-2.5 text-sm font-bold text-plum-700 transition-colors data-[state=active]:bg-brand data-[state=active]:text-white data-[state=active]:shadow-md sm:px-7 dark:text-orchid-300 dark:data-[state=active]:text-white"
+                className={`${r.key === "vendors" ? "vendor-pitch " : ""}cursor-pointer rounded-full px-5 py-2.5 text-sm font-bold text-plum-700 transition-colors data-[state=active]:bg-brand data-[state=active]:text-white data-[state=active]:shadow-md sm:px-7 dark:text-orchid-300 dark:data-[state=active]:text-white`}
               >
                 {r.label}
               </TabsTrigger>
@@ -57,7 +57,7 @@ export default function Roles() {
           {roles.map((r) => {
             const { Screen, label } = SCREENS[r.key];
             return (
-              <TabsContent key={r.key} value={r.key} className="grid items-center gap-12 lg:grid-cols-2 data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-4 motion-reduce:animate-none">
+              <TabsContent key={r.key} value={r.key} className={`${r.key === "vendors" ? "vendor-pitch " : ""}grid items-center gap-12 lg:grid-cols-2 data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-4 motion-reduce:animate-none`}>
                 <div>
                   <h3 className="text-3xl font-extrabold tracking-[-0.02em] text-plum-900 sm:text-4xl dark:text-white">{r.title}</h3>
                   <ul className="mt-8 space-y-4">

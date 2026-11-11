@@ -43,7 +43,7 @@ export default function Categories() {
               </li>
             );
           })}
-          <li className={`${card} flex flex-col justify-between border-transparent bg-plum-950 text-white dark:bg-plum-900`}>
+          <li className={`vendor-pitch ${card} flex flex-col justify-between border-transparent bg-plum-950 text-white dark:bg-plum-900`}>
             <p className="text-lg font-bold leading-snug">Your category?</p>
             <Link
               href={VENDOR_SIGNUP_HREF}

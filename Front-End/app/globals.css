@@ -271,6 +271,13 @@
     @apply bg-white text-blackColor dark:bg-gray-900;
   }
 
+  /* the home page's vendor sign-up pitches are for visitors: people with an account (customers, and
+     vendors who already joined) don't see them; they see .signed-in-only things instead */
+  html[data-signed-in] .vendor-pitch,
+  html:not([data-signed-in]) .signed-in-only {
+    display: none !important;
+  }
+
   /* iPhone Safari draws date and time boxes with a built-in minimum width (wider than a half-width
      column, so side-by-side boxes spill past the card) and its own height: size them like the text
      boxes around them instead */

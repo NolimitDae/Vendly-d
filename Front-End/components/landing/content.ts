@@ -5,11 +5,12 @@
 
 export const VENDOR_SIGNUP_HREF = "/register?type=VENDOR";
 
+// `vendorPitch`: for visitors only (vendor sign-up); hidden once someone is logged in
 export const nav = [
-  { label: "How it works", hash: "how-it-works" },
-  { label: "For vendors", hash: "vendors" },
-  { label: "For planners", hash: "planners" },
-  { label: "Pricing", hash: "pricing" },
+  { label: "How it works", hash: "how-it-works", vendorPitch: false },
+  { label: "For vendors", hash: "vendors", vendorPitch: true },
+  { label: "For planners", hash: "planners", vendorPitch: false },
+  { label: "Pricing", hash: "pricing", vendorPitch: true },
 ] as const;
 
 export const hero = {

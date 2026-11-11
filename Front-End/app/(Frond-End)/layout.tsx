@@ -3,6 +3,7 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { ThemeScript } from "@/providers/ThemeScript";
+import { SignedInScript } from "@/providers/SignedInScript";
 import { NotificationProvider } from "@/providers/NotificationProvider";
 import { OnboardingProvider } from "@/providers/OnboardingProvider";
 import OnboardingPopup from "@/components/onboarding/OnboardingPopup";
@@ -20,6 +21,7 @@ export default function FrontEndLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <ThemeScript />
+        <SignedInScript />
       </head>
       <body className={jakarta.className}>
         <ThemeProvider>

@@ -7,7 +7,7 @@ import VendorDashboardScreen from "./phone/screens/VendorDashboardScreen";
 
 export default function FoundingVendors() {
   return (
-    <section id="vendors" aria-labelledby="founding-title" className="relative isolate scroll-mt-24 overflow-hidden bg-plum-950 py-24 text-white sm:py-32">
+    <section id="vendors" aria-labelledby="founding-title" className="vendor-pitch relative isolate scroll-mt-24 overflow-hidden bg-plum-950 py-24 text-white sm:py-32">
       <div aria-hidden="true" className="landing-glow [pointer-events:none] absolute -right-40 top-10 -z-10 size-[560px] rounded-full bg-[#A84AB0]/30 blur-[130px]" />
       {/* Oversized mark as a backdrop */}
       <div aria-hidden="true" data-parallax="0.25" className="[pointer-events:none] absolute -left-24 bottom-0 -z-10 opacity-7">

@@ -12,7 +12,7 @@ export default function Pricing() {
   ];
 
   return (
-    <section id="pricing" aria-labelledby="pricing-title" className="scroll-mt-24 bg-blush-50 py-24 sm:py-32 dark:bg-plum-950">
+    <section id="pricing" aria-labelledby="pricing-title" className="vendor-pitch scroll-mt-24 bg-blush-50 py-24 sm:py-32 dark:bg-plum-950">
       <div className="mx-auto max-w-[1080px] px-5 sm:px-8">
         <SectionHeading
           id="pricing-title"

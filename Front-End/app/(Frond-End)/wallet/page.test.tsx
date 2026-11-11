@@ -173,7 +173,10 @@ describe('WalletPage', () => {
       setupMocks({ account: { hasConnectedAccount: false, accountId: null, email: '', name: '' } });
       (AuthService.me as jest.Mock).mockResolvedValue({ data: { success: true, data: { id: 'u-2', name: 'Ada', type: 'CUSTOMER' } } });
       render(<WalletPage />);
-      await waitFor(() => expect(screen.getByText('Transaction History')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('Your booking payments and refunds')).toBeInTheDocument());
+      // a customer sees their payments and refunds, not the vendor withdrawals list
+      expect(screen.queryByText('Transaction History')).not.toBeInTheDocument();
+      expect(screen.queryByText('Withdraw Funds')).not.toBeInTheDocument();
       expect(screen.queryByText(/add funds/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/deposit/i)).not.toBeInTheDocument();
       expect(WalletService.deposit).not.toHaveBeenCalled();

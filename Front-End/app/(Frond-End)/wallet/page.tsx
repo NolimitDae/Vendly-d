@@ -177,7 +177,7 @@ export default function WalletPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wallet</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Manage your funds and transactions
+              {isVendor ? "Manage your funds and transactions" : "Your booking payments and refunds"}
             </p>
           </div>
         </div>
@@ -313,7 +313,8 @@ export default function WalletPage() {
         {/* ── Booking charges and refunds ───────────────────── */}
         <TransactionsList role="customer" title="Booking payments and refunds" />
 
-        {/* ── Transaction history ───────────────────────────── */}
+        {/* ── Withdrawal history (vendors only: customers' payments and refunds are listed above) ── */}
+        {isVendor && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900 dark:text-white">Transaction History</h2>
@@ -407,6 +408,7 @@ export default function WalletPage() {
             </div>
           )}
         </div>
+        )}
       </div>
       {onboarding && <StripeOnboardingDialog onClose={closeOnboarding} manage={onboarding === "manage"} />}
     </div>

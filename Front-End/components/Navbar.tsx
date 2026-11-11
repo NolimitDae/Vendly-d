@@ -18,10 +18,11 @@ import { AuthService } from "@/service/auth/auth.service";
 import { useNotifications } from "@/hooks/useNotifications";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { SIGNED_IN_ATTRIBUTE } from "@/providers/SignedInScript";
 
 dayjs.extend(relativeTime);
 
-const homeItems = nav.map((item) => ({ en: item.label, href: `/#${item.hash}`, hash: item.hash }));
+const homeItems = nav.map((item) => ({ en: item.label, href: `/#${item.hash}`, hash: item.hash, vendorPitch: item.vendorPitch }));
 
 const appLinks = [
   { en: "Marketplace", href: "/marketplace", icon: Store },
@@ -56,6 +57,12 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [hash, setHash] = useState("");
   const [user, setUser] = useState<UserInfo | null>(null);
+  // keeps the "signed in" mark on the page in step after logging in or out without a reload (it hides
+  // the home page's vendor sign-up pitches; providers/SignedInScript sets it before the first paint)
+  // (it follows the login cookie, so it doesn't drop while the account is still loading)
+  useEffect(() => {
+    document.documentElement.toggleAttribute(SIGNED_IN_ATTRIBUTE, hasSession());
+  }, [user, pathname]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const rentalsOn = useFeature("rentals");
   // vendor plans are hidden until they launch (an admin switches the flag on)
@@ -137,6 +144,7 @@ export default function Navbar() {
               href={item.href}
               onClick={(e) => handleNavClick(e, item.hash)}
               className={cn(
+                item.vendorPitch && "vendor-pitch",
                 "hover:text-orchid-500 dark:hover:text-orchid-300 transition text-base dark:text-white",
                 linkIsActive(item.hash)
                   ? "text-blackColor dark:text-white font-medium"
@@ -478,7 +486,7 @@ export default function Navbar() {
               </Link>
               <Link
                 href={isHome ? VENDOR_SIGNUP_HREF : "/register"}
-                className="bg-brand text-white font-medium px-6 py-2.5 rounded-full text-sm hover:opacity-90 transition"
+                className={cn(isHome && "vendor-pitch", "bg-brand text-white font-medium px-6 py-2.5 rounded-full text-sm hover:opacity-90 transition")}
               >
                 {isHome ? "List your business free" : "Sign up"}
               </Link>
@@ -530,6 +538,7 @@ export default function Navbar() {
                 key={item.hash}
                 href={item.href}
                 className={cn(
+                  item.vendorPitch && "vendor-pitch",
                   "block text-sm py-2.5 px-3 rounded-xl dark:text-white",
                   linkIsActive(item.hash)
                     ? "text-primary font-medium bg-primary/5"

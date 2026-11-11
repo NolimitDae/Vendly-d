@@ -55,9 +55,17 @@ export default function Hero() {
             <Link
               href={VENDOR_SIGNUP_HREF}
               data-magnetic
-              className="group flex w-full items-center justify-center gap-3 rounded-full bg-brand px-7 py-4 sm:inline-flex sm:w-fit text-base font-bold text-white shadow-[0_20px_50px_-15px_rgba(168,74,176,0.8)] transition-shadow hover:shadow-[0_24px_60px_-12px_rgba(168,74,176,1)]"
+              className="vendor-pitch group flex w-full items-center justify-center gap-3 rounded-full bg-brand px-7 py-4 sm:inline-flex sm:w-fit text-base font-bold text-white shadow-[0_20px_50px_-15px_rgba(168,74,176,0.8)] transition-shadow hover:shadow-[0_24px_60px_-12px_rgba(168,74,176,1)]"
             >
               {hero.primary}
+              <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
+            </Link>
+            {/* signed in: straight to booking instead of the vendor sign-up */}
+            <Link
+              href="/marketplace"
+              className="signed-in-only group flex w-full items-center justify-center gap-3 rounded-full bg-brand px-7 py-4 sm:inline-flex sm:w-fit text-base font-bold text-white shadow-[0_20px_50px_-15px_rgba(168,74,176,0.8)] transition-shadow hover:shadow-[0_24px_60px_-12px_rgba(168,74,176,1)]"
+            >
+              Find vendors
               <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
             </Link>
             <Link href="/plan" className="text-center text-sm font-semibold text-orchid-300 underline-offset-4 hover:underline sm:text-left">
