@@ -7,6 +7,7 @@ import { ArrowLeft, Star, Package, Store } from "lucide-react";
 import { MarketplaceService } from "@/service/marketplace/marketplace.service";
 import ReviewList from "@/components/marketplace/ReviewList";
 import { AddToTeamButton } from "@/components/events/VendorTeams";
+import MessageButton from "@/components/chat/MessageButton";
 import TestBadge from "@/components/marketplace/TestBadge";
 import ShareButton from "@/components/marketplace/ShareButton";
 import SaveVendorButton from "@/components/marketplace/SaveVendorButton";
@@ -134,6 +135,9 @@ export default function VendorShop({ idOrHandle }: { idOrHandle: string }) {
               </div>
 
               <AddToTeamButton vendor={{ id: vendor.id, name: displayName, avatar_url: mark ?? null, category: listings[0]?.category?.name ?? null }} />
+
+              {/* questions go to the vendor's messages (not shown on your own shop) */}
+              <MessageButton userId={vendor.id} name={displayName} label="Message vendor" className="w-auto self-start sm:self-auto" />
 
               {/* customers save the vendor to Favorites (by id: the address may hold the shop handle) */}
               <SaveVendorButton vendorId={vendor.id} className="self-start sm:self-auto" />

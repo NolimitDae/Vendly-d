@@ -35,7 +35,10 @@ const columns = [
 ];
 
 export default function Footer() {
-  const isHome = usePathname() === "/";
+  const pathname = usePathname();
+  const isHome = pathname === "/";
+  // messages fill the screen like an app: no footer under them (the page would scroll away from the chat)
+  if (pathname === "/chat" || pathname?.startsWith("/chat/")) return null;
 
   return (
     // On the home page the footer continues the page's deep plum; elsewhere it follows the site theme.

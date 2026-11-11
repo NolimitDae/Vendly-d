@@ -52,6 +52,8 @@ export default function ConversationPage() {
   const unseen = useRef(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  // the message list: new messages scroll it, never the whole page
+  const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [me, setMe] = useState<{ id: string | null; type: string | null }>({ id: null, type: null });
 
@@ -168,7 +170,8 @@ export default function ConversationPage() {
   useEffect(() => () => typing?.stop(), [typing]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const list = listRef.current;
+    if (list) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   const isGroup = !!info?.is_group;
@@ -320,7 +323,7 @@ export default function ConversationPage() {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 bg-gray-50 dark:bg-gray-900">
+      <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-1 bg-gray-50 dark:bg-gray-900">
         {loading ? (
           <div className="flex justify-center items-center h-full"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
         ) : messages.length === 0 ? (
@@ -494,11 +497,11 @@ export default function ConversationPage() {
                 send();
               }
             }}
-            placeholder={blocked ? "You can't send messages in this chat" : limitReached ? `Waiting for ${sendLimit?.vendor_name ?? "them"} to reply` : "Type a message... (Enter to send)"}
+            placeholder={blocked ? "You can't send messages in this chat" : limitReached ? `Waiting for ${sendLimit?.vendor_name ?? "them"} to reply` : "Type a message…"}
             aria-label="Message"
             disabled={cantSend}
             rows={1}
-            className="flex-1 resize-none px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 max-h-32 overflow-y-auto leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex-1 resize-none px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-base md:text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 max-h-32 overflow-y-auto leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ height: "auto" }}
             onInput={(e) => {
               const t = e.currentTarget;

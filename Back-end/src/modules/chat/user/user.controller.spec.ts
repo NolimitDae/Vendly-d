@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
+import { RolesGuard } from 'src/common/guard/role/roles.guard';
+import { ROLES_KEY } from 'src/common/guard/role/roles.decorator';
 
 const mockUserService = {
   findAll: jest.fn(),
@@ -16,13 +18,20 @@ describe('UserController', () => {
       providers: [
         { provide: UserService, useValue: mockUserService },
       ],
-    }).compile();
+    })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<UserController>(UserController);
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it("is for Vendly's admins only (it lists vendors' and planners' emails)", () => {
+    expect(Reflect.getMetadata(ROLES_KEY, UserController)).toEqual(['ADMIN']);
   });
 
   describe('findAll', () => {

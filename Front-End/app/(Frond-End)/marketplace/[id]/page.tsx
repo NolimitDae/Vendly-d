@@ -13,7 +13,7 @@ import {
   Calendar,
   CheckCircle,
   ChevronLeft,
-  MessageCircle,
+  Store,
   Heart,
   CalendarPlus,
   X,
@@ -40,6 +40,7 @@ import DosDontsList from "@/components/listing/DosDontsList";
 import type { Customization } from "@/lib/package-options";
 import { ListingPageSkeleton } from "@/components/marketplace/PageSkeletons";
 import PhotoViewer from "@/components/shared/PhotoViewer";
+import MessageButton from "@/components/chat/MessageButton";
 
 interface Listing {
   id: string;
@@ -643,11 +644,13 @@ export default function ListingDetailPage() {
                   </p>
                 )}
 
+                {/* questions before booking go to the vendor's messages */}
+                <MessageButton userId={listing.vendor.id} name={listing.vendor.vendorProfile?.business_name || listing.vendor.name} label="Message vendor" className="mt-4" />
                 <Link
                   href={`/marketplace/vendors/${listing.vendor.id}`}
                   className="flex items-center gap-1 mt-3 text-sm text-primary hover:underline"
                 >
-                  <MessageCircle className="w-4 h-4" />
+                  <Store className="w-4 h-4" />
                   View full profile
                 </Link>
               </div>
