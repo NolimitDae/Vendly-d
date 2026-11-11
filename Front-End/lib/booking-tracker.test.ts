@@ -56,7 +56,8 @@ describe("contact and directions", () => {
     expect(phoneProblem("555-CALL-NOW")).toMatch(/only digits/);
   });
 
-  it("opens Google Maps directions to the position, else the address", () => {
+  it("opens Google Maps directions to the address shown, else the position", () => {
+    expect(directionsUrl({ lat: 30.27, lng: -97.74, address: "1 Main St, Austin" })).toBe("https://www.google.com/maps/dir/?api=1&destination=1%20Main%20St%2C%20Austin");
     expect(directionsUrl({ lat: 30.27, lng: -97.74 })).toBe("https://www.google.com/maps/dir/?api=1&destination=30.27%2C-97.74");
     expect(directionsUrl({ address: "1 Main St, Austin" })).toBe("https://www.google.com/maps/dir/?api=1&destination=1%20Main%20St%2C%20Austin");
     expect(directionsUrl({})).toBeNull();

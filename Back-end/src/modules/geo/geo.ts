@@ -197,6 +197,8 @@ const SUGGEST_CENSUS_BUDGET_MS = 900;
 /** Photon (OpenStreetMap search) normally answers in under a second. */
 const PHOTON_TIMEOUT_MS = 3000;
 const MAX_SUGGESTIONS = 6;
+/** With the Census address in hand, the map search gets only this much longer before suggestions go out. */
+const QUICK_PHOTON_WAIT_MS = 150;
 const headers = () => ({ 'User-Agent': `Vendly/1.0 (${process.env.GEOCODER_CONTACT_EMAIL ?? 'support@vendlymarketplace.com'})`, Accept: 'application/json' });
 const round5 = (n: number) => Math.round(n * 1e5) / 1e5;
 
@@ -254,7 +256,20 @@ export async function censusMatches(text: string, near: { lat: number; lng: numb
   return near ? [...places].sort((a, b) => milesBetween(near, a) - milesBetween(near, b)) : places;
 }
 
+const photonCache = new Map<string, any[]>();
+
 async function photonFeatures(text: string, near: { lat: number; lng: number } | null | undefined, street: boolean, fetchImpl: typeof fetch): Promise<any[]> {
+  // the same search again (typing back over a word, the next field) is answered from memory
+  const cacheKey = `${street ? 's' : 'a'}|${text.trim().toLowerCase()}|${near ? `${near.lat.toFixed(1)},${near.lng.toFixed(1)}` : ''}`;
+  const cached = photonCache.get(cacheKey);
+  if (cached) return cached;
+  const found = await photonFetch(text, near, street, fetchImpl);
+  if (photonCache.size > 2000) photonCache.clear();
+  photonCache.set(cacheKey, found);
+  return found;
+}
+
+async function photonFetch(text: string, near: { lat: number; lng: number } | null | undefined, street: boolean, fetchImpl: typeof fetch): Promise<any[]> {
   // a few more than are shown, so places outside the US can be left out
   const params = new URLSearchParams({ q: text, limit: '10', lang: 'en' });
   if (near) {
@@ -360,6 +375,47 @@ function distinctAddresses(places: Place[]): Place[] {
   });
 }
 
+/** The first word of the street typed after the house number ("200 E Glenwood Ave" -> "glenwood"), or null. */
+export function typedStreetWord(text: string): string | null {
+  const words = text.trim().toLowerCase().split(/[\s,]+/);
+  if (!typedHouseNumber(text)) return null;
+  let i = 1;
+  if (words[i] && (DIRECTIONS[words[i]] || SHORT_DIRECTIONS.has(words[i].toUpperCase()))) i++;
+  const w = words[i]?.replace(/[^a-z0-9]/g, '');
+  return w && w.length >= 2 ? w : null;
+}
+
+/** Whether a label's street has the typed street word ("lakeside" in "2100 Lakeside Dr, ..."; not in "Ellison Lakes Dr"). */
+function onTypedStreet(label: string, word: string): boolean {
+  const street = (label.split(', ').find((x) => /^\d/.test(x)) ?? '').toLowerCase().split(/\s+/).slice(1);
+  return street.some((w) => {
+    const clean = w.replace(/[^a-z0-9]/g, '');
+    // the street's word starts with what's typed ("mai" -> Main); "Lakes" doesn't answer "lakeside"
+    return clean.startsWith(word);
+  });
+}
+
+/** A label without a business or building name in front ("Fountain Park, 123 E Main St, ..." -> "123 E Main St, ..."). */
+export function addressOnly(label: string): string {
+  const parts = label.split(', ');
+  const at = parts.findIndex((x) => /^\d/.test(x));
+  return at > 0 ? parts.slice(at).join(', ') : label;
+}
+
+/**
+ * Only what fits a typed street address ("2100 Lakeside Dr"): places on that street, as plain addresses
+ * (no business names in front), and, when the typed house number was found, without the neighbours on
+ * other numbers. With no house number typed (a venue's name) everything is kept as it is.
+ */
+export function fitTypedAddress(places: Place[], text: string): Place[] {
+  const house = typedHouseNumber(text);
+  if (!house) return places;
+  const word = typedStreetWord(text);
+  const fit = places.map((p) => ({ ...p, label: addressOnly(p.label) })).filter((p) => /^\d/.test(p.label) && (!word || onTypedStreet(p.label, word)));
+  const exact = fit.filter((p) => p.label.split(' ')[0].toLowerCase() === house.toLowerCase());
+  return exact.length ? exact : fit;
+}
+
 /** Photon's street-mode answers as labels, ranked for the house number typed (if any). */
 function streetPlaces(features: any[], text: string): Place[] {
   const house = typedHouseNumber(text);
@@ -406,22 +462,26 @@ export async function suggestPlaces(q: string, near?: { lat: number; lng: number
             SUGGEST_CENSUS_BUDGET_MS,
           )
         : Promise.resolve(null);
-    const [photon, found, local] = await Promise.all([
-      photonFeatures(text, near, true, fetchImpl).catch((err: Error) => err),
-      within(censusForTyping(text, near, fetchImpl), SUGGEST_CENSUS_BUDGET_MS),
-      inState,
-    ]);
+    const photonAsk = photonFeatures(text, near, true, fetchImpl).catch((err: Error) => err);
+    const found = await within(censusForTyping(text, near, fetchImpl), SUGGEST_CENSUS_BUDGET_MS);
+    // the Census found the typed street address: answer now, with what the map search has by then
+    // (it often takes a second or two more); its answer is kept for the next keystroke
+    const quick = !!typedHouseNumber(text) && !!found?.places.length;
+    const [photon, local] = quick
+      ? [(await within(photonAsk, QUICK_PHOTON_WAIT_MS)) ?? ([] as any[]), await within(inState, QUICK_PHOTON_WAIT_MS)]
+      : await Promise.all([photonAsk, inState]);
     // null: slow (still on its way) or failed
     const census = found?.complete ? found.places : null;
     const censusSoFar = found?.places ?? [];
     if (photon instanceof Error) {
       // the Census matches alone are still worth showing (not cached: the next keystroke asks Photon again)
-      if (censusSoFar.length) return censusSoFar.slice(0, MAX_SUGGESTIONS);
+      if (censusSoFar.length) return fitTypedAddress(censusSoFar, text).slice(0, MAX_SUGGESTIONS);
       throw photon;
     }
-    places = distinct(distinctAddresses([...censusSoFar, ...streetPlaces(local ?? [], text), ...streetPlaces(photon, text)]));
-    // a slow or failed Census lookup isn't remembered as "no exact match": the next time asks again
-    if (census === null) return places;
+    places = distinct(distinctAddresses(fitTypedAddress([...censusSoFar, ...streetPlaces(local ?? [], text), ...streetPlaces(photon, text)], text)));
+    // a slow or failed Census lookup isn't remembered as "no exact match": the next time asks again, as is
+    // an answer given before the map search was back
+    if (census === null || quick) return places;
   }
   if (placeCache.size > 2000) placeCache.clear();
   placeCache.set(key, places);
@@ -485,4 +545,5 @@ export function withoutPosition<T extends Record<string, any>>(listing: T): Omit
 export const __clearPlaceCache = () => {
   placeCache.clear();
   censusCache.clear();
+  photonCache.clear();
 };

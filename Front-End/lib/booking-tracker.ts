@@ -82,9 +82,14 @@ export function nextVendorStep(b: TrackerFields): { path: "en-route" | "arrived"
 /** A tel: link for a phone number as typed (keeps the + and the digits). */
 export const telLink = (phone: string) => `tel:${phone.replace(/[^\d+]/g, "")}`;
 
-/** Google Maps directions to a place: its map position when known, else the address. */
+/**
+ * Google Maps directions to a place: to its address, as written on the booking (so the map shows that
+ * address, and a slightly-off map position can't send anyone to the wrong door); its map position only
+ * when there's no address.
+ */
 export function directionsUrl(place: { lat?: number | null; lng?: number | null; address?: string | null }) {
-  const dest = place.lat != null && place.lng != null ? `${place.lat},${place.lng}` : (place.address ?? "").trim();
+  const address = (place.address ?? "").trim();
+  const dest = address || (place.lat != null && place.lng != null ? `${place.lat},${place.lng}` : "");
   return dest ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}` : null;
 }
 

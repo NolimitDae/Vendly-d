@@ -48,7 +48,8 @@ describe("MapPicture", () => {
     expect(screen.getByRole("img", { name: /1 Main St/ })).toBeInTheDocument();
     expect(screen.getByText("© OpenStreetMap contributors")).toBeInTheDocument();
     const dir = screen.getByRole("link", { name: "Directions" });
-    expect(dir).toHaveAttribute("href", "https://www.google.com/maps/dir/?api=1&destination=30.2672%2C-97.7431");
+    // to the address shown on the booking (the map position only when there's no address)
+    expect(dir).toHaveAttribute("href", "https://www.google.com/maps/dir/?api=1&destination=1%20Main%20St");
     expect(dir).toHaveAttribute("target", "_blank");
   });
 

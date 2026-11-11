@@ -1,4 +1,4 @@
-import { __clearGeocodeCache, __clearPlaceCache, addressPoint, boundingBox, censusLabel, geocode, looksLikeStreetAddress, milesBetween, placeLabel, reversePlace, shortStreet, streetLabel, suggestPlaces, takeOsmTurn, titleCase, typedHouseNumber, withoutPosition } from './geo';
+import { __clearGeocodeCache, __clearPlaceCache, addressPoint, boundingBox, fitTypedAddress, censusLabel, geocode, looksLikeStreetAddress, milesBetween, placeLabel, reversePlace, shortStreet, streetLabel, suggestPlaces, takeOsmTurn, titleCase, typedHouseNumber, withoutPosition } from './geo';
 import { GeocodeService } from './geocode.service';
 
 const houston = { lat: 29.7604, lng: -95.3698 };
@@ -206,12 +206,8 @@ describe('street address suggestions', () => {
       [{ matchedAddress: '200 E GLENWOOD AVE, SMYRNA, DE, 19977', coordinates: { x: -75.607860614109, y: 39.305557736471 } }],
     );
     const places = await suggestPlaces('200 E Glenwood Ave Smyrna DE', near, fetchMock as any, true);
-    expect(places).toEqual([
-      { label: '200 E Glenwood Ave, Smyrna, DE 19977', lat: 39.30556, lng: -75.60786 },
-      // the street with the typed number (the Census match above already has it), the other side without it
-      { label: 'W Glenwood Ave, Smyrna, DE 19977', lat: 39.30286, lng: -75.6111 },
-      { label: 'Smyrna Police Department, 325 W Glenwood Ave, Smyrna, DE 19977', lat: 39.29997, lng: -75.61388 },
-    ]);
+    // the typed address was found: just it, not the other side of the street or a business at another number
+    expect(places).toEqual([{ label: '200 E Glenwood Ave, Smyrna, DE 19977', lat: 39.30556, lng: -75.60786 }]);
     const photonUrl = fetchMock.mock.calls.find(([u]) => u.includes('/api/'))![0];
     expect(photonUrl).toContain('countrycode=US');
     expect(photonUrl).toContain('lat=39.3');
@@ -234,7 +230,8 @@ describe('street address suggestions', () => {
       feature({ name: 'Smyrna Health Center', housenumber: '100', street: 'South Main Street', type: 'house', ...delaware }, -75.60473, 39.29981),
     ]);
     const labels = (await suggestPlaces('100 S Main', near, fetchMock as any, true)).map((p) => p.label);
-    expect(labels).toEqual(['Smyrna Health Center, 100 S Main St, Smyrna, DE 19977', 'The Skyline Cafe, 7 S Main St, Smyrna, DE 19977']);
+    // the typed number on its street, as a plain address (no business name in front, no neighbour at No. 7)
+    expect(labels).toEqual(['100 S Main St, Smyrna, DE 19977']);
     // no town typed: the Census geocoder is asked with the town the person is in
     const census = fetchMock.mock.calls.map(([u]) => u).filter((u) => u.includes('census'));
     expect(census).toHaveLength(1);
@@ -268,7 +265,7 @@ describe('street address suggestions', () => {
     const at = (name: string) => feature({ name, housenumber: '350', street: '5th Avenue', type: 'house', city: 'New York', state: 'New York', postcode: '10118', countrycode: 'US' }, -73.98, 40.75);
     const fetchMock = mockFetch([at('Empire State Building'), at('WNEW-FM (New York)'), at('WCBS-FM (New York)')]);
     const labels = (await suggestPlaces('350 5th Ave New York NY', null, fetchMock as any, true)).map((p) => p.label);
-    expect(labels).toEqual(['Empire State Building, 350 5th Ave, New York, NY 10118']);
+    expect(labels).toEqual(['350 5th Ave, New York, NY 10118']);
   });
 
   it('orders Census matches by distance and de-duplicates them against Photon', async () => {
@@ -299,3 +296,32 @@ describe('street address suggestions', () => {
   });
 });
 
+
+describe('fitting a typed street address', () => {
+  const place = (label: string) => ({ label, lat: 1, lng: 2 });
+
+  it('drops other streets that only look alike, and business names in front', () => {
+    const out = fitTypedAddress(
+      [place('2100 Lakeside Dr, Athens, GA 30605'), place('Lakeside Vista Apartment Homes, 2100 Ellison Lakes Dr NW, Kennesaw, GA 30152')],
+      '2100 Lakeside Dr',
+    );
+    expect(out.map((p) => p.label)).toEqual(['2100 Lakeside Dr, Athens, GA 30605']);
+    expect(fitTypedAddress([place('Infinite Loop 1, 1 Infinite Loop, Cupertino, CA 95014'), place('BJ’s, 10690 N De Anza Blvd, Cupertino, CA 95014')], '1 Infinite Loop Cupertino').map((p) => p.label)).toEqual([
+      '1 Infinite Loop, Cupertino, CA 95014',
+    ]);
+  });
+
+  it('keeps only the typed house number when it was found, else the street', () => {
+    const list = [place('8520 Beach Blvd, Jacksonville, FL 32216'), place('WoodSpring Suites, Saland Way, Jacksonville, FL 33216'), place('Everything Automotive, 7624 Beach Blvd, Jacksonville, FL 32216')];
+    expect(fitTypedAddress(list, '8520 Beach Blvd Jacksonville').map((p) => p.label)).toEqual(['8520 Beach Blvd, Jacksonville, FL 32216']);
+    // number not found: the street's other numbers are still a help
+    expect(fitTypedAddress(list, '8000 Beach Blvd').map((p) => p.label)).toEqual(['8520 Beach Blvd, Jacksonville, FL 32216', '7624 Beach Blvd, Jacksonville, FL 32216']);
+    // a direction before the street, and a street only half typed
+    expect(fitTypedAddress([place('123 E Main St, Millheim, PA 16854')], '123 E Mai').map((p) => p.label)).toEqual(['123 E Main St, Millheim, PA 16854']);
+  });
+
+  it('leaves a venue name search alone (no house number typed)', () => {
+    const list = [place('Marriott Marquis, 265 Peachtree Center Ave NE, Atlanta, GA 30303')];
+    expect(fitTypedAddress(list, 'Marriott Atlanta')).toEqual(list);
+  });
+});

@@ -50,11 +50,13 @@ export function callNumber(phone: string) {
 }
 
 /**
- * Directions in the phone's maps app: Apple Maps on iOS, Google Maps on Android. Uses the map position
- * when known, else the address text.
+ * Directions in the phone's maps app: Apple Maps on iOS, Google Maps on Android. To the address as written
+ * on the booking (the maps app shows that address, and a slightly-off map position can't send anyone to
+ * the wrong door); the map position only when there's no address.
  */
 export function openDirections(place: { lat?: number | null; lng?: number | null; address?: string | null }) {
-  const dest = place.lat != null && place.lng != null ? `${place.lat},${place.lng}` : (place.address ?? '').trim();
+  const address = (place.address ?? '').trim();
+  const dest = address || (place.lat != null && place.lng != null ? `${place.lat},${place.lng}` : '');
   if (!dest) return;
   const q = encodeURIComponent(dest);
   const url = Platform.OS === 'ios' ? `https://maps.apple.com/?daddr=${q}&dirflg=d` : `https://www.google.com/maps/dir/?api=1&destination=${q}`;
