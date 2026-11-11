@@ -19,6 +19,7 @@ import ChatSafetyMenu, { ReportMessageButton } from "@/components/chat/ChatSafet
 import { CHAT_ARCHIVE_EVENT, type ChatArchiveDetail } from "@/components/chat/ArchivedChats";
 import { CHAT_READ_EVENT, createTypingEmitter, readReceipt, useTypingUsers } from "@/components/chat/presence";
 import { cn } from "@/lib/utils";
+import PhotoViewer from "@/components/shared/PhotoViewer";
 
 function Avatar({ url, name, size = 28 }: { url?: string | null; name: string; size?: number }) {
   return url ? (
@@ -54,6 +55,8 @@ export default function ConversationPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   // the message list: new messages scroll it, never the whole page
   const listRef = useRef<HTMLDivElement>(null);
+  // a message's photos shown full screen, on the page
+  const [viewingPhotos, setViewingPhotos] = useState<{ photos: string[]; index: number } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [me, setMe] = useState<{ id: string | null; type: string | null }>({ id: null, type: null });
 
@@ -376,14 +379,14 @@ export default function ConversationPage() {
                       {!!msg.attachments_url?.length && (
                         <div className={cn("grid gap-1", msg.attachments_url.length === 1 ? "grid-cols-1" : msg.attachments_url.length === 2 || msg.attachments_url.length === 4 ? "grid-cols-2" : "grid-cols-3")}>
                           {msg.attachments_url.map((url, n) => (
-                            <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block" aria-label={`Open photo ${n + 1} of ${msg.attachments_url!.length} from ${name}`}>
+                            <button type="button" key={url} onClick={() => setViewingPhotos({ photos: msg.attachments_url!, index: n })} className="block cursor-zoom-in" aria-label={`Open photo ${n + 1} of ${msg.attachments_url!.length} from ${name}`}>
                               {/* eslint-disable-next-line @next/next/no-img-element -- user photo from storage */}
                               <img loading="lazy" decoding="async"
                                 src={url}
                                 alt={`Photo ${n + 1} from ${name}`}
                                 className={cn("rounded-2xl object-cover bg-gray-100 dark:bg-gray-800", msg.attachments_url!.length === 1 ? "max-w-[240px] max-h-[240px]" : "w-24 h-24 sm:w-28 sm:h-28")}
                               />
-                            </a>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -514,6 +517,15 @@ export default function ConversationPage() {
           </button>
         </div>
       </div>
+      {viewingPhotos && (
+        <PhotoViewer
+          photos={viewingPhotos.photos}
+          index={viewingPhotos.index}
+          onIndex={(index) => setViewingPhotos((v) => (v ? { ...v, index } : v))}
+          onClose={() => setViewingPhotos(null)}
+          unoptimized
+        />
+      )}
       {quoting && <SendQuoteModal conversationId={conversationId} onClose={() => setQuoting(false)} onSent={load} />}
     </div>
   );

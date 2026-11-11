@@ -57,4 +57,16 @@ describe('InspirationPhotos', () => {
     expect(screen.getAllByRole('img')).toHaveLength(2);
     expect(screen.getByRole('img', { name: 'Inspiration photo 1 of 2' })).toHaveAttribute('src', 'https://api.test/api/request-photos/a');
   });
+
+  it('opens a photo full screen on the page, and moves to the next', async () => {
+    const user = userEvent.setup();
+    render(<InspirationPhotos urls={['https://api.test/api/request-photos/a', 'https://api.test/api/request-photos/b']} />);
+    await user.click(screen.getByRole('button', { name: 'Open photo 1 of 2 full size' }));
+    expect(screen.getByRole('dialog', { name: 'Inspiration photos' })).toBeInTheDocument();
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next photo' }));
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 });

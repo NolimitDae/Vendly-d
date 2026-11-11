@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
 import { toast } from "react-toastify";
+import PhotoViewer from "@/components/shared/PhotoViewer";
 
 export const REQUEST_MAX_PHOTOS = 10;
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -102,17 +103,20 @@ export function InspirationPhotosPicker({ onChange }: { onChange: (files: File[]
 /** The photos sent with the request, from short-lived signed links (thumbnails open full size). */
 export function InspirationPhotos({ urls, title = "Inspiration photos" }: { urls?: string[] | null; title?: string }) {
   const photos = urls ?? [];
+  // the photo shown full screen, on the page
+  const [viewing, setViewing] = useState<number | null>(null);
   if (photos.length === 0) return null;
   return (
     <div className="space-y-2">
+      {viewing != null && <PhotoViewer photos={photos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} title={title.replace(/ photos$/i, "")} unoptimized />}
       <p className="text-gray-400 text-xs">{title}</p>
       <ul aria-label={title} className="flex flex-wrap gap-2">
         {photos.map((url, i) => (
           <li key={url}>
-            <a href={url} target="_blank" rel="noopener noreferrer" title="Open full size" className="block">
+            <button type="button" onClick={() => setViewing(i)} title="Open full size" aria-label={`Open photo ${i + 1} of ${photos.length} full size`} className="block cursor-zoom-in">
               {/* eslint-disable-next-line @next/next/no-img-element -- private, short-lived signed link */}
               <img loading="lazy" decoding="async" src={url} alt={`Inspiration photo ${i + 1} of ${photos.length}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900" />
-            </a>
+            </button>
           </li>
         ))}
       </ul>

@@ -36,6 +36,7 @@ import { useBookingRefresh } from "@/hooks/useBookingRefresh";
 import BookingChoices from "@/components/bookings/BookingChoices";
 import RequestChangesCard from "@/components/bookings/RequestChangesCard";
 import PaymentPlanCard from "@/components/bookings/PaymentPlanCard";
+import PhotoViewer from "@/components/shared/PhotoViewer";
 
 interface Proof {
   id: string;
@@ -92,6 +93,8 @@ export default function CustomerBookingDetailPage() {
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [proofs, setProofs] = useState<Proof[]>([]);
+  // a proof's photos shown full screen, on the page
+  const [viewingPhotos, setViewingPhotos] = useState<{ photos: string[]; index: number } | null>(null);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [loading, setLoading] = useState(true);
   // bumped when an add-on or fee is paid, so the payments list reloads
@@ -166,6 +169,16 @@ export default function CustomerBookingDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      {viewingPhotos && (
+        <PhotoViewer
+          photos={viewingPhotos.photos}
+          index={viewingPhotos.index}
+          onIndex={(index) => setViewingPhotos((v) => (v ? { ...v, index } : v))}
+          onClose={() => setViewingPhotos(null)}
+          title="Proof"
+          unoptimized
+        />
+      )}
       <Link
         href="/bookings"
         className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:hover:text-white dark:text-gray-400"
@@ -381,7 +394,7 @@ export default function CustomerBookingDetailPage() {
                 {proof.notes && <p className="text-sm text-gray-600 dark:text-gray-300">{proof.notes}</p>}
                 <div className="flex flex-wrap gap-2">
                   {proof.photos.map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                    <button type="button" key={i} onClick={() => setViewingPhotos({ photos: proof.photos, index: i })} className="block cursor-zoom-in" aria-label={`Open proof photo ${i + 1} of ${proof.photos.length} full size`}>
                       <Image
                         src={url}
                         alt={`Proof ${i + 1}`}
@@ -390,7 +403,7 @@ export default function CustomerBookingDetailPage() {
                         className="w-20 h-20 object-cover rounded-lg border"
                         unoptimized
                       />
-                    </a>
+                    </button>
                   ))}
                 </div>
               </div>

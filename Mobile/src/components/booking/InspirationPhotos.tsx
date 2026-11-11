@@ -1,8 +1,9 @@
-import React from 'react';
-import { Alert, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { DARK, FONTS } from '../../constants/colors';
+import PhotoViewer from '../PhotoViewer';
 
 export const REQUEST_MAX_PHOTOS = 10;
 
@@ -50,13 +51,16 @@ export function InspirationPhotosPicker({ photos, onChange }: { photos: PickedPh
 /** The photos sent with a request, from short-lived signed links; tapping one opens it full size. */
 export function InspirationPhotos({ urls, title = 'Inspiration photos' }: { urls?: string[] | null; title?: string }) {
   const photos = urls ?? [];
+  // the photo shown full screen, in the app
+  const [viewing, setViewing] = useState<number | null>(null);
   if (photos.length === 0) return null;
   return (
     <View style={{ gap: 8 }}>
+      {viewing != null && <PhotoViewer photos={photos} start={viewing} onClose={() => setViewing(null)} title={title} />}
       <Text style={s.title}>{title}</Text>
       <View style={s.wrap}>
         {photos.map((url, i) => (
-          <Pressable key={url} onPress={() => Linking.openURL(url)} accessibilityRole="imagebutton" accessibilityLabel={`Inspiration photo ${i + 1} of ${photos.length}`}>
+          <Pressable key={url} onPress={() => setViewing(i)} accessibilityRole="imagebutton" accessibilityLabel={`Inspiration photo ${i + 1} of ${photos.length}, open full size`}>
             <Image source={{ uri: url }} style={s.thumb} />
           </Pressable>
         ))}

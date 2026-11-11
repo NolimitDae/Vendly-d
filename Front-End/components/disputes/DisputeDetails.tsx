@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { DISPUTE_CATEGORY_LABELS, DISPUTE_OUTCOME_LABELS, type DisputeCategory, type DisputeOutcome } from "@/service/payments/payments.service";
+import PhotoViewer from "@/components/shared/PhotoViewer";
 
 export interface DisputeDetailFields {
   dispute_category?: string | null;
@@ -18,14 +20,17 @@ export function outcomeLabel(o?: string | null, amount?: number | string | null)
   return o === "partial_refund" && amount != null && amount !== "" ? `${base} of $${Number(amount).toFixed(2)}` : base;
 }
 
-/** Category, what the customer asks for and their photos (thumbnails open full size). */
+/** Category, what the customer asks for and their photos (thumbnails open full screen on the page). */
 export default function DisputeDetails({ d, who = "The customer" }: { d: DisputeDetailFields; who?: string }) {
   const category = categoryLabel(d.dispute_category);
   const outcome = outcomeLabel(d.dispute_outcome, d.dispute_requested_amount);
   const photos = d.dispute_photo_urls ?? [];
+  // the photo shown full screen, on the page
+  const [viewing, setViewing] = useState<number | null>(null);
   if (!category && !outcome && photos.length === 0) return null;
   return (
     <div className="space-y-2 text-sm">
+      {viewing != null && <PhotoViewer photos={photos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} title="Dispute" unoptimized />}
       {(category || outcome) && (
         <dl className="flex flex-wrap gap-x-6 gap-y-1">
           {category && (
@@ -46,10 +51,10 @@ export default function DisputeDetails({ d, who = "The customer" }: { d: Dispute
         <ul aria-label={`${who === "You" ? "Your" : "The customer’s"} photos`} className="flex flex-wrap gap-2">
           {photos.map((url, i) => (
             <li key={url}>
-              <a href={url} target="_blank" rel="noopener noreferrer" title="Open full size" className="block">
+              <button type="button" onClick={() => setViewing(i)} title="Open full size" aria-label={`Open photo ${i + 1} of ${photos.length} full size`} className="block cursor-zoom-in">
                 {/* eslint-disable-next-line @next/next/no-img-element -- private, short-lived signed link */}
                 <img loading="lazy" decoding="async" src={url} alt={`Photo ${i + 1} of ${photos.length}`} className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900" />
-              </a>
+              </button>
             </li>
           ))}
         </ul>

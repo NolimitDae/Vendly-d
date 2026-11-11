@@ -14,12 +14,15 @@ export default function PhotoViewer({
   onIndex,
   onClose,
   title,
+  unoptimized = false,
 }: {
   photos: string[];
   index: number;
   onIndex: (i: number) => void;
   onClose: () => void;
   title?: string;
+  /** private photos (short-lived signed links: chat, requests, proof) are shown as they are */
+  unoptimized?: boolean;
 }) {
   const count = photos.length;
   const go = (step: number) => onIndex((index + step + count) % count);
@@ -79,7 +82,7 @@ export default function PhotoViewer({
       )}
 
       <div className="relative h-[85vh] w-[94vw] max-w-6xl" onClick={(e) => e.stopPropagation()}>
-        <Image src={photos[index]} alt={title ? `${title}, photo ${index + 1}` : `Photo ${index + 1}`} fill sizes="100vw" className="object-contain" priority />
+        <Image src={photos[index]} alt={title ? `${title}, photo ${index + 1}` : `Photo ${index + 1}`} fill sizes="100vw" className="object-contain" priority unoptimized={unoptimized} />
       </div>
 
       {count > 1 && (

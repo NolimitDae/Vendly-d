@@ -40,6 +40,7 @@ import BookingContact from "@/components/bookings/BookingContact";
 import MapPicture from "@/components/bookings/MapPicture";
 import VendorDayPanel from "@/components/bookings/VendorDayPanel";
 import type { TrackerFields } from "@/lib/booking-tracker";
+import PhotoViewer from "@/components/shared/PhotoViewer";
 
 interface Proof {
   id: string;
@@ -95,6 +96,8 @@ export default function VendorBookingDetailPage() {
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [proofs, setProofs] = useState<Proof[]>([]);
+  // a proof's photos shown full screen, on the page
+  const [viewingPhotos, setViewingPhotos] = useState<{ photos: string[]; index: number } | null>(null);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -192,6 +195,16 @@ export default function VendorBookingDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      {viewingPhotos && (
+        <PhotoViewer
+          photos={viewingPhotos.photos}
+          index={viewingPhotos.index}
+          onIndex={(index) => setViewingPhotos((v) => (v ? { ...v, index } : v))}
+          onClose={() => setViewingPhotos(null)}
+          title="Proof"
+          unoptimized
+        />
+      )}
       {/* Back */}
       <Link
         href="/vendor/bookings"
@@ -390,7 +403,7 @@ export default function VendorBookingDetailPage() {
                 {proof.notes && <p className="text-sm text-gray-600 dark:text-gray-300">{proof.notes}</p>}
                 <div className="flex flex-wrap gap-2">
                   {proof.photos.map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                    <button type="button" key={i} onClick={() => setViewingPhotos({ photos: proof.photos, index: i })} className="block cursor-zoom-in" aria-label={`Open proof photo ${i + 1} of ${proof.photos.length} full size`}>
                       <Image
                         src={url}
                         alt={`Proof ${i + 1}`}
@@ -399,7 +412,7 @@ export default function VendorBookingDetailPage() {
                         className="w-20 h-20 object-cover rounded-lg border"
                         unoptimized
                       />
-                    </a>
+                    </button>
                   ))}
                 </div>
               </div>

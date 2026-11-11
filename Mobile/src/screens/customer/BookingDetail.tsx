@@ -8,6 +8,7 @@ import { vendorAnswersWithin } from '../../utils/requests';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
+import PhotoViewer from '../../components/PhotoViewer';
 import { InspirationPhotos } from '../../components/booking/InspirationPhotos';
 import PaymentTimeline from '../../components/PaymentTimeline';
 import RentalReturnCard from '../../components/RentalReturnCard';
@@ -45,6 +46,8 @@ export default function BookingDetail() {
   // the bottom buttons float over the page; it scrolls far enough to clear them
   const [footerH, setFooterH] = useState(0);
   const [booking, setBooking] = useState<Booking | null>(null);
+  // proof photos shown full screen, in the app
+  const [viewingPhotos, setViewingPhotos] = useState<{ photos: string[]; start: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -165,6 +168,7 @@ export default function BookingDetail() {
 
   return (
     <View style={s.root}>
+      {viewingPhotos && <PhotoViewer photos={viewingPhotos.photos} start={viewingPhotos.start} onClose={() => setViewingPhotos(null)} title="Proof" />}
       <CancelBookingSheet
         bookingId={cancelling ? booking.id : null}
         role="CUSTOMER"
@@ -372,7 +376,7 @@ export default function BookingDetail() {
                   {!!p.notes && <Text style={s.body}>{p.notes}</Text>}
                   <View style={s.photoRow}>
                     {p.photos.map((url, i) => (
-                      <Pressable key={i} onPress={() => Linking.openURL(url)}>
+                      <Pressable key={i} onPress={() => setViewingPhotos({ photos: p.photos, start: i })} accessibilityRole="imagebutton" accessibilityLabel={`Proof photo ${i + 1} of ${p.photos.length}, open full size`}>
                         <Image source={{ uri: url }} style={s.thumb} />
                       </Pressable>
                     ))}

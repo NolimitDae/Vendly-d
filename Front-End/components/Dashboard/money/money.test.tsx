@@ -129,8 +129,12 @@ describe('DisputesPageContent', () => {
     expect(screen.getByText('Partial refund of $120.00')).toBeInTheDocument();
     const photos = screen.getAllByRole('img', { name: /photo \d of 2/i });
     expect(photos).toHaveLength(2);
-    expect(photos[0].closest('a')).toHaveAttribute('href', 'https://api.test/api/dispute-files/t1');
-    expect(photos[0].closest('a')).toHaveAttribute('target', '_blank');
+    expect(photos[0]).toHaveAttribute('src', 'https://api.test/api/dispute-files/t1');
+    await user.click(screen.getByRole('button', { name: 'Open photo 2 of 2 full size' }));
+    expect(screen.getByRole('dialog', { name: 'Dispute photos' })).toBeInTheDocument();
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Dispute photos' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /decide/i }));
     await user.click(screen.getByRole('button', { name: /partial refund/i }));

@@ -105,7 +105,8 @@ describe('ReportProblemForm', () => {
 });
 
 describe('VendorDisputeCard', () => {
-  it('shows the vendor the kind of problem, what is asked for and the photos', () => {
+  it('shows the vendor the kind of problem, what is asked for and the photos', async () => {
+    const user = userEvent.setup();
     render(
       <VendorDisputeCard
         bookingId="b1"
@@ -121,6 +122,9 @@ describe('VendorDisputeCard', () => {
     );
     expect(screen.getByText('Vendor was late')).toBeInTheDocument();
     expect(screen.getByText('Partial refund of $75.00')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Photo 1 of 1' }).closest('a')).toHaveAttribute('href', 'https://api.test/api/dispute-files/t1');
+    expect(screen.getByRole('img', { name: 'Photo 1 of 1' })).toHaveAttribute('src', 'https://api.test/api/dispute-files/t1');
+    // the photo opens full screen on the page, not in a new tab
+    await user.click(screen.getByRole('button', { name: 'Open photo 1 of 1 full size' }));
+    expect(screen.getByRole('dialog', { name: 'Dispute photos' })).toBeInTheDocument();
   });
 });
