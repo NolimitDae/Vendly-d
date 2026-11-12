@@ -208,7 +208,7 @@ export default function BookingContractSection({ bookingId, role, bookingStatus,
             {current.status === "EXECUTED" && (
               <button
                 onClick={() =>
-                  openContractFile(() => ContractsService.downloadLink(current.id, "executed")).catch((e) =>
+                  openContractFile(() => ContractsService.downloadLink(current.id, "executed"), "Signed contract").catch((e) =>
                     toast.error(apiError(e, "Download failed")),
                   )
                 }

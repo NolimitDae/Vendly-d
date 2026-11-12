@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { FileText, Loader2 } from "lucide-react";
 import ModalWrapper from "../common/modal/ModalWrapper";
+import { openFile } from "@/lib/openFile";
 import { AdminService } from "@/service/admin/admin.service";
 import { EVENT_TYPE_LABELS, PlannerStatus, PlannerStatusBadge } from "./tableConfig";
 
@@ -152,9 +153,9 @@ export default function PlannerDetails({ userId, refreshKey = 0, onClose, onTogg
                 <ul className="flex flex-wrap gap-2">
                   {p.documents.map((url, i) => (
                     <li key={url}>
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-borderColor text-sm text-primary">
+                      <button type="button" onClick={() => openFile({ url, name: `Document ${i + 1}`, share: false })} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-borderColor text-sm text-primary">
                         <FileText className="w-4 h-4" /> Document {i + 1}
-                      </a>
+                      </button>
                     </li>
                   ))}
                 </ul>

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader, ui } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
 import PhotoViewer from '../../components/PhotoViewer';
+import FileViewer from '../../components/FileViewer';
 import { InspirationPhotos } from '../../components/booking/InspirationPhotos';
 import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
@@ -47,6 +48,8 @@ export default function VendorBookingDetail() {
   const [booking, setBooking] = useState<Booking | null>(null);
   // proof photos shown full screen, in the app
   const [viewingPhotos, setViewingPhotos] = useState<{ photos: string[]; start: number } | null>(null);
+  // a deliverable file or link shown full screen, in the app
+  const [viewingFile, setViewingFile] = useState<{ url: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -215,6 +218,7 @@ export default function VendorBookingDetail() {
 
   return (
     <View style={s.root}>
+      {viewingFile && <FileViewer url={viewingFile.url} name={viewingFile.name} onClose={() => setViewingFile(null)} />}
       {viewingPhotos && <PhotoViewer photos={viewingPhotos.photos} start={viewingPhotos.start} onClose={() => setViewingPhotos(null)} title="Proof" />}
       <CancelBookingSheet bookingId={cancelling ? booking.id : null} role="VENDOR" onClose={() => setCancelling(false)} onCancelled={() => load()} />
       <ScrollView
@@ -463,7 +467,7 @@ export default function VendorBookingDetail() {
                   <Text style={s.body}>{d.title}</Text>
                   <Text style={s.muted}>{format(parseISO(d.created_at), 'MMM d, yyyy')}</Text>
                   {[...d.links, ...d.files].map((url, i) => (
-                    <Pressable key={i} onPress={() => Linking.openURL(url)}>
+                    <Pressable key={i} onPress={() => setViewingFile({ url, name: i < d.links.length ? d.title : `${d.title} · file ${i - d.links.length + 1}` })} accessibilityRole="button">
                       <Text style={s.link} numberOfLines={1}>{i < d.links.length ? url : `File ${i - d.links.length + 1}`}</Text>
                     </Pressable>
                   ))}

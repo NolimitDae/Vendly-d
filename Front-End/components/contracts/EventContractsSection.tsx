@@ -36,7 +36,7 @@ export default function EventContractsSection({ eventId }: { eventId: string }) 
   const downloadAll = async () => {
     setZipping(true);
     try {
-      await openContractFile(() => ContractsService.eventZip(eventId));
+      await openContractFile(() => ContractsService.eventZip(eventId), "Event contracts", { download: true });
     } catch (err) {
       toast.error(apiError(err, "Couldn't prepare the download"));
     } finally {

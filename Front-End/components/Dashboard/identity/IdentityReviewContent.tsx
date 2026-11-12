@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { AdminIdentityService, IdStatus } from "@/service/identity/identity.service";
 import { ROLE_LABEL } from "@/lib/roles";
+import { openFile } from "@/lib/openFile";
 
 interface Row {
   id: string;
@@ -137,11 +138,11 @@ export default function IdentityReviewContent() {
                     ["Selfie", open.selfie_url],
                   ] as const).map(([label, url]) =>
                     url ? (
-                      <a key={label} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                      <button type="button" key={label} onClick={() => openFile({ url, name: `${label} of ID check for ${r.legal_name}`, mime: "image/jpeg", share: false })} className="block w-full text-left cursor-zoom-in">
                         <p className="text-xs text-gray-500 mb-1">{label} (opens full size)</p>
                         {/* eslint-disable-next-line @next/next/no-img-element -- private, short-lived signed link */}
                         <img loading="lazy" decoding="async" src={url} alt={`${label} of ID check for ${r.legal_name}`} className="w-full aspect-[4/3] object-contain rounded-lg bg-gray-100 dark:bg-gray-900" />
-                      </a>
+                      </button>
                     ) : null,
                   )}
                 </div>

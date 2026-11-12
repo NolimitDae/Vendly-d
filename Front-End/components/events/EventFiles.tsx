@@ -7,6 +7,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { toast } from "react-toastify";
 import { EventToolsService, fileSize, type EventFile, type EventRole } from "@/service/events/eventTools.service";
 import { errorMessage } from "@/service/rentals/rentals.service";
+import { openFile } from "@/lib/openFile";
 
 dayjs.extend(relativeTime);
 
@@ -60,9 +61,9 @@ export default function EventFiles({ eventId, role, readOnly = false }: { eventI
     try {
       const r = await EventToolsService.files(eventId);
       const fresh = (r.data?.data as EventFile[] | undefined)?.find((x) => x.id === f.id);
-      window.open(fresh?.url ?? f.url, "_blank", "noopener");
+      openFile({ url: fresh?.url ?? f.url, name: f.name, mime: f.mime });
     } catch {
-      window.open(f.url, "_blank", "noopener");
+      openFile({ url: f.url, name: f.name, mime: f.mime });
     }
   };
 

@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { DARK, FONTS } from '../../constants/colors';
 import { EventToolsService, fileSize, type EventFile, type EventRole } from '../../services/eventTools.service';
 import { apiError } from '../../services/contracts.service';
+import FileViewer from '../FileViewer';
 
 const iconFor = (mime: string): keyof typeof Ionicons.glyphMap =>
   mime.startsWith('image/') ? 'image-outline' : mime === 'application/pdf' ? 'document-text-outline' : /sheet|excel|csv/.test(mime) ? 'grid-outline' : 'document-outline';
@@ -14,6 +15,8 @@ const iconFor = (mime: string): keyof typeof Ionicons.glyphMap =>
 export default function EventFiles({ eventId, role, readOnly = false }: { eventId: string; role: EventRole; /** a cancelled event: download only */ readOnly?: boolean }) {
   const [files, setFiles] = useState<EventFile[] | null>(null);
   const [uploading, setUploading] = useState(false);
+  // a file shown full screen, in the app
+  const [viewing, setViewing] = useState<EventFile | null>(null);
 
   const load = useCallback(() => {
     EventToolsService.files(eventId)
@@ -49,6 +52,7 @@ export default function EventFiles({ eventId, role, readOnly = false }: { eventI
 
   return (
     <View style={{ gap: 10 }}>
+      {viewing && <FileViewer url={viewing.url} name={viewing.name} mime={viewing.mime} onClose={() => setViewing(null)} />}
       {role !== 'client' && !readOnly && (
         <Pressable style={s.upload} onPress={upload} disabled={uploading} accessibilityRole="button">
           {uploading ? <ActivityIndicator color={DARK.accent} /> : <Ionicons name="cloud-upload-outline" size={20} color={DARK.accent} />}
@@ -63,7 +67,7 @@ export default function EventFiles({ eventId, role, readOnly = false }: { eventI
         </View>
       ) : (
         files.map((f) => (
-          <Pressable key={f.id} style={s.row} onPress={() => Linking.openURL(f.url)} accessibilityRole="link" accessibilityLabel={`Open ${f.name}`}>
+          <Pressable key={f.id} style={s.row} onPress={() => setViewing(f)} accessibilityRole="button" accessibilityLabel={`Open ${f.name}`}>
             <View style={s.icon}><Ionicons name={iconFor(f.mime)} size={22} color={DARK.accent} /></View>
             <View style={{ flex: 1 }}>
               <Text style={s.name} numberOfLines={1}>{f.name}</Text>

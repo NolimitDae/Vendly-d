@@ -41,6 +41,7 @@ import MapPicture from "@/components/bookings/MapPicture";
 import VendorDayPanel from "@/components/bookings/VendorDayPanel";
 import type { TrackerFields } from "@/lib/booking-tracker";
 import PhotoViewer from "@/components/shared/PhotoViewer";
+import FileViewer from "@/components/shared/FileViewer";
 
 interface Proof {
   id: string;
@@ -98,6 +99,8 @@ export default function VendorBookingDetailPage() {
   const [proofs, setProofs] = useState<Proof[]>([]);
   // a proof's photos shown full screen, on the page
   const [viewingPhotos, setViewingPhotos] = useState<{ photos: string[]; index: number } | null>(null);
+  // a deliverable file shown in a window on the page
+  const [viewingFile, setViewingFile] = useState<{ url: string; name: string } | null>(null);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -195,6 +198,7 @@ export default function VendorBookingDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      {viewingFile && <FileViewer url={viewingFile.url} name={viewingFile.name} onClose={() => setViewingFile(null)} />}
       {viewingPhotos && (
         <PhotoViewer
           photos={viewingPhotos.photos}
@@ -474,15 +478,14 @@ export default function VendorBookingDetailPage() {
                 {d.files.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {d.files.map((url, i) => (
-                      <a
+                      <button
+                        type="button"
                         key={i}
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        onClick={() => setViewingFile({ url, name: `${d.title} · file ${i + 1}` })}
                         className="text-xs text-primary underline flex items-center gap-1"
                       >
                         <Upload className="w-3 h-3" /> File {i + 1}
-                      </a>
+                      </button>
                     ))}
                   </div>
                 )}

@@ -3,7 +3,6 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
@@ -21,6 +20,7 @@ import { GradientButton } from '../brand';
 import { SignaturePayload, signerDevice } from '../../services/contracts.service';
 import ContractBody from './ContractBody';
 import SignaturePadModal from './SignaturePadModal';
+import FileViewer from '../FileViewer';
 
 interface Props {
   title: string;
@@ -61,6 +61,8 @@ export default function SignContractView({
   subtitle,
 }: Props) {
   const [readToEnd, setReadToEnd] = useState(false);
+  // the vendor's own PDF, full screen in the app
+  const [viewingPdf, setViewingPdf] = useState(false);
   const [consent, setConsent] = useState(false);
   const [name, setName] = useState(defaultName);
   const [image, setImage] = useState<string | null>(null);
@@ -133,8 +135,9 @@ export default function SignContractView({
           }}
         >
           {intro ? <View style={{ marginBottom: 20 }}>{intro}</View> : null}
+          {viewingPdf && sourcePdfUrl ? <FileViewer url={sourcePdfUrl} name="Vendor's contract" mime="application/pdf" onClose={() => setViewingPdf(false)} /> : null}
           {sourcePdfUrl ? (
-            <TouchableOpacity style={s.pdfBtn} onPress={() => Linking.openURL(sourcePdfUrl)}>
+            <TouchableOpacity style={s.pdfBtn} onPress={() => setViewingPdf(true)}>
               <Ionicons name="document-text-outline" size={18} color={DARK.accent} />
               <Text style={s.pdfBtnText}>Open the vendor&apos;s contract (PDF)</Text>
             </TouchableOpacity>

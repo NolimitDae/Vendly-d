@@ -439,7 +439,7 @@ export default function VendorContractsPage() {
                   <div className="flex gap-2">
                     {c.type === "UPLOADED" && (
                       <button
-                        onClick={() => openContractFile(() => ContractsService.vendorFile(c.id)).catch((e) => toast.error(apiError(e)))}
+                        onClick={() => openContractFile(() => ContractsService.vendorFile(c.id), c.file_name ?? "Your contract").catch((e) => toast.error(apiError(e)))}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm"
                       >
                         <Eye className="w-4 h-4" /> View

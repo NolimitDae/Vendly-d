@@ -5,6 +5,7 @@ import { FileText, Loader2, PenLine } from "lucide-react";
 import ContractBody from "./ContractBody";
 import SignaturePad from "./SignaturePad";
 import type { SignaturePayload } from "@/service/contracts/contracts.service";
+import { openFile } from "@/lib/openFile";
 
 interface Props {
   title?: string;
@@ -78,9 +79,9 @@ export default function SignContractPanel({
             <span className="flex items-center gap-1.5 font-medium">
               <FileText className="w-4 h-4" /> Vendor&apos;s contract
             </span>
-            <a href={sourcePdfUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+            <button type="button" onClick={() => openFile({ url: sourcePdfUrl, name: "Vendor\u2019s contract", mime: "application/pdf" })} className="text-primary underline">
               Open full screen
-            </a>
+            </button>
           </div>
           <iframe src={sourcePdfUrl} title="Vendor contract" className="w-full h-72 bg-white dark:bg-gray-800" />
         </div>

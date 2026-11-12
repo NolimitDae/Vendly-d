@@ -7,7 +7,7 @@ import { ContractsService, apiError, openContractFile } from "@/service/contract
 /** One booking contract as an admin sees it: hashes, files, signatures, the text and the audit log. */
 export default function AdminContractCard({ contract: c, onError }: { contract: any; onError: (message: string) => void }) {
   const open = (kind: "executed" | "draft") =>
-    openContractFile(() => ContractsService.downloadLink(c.id, kind)).catch((e) => onError(apiError(e)));
+    openContractFile(() => ContractsService.downloadLink(c.id, kind), kind === "executed" ? "Signed contract" : "Draft contract").catch((e) => onError(apiError(e)));
   return (
     <div className="bg-white rounded-xl border p-5 space-y-3 dark:bg-gray-800 dark:border-gray-700">
       <div className="flex items-center justify-between gap-3">

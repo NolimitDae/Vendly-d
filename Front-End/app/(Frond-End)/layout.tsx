@@ -7,6 +7,7 @@ import { SignedInScript } from "@/providers/SignedInScript";
 import { NotificationProvider } from "@/providers/NotificationProvider";
 import { OnboardingProvider } from "@/providers/OnboardingProvider";
 import OnboardingPopup from "@/components/onboarding/OnboardingPopup";
+import FileViewerHost from "@/components/shared/FileViewerHost";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "../globals.css";
 
@@ -30,6 +31,7 @@ export default function FrontEndLayout({
               <Navbar />
               {children}
               <OnboardingPopup />
+              <FileViewerHost />
               <CustomToastContainer />
               <div className="bg-[#FAFAFA] dark:bg-gray-950">
                 <Footer />

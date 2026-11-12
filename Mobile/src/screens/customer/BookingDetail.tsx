@@ -9,6 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BrandGradient, Card, GradientButton, ScreenHeader } from '../../components/brand';
 import BookingContractCard from '../../components/contracts/BookingContractCard';
 import PhotoViewer from '../../components/PhotoViewer';
+import FileViewer from '../../components/FileViewer';
 import { InspirationPhotos } from '../../components/booking/InspirationPhotos';
 import PaymentTimeline from '../../components/PaymentTimeline';
 import RentalReturnCard from '../../components/RentalReturnCard';
@@ -48,6 +49,8 @@ export default function BookingDetail() {
   const [booking, setBooking] = useState<Booking | null>(null);
   // proof photos shown full screen, in the app
   const [viewingPhotos, setViewingPhotos] = useState<{ photos: string[]; start: number } | null>(null);
+  // a deliverable file or link shown full screen, in the app
+  const [viewingFile, setViewingFile] = useState<{ url: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -168,6 +171,7 @@ export default function BookingDetail() {
 
   return (
     <View style={s.root}>
+      {viewingFile && <FileViewer url={viewingFile.url} name={viewingFile.name} onClose={() => setViewingFile(null)} />}
       {viewingPhotos && <PhotoViewer photos={viewingPhotos.photos} start={viewingPhotos.start} onClose={() => setViewingPhotos(null)} title="Proof" />}
       <CancelBookingSheet
         bookingId={cancelling ? booking.id : null}
@@ -395,7 +399,7 @@ export default function BookingDetail() {
                   <Text style={s.muted}>{format(parseISO(d.created_at), 'MMM d, yyyy')}</Text>
                   {!!d.message && <Text style={s.body}>{d.message}</Text>}
                   {[...d.links, ...d.files].map((url, i) => (
-                    <Pressable key={i} onPress={() => Linking.openURL(url)}>
+                    <Pressable key={i} onPress={() => setViewingFile({ url, name: i < d.links.length ? d.title : `${d.title} · file ${i - d.links.length + 1}` })} accessibilityRole="button">
                       <Text style={s.link} numberOfLines={1}>{i < d.links.length ? url : `File ${i - d.links.length + 1}`}</Text>
                     </Pressable>
                   ))}

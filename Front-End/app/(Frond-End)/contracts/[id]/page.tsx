@@ -106,7 +106,7 @@ export default function ContractPage() {
   const coSigning = contract?.my_role === "CLIENT";
 
   const download = (kind: "executed" | "draft" | "source") =>
-    openContractFile(() => ContractsService.downloadLink(id, kind)).catch((e) => toast.error(apiError(e, "Download failed")));
+    openContractFile(() => ContractsService.downloadLink(id, kind), kind === "executed" ? "Signed contract" : kind === "draft" ? "Draft contract" : "Vendor\u2019s contract").catch((e) => toast.error(apiError(e, "Download failed")));
 
   const startSigning = async () => {
     if (contract?.has_source_pdf && !sourceUrl) {

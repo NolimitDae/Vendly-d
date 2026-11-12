@@ -1,5 +1,6 @@
 import { CookieHelper } from "../../helper/cookie.helper";
 import { Fetch } from "../../lib/Fetch";
+import { openFile } from "@/lib/openFile";
 
 const auth = () => ({
   headers: { Authorization: `Bearer ${CookieHelper.get({ key: "token" })}` },
@@ -120,9 +121,13 @@ export const ContractsService = {
 };
 
 /** Opens a short-lived signed file link in a new tab. */
-export async function openContractFile(getLink: () => Promise<any>) {
+/** Opens a contract file in the pop-up on the page (a zip of them downloads instead). */
+export async function openContractFile(getLink: () => Promise<any>, name = "Contract", { download = false }: { download?: boolean } = {}) {
   const res = await getLink();
   const url = res.data?.data?.url;
-  if (url) window.open(url, "_blank", "noopener,noreferrer");
+  if (url) {
+    if (download) window.location.assign(url);
+    else openFile({ url, name, mime: "application/pdf" });
+  }
   return url;
 }

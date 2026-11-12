@@ -6,6 +6,8 @@ import EventPlannersPageContent from "./EventPlannersPageContent";
 jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 jest.mock("@/service/admin/admin.service", () => ({ AdminService: { getPlanners: jest.fn(), getPlanner: jest.fn() } }));
 jest.mock("@/service/admin/money.service", () => ({ MoneyService: { setUserStatus: jest.fn() } }));
+jest.mock("@/lib/openFile", () => ({ openFile: jest.fn() }));
+import { openFile } from "@/lib/openFile";
 
 import { AdminService } from "@/service/admin/admin.service";
 import { MoneyService } from "@/service/admin/money.service";
@@ -124,7 +126,8 @@ describe("EventPlannersPageContent", () => {
     const panel = await screen.findByRole("dialog", { name: "Planner details" });
     expect(AdminService.getPlanner).toHaveBeenCalledWith("p1");
     expect(await within(panel).findByText("Weddings in Texas")).toBeInTheDocument();
-    expect(within(panel).getByRole("link", { name: /Document 1/ })).toHaveAttribute("href", "https://api.test/api/licence-files/t1.sig");
+    await user.click(within(panel).getByRole("button", { name: /Document 1/ }));
+    expect(openFile).toHaveBeenCalledWith(expect.objectContaining({ url: "https://api.test/api/licence-files/t1.sig", share: false }));
     expect(within(panel).getByText(/DJ set with Dee Sounds/)).toBeInTheDocument();
     expect(within(panel).getByText("Licence approved")).toBeInTheDocument();
     expect(within(panel).getByText("Planning: 2")).toBeInTheDocument();

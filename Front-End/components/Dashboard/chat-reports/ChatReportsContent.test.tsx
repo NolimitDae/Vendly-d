@@ -6,6 +6,8 @@ import ChatReportsContent from "./ChatReportsContent";
 jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 jest.mock("@/service/admin/chat-reports.service", () => ({ ChatReportsService: { list: jest.fn(), resolve: jest.fn() } }));
 jest.mock("@/service/admin/money.service", () => ({ MoneyService: { setUserStatus: jest.fn() } }));
+jest.mock("@/lib/openFile", () => ({ openFile: jest.fn() }));
+import { openFile } from "@/lib/openFile";
 
 import { ChatReportsService } from "@/service/admin/chat-reports.service";
 import { MoneyService } from "@/service/admin/money.service";
@@ -64,11 +66,14 @@ describe("ChatReportsContent", () => {
         ],
       },
     });
+    const user = userEvent.setup();
     render(<ChatReportsContent />);
     const card = await screen.findByRole("article", { name: "Report about Victor Vendor" });
     expect(within(card).getByText("Deleted by the sender — copy kept for review")).toBeInTheDocument();
     expect(within(card).getByText("Send the deposit to my CashApp")).toBeInTheDocument();
-    expect(within(card).getByRole("link", { name: "Attachment 2" })).toHaveAttribute("href", "https://cdn/b.jpg");
+    // the photo opens in the pop-up on the page, without a share button
+    await user.click(within(card).getByRole("button", { name: "Attachment 2" }));
+    expect(openFile).toHaveBeenCalledWith(expect.objectContaining({ url: "https://cdn/b.jpg", share: false }));
   });
 
   it("says the message is gone when there's no copy (older reports)", async () => {

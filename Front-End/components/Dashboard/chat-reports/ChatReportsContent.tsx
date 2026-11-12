@@ -8,6 +8,7 @@ import { ChatReportsService, type ChatReport, type ReportPerson } from "@/servic
 import { MoneyService } from "@/service/admin/money.service";
 import { REPORT_REASONS } from "@/service/chat/chat.service";
 import { errorMessage } from "@/service/rentals/rentals.service";
+import { openFile } from "@/lib/openFile";
 
 const TABS = [
   { value: "open", label: "Open" },
@@ -38,9 +39,9 @@ function ReportedMessage({ text, urls }: { text: string | null; urls: string[] }
       {urls.length > 0 && (
         <div className="flex flex-wrap gap-2 mt-1">
           {urls.map((url, n) => (
-            <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+            <button type="button" key={url} onClick={() => openFile({ url, name: urls.length > 1 ? `Reported photo ${n + 1}` : "Reported photo", mime: "image/jpeg", share: false })} className="text-xs text-primary underline">
               {urls.length > 1 ? `Attachment ${n + 1}` : "Attachment"}
-            </a>
+            </button>
           ))}
         </div>
       )}
