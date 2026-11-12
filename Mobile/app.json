@@ -44,7 +44,6 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.vendly",
           "enableGooglePay": false
         }
       ],
