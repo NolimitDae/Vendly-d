@@ -24,6 +24,9 @@ describe("StripePayoutsPanel", () => {
     expect(await screen.findByText("stripe-payouts")).toBeInTheDocument();
     expect(screen.getByText("stripe-alerts")).toBeInTheDocument();
     expect(screen.getByText("Bank payouts")).toBeInTheDocument();
+    // Stripe's instant payout fee is disclosed before the vendor opens Stripe's own confirmation
+    expect(screen.getByTestId("payout-fees")).toHaveTextContent("Stripe's fee for an instant payout is 1% of the amount");
+    expect(screen.getByTestId("payout-fees")).toHaveTextContent("usually in 1–2 business days, free");
   });
 
   it("leaves the page as it was when Stripe's components can't open", async () => {

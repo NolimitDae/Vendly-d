@@ -73,6 +73,8 @@ const mockPayments = {
   scheduleForBooking: jest.fn().mockResolvedValue([]),
   onBookingCompleted: jest.fn().mockResolvedValue(undefined),
   onProofUploaded: jest.fn().mockResolvedValue(undefined),
+  onPaidAfterCompletion: jest.fn().mockResolvedValue(null),
+  payOutCancellation: jest.fn().mockResolvedValue('balance'),
   refundBooking: jest.fn().mockResolvedValue(0),
   voidOpenCharges: jest.fn().mockResolvedValue(undefined),
   cardLabel: jest.fn().mockResolvedValue(null),
@@ -337,7 +339,7 @@ describe('BookingService', () => {
 
       expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_paid', 'cancel-booking-1', 225);
       expect(result.data.refund).toMatchObject({ refundTotal: 225, refundFee: 0, vendorKeeps: 225, percent: 50 });
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 225 } } });
+      expect(mockPayments.payOutCancellation).toHaveBeenCalledWith('booking-1', 225);
     });
 
     it('uses the policy from the signed contract', async () => {
@@ -368,7 +370,7 @@ describe('BookingService', () => {
 
         expect(result.data.refund).toMatchObject({ refundTotal: 0, vendorKeeps: 250 });
         expect(mockPayments.voidOpenCharges).toHaveBeenCalledWith('booking-1');
-        expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 250 } } });
+        expect(mockPayments.payOutCancellation).toHaveBeenCalledWith('booking-1', 250);
       });
 
       it('customer cancels at 50%: owed $500 but only $250 was paid, so the vendor keeps $250 and nothing is refunded', async () => {
@@ -835,13 +837,13 @@ describe('BookingService', () => {
       expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_late', 'late-cs_late');
     });
 
-    it('credits the vendor when payment arrives after the booking was completed', async () => {
+    it('pays the vendor through the usual release when payment arrives after the booking was completed', async () => {
       mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
-      mockPrisma.booking.findUnique
-        .mockResolvedValueOnce({ customer_id: 'customer-1', currency: 'usd' })
-        .mockResolvedValueOnce({ status: BookingStatus.COMPLETED, paid_at: new Date(), payout_credited_at: null, amount: 100, currency: 'usd', vendor_id: 'vendor-1' });
+      mockPrisma.booking.findUnique.mockResolvedValueOnce({ customer_id: 'customer-1', currency: 'usd', status: BookingStatus.COMPLETED });
       await service.recordPayment(session);
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 100 } } });
+      // the hold, commission and Stripe transfer all happen there; nothing goes to the Vendly balance here
+      expect(mockPayments.onPaidAfterCompletion).toHaveBeenCalledWith('booking-1');
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
     });
   });
 
@@ -902,7 +904,8 @@ describe('BookingService', () => {
       const result = await service.cancel('booking-1', userId, {});
       const legacyRefund = (StripePayment.refundPaymentIntent as jest.Mock).mock.calls[0]?.[2] ?? 0;
       const engineRefund = mockPayments.refundBooking.mock.calls[0]?.[1] ?? 0;
-      const credited = mockPrisma.user.update.mock.calls[0]?.[0]?.data?.balance?.increment ?? 0;
+      // what the vendor keeps is paid out to their Stripe account (PaymentsService.payOutCancellation)
+      const credited = mockPayments.payOutCancellation.mock.calls[0]?.[1] ?? mockPrisma.user.update.mock.calls[0]?.[0]?.data?.balance?.increment ?? 0;
       return { preview, result: result.data as any, refunded: legacyRefund || engineRefund, credited };
     };
 
@@ -1132,7 +1135,7 @@ describe('BookingService', () => {
       expect(result.data.refund).toMatchObject({ refundTotal: 0, vendorKeeps: 250 });
       expect(result.data.refund_summary).toMatchObject({ deposit_kept: 250, fee_kept: 50, unpaid_cancelled: 750 });
       expect(result.data.refund_summary.message).toContain('Your deposit of $250.00 is non-refundable.');
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 250 } } });
+      expect(mockPayments.payOutCancellation).toHaveBeenCalledWith('booking-1', 250);
       expect(mockPayments.refundBooking).not.toHaveBeenCalled();
     });
 
@@ -1314,44 +1317,6 @@ describe('BookingService', () => {
       mockPrisma.booking.findFirst.mockResolvedValue(depositPlan({ status: BookingStatus.CANCELLED, cancelled_by: 'VENDOR', cancel_reason_code: 'double_booked', payment_due_by: null }));
       const cancelled = (await service.getBooking('booking-1', 'customer-1')).data;
       expect(cancelled).toMatchObject({ payment_state: null, cancel_reason_label: 'Double booked', similar_vendors: expect.objectContaining({ items: [] }) });
-    });
-  });
-
-  describe('legacy Checkout bookings credited after completion', () => {
-    const { __setFeeCache } = require('src/modules/platform/platform-settings.service');
-    afterEach(() => __setFeeCache(null));
-    const session = { id: 'cs_paid', payment_intent: 'pi_1', amount_total: 10500, currency: 'usd', metadata: { booking_id: 'booking-1' } };
-
-    it('takes the current Vendly commission, like a regular payout', async () => {
-      __setFeeCache({ percent: 5, minimum: 3, commission: 10, categories: new Map() });
-      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
-      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
-      mockPrisma.booking.findUnique
-        .mockResolvedValueOnce({ customer_id: 'customer-1', currency: 'usd' })
-        .mockResolvedValueOnce({ status: BookingStatus.COMPLETED, paid_at: new Date(), payout_credited_at: null, amount: 100, currency: 'usd', vendor_id: 'vendor-1' });
-
-      await service.recordPayment(session);
-
-      expect(mockPrisma.booking.updateMany).toHaveBeenCalledWith({
-        where: { id: 'booking-1', payout_credited_at: null },
-        data: { payout_credited_at: expect.any(Date), released_at: expect.any(Date), commission_amount: 10, released_gross: 100 },
-      });
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({ where: { id: 'vendor-1' }, data: { balance: { increment: 90 } } });
-      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: 'vendor-1', type: 'vendly_commission', amount: 10, order_id: 'booking-1' }) });
-      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: 'vendor-1', type: 'booking_earning', amount: 90 }) });
-      expect(mockPayments.sendFinalInvoice).toHaveBeenCalledWith('booking-1');
-    });
-
-    it('never credits a booking twice (already credited before the commission rule: untouched)', async () => {
-      __setFeeCache({ percent: 5, minimum: 3, commission: 10, categories: new Map() });
-      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(null);
-      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
-      mockPrisma.booking.findUnique
-        .mockResolvedValueOnce({ customer_id: 'customer-1', currency: 'usd' })
-        .mockResolvedValueOnce({ status: BookingStatus.COMPLETED, paid_at: new Date(), payout_credited_at: new Date('2026-01-01'), amount: 100, currency: 'usd', vendor_id: 'vendor-1' });
-      await service.recordPayment(session);
-      expect(mockPrisma.user.update).not.toHaveBeenCalled();
-      expect(mockPrisma.paymentTransaction.create).not.toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'vendly_commission' }) });
     });
   });
 });

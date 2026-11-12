@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { createHash } from 'crypto';
 import { withBookingLock, withJobLock } from 'src/common/helper/job-lock';
 import * as Sentry from '@sentry/nestjs';
 import { AddOnKind, BookingExtraStatus, BookingStatus, InstallmentStatus, PaymentPlan } from 'prisma/generated/enums';
@@ -22,6 +23,7 @@ import { checkDisputePhotos, describeDisputeAsk, disputePhotoUrls, removeDispute
 import { requestPhotoUrls } from 'src/modules/booking/request-photos';
 import { NOT_STARTED_FLAG_HOURS, notStartedWindow, pastStartNotStarted } from 'src/modules/booking/no-show';
 import { isBankPaymentsOff, isStripeMissing } from 'src/common/lib/Payment/stripe/stripe-errors';
+import { PayoutSource, splitAcrossPayments } from './payout-sources';
 
 /** A customer's report: the reason, and from newer apps what kind of problem and what they ask for. */
 export interface DisputeInput {
@@ -1073,6 +1075,19 @@ export class PaymentsService {
     await this.prisma.booking.updateMany({ where: { id: bookingId, released_at: null }, data: { release_at: releaseAt } });
   }
 
+  /**
+   * A one-off payment that arrived after the vendor marked the booking complete: paid out through the
+   * usual release (from that payment, to the vendor's Stripe account), now if its release time has
+   * passed, else when it comes.
+   */
+  async onPaidAfterCompletion(bookingId: string, now = new Date()) {
+    const b = await this.prisma.booking.findUnique({ where: { id: bookingId }, select: { status: true, release_at: true, released_at: true } });
+    if (!b || b.status !== BookingStatus.COMPLETED || b.released_at) return null;
+    if (!b.release_at) await this.prisma.booking.update({ where: { id: bookingId }, data: { release_at: now } });
+    if (b.release_at && b.release_at > now) return null;
+    return this.releaseBooking(bookingId);
+  }
+
   /** Proof uploaded after completion pulls the release forward to 48h from now. */
   async onProofUploaded(bookingId: string, at = new Date()) {
     const b = await this.prisma.booking.findUnique({ where: { id: bookingId }, select: { status: true, release_at: true, released_at: true } });
@@ -1395,20 +1410,120 @@ export class PaymentsService {
     }
     if (toPay <= 0) return 'recovered';
 
+    let rest = toPay;
+    let firstTransfer: string | null = null;
     if (b.vendor.stripe_connect_id) {
+      // sent from the customer's own payments, so it goes through on the day they paid too
+      const deposit = b.installments.filter((i) => i.kind === 'charge').sort((x, y) => x.sequence - y.sequence)[0];
+      const early = Number(b.early_released_amount ?? 0);
+      const sources: PayoutSource[] = paid
+        .filter((i) => i.payment_intent_id)
+        .map((i) => ({ paymentIntentId: i.payment_intent_id!, room: round2(Number(i.amount) - Number(i.refunded_amount) - (deposit && i.id === deposit.id ? early : 0)) }));
+      if (legacy > 0) {
+        const pi = await this.checkoutPaymentIntent(b.payment_transaction_id).catch(() => null);
+        if (pi) sources.push({ paymentIntentId: pi, room: legacy });
+      }
+      const sent = await this.sendToVendor({ bookingId, vendorId: b.vendor_id, accountId: b.vendor.stripe_connect_id, amount: toPay, currency, keyBase: `release-${bookingId}`, sources });
+      firstTransfer = sent.transferIds[0] ?? null;
+      if (firstTransfer) await this.prisma.booking.update({ where: { id: bookingId }, data: { transfer_id: firstTransfer } });
+      rest = round2(toPay - sent.sent);
+    }
+    if (rest <= 0) return firstTransfer;
+    // no Connect account (or Stripe refused the transfer): the money waits in the vendor's Vendly balance
+    await this.prisma.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: rest } } });
+    await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'booking_earning', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount: rest, currency } });
+    return firstTransfer ?? 'balance';
+  }
+
+  /**
+   * What the vendor keeps from a cancelled booking (cancellation terms): sent to their Stripe account from
+   * the customer's payment, after anything they owe Vendly is settled from it, like a payout. Without a
+   * payout account (or if Stripe refuses) it waits in their Vendly balance as before.
+   */
+  async payOutCancellation(bookingId: string, amount: number) {
+    const b = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { vendor_id: true, currency: true, payment_transaction_id: true, early_released_amount: true, vendor: { select: { stripe_connect_id: true, balance: true } }, installments: true },
+    });
+    if (!b || !(amount > 0)) return null;
+    const currency = b.currency ?? 'usd';
+    const owed = Math.max(0, -Number(b.vendor.balance ?? 0));
+    const offset = round2(Math.min(owed, amount));
+    if (offset > 0) {
+      await this.prisma.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: offset } } });
+      await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'payout_recovery_settled', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount: offset, currency } });
+    }
+    let rest = round2(amount - offset);
+    if (rest <= 0) return 'recovered';
+    let first: string | null = null;
+    if (b.vendor.stripe_connect_id) {
+      const deposit = b.installments.filter((i) => i.kind === 'charge').sort((x, y) => x.sequence - y.sequence)[0];
+      const early = Number(b.early_released_amount ?? 0);
+      const sources: PayoutSource[] = b.installments
+        .filter((i) => isPaid(i) && i.payment_intent_id)
+        .map((i) => ({ paymentIntentId: i.payment_intent_id!, room: round2(Number(i.amount) - Number(i.refunded_amount) - (deposit && i.id === deposit.id ? early : 0)) }));
+      if (!b.installments.length) {
+        const pi = await this.checkoutPaymentIntent(b.payment_transaction_id).catch(() => null);
+        if (pi) sources.push({ paymentIntentId: pi, room: rest });
+      }
+      const sent = await this.sendToVendor({ bookingId, vendorId: b.vendor_id, accountId: b.vendor.stripe_connect_id, amount: rest, currency, keyBase: `cancel-keep-${bookingId}`, sources });
+      first = sent.transferIds[0] ?? null;
+      rest = round2(rest - sent.sent);
+    }
+    if (rest <= 0) return first;
+    await this.prisma.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: rest } } });
+    await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'booking_cancellation_earning', provider: 'stripe', reference_number: bookingId, order_id: bookingId, status: 'succeeded', amount: rest, currency } });
+    return first ?? 'balance';
+  }
+
+  /** The PaymentIntent behind a one-off Checkout payment (its id is kept as pi_… or cs_…). */
+  private async checkoutPaymentIntent(ref?: string | null): Promise<string | null> {
+    if (!ref) return null;
+    if (ref.startsWith('pi_')) return ref;
+    if (!ref.startsWith('cs_')) return null;
+    const session = await StripePayment.retrieveCheckoutSession(ref);
+    return typeof session?.payment_intent === 'string' ? session.payment_intent : (session?.payment_intent?.id ?? null);
+  }
+
+  /**
+   * Sends `amount` to the vendor's Stripe account, from the customer's own payments where it can
+   * (payout-sources.ts), else from Vendly's settled balance. Each transfer is recorded as a payout.
+   * Returns what was sent; the caller credits anything Stripe refused to the vendor's Vendly balance.
+   */
+  private async sendToVendor(o: { bookingId: string; vendorId: string; accountId: string; amount: number; currency: string; keyBase: string; sources: PayoutSource[] }) {
+    const { parts, rest } = splitAcrossPayments(o.amount, o.sources);
+    let left = rest;
+    let sent = 0;
+    const transferIds: string[] = [];
+    const record = async (id: string, amount: number) => {
+      transferIds.push(id);
+      sent = round2(sent + amount);
+      await this.prisma.paymentTransaction.create({ data: { user_id: o.vendorId, type: 'booking_payout', provider: 'stripe', reference_number: id, order_id: o.bookingId, status: 'succeeded', amount, currency: o.currency } });
+    };
+    for (const part of parts) {
+      const charge = await StripePayment.chargeOf(part.paymentIntentId).catch(() => null);
+      if (!charge) {
+        left = round2(left + part.amount);
+        continue;
+      }
       try {
-        const transfer = await StripePayment.transferForBooking({ amount: toPay, currency, accountId: b.vendor.stripe_connect_id, bookingId, idempotencyKey: `release-${bookingId}` });
-        await this.prisma.booking.update({ where: { id: bookingId }, data: { transfer_id: transfer.id } });
-        await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'booking_payout', provider: 'stripe', reference_number: transfer.id, order_id: bookingId, status: 'succeeded', amount: toPay, currency } });
-        return transfer.id;
+        const t = await StripePayment.transferForBooking({ amount: part.amount, currency: o.currency, accountId: o.accountId, bookingId: o.bookingId, idempotencyKey: `${o.keyBase}-${charge}`.slice(0, 250), sourceTransaction: charge });
+        await record(t.id, part.amount);
       } catch (e) {
-        this.logger.error(`transfer for ${bookingId} failed; crediting balance instead`, e);
+        this.logger.warn(`transfer from ${charge} for ${o.bookingId} failed; sending it from the balance instead: ${(e as Error)?.message}`);
+        left = round2(left + part.amount);
       }
     }
-    // no Connect account (or transfer failed): the money waits in the vendor's Vendly balance
-    await this.prisma.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: toPay } } });
-    await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'booking_earning', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount: toPay, currency } });
-    return 'balance';
+    if (left > 0) {
+      try {
+        const t = await StripePayment.transferForBooking({ amount: left, currency: o.currency, accountId: o.accountId, bookingId: o.bookingId, idempotencyKey: `${o.keyBase}-rest`.slice(0, 250) });
+        await record(t.id, left);
+      } catch (e) {
+        this.logger.error(`transfer for ${o.bookingId} failed; crediting balance instead`, e);
+        Sentry.captureException(e, { tags: { job: 'vendor-transfer' }, extra: { booking_id: o.bookingId, amount: left } });
+      }
+    }
+    return { sent, transferIds };
   }
 
   /**
@@ -1716,19 +1831,20 @@ export class PaymentsService {
         await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'payout_recovery_settled', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount: offset, currency } });
       }
       if (toPay <= 0) return 'recovered';
+      let rest = toPay;
+      let first: string | null = null;
       if (b.vendor.stripe_connect_id) {
-        try {
-          const key = `extras-${insts.map((i) => i.id).sort().join('-')}`.slice(0, 250);
-          const transfer = await StripePayment.transferForBooking({ amount: toPay, currency, accountId: b.vendor.stripe_connect_id, bookingId, idempotencyKey: key });
-          await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'booking_payout', provider: 'stripe', reference_number: transfer.id, order_id: bookingId, status: 'succeeded', amount: toPay, currency } });
-          return transfer.id;
-        } catch (e) {
-          this.logger.error(`extras transfer for ${bookingId} failed; crediting balance instead`, e);
-        }
+        // from the customer's payments for these extras, like the booking's own payout
+        const sources: PayoutSource[] = insts.filter((i) => i.payment_intent_id).map((i) => ({ paymentIntentId: i.payment_intent_id!, room: round2(Number(i.amount) - Number(i.refunded_amount)) }));
+        const keyBase = `extras-${createHash('sha256').update(insts.map((i) => i.id).sort().join('-')).digest('hex').slice(0, 32)}`;
+        const sent = await this.sendToVendor({ bookingId, vendorId: b.vendor_id, accountId: b.vendor.stripe_connect_id, amount: toPay, currency, keyBase, sources });
+        first = sent.transferIds[0] ?? null;
+        rest = round2(toPay - sent.sent);
       }
-      await this.prisma.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: toPay } } });
-      await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'booking_earning', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount: toPay, currency } });
-      return 'balance';
+      if (rest <= 0) return first;
+      await this.prisma.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: rest } } });
+      await this.prisma.paymentTransaction.create({ data: { user_id: b.vendor_id, type: 'booking_earning', provider: 'stripe', reference_number: bookingId, status: 'succeeded', amount: rest, currency } });
+      return first ?? 'balance';
     });
   }
 

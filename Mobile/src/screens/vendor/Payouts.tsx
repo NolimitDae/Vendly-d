@@ -10,6 +10,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import { apiMessage } from '../auth/SignIn';
 import StripePayoutSetup, { canSetUpPayoutsInApp, canShowPayoutDetailsInApp, StripePayoutDetails } from '../../components/StripePayoutSetup';
+import { INSTANT_PAYOUT_TEXT, STANDARD_PAYOUT_TEXT } from '../../constants/payouts';
 
 interface Account { accountId?: string | null; payouts_enabled?: boolean; charges_enabled?: boolean; details_submitted?: boolean }
 interface Transaction { id: string; amount: number | string; status?: string; type?: string; created_at: string; currency?: string }
@@ -113,7 +114,7 @@ export default function Payouts() {
             <BrandGradient style={s.balance}>
               <Text style={s.balanceLabel}>Available balance</Text>
               <Text style={s.balanceValue}>{money(balance)}</Text>
-              <Text style={s.balanceHint}>Released from completed bookings under the payout rules</Text>
+              <Text style={s.balanceHint}>Booking payouts go straight to your Stripe account; this balance holds anything left to withdraw</Text>
             </BrandGradient>
 
             {connected ? (
@@ -124,10 +125,12 @@ export default function Payouts() {
                   <TextInput style={ui.input} placeholder="0.00" placeholderTextColor={DARK.muted} value={amount} onChangeText={(t) => setAmount(t.replace(/[^0-9.]/g, ''))} keyboardType="decimal-pad" />
                 </View>
                 <GradientButton title="Withdraw" onPress={withdraw} loading={busy} disabled={!amount} />
+                <Text style={s.feeText}>{STANDARD_PAYOUT_TEXT}</Text>
+                <Text style={s.feeText}>{INSTANT_PAYOUT_TEXT}</Text>
                 {canShowPayoutDetailsInApp() && (
-                  <Pressable style={s.detailsLink} onPress={() => setDetails(true)} accessibilityRole="button" accessibilityLabel="Update payout details">
-                    <Ionicons name="card-outline" size={16} color={DARK.accent} />
-                    <Text style={s.detailsText}>Update payout details</Text>
+                  <Pressable style={s.detailsLink} onPress={() => setDetails(true)} accessibilityRole="button" accessibilityLabel="Payouts and instant cash-out">
+                    <Ionicons name="flash-outline" size={16} color={DARK.accent} />
+                    <Text style={s.detailsText}>Payouts &amp; instant cash-out</Text>
                   </Pressable>
                 )}
               </Card>
@@ -188,6 +191,7 @@ export default function Payouts() {
 const s = StyleSheet.create({
   detailsLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: 4 },
   detailsText: { color: DARK.accent, fontFamily: FONTS.semibold, fontSize: 14 },
+  feeText: { color: DARK.muted, fontFamily: FONTS.regular, fontSize: 13, lineHeight: 19 },
   root: { flex: 1, backgroundColor: DARK.bg },
   balance: { borderRadius: 20, padding: 24, gap: 6 },
   balanceLabel: { color: '#fff', fontSize: 15, fontFamily: FONTS.medium },

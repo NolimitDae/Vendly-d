@@ -160,8 +160,11 @@ export class StripePayment {
         // changing the bank account and details after setup
         account_management: { enabled: true },
         notification_banner: { enabled: true },
-        // balance and payouts, and changing the bank they go to
-        payouts: { enabled: true },
+        // balance and payouts, changing the bank they go to, and cashing out instantly (Stripe Instant
+        // Payouts to an eligible debit card or bank, for Stripe's fee, shown before the vendor confirms;
+        // set in the Stripe Dashboard under Connect > Instant Payouts). Regular payouts stay on Stripe's
+        // automatic daily schedule.
+        payouts: { enabled: true, features: { instant_payouts: true, external_account_collection: true } },
       },
     });
   }

@@ -591,8 +591,69 @@ describe('PaymentsService', () => {
 
       await service.releaseBooking('b1');
 
-      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 425, accountId: 'acct_1', idempotencyKey: 'release-b1' }));
+      // no customer charge on record: sent from Vendly's settled balance
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 425, accountId: 'acct_1', idempotencyKey: 'release-b1-rest' }));
+      expect((StripePayment.transferForBooking as jest.Mock).mock.calls[0][0].sourceTransaction).toBeUndefined();
       expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('sends the payout from the customer’s own charges, so it goes through the day they paid', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), currency: 'usd', vendor_id: 'v1', amount: 450, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null,
+        vendor: { stripe_connect_id: 'acct_1' },
+        installments: [
+          installment({ id: 'i1', sequence: 1, status: InstallmentStatus.PAID, amount: 247.5, fee_amount: 22.5, payment_intent_id: 'pi_dep' }),
+          installment({ id: 'i2', sequence: 2, status: InstallmentStatus.PAID, amount: 225, fee_amount: 0, refunded_amount: 25, payment_intent_id: 'pi_bal' }),
+        ],
+      });
+      (StripePayment.chargeOf as jest.Mock).mockImplementation(async (pi: string) => (pi === 'pi_dep' ? 'ch_dep' : 'ch_bal'));
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValueOnce({ id: 'tr_a' }).mockResolvedValueOnce({ id: 'tr_b' });
+
+      expect(await service.releaseBooking('b1')).toBe('tr_a');
+
+      // 425 to send: 247.50 from the deposit charge (the larger), the other 177.50 from the balance charge
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 247.5, sourceTransaction: 'ch_dep', idempotencyKey: 'release-b1-ch_dep' }));
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 177.5, sourceTransaction: 'ch_bal', idempotencyKey: 'release-b1-ch_bal' }));
+      const payouts = prisma.paymentTransaction.create.mock.calls.filter((c: any) => c[0].data.type === 'booking_payout').map((c: any) => [c[0].data.reference_number, c[0].data.amount]);
+      expect(payouts).toEqual([['tr_a', 247.5], ['tr_b', 177.5]]);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('leaves out of a deposit charge what was already sent early, and falls back to the balance if Stripe refuses one', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, released_at: null, paid_at: new Date(), currency: 'usd', vendor_id: 'v1', amount: 200, payout_credited_at: null, dispute_opened_at: null, dispute_resolved_at: null, early_released_amount: 100,
+        vendor: { stripe_connect_id: 'acct_1', balance: 0 },
+        installments: [
+          installment({ id: 'i1', sequence: 1, status: InstallmentStatus.PAID, amount: 100, fee_amount: 0, payment_intent_id: 'pi_dep' }),
+          installment({ id: 'i2', sequence: 2, status: InstallmentStatus.PAID, amount: 100, fee_amount: 0, payment_intent_id: 'pi_bal' }),
+        ],
+      });
+      (StripePayment.chargeOf as jest.Mock).mockImplementation(async (pi: string) => (pi === 'pi_dep' ? 'ch_dep' : 'ch_bal'));
+      (StripePayment.transferForBooking as jest.Mock).mockRejectedValueOnce(new Error('source charge not usable')).mockResolvedValueOnce({ id: 'tr_rest' });
+
+      await service.releaseBooking('b1');
+
+      const calls = (StripePayment.transferForBooking as jest.Mock).mock.calls.map((c) => c[0]);
+      // the deposit charge's 100 went out early, so nothing more is taken from it
+      expect(calls.some((c) => c.sourceTransaction === 'ch_dep')).toBe(false);
+      const share = calls[0].amount;
+      expect(calls[0]).toEqual(expect.objectContaining({ sourceTransaction: 'ch_bal' }));
+      expect(calls[1]).toEqual(expect.objectContaining({ amount: share, idempotencyKey: 'release-b1-rest' }));
+      expect(calls[1].sourceTransaction).toBeUndefined();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('a payment arriving after completion is paid out through the usual release once its time has come', async () => {
+      const release = jest.spyOn(service, 'releaseBooking').mockResolvedValue('tr_1');
+      prisma.booking.findUnique.mockResolvedValueOnce({ status: BookingStatus.COMPLETED, release_at: new Date(Date.now() + 3600e3), released_at: null });
+      expect(await service.onPaidAfterCompletion('b1')).toBeNull();
+      expect(release).not.toHaveBeenCalled();
+      prisma.booking.findUnique.mockResolvedValueOnce({ status: BookingStatus.COMPLETED, release_at: new Date(Date.now() - 1000), released_at: null });
+      expect(await service.onPaidAfterCompletion('b1')).toBe('tr_1');
+      prisma.booking.findUnique.mockResolvedValueOnce({ status: BookingStatus.COMPLETED, release_at: null, released_at: null });
+      await service.onPaidAfterCompletion('b1');
+      expect(prisma.booking.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { release_at: expect.any(Date) } });
+      expect(release).toHaveBeenCalledTimes(2);
     });
 
     it('credits the Vendly balance when the vendor has no Connect account', async () => {
@@ -906,6 +967,27 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('what the vendor keeps after a cancellation', () => {
+    it('goes to their Stripe account from the customer’s payment, after what they owe Vendly', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ vendor_id: 'v1', currency: 'usd', payment_transaction_id: 'pi_co', early_released_amount: 0, vendor: { stripe_connect_id: 'acct_1', balance: -20 }, installments: [] });
+      (StripePayment.chargeOf as jest.Mock).mockResolvedValue('ch_co');
+      (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_keep' });
+      expect(await service.payOutCancellation('b1', 100)).toBe('tr_keep');
+      // the 20 owed is settled first, the other 80 is sent from the customer's charge
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { balance: { increment: 20 } } });
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 80, sourceTransaction: 'ch_co', idempotencyKey: 'cancel-keep-b1-ch_co' }));
+      expect(prisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'booking_payout', reference_number: 'tr_keep', amount: 80 }) });
+    });
+
+    it('waits in the Vendly balance when the vendor has no payout account', async () => {
+      prisma.booking.findUnique.mockResolvedValue({ vendor_id: 'v1', currency: 'usd', payment_transaction_id: null, early_released_amount: 0, vendor: { stripe_connect_id: null, balance: 0 }, installments: [] });
+      expect(await service.payOutCancellation('b1', 50)).toBe('balance');
+      expect(StripePayment.transferForBooking).not.toHaveBeenCalled();
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { balance: { increment: 50 } } });
+      expect(prisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'booking_cancellation_earning', amount: 50 }) });
+    });
+  });
+
   describe('extras paid after the payout', () => {
     it('pays the vendor their share at the booking commission rate', async () => {
       prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, released_at: new Date(), vendor_id: 'v1', currency: 'usd', commission_amount: 50, released_gross: 500, dispute_opened_at: null, dispute_resolved_at: null, vendor: { stripe_connect_id: 'acct_1', balance: 0 } });
@@ -913,7 +995,7 @@ describe('PaymentsService', () => {
       (StripePayment.transferForBooking as jest.Mock).mockResolvedValue({ id: 'tr_x' });
       expect(await service.payOutLateFor('b1')).toBe('tr_x');
       expect(prisma.bookingInstallment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['x1'] }, paid_out_at: null }, data: { paid_out_at: expect.any(Date) } });
-      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 90, idempotencyKey: 'extras-x1' }));
+      expect(StripePayment.transferForBooking).toHaveBeenCalledWith(expect.objectContaining({ amount: 90, idempotencyKey: expect.stringMatching(/^extras-[0-9a-f]{32}-rest$/) }));
     });
 
     it('never pays out on a booking Vendly refunded in full', async () => {

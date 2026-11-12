@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/react-native';
 import { api } from '../services/api';
 import { apiMessage } from '../screens/auth/SignIn';
 import { DARK, FONTS } from '../constants/colors';
+import { INSTANT_PAYOUT_FEE } from '../constants/payouts';
 
 // Stripe's native module isn't in Expo Go (or on web): the payout screen then uses Stripe's setup page instead
 let connect: {
@@ -154,7 +155,7 @@ export function StripePayoutDetails({ onClose }: { onClose: () => void }) {
             <Ionicons name="close" size={24} color={DARK.text} />
           </Pressable>
         </View>
-        <Text style={d.sub}>Change the bank account your earnings go to, and see payouts on their way to your bank.</Text>
+        <Text style={d.sub}>Change the bank account your earnings go to, see payouts on their way, or cash out instantly. Stripe&apos;s fee for an instant payout is {INSTANT_PAYOUT_FEE} of the amount, shown before you confirm; standard payouts are free.</Text>
         {!connect || !instance || !Payouts ? (
           <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
         ) : (

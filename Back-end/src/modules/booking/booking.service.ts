@@ -397,56 +397,9 @@ export class BookingService {
         data: { status: 'refunded' },
       });
     }
-    // paid after the vendor already marked the job complete
-    if (outcome === 'paid') await this.creditVendorEarnings(bookingId);
-  }
-
-  /**
-   * Releases the vendor price (not the customer service fee) to the vendor's payout balance, once,
-   * less Vendly's commission at the current rate, like a regular payout (`releaseBooking`).
-   */
-  private async creditVendorEarnings(bookingId: string) {
-    const credited = await this.prisma.$transaction(async (tx) => {
-      const b = await tx.booking.findUnique({
-        where: { id: bookingId },
-        select: { status: true, paid_at: true, payout_credited_at: true, amount: true, currency: true, vendor_id: true },
-      });
-      if (!b?.paid_at || b.payout_credited_at || !b.amount || b.status !== BookingStatus.COMPLETED) return false;
-      const gross = round2(Number(b.amount));
-      const commission = round2((Math.max(0, gross) * currentFees().commission) / 100);
-      const share = round2(gross - commission);
-      const now = new Date();
-      // released_gross / commission_amount: refunds after the payout are recovered net of commission
-      const claimed = await tx.booking.updateMany({
-        where: { id: bookingId, payout_credited_at: null },
-        data: { payout_credited_at: now, released_at: now, commission_amount: commission, released_gross: gross },
-      });
-      if (claimed.count !== 1) return false;
-      const currency = b.currency ?? 'usd';
-      if (commission > 0) {
-        await tx.paymentTransaction.create({
-          data: { user_id: b.vendor_id, type: 'vendly_commission', provider: 'stripe', reference_number: bookingId, order_id: bookingId, status: 'succeeded', amount: commission, currency },
-        });
-      }
-      if (share > 0) {
-        await tx.user.update({ where: { id: b.vendor_id }, data: { balance: { increment: share } } });
-        await tx.paymentTransaction.create({
-          data: {
-            user_id: b.vendor_id,
-            type: 'booking_earning',
-            provider: 'stripe',
-            reference_number: bookingId,
-            order_id: bookingId,
-            status: 'succeeded',
-            amount: share,
-            currency,
-          },
-        });
-      }
-      return true;
-    });
-    // the money on this booking is final: the customer gets their invoice
-    if (credited) await this.payments.sendFinalInvoice(bookingId).catch((err) => console.error(`Invoice for ${bookingId} failed:`, err));
+    // paid after the vendor already marked the job complete: paid out like any booking (the usual hold,
+    // sent from this payment to the vendor's Stripe account)
+    if (outcome === 'paid') await this.payments.onPaidAfterCompletion(bookingId);
   }
 
   async cancel(bookingId: string, userId: string, dto: CancelBookingDto) {
@@ -907,7 +860,13 @@ export class BookingService {
     if (net === 0 && settlement.vendorKeeps > 0) {
       await this.prisma.booking.updateMany({ where: { id: booking.id, payout_credited_at: null }, data: { payout_credited_at: new Date() } });
     }
-    if (net !== 0) {
+    if (net > 0) {
+      // what the vendor keeps goes to their Stripe account, from the customer's payment (or their Vendly
+      // balance if they have no payout account yet)
+      const claimed = await this.prisma.booking.updateMany({ where: { id: booking.id, payout_credited_at: null }, data: { payout_credited_at: new Date() } });
+      if (claimed.count === 1) await this.payments.payOutCancellation(booking.id, net);
+    }
+    if (net < 0) {
       await this.prisma.$transaction(async (tx) => {
         const claimed = await tx.booking.updateMany({
           where: { id: booking.id, payout_credited_at: null },
@@ -919,7 +878,7 @@ export class BookingService {
         await tx.paymentTransaction.create({
           data: {
             user_id: booking.vendor_id,
-            type: net > 0 ? 'booking_cancellation_earning' : 'payout_recovery',
+            type: 'payout_recovery',
             provider: 'stripe',
             reference_number: booking.id,
             order_id: booking.id,
