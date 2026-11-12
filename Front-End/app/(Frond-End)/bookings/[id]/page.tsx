@@ -358,7 +358,9 @@ export default function CustomerBookingDetailPage() {
         }}
       />
 
-      <PaymentTimeline key={paymentsKey} bookingId={booking.id} bookingStatus={booking.status} startReporting={reporting} />
+      {/* keys differ from the contract section's: the same key on two siblings made React add a
+          new Payments card on every refresh instead of replacing it */}
+      <PaymentTimeline key={`payments-${paymentsKey}`} bookingId={booking.id} bookingStatus={booking.status} startReporting={reporting} />
 
       {!booking.payment_plan && ["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
         <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
@@ -379,7 +381,7 @@ export default function CustomerBookingDetailPage() {
         </div>
       )}
 
-      <BookingContractSection key={contractKey} bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
+      <BookingContractSection key={`contract-${contractKey}`} bookingId={booking.id} role="CUSTOMER" bookingStatus={booking.status} />
 
       {/* Photo Proof */}
       <section className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 space-y-4">

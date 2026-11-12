@@ -151,6 +151,16 @@ describe('PaymentTimeline (possible no-show)', () => {
     await waitFor(() => expect(PaymentsService.timeline).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
+
+  it('reloads when the vendor starts, so the no-show hint goes away', async () => {
+    (PaymentsService.timeline as jest.Mock).mockResolvedValue({ data: { data: timeline } });
+    const { rerender } = render(<PaymentTimeline bookingId="b1" bookingStatus="CONFIRMED" />);
+    expect(await screen.findByTestId('no-show-hint')).toBeInTheDocument();
+    (PaymentsService.timeline as jest.Mock).mockResolvedValue({ data: { data: { ...timeline, not_started: false } } });
+    rerender(<PaymentTimeline bookingId="b1" bookingStatus="IN_PROGRESS" />);
+    await waitFor(() => expect(screen.queryByTestId('no-show-hint')).not.toBeInTheDocument());
+    expect(screen.getAllByRole('heading', { name: 'Payments' })).toHaveLength(1);
+  });
 });
 
 describe('PaymentTimeline (missed deposit on a deposit plan)', () => {

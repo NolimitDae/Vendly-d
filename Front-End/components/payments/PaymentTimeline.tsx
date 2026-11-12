@@ -49,9 +49,10 @@ export default function PaymentTimeline({ bookingId, bookingStatus, onChanged, s
     }
   }, [bookingId]);
 
+  // again when the booking moves on (vendor started, finished): what's held and what can be done changes
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, bookingStatus]);
 
   const run = async (fn: () => Promise<unknown>, fail: string) => {
     setBusy(true);

@@ -386,7 +386,7 @@ export default function VendorBookingDetailPage() {
         }}
       />
 
-      <BookingContractSection key={contractKey} bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={fetchAll} />
+      <BookingContractSection key={`contract-${contractKey}`} bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} onChanged={fetchAll} />
 
       {["CONFIRMED", "IN_PROGRESS", "COMPLETED"].includes(booking.status) && (
         <BookingExtrasSection bookingId={booking.id} role="VENDOR" bookingStatus={booking.status} />
