@@ -1549,9 +1549,10 @@ export class PaymentsService {
         await this.prisma.paymentTransaction.create({ data: { user_id: vendorId, type: 'payout_reversal', provider: 'stripe', reference_number: rev.id, order_id: bookingId, status: 'succeeded', amount: -take, currency } });
         left = round2(left - take);
       } catch (e: any) {
-        // usually the vendor's Stripe balance is already at their bank: the rest is owed from their Vendly balance
+        // usually that money is already at the vendor's bank: try the booking's other payouts (a payout can
+        // be split across the customer's payments); what none covers is owed from their Vendly balance
         this.logger.warn(`reverse ${p.reference_number} for ${bookingId}: ${e?.raw?.message ?? e?.message}`);
-        break;
+        continue;
       }
     }
     if (left > 0) await this.recordRecovery(vendorId, bookingId, -left, currency);

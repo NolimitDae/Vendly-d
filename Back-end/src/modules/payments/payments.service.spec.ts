@@ -574,6 +574,24 @@ describe('PaymentsService', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { balance: { increment: -50 } } });
     });
 
+    it('takes it back from another of the booking’s payouts when one can’t be reversed', async () => {
+      prisma.booking.findUnique.mockResolvedValue({
+        id: 'b1', status: BookingStatus.COMPLETED, dispute_opened_at: new Date(), dispute_resolved_at: null, released_at: null, vendor_id: 'v1', currency: 'usd', early_released_amount: 50,
+        listing: { title: 'Glam' }, customer: { email: 'c@x.com', name: 'C' }, vendor: { email: 'v@x.com', name: 'V' },
+        installments: [installment({ status: InstallmentStatus.PAID, amount: 105, fee_amount: 5 })],
+      });
+      jest.spyOn(service, 'refundBooking').mockResolvedValue(105);
+      prisma.paymentTransaction.findMany.mockResolvedValueOnce([{ reference_number: 'tr_new' }, { reference_number: 'tr_old' }]);
+      (StripePayment.retrieveTransfer as jest.Mock).mockImplementation(async (id: string) => ({ id, amount: 5000, amount_reversed: 0 }));
+      (StripePayment.reverseTransfer as jest.Mock).mockImplementation(async (id: string) => {
+        if (id === 'tr_new') throw Object.assign(new Error('insufficient funds'), { raw: { message: 'Already paid out' } });
+        return { id: 'trr_1' };
+      });
+      await service.resolveDispute('b1', 'admin', { action: 'refund', note: 'No-show confirmed' });
+      expect(StripePayment.reverseTransfer).toHaveBeenCalledWith('tr_old', 50, expect.any(String));
+      expect(prisma.user.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { balance: { increment: -50 } } }));
+    });
+
     it('rejects a partial refund that is the whole amount', async () => {
       prisma.booking.findUnique.mockResolvedValue({ id: 'b1', status: BookingStatus.COMPLETED, dispute_opened_at: new Date(), dispute_resolved_at: null, released_at: null, installments: [installment({ status: InstallmentStatus.PAID, amount: 105 })] });
       await expect(service.resolveDispute('b1', 'admin', { action: 'partial_refund', amount: 105, note: 'split' })).rejects.toThrow(BadRequestException);

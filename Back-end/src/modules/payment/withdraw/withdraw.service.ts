@@ -275,7 +275,7 @@ export class WithdrawService {
       let errorMessage = 'Failed to process withdraw. Please try again later.';
       if ((error as any)?.code === 'balance_insufficient') {
         errorMessage =
-          'Stripe account have not enough balance. Please try again later.';
+          "Vendly's payout funds are still settling with Stripe. Your balance is unchanged; try again in a day or two.";
       }
       throw new HttpException(errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
