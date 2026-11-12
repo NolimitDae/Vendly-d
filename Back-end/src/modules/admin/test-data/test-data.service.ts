@@ -17,6 +17,9 @@ import { placeholderPng } from './placeholder-image';
 import { CATALOG, DemoCategory, DemoVendor, fallbackCategory, workingHoursFor } from './test-data-catalog';
 import { generatePassword, guessTimeZone, spreadAround, testEmail, testHandle } from './test-data-helpers';
 
+/** The App Review login (reviewAccount): kept apart from the test vendors' shared password and removal. */
+export const REVIEW_EMAIL = 'appreview@vendlymarketplace.com';
+
 export interface CreateTestDataInput {
   /** "Atlanta, GA"; left out, the place the test vendors already are */
   near?: string;
@@ -59,7 +62,7 @@ export class TestDataService {
   /** The test vendors there are now. */
   async status() {
     const users = await this.prisma.user.findMany({
-      where: { is_test: true, deleted_at: null },
+      where: { is_test: true, deleted_at: null, email: { not: REVIEW_EMAIL } },
       orderBy: { email: 'asc' },
       select: {
         id: true,
@@ -84,6 +87,50 @@ export class TestDataService {
       business_name: u.vendorProfile?.business_name ?? null,
       shop_url: handle ? `${appConfig().app.client_app_url}/v/${handle}` : null,
       ...(u._count ? { packages: u._count.vendorListings } : {}),
+    };
+  }
+
+  /**
+   * The login for Apple's App Review (App Store Connect > App Review Information): a verified test
+   * customer who can also switch to a vendor profile, so the reviewer sees both sides. Created the first
+   * time, and every call gives it a new password (shown once). Test accounts get no emails or payouts.
+   */
+  async reviewAccount() {
+    const password = generatePassword();
+    const hash = await bcrypt.hash(password, appConfig().security.salt);
+    const now = new Date();
+    const existing = await this.prisma.user.findFirst({ where: { email: REVIEW_EMAIL, deleted_at: null }, select: { id: true, is_test: true } });
+    if (existing && !existing.is_test) throw new BadRequestException(`A real account already uses ${REVIEW_EMAIL}.`);
+    if (existing) {
+      await this.prisma.user.update({ where: { id: existing.id }, data: { password: hash, email_verified_at: now } });
+    } else {
+      await this.prisma.user.create({
+        data: {
+          email: REVIEW_EMAIL,
+          name: 'App Review',
+          first_name: 'App',
+          last_name: 'Review',
+          type: UserType.CUSTOMER,
+          roles: [UserType.CUSTOMER, UserType.VENDOR],
+          password: hash,
+          is_test: true,
+          email_verified_at: now,
+          terms_accepted_at: now,
+          onboarding_seen: { CUSTOMER: { intro: now.toISOString(), complete: now.toISOString() }, VENDOR: { intro: now.toISOString(), complete: now.toISOString() } },
+          vendorProfile: {
+            create: { business_name: 'App Review Studio (Test)', about_me: 'A test vendor profile for App Store review.', license_status: 'APPROVED', approved_at: now },
+          },
+        },
+        select: { id: true },
+      });
+    }
+    return {
+      success: true,
+      data: {
+        email: REVIEW_EMAIL,
+        password,
+        note: 'Put these in App Store Connect > App Review Information > Sign-in required. The password is shown only once; making it again gives a new one. The account is a customer that can switch to a vendor profile (Profile > Switch role), and test accounts get no emails or payouts.',
+      },
     };
   }
 
@@ -173,7 +220,8 @@ export class TestDataService {
         skipped.push({ email: slot.email, reason: (err as Error).message });
       }
     }
-    if (hash) await this.prisma.user.updateMany({ where: { is_test: true, deleted_at: null }, data: { password: hash } });
+    // the App Review login keeps its own password
+    if (hash) await this.prisma.user.updateMany({ where: { is_test: true, deleted_at: null, email: { not: REVIEW_EMAIL } }, data: { password: hash } });
 
     const status = await this.status();
     const reset = !!password && existing.some((u) => u.is_test);
@@ -346,7 +394,8 @@ export class TestDataService {
 
   async removeAll() {
     const users = await this.prisma.user.findMany({
-      where: { is_test: true, deleted_at: null },
+      // the App Review login stays (Apple's reviewer may be using it)
+      where: { is_test: true, deleted_at: null, email: { not: REVIEW_EMAIL } },
       orderBy: { email: 'asc' },
       select: { id: true, email: true, vendorProfile: { select: { business_name: true } } },
     });

@@ -46,4 +46,12 @@ export const TestDataService = {
   /** near can be left out to use where the test vendors already are (e.g. only resetting the password) */
   create: (body: { near?: string; lat?: number; lng?: number; reset_password?: boolean }) => Fetch.post("/admin/test-data", body, json()),
   remove: () => Fetch.delete("/admin/test-data", json()),
+  /** the App Review login for App Store Connect (made the first time; a new password each time) */
+  reviewAccount: () => Fetch.post("/admin/test-data/review-account", {}, json()),
 };
+
+export interface ReviewAccount {
+  email: string;
+  password: string;
+  note: string;
+}

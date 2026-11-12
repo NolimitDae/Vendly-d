@@ -54,6 +54,12 @@ export class TestDataController {
     return this.testData.create(dto);
   }
 
+  @ApiOperation({ summary: 'Create the App Review login (or give it a new password); the password is shown once' })
+  @Post('review-account')
+  reviewAccount() {
+    return this.testData.reviewAccount();
+  }
+
   @ApiOperation({ summary: 'Cancel test vendors’ open bookings, remove their packages and delete the accounts' })
   @Delete()
   remove() {

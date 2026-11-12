@@ -1,5 +1,6 @@
 import FeeSettings from "@/components/Dashboard/money/FeeSettings";
 import TestVendorsCard from "@/components/Dashboard/settings/TestVendorsCard";
+import AppReviewLoginCard from "@/components/Dashboard/settings/AppReviewLoginCard";
 
 const SettingsPage = () => {
   return (
@@ -10,6 +11,7 @@ const SettingsPage = () => {
       </div>
       <FeeSettings />
       <TestVendorsCard />
+      <AppReviewLoginCard />
     </div>
   );
 };

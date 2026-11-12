@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { TestDataService } from './test-data.service';
+import { REVIEW_EMAIL, TestDataService } from './test-data.service';
 import { CATALOG } from './test-data-catalog';
 import { categorySlug, guessTimeZone, spreadAround, testEmail, testHandle } from './test-data-helpers';
 import { sniffUpload } from 'src/common/helper/upload-files';
@@ -37,7 +37,7 @@ function setup() {
     user: {
       findMany: jest.fn(async ({ where }: any) =>
         db.users
-          .filter((u) => !u.deleted_at && (where.email?.in ? where.email.in.includes(u.email) : true) && (where.is_test === undefined || u.is_test === where.is_test))
+          .filter((u) => !u.deleted_at && (where.email?.in ? where.email.in.includes(u.email) : true) && (where.email?.not ? u.email !== where.email.not : true) && (where.is_test === undefined || u.is_test === where.is_test))
           .map((u) => ({ ...u, vendorProfile: u.vendorProfile, _count: { vendorListings: db.listings.filter((l) => l.vendor_id === u.id && !l.deleted_at).length } })),
       ),
       create: jest.fn(async ({ data }: any) => {
@@ -46,10 +46,16 @@ function setup() {
         return { id: u.id };
       }),
       findUnique: jest.fn(async ({ where }: any) => db.users.find((u) => u.id === where.id) ?? null),
+      findFirst: jest.fn(async ({ where }: any) => db.users.find((u) => u.email === where.email && !u.deleted_at) ?? null),
+      update: jest.fn(async ({ where, data }: any) => {
+        const u = db.users.find((x) => x.id === where.id);
+        Object.assign(u, data);
+        return u;
+      }),
       updateMany: jest.fn(async ({ where, data }: any) => {
         const hit = where.id
           ? db.users.filter((u) => u.id === where.id && Number(u.balance ?? 0) === Number(where.balance))
-          : db.users.filter((u) => u.is_test === where.is_test && !u.deleted_at);
+          : db.users.filter((u) => u.is_test === where.is_test && !u.deleted_at && (where.email?.not ? u.email !== where.email.not : true));
         hit.forEach((u) => Object.assign(u, data));
         return { count: hit.length };
       }),
@@ -288,5 +294,38 @@ describe('test data helpers', () => {
     }
     // the categories most events need get two vendors
     for (const name of ['Photography & Video', 'Catering & Food', 'Music & Entertainment', 'Venues', 'Decor & Florals']) expect(CATALOG[name].vendors).toHaveLength(2);
+  });
+
+  describe('App Review login', () => {
+    it('is a verified test customer who can switch to a vendor profile, with a new password each time', async () => {
+      const { service, db } = setup();
+      const first = (await service.reviewAccount()).data;
+      expect(first.email).toBe(REVIEW_EMAIL);
+      const u = db.users.find((x) => x.email === REVIEW_EMAIL);
+      expect(u).toMatchObject({ type: 'CUSTOMER', roles: ['CUSTOMER', 'VENDOR'], is_test: true, email_verified_at: expect.any(Date) });
+      expect(await bcrypt.compare(first.password, u.password)).toBe(true);
+      const second = (await service.reviewAccount()).data;
+      expect(second.password).not.toBe(first.password);
+      expect(db.users.filter((x) => x.email === REVIEW_EMAIL)).toHaveLength(1);
+      expect(await bcrypt.compare(second.password, u.password)).toBe(true);
+    });
+
+    it('keeps its password when the test vendors get a new one, and is never removed with them', async () => {
+      const { service, db } = setup();
+      const { password } = (await service.reviewAccount()).data;
+      await service.create({ near: 'Atlanta, GA', lat: 33.75, lng: -84.39 });
+      await service.create({ near: 'Atlanta, GA', lat: 33.75, lng: -84.39, reset_password: true });
+      const review = db.users.find((x) => x.email === REVIEW_EMAIL);
+      expect(await bcrypt.compare(password, review.password)).toBe(true);
+      expect((await service.status()).data.accounts.map((a: any) => a.email)).not.toContain(REVIEW_EMAIL);
+      await service.removeAll();
+      expect(review.deleted_at).toBeFalsy();
+    });
+
+    it('never takes over a real account that uses the address', async () => {
+      const { service, db } = setup();
+      db.users.push({ id: 'real', email: REVIEW_EMAIL, is_test: false });
+      await expect(service.reviewAccount()).rejects.toThrow('A real account already uses');
+    });
   });
 });
