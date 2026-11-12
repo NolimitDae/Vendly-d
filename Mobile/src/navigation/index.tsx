@@ -47,7 +47,7 @@ export default function RootNavigator() {
           <Text style={s.adminTitle}>Admin Portal</Text>
           <Text style={s.adminSub}>
             The admin dashboard is only available on the web platform.
-            {'\n'}Please visit vendly.com/admin to continue.
+            {'\n'}Please visit vendlymarketplace.com/dashboard to continue.
           </Text>
         </View>
       ) : (

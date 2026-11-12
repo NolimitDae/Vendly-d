@@ -62,7 +62,8 @@
     "install": {
       "exclude": [
         "@react-native-community/datetimepicker",
-        "typescript"
+        "typescript",
+        "@stripe/stripe-react-native"
       ]
     }
   }
