@@ -34,7 +34,7 @@ export const apiMessage = (err: any, fallback: string): string => {
 
 export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackParams, 'SignIn'>) {
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { login, browseAsGuest } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -161,6 +161,10 @@ export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackP
                 <Text style={ui.link}>Sign Up</Text>
               </Pressable>
             </View>
+            {/* vendors, packages and rentals can be looked at without an account */}
+            <Pressable onPress={() => void browseAsGuest()} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'center', marginTop: 16 }}>
+              <Text style={ui.link}>Browse without an account</Text>
+            </Pressable>
             </>
           )}
         </View>

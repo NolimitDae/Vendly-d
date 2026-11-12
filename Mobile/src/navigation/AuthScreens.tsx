@@ -12,12 +12,15 @@ import ForgotPassword from '../screens/auth/ForgotPassword';
 import ResetPassword from '../screens/auth/ResetPassword';
 import NewPassword from '../screens/auth/NewPassword';
 import type { AuthStackParams } from './types';
+import { takeAuthStart } from '../context/guest';
 
 const Stack = createNativeStackNavigator<AuthStackParams>();
 
 export default function AuthScreens() {
   // Onboarding shows once per install; after that the app opens on sign in.
   const [seen, setSeen] = useState<boolean | null>(null);
+  // a guest who chose Sign in or Create account starts there
+  const [start] = useState(takeAuthStart);
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDED_KEY).then((v) => setSeen(!!v), () => setSeen(false));
   }, []);
@@ -26,7 +29,7 @@ export default function AuthScreens() {
 
   return (
     <Stack.Navigator
-      initialRouteName={seen ? 'SignIn' : 'Onboarding'}
+      initialRouteName={start ?? (seen ? 'SignIn' : 'Onboarding')}
       screenOptions={{ headerShown: false, contentStyle: { backgroundColor: DARK.bg }, animation: 'slide_from_right' }}
     >
       <Stack.Screen name="Onboarding" component={Onboarding} options={{ animation: 'fade' }} />

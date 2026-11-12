@@ -12,12 +12,13 @@ import { OnboardingProvider } from '../context/OnboardingContext';
 import OnboardingPopup from '../components/OnboardingPopup';
 
 import AuthScreens from './AuthScreens';
+import GuestScreens from './GuestScreens';
 import CustomerTabs from './CustomerTabs';
 import VendorTabs from './VendorTabs';
 import EventPlannerTabs from './EventPlannerTabs';
 
 export default function RootNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, guest } = useAuth();
   usePushNotifications(user?.type);
   // at launch the full logo plays before the app opens (about 4.7s); a timer makes sure a stalled
   // animation can never keep the app on this screen
@@ -32,9 +33,10 @@ export default function RootNavigator() {
   return (
     // Keyed on the role: switching roles starts the new role's tabs fresh, instead of carrying the
     // old screen history (e.g. the Switch role screen) into them.
-    <NavigationContainer ref={navigationRef} key={user ? `role-${user.type}` : 'signed-out'}>
+    <NavigationContainer ref={navigationRef} key={user ? `role-${user.type}` : guest ? 'guest' : 'signed-out'}>
       {!user ? (
-        <AuthScreens />
+        // browsing without an account (App Store 5.1.1), or the sign-in screens
+        guest ? <GuestScreens /> : <AuthScreens />
       ) : user.type === 'CUSTOMER' || user.type === 'CLIENT' ? (
         // The website registers customers as CLIENT; both are the same kind of account.
         <WithOnboarding><CustomerTabs /></WithOnboarding>

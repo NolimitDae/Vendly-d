@@ -7,6 +7,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BrandGradient, GradientButton, ui } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import type { AuthStackParams } from '../../navigation/types';
+import { useAuth } from '../../context/AuthContext';
 
 export const ONBOARDED_KEY = 'vendly_onboarded';
 
@@ -45,7 +46,9 @@ export default function Onboarding({ navigation }: NativeStackScreenProps<AuthSt
   const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const fade = useRef(new Animated.Value(1)).current;
-  const panel = Math.max(PANEL, 268 + insets.bottom);
+  // room for the "Look around first" link under the button
+  const panel = Math.max(PANEL, 268 + insets.bottom) + 36;
+  const { browseAsGuest } = useAuth();
 
   useEffect(() => {
     fade.setValue(0.4);
@@ -97,11 +100,24 @@ export default function Onboarding({ navigation }: NativeStackScreenProps<AuthSt
           <Text style={s.title}>{slide.title}</Text>
           <Text style={ui.body}>{slide.body}</Text>
         </View>
-        <GradientButton
-          pill
-          title={last ? 'Get Started' : 'Next'}
-          onPress={() => (last ? finish() : setIndex(index + 1))}
-        />
+        <View style={{ gap: 14 }}>
+          <GradientButton
+            pill
+            title={last ? 'Get Started' : 'Next'}
+            onPress={() => (last ? finish() : setIndex(index + 1))}
+          />
+          <Pressable
+            onPress={async () => {
+              await AsyncStorage.setItem(ONBOARDED_KEY, '1');
+              await browseAsGuest();
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            style={{ alignSelf: 'center' }}
+          >
+            <Text style={ui.link}>Look around first</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );

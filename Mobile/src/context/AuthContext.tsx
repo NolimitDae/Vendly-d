@@ -1,5 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react';
-import { AppState } from 'react-native';
+import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from 'react';
+import { Alert, AppState } from 'react-native';
+import { guestSession, setAuthStart } from './guest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, PUSH_TOKEN_KEY } from '../services/api';
 import { SocketService } from '../services/socket.service';
@@ -36,7 +37,14 @@ export interface AuthContextValue extends AuthState {
   logout: () => Promise<void>;
   /** Re-fetch /auth/me and update stored user (e.g. after profile edit). */
   refreshUser: () => Promise<void>;
+  /** Looking around without an account (vendors, packages, rentals); signing in ends it. */
+  guest: boolean;
+  browseAsGuest: () => Promise<void>;
+  /** Leaves guest browsing for the sign-in screens ('SignIn', or 'RoleSelect' to create an account). */
+  leaveGuest: (to?: 'SignIn' | 'RoleSelect') => Promise<void>;
 }
+
+const GUEST_KEY = 'browsing_as_guest';
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -76,6 +84,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     token: null,
     loading: true,
   });
+  const [guest, setGuest] = useState(false);
+  // a guest who closed the app comes back browsing, not on the sign-in screen
+  useEffect(() => {
+    AsyncStorage.getItem(GUEST_KEY).then((v) => {
+      if (v) {
+        guestSession.set(true);
+        setGuest(true);
+      }
+    }, () => undefined);
+  }, []);
 
   // On mount: restore token from storage, then validate with GET /auth/me.
   // Using /auth/me (not just the cached user JSON) ensures:
@@ -128,6 +146,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (token: string, user: AuthUser, refreshToken?: string) => {
+    guestSession.set(false);
+    setGuest(false);
+    await AsyncStorage.removeItem(GUEST_KEY).catch(() => undefined);
     await Promise.all([
       AsyncStorage.setItem(TOKEN_KEY, token),
       AsyncStorage.setItem(USER_KEY, JSON.stringify(user)),
@@ -159,6 +180,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const browseAsGuest = useCallback(async () => {
+    guestSession.set(true);
+    setGuest(true);
+    await AsyncStorage.setItem(GUEST_KEY, '1').catch(() => undefined);
+  }, []);
+
+  const leaveGuest = useCallback(async (to: 'SignIn' | 'RoleSelect' = 'SignIn') => {
+    setAuthStart(to);
+    guestSession.set(false);
+    setGuest(false);
+    await AsyncStorage.removeItem(GUEST_KEY).catch(() => undefined);
+  }, []);
+
+  // what a guest sees when they try something that needs an account
+  useEffect(() => {
+    guestSession.setPrompt((why) =>
+      Alert.alert(`Sign in to ${why}`, 'Create a free Vendly account or sign in to book vendors, message them and save your favourites.', [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Create account', onPress: () => void leaveGuest('RoleSelect') },
+        { text: 'Sign in', onPress: () => void leaveGuest('SignIn') },
+      ]),
+    );
+    return () => guestSession.setPrompt(null);
+  }, [leaveGuest]);
+
   // Coming back to the app re-reads the account, so a role switched on the website (or an ID
   // approved meanwhile) shows up without closing the app. At most once every 30 seconds.
   const lastRefresh = useRef(0);
@@ -174,7 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [signedIn, refreshUser]);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ ...state, login, logout, refreshUser, guest, browseAsGuest, leaveGuest }}>
       {children}
     </AuthContext.Provider>
   );

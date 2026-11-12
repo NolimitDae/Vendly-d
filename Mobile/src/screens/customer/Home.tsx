@@ -72,7 +72,7 @@ const NEAR_RADIUS = 25;
 export default function CustomerHome() {
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, guest, leaveGuest } = useAuth();
   const [listings, setListings] = useState<Listing[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showAll, setShowAll] = useState(false);
@@ -122,14 +122,15 @@ export default function CustomerHome() {
   useFocusEffect(
     useCallback(() => {
       load();
-      api.get('/notifications').then((r) => setUnread(Number(r.data?.unread ?? 0))).catch(() => {});
-    }, [load]),
+      if (!guest) api.get('/notifications').then((r) => setUnread(Number(r.data?.unread ?? 0))).catch(() => {});
+    }, [load, guest]),
   );
   useEffect(() => {
+    if (guest) return;
     const onNew = () => setUnread((n) => n + 1);
     void SocketService.on('receiveNotification', onNew);
     return () => SocketService.off('receiveNotification', onNew);
-  }, []);
+  }, [guest]);
 
   const firstName = (user?.name ?? '').split(' ')[0];
   const tiles = showAll ? categories : categories.slice(0, MAX_TILES);
@@ -158,6 +159,12 @@ export default function CustomerHome() {
             <Text style={s.helloSub}>What are you planning today?</Text>
           </View>
         </View>
+        {guest ? (
+          // browsing without an account: sign in from here
+          <Pressable style={s.signIn} onPress={() => void leaveGuest('SignIn')} accessibilityRole="button" accessibilityLabel="Sign in">
+            <Text style={s.signInText}>Sign in</Text>
+          </Pressable>
+        ) : (
         <Pressable
           style={s.bell}
           onPress={() => nav.navigate('Notifications')}
@@ -167,6 +174,7 @@ export default function CustomerHome() {
           <Ionicons name="notifications-outline" size={22} color="#fff" />
           {unread > 0 && <View style={s.bellDot} />}
         </Pressable>
+        )}
       </View>
 
       {/* Search */}
@@ -407,6 +415,8 @@ function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) 
 }
 
 const s = StyleSheet.create({
+  signIn: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.12)' },
+  signInText: { color: '#fff', fontFamily: FONTS.semibold, fontSize: 14 },
   root: { flex: 1, backgroundColor: DARK.bg },
   center: { alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, gap: 12 },
