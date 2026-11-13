@@ -8,6 +8,7 @@ import { Card, ScreenHeader } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import { api } from '../../services/api';
 import type { CustomerHomeStackParams } from '../../navigation/types';
+import ReportButton from '../../components/ReportButton';
 
 interface Review {
   id: string;
@@ -118,6 +119,13 @@ export default function Reviews({ navigation, route }: NativeStackScreenProps<Cu
               </View>
               <Text style={s.authorName}>{item.author?.name ?? 'Vendly customer'}</Text>
             </View>
+            <ReportButton
+              variant="text"
+              person={item.author ? { id: item.author.id, name: item.author.name ?? 'this customer' } : null}
+              about={`Review ${item.id}: ${item.comment ?? '(no comment)'}`}
+              title="Report this review"
+              style={{ marginTop: 8 }}
+            />
           </View>
         )}
       />

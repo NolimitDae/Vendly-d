@@ -17,6 +17,9 @@ const googleConfigured = Platform.select({
   default: !!GOOGLE_IDS.webClientId,
 });
 
+/** Whether any "Continue with …" button can show (Apple on iPhone; Google once its client IDs are set). */
+export const socialSignInOffered = googleConfigured || Platform.OS === 'ios';
+
 /**
  * "Continue with Google / Apple". New accounts are sent to pick a role (onNeedsRole); accounts with
  * two-step sign-in are asked for their authenticator code (onNeedsCode).
@@ -51,7 +54,7 @@ export default function SocialButtons({ onNeedsRole, onNeedsCode }: { onNeedsRol
       if (!cred.identityToken) throw new Error('Apple didn’t return a sign-in token');
       // Apple only shares the name the first time, so pass it along for the new account
       const name = [cred.fullName?.givenName, cred.fullName?.familyName].filter(Boolean).join(' ') || undefined;
-      await finish({ provider: 'apple', id_token: cred.identityToken, name });
+      await finish({ provider: 'apple', id_token: cred.identityToken, name, ...(cred.authorizationCode ? { authorization_code: cred.authorizationCode } : {}) });
     } catch (err: any) {
       setBusy(null);
       if (err?.code !== 'ERR_REQUEST_CANCELED') Alert.alert('Apple sign-in failed', err?.message ?? 'Try again.');
@@ -60,14 +63,25 @@ export default function SocialButtons({ onNeedsRole, onNeedsCode }: { onNeedsRol
 
   return (
     <View style={{ gap: 16 }}>
-      {googleConfigured ? (
+      {/* only when Google sign-in is set up: no placeholder buttons (App Store 2.1) */}
+      {googleConfigured && (
         <GoogleButton busy={busy === 'google'} onStart={() => setBusy('google')} onCancel={() => setBusy(null)} onToken={(t) => finish({ provider: 'google', id_token: t })} />
-      ) : (
-        <OutlineButton title="Continue with Google" icon={<Ionicons name="logo-google" size={22} color="#fff" />} onPress={() => Alert.alert('Coming soon', 'Google sign-in is being switched on. Use your email for now.')} />
       )}
-      {appleAvailable && (
-        <OutlineButton title="Continue with Apple" icon={busy === 'apple' ? <ActivityIndicator color="#fff" /> : <Ionicons name="logo-apple" size={24} color="#fff" />} onPress={apple} />
-      )}
+      {appleAvailable &&
+        (busy === 'apple' ? (
+          <View style={{ height: 56, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator color="#fff" />
+          </View>
+        ) : (
+          // Apple's own button, as Apple's design rules ask for Sign in with Apple
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+            cornerRadius={24}
+            style={{ height: 56, width: '100%' }}
+            onPress={apple}
+          />
+        ))}
     </View>
   );
 }

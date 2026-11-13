@@ -7,6 +7,8 @@ export interface SocialPending {
   provider: SocialProvider;
   id_token: string;
   name?: string;
+  /** Apple: the one-time code the server trades for what it needs to revoke the sign-in on account deletion */
+  authorization_code?: string;
 }
 
 /**

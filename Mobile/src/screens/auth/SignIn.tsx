@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { api } from '../../services/api';
 import { useAuth, type AuthContextValue } from '../../context/AuthContext';
 import { Field, GradientButton, ui } from '../../components/brand';
-import SocialButtons from '../../components/SocialButtons';
+import SocialButtons, { socialSignInOffered } from '../../components/SocialButtons';
 import { socialSignIn, type SocialPending } from '../../services/socialAuth';
 import { DARK, FONTS } from '../../constants/colors';
 import type { AuthStackParams } from '../../navigation/types';
@@ -140,11 +140,13 @@ export default function SignIn({ navigation }: NativeStackScreenProps<AuthStackP
 
             <GradientButton title="Continue with Email" onPress={submit} loading={loading} style={{ marginTop: 28 }} />
 
-            <View style={s.or}>
-              <View style={s.line} />
-              <Text style={s.orText}>Or continue with</Text>
-              <View style={s.line} />
-            </View>
+            {socialSignInOffered && (
+              <View style={s.or}>
+                <View style={s.line} />
+                <Text style={s.orText}>Or continue with</Text>
+                <View style={s.line} />
+              </View>
+            )}
 
             <SocialButtons
               onNeedsRole={(pending) => navigation.navigate('RoleSelect', { social: pending })}

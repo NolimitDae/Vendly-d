@@ -13,14 +13,21 @@ export default function ReportSheet({
   person,
   conversationId,
   messageId,
+  about,
+  title,
   alreadyBlocked,
   onClose,
   onReported,
 }: {
   visible: boolean;
   person: { id: string; name: string } | null;
-  conversationId: string;
+  /** the chat it's from; left out when reporting from a vendor page, a package or a review */
+  conversationId?: string;
   messageId?: string;
+  /** what's being reported when it isn't a chat ("Package: DJ set (id)"), sent ahead of the details */
+  about?: string;
+  /** heading, e.g. "Report this review" */
+  title?: string;
   alreadyBlocked?: boolean;
   onClose: () => void;
   onReported: (alsoBlocked: boolean) => void;
@@ -48,7 +55,7 @@ export default function ReportSheet({
       await ChatService.report({
         reported_id: person.id,
         reason,
-        details: details.trim() || undefined,
+        details: [about, details.trim()].filter(Boolean).join('\n\n').slice(0, 2000) || undefined,
         conversation_id: conversationId,
         message_id: messageId,
         block: block || undefined,
@@ -69,7 +76,7 @@ export default function ReportSheet({
       <KeyboardAvoidingView style={s.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Animated.View style={[s.sheet, slide]}>
           <View style={s.head}>
-            <Text style={s.h2}>{messageId ? 'Report message' : `Report ${name}`}</Text>
+            <Text style={s.h2}>{title ?? (messageId ? 'Report message' : `Report ${name}`)}</Text>
             <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close"><Ionicons name="close" size={24} color="#fff" /></Pressable>
           </View>
           <ScrollView contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">

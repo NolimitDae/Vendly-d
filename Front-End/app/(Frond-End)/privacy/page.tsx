@@ -9,7 +9,7 @@ export const metadata: Metadata = pageMetadata({
   path: "/privacy",
 });
 
-const LAST_UPDATED = "October 9, 2026";
+const LAST_UPDATED = "November 13, 2026";
 
 // Draft written from what the apps actually collect; have it reviewed by a lawyer before relying on it.
 const sections: { title: string; body: React.ReactNode }[] = [
@@ -35,6 +35,8 @@ const sections: { title: string; body: React.ReactNode }[] = [
         <li><strong>Bookings:</strong> the service you book, event date and times, venue address, guest count, booking comments (which can include details such as allergies you choose to share), price and booking status.</li>
         <li><strong>Messages and files:</strong> chat messages between customers and vendors, photo proof of service, deliverables (files and links), and reviews.</li>
         <li><strong>Contracts and signatures:</strong> when you sign a contract we record your typed legal name, any signature you draw, the date and time, your IP address, your device type, app version and browser information, and a fingerprint (SHA-256 hash) of the document you signed. Vendors may also upload their own contract documents.</li>
+        <li><strong>Identity checks:</strong> if you verify your identity (for example to offer services), photos of your ID and a selfie. They are seen only by Vendly staff who review them, and are deleted when you delete your account.</li>
+        <li><strong>Reports:</strong> when you report a person, a package, a review or a message, what you tell us about it.</li>
         <li><strong>Support requests:</strong> what you send us through the contact form.</li>
       </ul>
     ),
@@ -46,6 +48,10 @@ const sections: { title: string; body: React.ReactNode }[] = [
         <li><strong>Sign-in cookie:</strong> the website stores a single cookie containing your sign-in token so you stay logged in. We do not use advertising or analytics cookies.</li>
         <li><strong>Device and log data:</strong> IP address, browser or device type and the pages or features you use, recorded in server logs to keep the service secure and working.</li>
         <li><strong>Push notification token:</strong> if you allow notifications in the mobile app, we store a token that lets us send you booking and contract updates.</li>
+        <li><strong>Location:</strong> only if you allow it, and only while you use the app or site: to show vendors and services near you, and to record where a vendor&apos;s photo proof of work was taken. You can turn it off in your device settings at any time; Vendly works without it.</li>
+        <li><strong>Camera and photos:</strong> only the photos you choose to take or upload (listings, your profile, booking requests, proof of work, chats and disputes). Vendly never reads the rest of your photo library.</li>
+        <li><strong>Crash and error reports:</strong> when something goes wrong, details of the error, your device type and the app version, so we can fix it.</li>
+        <li><strong>Usage events:</strong> a record of key actions (such as signing up, booking or being paid), linked to your account, to understand how Vendly is used. We don&apos;t use it for advertising.</li>
       </ul>
     ),
   },
@@ -54,7 +60,7 @@ const sections: { title: string; body: React.ReactNode }[] = [
     body: (
       <ul>
         <li><strong>Payments:</strong> card payments and vendor payouts are processed by Stripe. Vendly does not store your full card number; we keep the identifiers Stripe gives us and a record of transactions. Vendors who receive payouts provide identity and bank details directly to Stripe.</li>
-        <li><strong>Google or Facebook sign-in:</strong> if you sign in this way, we receive your name, email address and profile photo from that provider.</li>
+        <li><strong>Google or Apple sign-in:</strong> if you sign in this way, we receive your name and email address from that provider (with Apple you can hide your email, and we then receive a private relay address). For Sign in with Apple we also keep a token that lets us revoke the Apple sign-in when you delete your account.</li>
       </ul>
     ),
   },
@@ -78,7 +84,8 @@ const sections: { title: string; body: React.ReactNode }[] = [
         <p>We do not sell your personal information. We share it only as needed to run Vendly:</p>
         <ul>
           <li><strong>The other party to your booking.</strong> Vendors see the customer&apos;s name, contact details and booking details; customers and planners see the vendor&apos;s business details. Both parties receive the signed contract.</li>
-          <li><strong>Service providers</strong> that process data for us: Stripe (payments and payouts), our hosting provider (Railway), our email delivery provider, Expo (mobile push notifications) and Google or Facebook (if you use them to sign in).</li>
+          <li><strong>Service providers</strong> that process data for us: Stripe (payments and payouts), our hosting provider (Railway), Cloudflare (website delivery and file storage), our email delivery provider (Resend), Expo (mobile app updates and push notifications), Sentry (crash and error reports), PostHog (usage events), address lookup services (OpenStreetMap-based search and the US Census geocoder, which receive the address text you type) and Google or Apple (if you use them to sign in).</li>
+          <li><strong>No AI services.</strong> Vendly does not send your personal information, messages or photos to artificial intelligence services.</li>
           <li><strong>Legal and safety reasons:</strong> when required by law, to respond to valid legal requests, or to protect the rights and safety of our users or Vendly.</li>
           <li><strong>Business transfers:</strong> if Vendly is involved in a merger or sale, your information may transfer as part of that transaction under the same protections.</li>
         </ul>

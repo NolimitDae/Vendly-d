@@ -7,6 +7,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthService } from '../auth.service';
 import { SocialIdentity, SocialTokenError, verifyApple, verifyGoogle } from './social-tokens';
 import { track } from 'src/common/analytics';
+import { exchangeAppleCode } from './apple-revoke';
 
 export type SocialRole = 'CLIENT' | 'VENDOR' | 'EVENT_PLANNER';
 const ROLES: SocialRole[] = ['CLIENT', 'VENDOR', 'EVENT_PLANNER'];
@@ -40,7 +41,7 @@ export class SocialAuthService {
    * "Token is required" first (as with a password), and the app calls again with the code and a
    * Google / Apple token, which is checked again.
    */
-  async signIn(dto: { provider: 'google' | 'apple'; id_token: string; role?: SocialRole; name?: string; accepted_terms?: boolean; token?: string }) {
+  async signIn(dto: { provider: 'google' | 'apple'; id_token: string; role?: SocialRole; name?: string; accepted_terms?: boolean; token?: string; authorization_code?: string }) {
     const id = await this.identity(dto.provider, dto.id_token);
 
     let userId: string | null = null;
@@ -94,6 +95,8 @@ export class SocialAuthService {
     if (linkExisting) await this.link(user.id, id);
     // Google / Apple have already verified the email
     if (!user.email_verified_at) await this.prisma.user.update({ where: { id: user.id }, data: { email_verified_at: new Date() } });
+    // Apple: keep what's needed to revoke this sign-in when the account is deleted (never blocks sign-in)
+    if (id.provider === 'apple' && dto.authorization_code && id.client_id) await this.keepAppleToken(id, dto.authorization_code).catch(() => undefined);
 
     return this.auth.login({ email: user.email, userId: user.id });
   }
@@ -113,6 +116,12 @@ export class SocialAuthService {
       this.prisma.ucode.deleteMany({ where: { user_id: userId } }),
     ]);
     await this.auth.revokeAllSessions(userId);
+  }
+
+  private async keepAppleToken(id: SocialIdentity, code: string) {
+    const refresh = await exchangeAppleCode(code, id.client_id!);
+    if (!refresh) return;
+    await this.prisma.account.updateMany({ where: { provider: 'apple', provider_account_id: id.sub }, data: { refresh_token: refresh, scope: id.client_id } });
   }
 
   private link(userId: string, id: SocialIdentity) {

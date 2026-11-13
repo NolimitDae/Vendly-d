@@ -29,6 +29,7 @@ import { parseWorkingHours, readWorkingHours, type WorkingHours } from '../vendo
 import { NOTIFICATION_PREF_KEYS, NotificationPrefKey, readPrefs } from '../../common/helper/notification-prefs';
 import { sessionKeys } from './session-keys';
 import { MessageGateway } from '../chat/message/message.gateway';
+import { revokeAppleToken } from './social/apple-revoke';
 
 /** Roles a person can hold on one login and switch between (CLIENT is the older name for CUSTOMER). */
 export const SWITCHABLE_ROLES = ['CUSTOMER', 'VENDOR', 'EVENT_PLANNER'] as const;
@@ -1391,8 +1392,20 @@ export class AuthService {
     if (blocker) return { success: false, message: blocker };
     // ID photos are deleted with the account, never kept
     await this.identity.purgeForUser(userId).catch(() => undefined);
+    // Sign in with Apple is revoked with the account (App Store 5.1.1(v)); read before the account goes
+    let apple: { refresh_token: string | null; scope: string | null }[] = [];
+    try {
+      apple = await this.prisma.account.findMany({ where: { user_id: userId, provider: 'apple', refresh_token: { not: null } }, select: { refresh_token: true, scope: true } });
+    } catch {
+      // never blocks deleting the account
+    }
     const result = await this.userRepository.deleteUser(userId);
-    if (result.success) await this.revokeAllSessions(userId).catch(() => null);
+    if (result.success) {
+      await this.revokeAllSessions(userId).catch(() => null);
+      for (const a of apple ?? []) {
+        if (a.refresh_token && a.scope) await revokeAppleToken(a.refresh_token, a.scope).catch(() => false);
+      }
+    }
     return result;
   }
 

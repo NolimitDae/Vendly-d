@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,7 @@ import { BrandGradient, GradientButton, ui } from '../../components/brand';
 import { DARK, FONTS } from '../../constants/colors';
 import type { AuthStackParams } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
+import { useContentWidth } from '../../hooks/useContentWidth';
 
 export const ONBOARDED_KEY = 'vendly_onboarded';
 
@@ -43,7 +44,7 @@ const CURVE = 40;
 
 export default function Onboarding({ navigation }: NativeStackScreenProps<AuthStackParams, 'Onboarding'>) {
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useContentWidth();
   const [index, setIndex] = useState(0);
   const fade = useRef(new Animated.Value(1)).current;
   // room for the "Look around first" link under the button

@@ -22,6 +22,11 @@ export class SocialSignInDto {
   @IsString()
   @MaxLength(120)
   name?: string;
+  @ApiPropertyOptional({ description: 'Apple only: the one-time authorization code, traded for a token that lets Vendly revoke the Apple sign-in when the account is deleted' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  authorization_code?: string;
   @ApiPropertyOptional({ description: 'The 6-digit authenticator code, for accounts with two-step sign-in (after a "Token is required" answer)' })
   @IsOptional()
   @IsString()

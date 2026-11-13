@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DetailScreenSkeleton } from '../../components/Skeleton';
 import PhotoViewer from '../../components/PhotoViewer';
@@ -20,6 +20,8 @@ import { usePaymentSettings } from '../../hooks/usePaymentSettings';
 import TestBadge from '../../components/TestBadge';
 import { DosDontsList } from '../../components/listing/DosDonts';
 import { listingLink, shareLink } from '../../utils/share';
+import { useContentWidth } from '../../hooks/useContentWidth';
+import ReportButton from '../../components/ReportButton';
 
 export const toSummary = (l: Listing): ListingSummary => ({
   id: l.id,
@@ -40,7 +42,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
   const { listingId, eventId } = route.params;
   const insets = useSafeAreaInsets();
   const [footerHeight, setFooterHeight] = useState(0);
-  const { width } = useWindowDimensions();
+  const { width } = useContentWidth();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const paymentSettings = usePaymentSettings();
@@ -118,6 +120,7 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
                 <Pressable onPress={() => saved.toggle(listing.id)} style={s.heart} accessibilityRole="button" accessibilityLabel="Save">
                   <Ionicons name={saved.has(listing.id) ? 'heart' : 'heart-outline'} size={20} color={saved.has(listing.id) ? '#E0479E' : DARK.bg} />
                 </Pressable>
+                <ReportButton person={listing.vendor ? { id: listing.vendor.id, name: vendor } : null} about={`Package: ${listing.title} (${listing.id})`} title="Report this package" />
                 </View>
               }
             />

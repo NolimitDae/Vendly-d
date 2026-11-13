@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DetailScreenSkeleton } from '../../components/Skeleton';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,12 +17,14 @@ import SocialLinks from '../../components/SocialLinks';
 import { EventToolsService, MAX_TEAM_SIZE, type TeamVendor, type VendorTeam } from '../../services/eventTools.service';
 import { apiError } from '../../services/contracts.service';
 import { shareLink, vendorLink } from '../../utils/share';
+import { useContentWidth } from '../../hooks/useContentWidth';
+import ReportButton from '../../components/ReportButton';
 
 export default function VendorProfile({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'VendorProfile'>) {
   const { vendorId } = route.params;
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { width } = useWindowDimensions();
+  const { width } = useContentWidth();
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
@@ -81,6 +83,7 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
                     <Ionicons name={saved.has(vendor.id) ? 'heart' : 'heart-outline'} size={20} color={saved.has(vendor.id) ? '#E0479E' : DARK.bg} />
                   </Pressable>
                 )}
+                <ReportButton person={{ id: vendor.id, name }} about={`Vendor profile: ${name} (${vendor.id})`} title={`Report ${name}`} />
               </View>
             }
           />

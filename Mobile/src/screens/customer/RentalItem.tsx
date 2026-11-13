@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { differenceInCalendarDays, format, isBefore, isSameDay } from 'date-fns';
@@ -12,11 +12,12 @@ import { dayKey, RentalsService, type RentalItem as Item } from '../../services/
 import { apiError } from '../../services/contracts.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { DosDontsList } from '../../components/listing/DosDonts';
+import { useContentWidth } from '../../hooks/useContentWidth';
 
-const W = Dimensions.get('window').width;
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
 
 export default function RentalItem({ navigation, route }: NativeStackScreenProps<CustomerHomeStackParams, 'RentalItem'>) {
+  const { width: W } = useContentWidth();
   const insets = useSafeAreaInsets();
   // the bottom buttons float over the page; it scrolls far enough to clear them
   const [footerH, setFooterH] = useState(0);

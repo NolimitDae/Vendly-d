@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { openChatWith } from '../../navigation/openChat';
 import { EventPlannerService, type PublicPlannerProfile } from '../../services/eventplanner.service';
 import { useAuth } from '../../context/AuthContext';
+import { useContentWidth } from '../../hooks/useContentWidth';
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
   WEDDING: 'Wedding',
@@ -26,7 +27,7 @@ export default function PlannerPublic() {
   const { userId } = useRoute<RouteProp<{ PlannerPublic: { userId: string } }, 'PlannerPublic'>>().params;
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { width } = useWindowDimensions();
+  const { width } = useContentWidth();
   const [planner, setPlanner] = useState<PublicPlannerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);

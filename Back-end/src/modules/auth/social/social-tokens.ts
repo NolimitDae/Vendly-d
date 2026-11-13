@@ -12,6 +12,8 @@ export interface SocialIdentity {
   email: string | null;
   email_verified: boolean;
   name?: string | null;
+  /** Apple: the app the token was made for (its bundle id), needed to revoke the sign-in later */
+  client_id?: string;
 }
 
 export class SocialTokenError extends Error {}
@@ -65,6 +67,7 @@ export async function verifyApple(idToken: string, fetchImpl: typeof fetch = fet
     // Apple sends the email only on the first sign-in (and may relay it through privaterelay.appleid.com)
     email: typeof claims.email === 'string' ? claims.email.toLowerCase() : null,
     email_verified: claims.email_verified === true || claims.email_verified === 'true',
+    client_id: typeof claims.aud === 'string' ? claims.aud : undefined,
   };
 }
 
