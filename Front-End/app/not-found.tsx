@@ -19,7 +19,7 @@ export default function NotFound() {
             {/* Stacked 404 + logo animation */}
             <div className="relative select-none mb-6 w-64 h-40 sm:w-80 sm:h-52">
               <span
-                className="absolute inset-0 flex items-center justify-center text-[9rem] sm:text-[12rem] font-extrabold leading-none text-primaryColor"
+                className="absolute inset-0 flex items-center justify-center text-[9rem] sm:text-[12rem] font-extrabold leading-none text-orchid-500 dark:text-orchid-300"
                 style={{ opacity: 0.06 }}
               >
                 404

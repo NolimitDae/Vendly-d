@@ -37,7 +37,7 @@ export default function ReviewCard({ review }: Props) {
             unoptimized
           />
         ) : (
-          <div className="w-10 h-10 rounded-full bg-primaryColor/20 flex items-center justify-center text-primaryColor font-semibold text-sm flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-orchid-500/15 dark:bg-orchid-300/20 flex items-center justify-center text-orchid-500 dark:text-orchid-300 font-semibold text-sm flex-shrink-0">
             {initial}
           </div>
         )}
@@ -62,7 +62,7 @@ export default function ReviewCard({ review }: Props) {
           {/* Vendor reply */}
           {review.reply && (
             <div className="mt-3 p-3 bg-grayBg dark:bg-gray-700/50 rounded-xl">
-              <p className="text-xs font-semibold text-primaryColor mb-1">Vendor reply</p>
+              <p className="text-xs font-semibold text-orchid-500 dark:text-orchid-300 mb-1">Vendor reply</p>
               <p className="text-sm text-descriptionColor dark:text-gray-300">{review.reply}</p>
             </div>
           )}

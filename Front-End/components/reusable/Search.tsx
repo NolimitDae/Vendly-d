@@ -146,7 +146,7 @@ export default function Search() {
             ))
           ) : (
             <p className="text-textColor p-2 flex justify-center font-semibold items-center gap-3">
-              <CircleHelp className="text-primaryColor" size={40} /> No matching
+              <CircleHelp className="text-orchid-500 dark:text-orchid-300" size={40} /> No matching
               products found.
             </p>
           )}
