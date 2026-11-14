@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const securityHeaders = [
   { key: "X-DNS-Prefetch-Control", value: "on" },
@@ -98,4 +99,15 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Readable stack traces in Sentry: source maps are uploaded at build time and then deleted from the
+// public build. Needs SENTRY_AUTH_TOKEN (a Sentry organization token, set in Railway); without it the
+// build is unchanged and nothing is uploaded.
+export default withSentryConfig(nextConfig, {
+  org: "adejoro-holdings-llc",
+  project: "vendly-web",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN, deleteSourcemapsAfterUpload: true },
+  telemetry: false,
+});

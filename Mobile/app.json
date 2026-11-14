@@ -63,6 +63,15 @@
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "organization": "adejoro-holdings-llc",
+          "project": "vendly-app",
+          "note": "Source maps upload during builds when SENTRY_AUTH_TOKEN is set (EAS environment variable)."
+        }
       ]
     ],
     "extra": {
