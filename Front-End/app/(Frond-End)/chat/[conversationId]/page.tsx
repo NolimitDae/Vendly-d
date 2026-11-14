@@ -252,6 +252,13 @@ export default function ConversationPage() {
     if (!q.listing) return;
     router.push(`/marketplace/${q.listing.id}?quote=${q.id}`);
   };
+  // tapping a quote: the booking it became, or (still open, for the customer) the booking flow at its price
+  const openQuote = (q: Quote): (() => void) | undefined => {
+    if (q.booking_id && q.vendor_id === me?.id) return () => router.push(`/vendor/bookings/${q.booking_id}`);
+    if (q.booking_id && q.customer_id === me?.id) return () => router.push(`/bookings/${q.booking_id}`);
+    if (!q.booking_id && q.status === "PENDING" && q.customer_id === me?.id && q.listing) return () => acceptQuote(q);
+    return undefined;
+  };
   const quoteAction = async (q: Quote, action: "decline" | "withdraw") => {
     setBusyQuote(q.id);
     try {
@@ -368,6 +375,7 @@ export default function ConversationPage() {
                           onAccept={() => acceptQuote(msg.quote!)}
                           onDecline={() => quoteAction(msg.quote!, "decline")}
                           onWithdraw={() => quoteAction(msg.quote!, "withdraw")}
+                          onOpen={openQuote(msg.quote)}
                         />
                       ) : (
                         msg.text ? (

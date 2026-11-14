@@ -16,6 +16,7 @@ import { ChatService, CONTACT_WARNING, MAX_PHOTOS, sharesContact, toMessage, typ
 import { SocketService } from '../../services/socket.service';
 import { apiError } from '../../services/contracts.service';
 import { useAuth } from '../../context/AuthContext';
+import { openInTab } from '../../navigation/crossTab';
 
 export default function ChatDetail() {
   const route = useRoute<any>();
@@ -296,6 +297,17 @@ export default function ChatDetail() {
     });
   };
 
+  // tapping a quote: the booking it became (on the Bookings tab), or (still open, for the customer) the
+  // booking flow at its price, as Accept & book
+  const openQuote = (m: Message): (() => void) | undefined => {
+    const q = m.quote;
+    if (!q) return undefined;
+    if (q.booking_id && q.vendor_id === user?.id) return () => openInTab(navigation as any, 'BookingsTab', 'VendorBookingDetail', { bookingId: q.booking_id });
+    if (q.booking_id && q.customer_id === user?.id) return () => openInTab(navigation as any, 'BookingsTab', 'BookingDetail', { bookingId: q.booking_id });
+    if (!q.booking_id && q.status === 'PENDING' && q.customer_id === user?.id && q.listing) return () => acceptQuote(m);
+    return undefined;
+  };
+
   const quoteAction = async (q: Quote, action: 'decline' | 'withdraw') => {
     setBusyQuote(q.id);
     try {
@@ -402,6 +414,7 @@ export default function ChatDetail() {
                       onAccept={() => acceptQuote(item)}
                       onDecline={() => quoteAction(item.quote!, 'decline')}
                       onWithdraw={() => quoteAction(item.quote!, 'withdraw')}
+                      onOpen={openQuote(item)}
                     />
                   ) : !item.content ? null : me ? (
                     <BrandGradient style={[s.bubble, s.bubbleMe]}>

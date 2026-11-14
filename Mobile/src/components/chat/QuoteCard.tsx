@@ -21,6 +21,7 @@ export default function QuoteCard({
   onAccept,
   onDecline,
   onWithdraw,
+  onOpen,
 }: {
   quote: Quote;
   role: 'customer' | 'vendor' | 'other';
@@ -28,10 +29,18 @@ export default function QuoteCard({
   onAccept: () => void;
   onDecline: () => void;
   onWithdraw: () => void;
+  /** tapping the card: the booking it became, or (still open) the booking flow at this price */
+  onOpen?: () => void;
 }) {
   const st = STATUS[quote.status];
   return (
-    <View style={s.card}>
+    <Pressable
+      style={({ pressed }) => [s.card, pressed && onOpen ? { opacity: 0.85 } : null]}
+      onPress={onOpen}
+      disabled={!onOpen}
+      accessibilityRole={onOpen ? 'button' : undefined}
+      accessibilityLabel={onOpen ? (quote.booking_id ? `View the booking for ${quote.title}` : `Book ${quote.title}`) : undefined}
+    >
       <View style={s.head}>
         <Ionicons name="pricetags-outline" size={16} color={DARK.accent} />
         <Text style={s.kicker}>Custom quote</Text>
@@ -47,7 +56,15 @@ export default function QuoteCard({
       {!!quote.description && <Text style={s.body}>{quote.description}</Text>}
 
       {st ? (
-        <Text style={[s.status, { color: st.color }]}>{st.label}</Text>
+        <View style={s.statusRow}>
+          <Text style={[s.status, { color: st.color }]}>{st.label}</Text>
+          {!!quote.booking_id && !!onOpen && (
+            <View style={s.viewRow}>
+              <Text style={s.viewText}>View booking</Text>
+              <Ionicons name="chevron-forward" size={14} color={DARK.accent} />
+            </View>
+          )}
+        </View>
       ) : (
         <>
           <Text style={s.muted}>Valid until {format(parseISO(quote.expires_at), 'EEE d MMM')}</Text>
@@ -68,7 +85,7 @@ export default function QuoteCard({
           )}
         </>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -83,7 +100,10 @@ const s = StyleSheet.create({
   amount: { color: '#fff', fontSize: 18, fontFamily: FONTS.bold },
   body: { color: '#E9DDEB', fontSize: 14, lineHeight: 20, fontFamily: FONTS.regular },
   muted: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular },
-  status: { fontSize: 13, fontFamily: FONTS.semibold },
+  status: { fontSize: 13, fontFamily: FONTS.semibold, flexShrink: 1 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  viewRow: { flexDirection: 'row', alignItems: 'center' },
+  viewText: { color: DARK.accent, fontSize: 12, fontFamily: FONTS.semibold },
   actions: { flexDirection: 'row', gap: 8 },
   decline: { height: 44, borderRadius: 22, borderWidth: 1, borderColor: DARK.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   declineText: { color: '#fff', fontSize: 14, fontFamily: FONTS.medium },

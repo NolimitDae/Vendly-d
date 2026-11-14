@@ -70,4 +70,20 @@ describe("QuoteCard", () => {
     expect(screen.getByText(/booking requested/i)).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
+
+  it("opens the booking it became when tapped, and leaves its buttons to their own actions", async () => {
+    const onOpen = jest.fn();
+    const onDecline = jest.fn();
+    const { rerender } = render(<QuoteCard quote={quote({ status: "ACCEPTED", booking_id: "b1" })} role="customer" onAccept={jest.fn()} onDecline={onDecline} onWithdraw={jest.fn()} onOpen={onOpen} />);
+    expect(screen.getByText("View booking")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: /view the booking/i }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    // still open: tapping the card starts the booking, Decline only declines
+    rerender(<QuoteCard quote={quote()} role="customer" onAccept={jest.fn()} onDecline={onDecline} onWithdraw={jest.fn()} onOpen={onOpen} />);
+    await userEvent.click(screen.getByRole("button", { name: /decline/i }));
+    expect(onDecline).toHaveBeenCalled();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByText("$900.00"));
+    expect(onOpen).toHaveBeenCalledTimes(2);
+  });
 });

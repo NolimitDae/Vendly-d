@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Loader2, Package, Tags } from "lucide-react";
+import { ChevronRight, Loader2, Package, Tags } from "lucide-react";
 import dayjs from "dayjs";
 import type { Quote } from "@/service/chat/chat.service";
 
@@ -20,6 +20,7 @@ export default function QuoteCard({
   onAccept,
   onDecline,
   onWithdraw,
+  onOpen,
 }: {
   quote: Quote;
   role: "customer" | "vendor" | "other";
@@ -27,10 +28,32 @@ export default function QuoteCard({
   onAccept: () => void;
   onDecline: () => void;
   onWithdraw: () => void;
+  /** tapping the card: the booking it became, or (still open) the booking flow at this price */
+  onOpen?: () => void;
 }) {
   const st = STATUS[quote.status];
   return (
-    <div className="w-72 rounded-2xl border border-primary/30 bg-white dark:bg-gray-800 p-4 space-y-3 shadow-sm">
+    <div
+      className={`w-72 rounded-2xl border border-primary/30 bg-white dark:bg-gray-800 p-4 space-y-3 shadow-sm ${onOpen ? "cursor-pointer hover:border-primary/60 transition" : ""}`}
+      {...(onOpen
+        ? {
+            role: "link",
+            tabIndex: 0,
+            "aria-label": quote.booking_id ? `View the booking for ${quote.title}` : `Book ${quote.title}`,
+            // the buttons inside keep their own actions
+            onClick: (e: React.MouseEvent) => {
+              if ((e.target as HTMLElement).closest("button")) return;
+              onOpen();
+            },
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+                e.preventDefault();
+                onOpen();
+              }
+            },
+          }
+        : {})}
+    >
       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
         <Tags className="w-3.5 h-3.5" /> Custom quote
       </p>
@@ -46,7 +69,14 @@ export default function QuoteCard({
       </div>
       {quote.description && <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line">{quote.description}</p>}
       {st ? (
-        <p className={`text-sm font-medium ${st.className}`}>{st.label}</p>
+        <p className={`text-sm font-medium flex items-center justify-between gap-2 ${st.className}`}>
+          {st.label}
+          {quote.booking_id && onOpen && (
+            <span className="flex items-center text-xs font-semibold text-primary">
+              View booking <ChevronRight className="w-3.5 h-3.5" />
+            </span>
+          )}
+        </p>
       ) : (
         <>
           <p className="text-xs text-gray-400">Valid until {dayjs(quote.expires_at).format("ddd D MMM")}</p>
