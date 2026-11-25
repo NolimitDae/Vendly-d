@@ -3,14 +3,12 @@
 import React from "react";
 import { saveSession } from "@/lib/session";
 import { useForm } from "react-hook-form";
-import CustomButton from "@/components/reusable/CustomButton";
 import ReusableInput from "@/components/reusable/InputFiled/ReusableInput";
 import EmailIcon from "@/icons/EmailIcon";
 import LockIcon from "@/icons/LockIcon";
 import { Checkbox } from "@/components/ui/checkbox";
 import HorizontalLineIcon from "@/icons/HorizontalLineIcon";
-import AppleIconBlack from "@/icons/AppleIconBlack";
-import GoogleIcon from "@/icons/GoogleIcon";
+import GoogleSignIn, { googleClientId } from "./GoogleSignIn";
 import GenericButton from "../GenericButton";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -242,28 +240,19 @@ const LoginForm = () => {
       </p>
 
       {/* Social login */}
-      <div className="space-y-4">
-        <div className="flex justify-center items-center gap-2">
-          <HorizontalLineIcon />
-          <p className="text-center text-descriptionColor text-sm whitespace-nowrap">
-            Or continue with
-          </p>
-          <HorizontalLineIcon />
+      {/* Google sign-in, once its client ID is set (the Apple button returns when web Apple sign-in is set up) */}
+      {googleClientId() && (
+        <div className="space-y-4">
+          <div className="flex justify-center items-center gap-2">
+            <HorizontalLineIcon />
+            <p className="text-center text-descriptionColor text-sm whitespace-nowrap">
+              Or continue with
+            </p>
+            <HorizontalLineIcon />
+          </div>
+          <GoogleSignIn />
         </div>
-
-        {/* Grid, not flex: CustomButton wraps its <button> in a div, so flex-1 on the button can't stretch it */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <CustomButton fullWidth className="flex items-center justify-center gap-2 w-full border border-borderColor rounded-2xl py-2 px-3 h-12 hover:border-orchid-500 transition-colors">
-            <GoogleIcon />
-            Google
-          </CustomButton>
-          <CustomButton fullWidth className="flex items-center justify-center gap-2 w-full border border-borderColor rounded-2xl py-2 px-3 h-12 hover:border-orchid-500 transition-colors">
-            {/* The Apple glyph is near-black; turn it white on the dark-mode button */}
-            <span className="dark:[&_path[fill='#070707']]:fill-white"><AppleIconBlack /></span>
-            Apple
-          </CustomButton>
-        </div>
-      </div>
+      )}
     </form>
   );
 };

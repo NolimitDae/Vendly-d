@@ -27,6 +27,12 @@ export const AuthService = {
       headers: { "Content-Type": "application/json" },
     }),
 
+  /** Google (or Apple) sign-in: an ID token from the provider; a new account also sends its role and terms consent */
+  social: async (data: { provider: "google" | "apple"; id_token: string; role?: "CLIENT" | "VENDOR" | "EVENT_PLANNER"; accepted_terms?: boolean; token?: string }) =>
+    Fetch.post("/auth/social", data, {
+      headers: { "Content-Type": "application/json" },
+    }),
+
   me: async () => Fetch.get("/auth/me", authHeaders()),
 
   updateProfile: async (formData: FormData) =>

@@ -38,8 +38,9 @@ describe('LoginForm Component', () => {
       expect(screen.getByPlaceholderText(/•••••••••/i)).toBeInTheDocument();
 
       expect(screen.getByRole('button', { name: /Log in/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Google/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Apple/i })).toBeInTheDocument();
+      // no dead social buttons: Google appears once its client ID is set, Apple once web Apple sign-in is
+      expect(screen.queryByRole('button', { name: /Google/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Apple/i })).toBeNull();
 
       expect(screen.getByRole('checkbox')).toBeInTheDocument();
       expect(screen.getByText(/Remember me/i)).toBeInTheDocument();

@@ -15,8 +15,8 @@ const securityHeaders = [
       "default-src 'self'",
       // js.stripe.com: Stripe's card form (saved cards); connect-js.stripe.com: Stripe's payout setup
       // (embedded onboarding); cloudflareinsights: Cloudflare's visitor stats
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com https://connect-js.stripe.com https://static.cloudflareinsights.com",
-      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.stripe.com https://connect-js.stripe.com https://static.cloudflareinsights.com https://accounts.google.com",
+      "style-src 'self' 'unsafe-inline' https://accounts.google.com",
       "img-src 'self' data: blob: https: http://localhost http://127.0.0.1",
       "font-src 'self'",
       "connect-src 'self' https: wss: ws://localhost:* ws://127.0.0.1:*",

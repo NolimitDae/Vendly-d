@@ -21,6 +21,9 @@ ARG NEXT_PUBLIC_MEDIA_URL
 ENV NEXT_PUBLIC_MEDIA_URL=$NEXT_PUBLIC_MEDIA_URL
 # Sentry: the browser's error reporting address, and the token that uploads source maps for readable
 # stack traces (only in this build stage; the image that runs doesn't contain it)
+# Google sign-in's public client ID (the button only shows when it's set)
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
 ARG NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 ARG SENTRY_AUTH_TOKEN
