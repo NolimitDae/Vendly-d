@@ -123,7 +123,7 @@ export default function SignContractView({
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView
+        <ScrollView showsVerticalScrollIndicator={false}
           ref={scrollRef}
           contentContainerStyle={s.scroll}
           onScroll={onScroll}

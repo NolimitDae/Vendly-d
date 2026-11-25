@@ -97,7 +97,7 @@ export default function CategoryPicker({
               </Pressable>
             )}
           </View>
-          <FlatList
+          <FlatList showsVerticalScrollIndicator={false}
             data={rows}
             keyExtractor={(r) => r.key}
             keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"

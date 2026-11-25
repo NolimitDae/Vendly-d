@@ -187,7 +187,7 @@ export default function BookingDetail() {
           setPaymentsKey((k) => k + 1);
         }}
       />
-      <ScrollView
+      <ScrollView showsVerticalScrollIndicator={false}
         ref={scrollRef}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); extras.reload(); }} tintColor={DARK.accent} />}

@@ -284,7 +284,7 @@ export default function PaymentPlanCard({ bookingId, role, bookingStatus, otherN
                 <Text style={s.sheetTitle}>Payment plan</Text>
                 <View style={{ width: 48 }} />
               </View>
-              <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
                 <Text style={s.muted}>Split the {money(rules.owed)} still owed into payments. Paid payments stay as they are.</Text>
                 <PaymentPlanEditor rows={rows} onChange={setRows} total={rules.owed} feeOwed={rules.fee_owed} firstLabel="When they agree" latest={latest} />
                 <Text style={s.small}>Note to {otherName} (optional)</Text>

@@ -65,7 +65,7 @@ export default function VendorReviews() {
 
   return (
     <View style={s.root}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={reviews}
         keyExtractor={(r) => r.id}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, gap: 16 }}

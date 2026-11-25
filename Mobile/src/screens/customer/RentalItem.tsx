@@ -74,9 +74,9 @@ export default function RentalItem({ navigation, route }: NativeStackScreenProps
   return (
     <View style={s.root}>
       {viewing != null && <PhotoViewer photos={item.images} start={viewing} onClose={() => setViewing(null)} title={item.title} />}
-      <ScrollView contentContainerStyle={{ paddingBottom: (footerH || insets.bottom + 110) + 16 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: (footerH || insets.bottom + 110) + 16 }}>
         <View style={s.hero}>
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setPhoto(Math.round(e.nativeEvent.contentOffset.x / W))}>
+          <ScrollView showsVerticalScrollIndicator={false} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setPhoto(Math.round(e.nativeEvent.contentOffset.x / W))}>
             {item.images.length ? (
               item.images.map((uri, i) => (
                 <Pressable key={uri} onPress={() => setViewing(i)} accessibilityRole="imagebutton" accessibilityLabel="View the photo full screen">

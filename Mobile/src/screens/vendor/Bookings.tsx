@@ -83,7 +83,7 @@ export default function VendorBookings() {
 
   return (
     <View style={s.root}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={items}
         keyExtractor={(b) => b.id}
         contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 32, paddingHorizontal: 20, gap: 20 }}

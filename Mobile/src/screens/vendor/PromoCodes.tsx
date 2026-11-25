@@ -136,7 +136,7 @@ export default function PromoCodes() {
   const d = editing?.draft;
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: DARK.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingHorizontal: 20, paddingBottom: insets.bottom + 40, gap: 16 }} keyboardShouldPersistTaps="handled">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingHorizontal: 20, paddingBottom: insets.bottom + 40, gap: 16 }} keyboardShouldPersistTaps="handled">
         <ScreenHeader title="Promo codes" onBack={() => nav.goBack()} />
         <Text style={s.hint}>Customers type a code when they book to get money off your packages. The discount comes off your price.</Text>
 

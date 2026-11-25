@@ -244,7 +244,7 @@ export default function BookingContractCard({ bookingId, role, bookingStatus, on
             <Text style={s.viewTitle} numberOfLines={1}>{viewing?.title}</Text>
             <View style={{ width: 26 }} />
           </View>
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
             {viewing && <ContractBody body={viewing.body} />}
           </ScrollView>
         </View>

@@ -61,7 +61,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
 
   return (
     <View style={s.root}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={listings}
         keyExtractor={(l) => l.id}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 16 }}
@@ -130,7 +130,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
               <Text style={s.sheetTitle}>Filters</Text>
               <Pressable onPress={() => setFilters({})} hitSlop={8} accessibilityRole="button"><Text style={s.clear}>Reset</Text></Pressable>
             </View>
-            <ScrollView contentContainerStyle={{ paddingBottom: 12 }}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
               <SearchFilters value={filters} onChange={setFilters} />
             </ScrollView>
             <GradientButton title="Show results" onPress={() => setSheet(false)} />

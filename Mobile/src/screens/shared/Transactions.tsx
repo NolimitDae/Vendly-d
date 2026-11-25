@@ -139,7 +139,7 @@ export default function Transactions() {
 
   return (
     <View style={[s.root, { paddingTop: insets.top + 8 }]}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={rows}
         keyExtractor={(r) => r.id}
         ListHeaderComponent={header}

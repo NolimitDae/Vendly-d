@@ -60,7 +60,7 @@ export default function OnboardingPopup() {
                 {ROLE_TITLE[data.role]}: {data.completed} of {data.total} done.
               </Text>
               <ProgressBar done={data.completed} total={data.total} />
-              <ScrollView style={{ maxHeight: 340 }} contentContainerStyle={{ paddingVertical: 4 }}>
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 340 }} contentContainerStyle={{ paddingVertical: 4 }}>
                 {data.steps.map((step) => (
                   <StepRow key={step.key} role={data.role} step={step} onOpen={close} />
                 ))}

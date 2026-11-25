@@ -106,7 +106,7 @@ export default function WorkingHours() {
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}>
         <ScreenHeader title="Working hours" onBack={() => nav.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 16 }}>
           <View style={s.note}>

@@ -74,7 +74,7 @@ export default function TeamEditor({ navigation, route }: NativeStackScreenProps
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, gap: 16 }} keyboardShouldPersistTaps="handled">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, gap: 16 }} keyboardShouldPersistTaps="handled">
         <ScreenHeader title={team ? 'Edit team' : 'New team'} onBack={() => navigation.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 16 }}>
           <Field label="Team name" placeholder="My wedding team" value={name} onChangeText={setName} maxLength={120} />

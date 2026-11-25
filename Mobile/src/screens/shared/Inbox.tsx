@@ -97,7 +97,7 @@ export default function Inbox() {
       {!items ? (
         <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
       ) : (
-        <FlatList
+        <FlatList showsVerticalScrollIndicator={false}
           data={items}
           keyExtractor={(n) => n.id}
           contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: insets.bottom + 24 }}

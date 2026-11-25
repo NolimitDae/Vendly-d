@@ -82,7 +82,7 @@ export default function CustomerBookings() {
         // Report a problem is on the booking's page
         onReportProblem={() => cancelling && nav.navigate('BookingDetail', { bookingId: cancelling.id })}
       />
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={items}
         keyExtractor={(b) => b.id}
         contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 32, paddingHorizontal: 20, gap: 20 }}

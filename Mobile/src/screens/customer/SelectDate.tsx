@@ -52,7 +52,7 @@ export default function SelectDate({ navigation, route }: NativeStackScreenProps
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20 }}>
         <ScreenHeader title="Select Date" onBack={() => navigation.goBack()} />
 
         <View style={s.note}>

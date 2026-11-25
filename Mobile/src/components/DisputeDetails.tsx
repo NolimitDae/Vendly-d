@@ -37,7 +37,7 @@ export default function DisputeDetails({ d, mine = false }: { d: DisputeDetailFi
         </Text>
       )}
       {photos.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        <ScrollView showsVerticalScrollIndicator={false} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {photos.map((url, i) => (
             <Pressable key={url} onPress={() => setViewing(url)} accessibilityRole="imagebutton" accessibilityLabel={`Photo ${i + 1} of ${photos.length}, open full size`}>
               <Image source={{ uri: url }} style={s.thumb} />

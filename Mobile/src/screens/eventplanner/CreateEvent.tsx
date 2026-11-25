@@ -81,7 +81,7 @@ export default function CreateEvent() {
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <ScreenHeader title={editing ? 'Edit Event' : 'New Event'} onBack={() => nav.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 20 }}>
           <Text style={s.sectionTitle}>Event Details</Text>

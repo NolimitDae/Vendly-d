@@ -58,7 +58,7 @@ export default function License() {
   };
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}>
+    <ScrollView showsVerticalScrollIndicator={false} style={s.root} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}>
       <ScreenHeader title="Verification" onBack={() => nav.goBack()} />
       <View style={{ paddingHorizontal: 20, gap: 16 }}>
         <Card style={s.status}>

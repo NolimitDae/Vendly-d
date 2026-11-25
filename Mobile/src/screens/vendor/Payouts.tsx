@@ -101,7 +101,7 @@ export default function Payouts() {
 
   return (
     <View style={s.root}>
-      <ScrollView
+      <ScrollView showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"

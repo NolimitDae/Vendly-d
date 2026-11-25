@@ -40,7 +40,7 @@ export default function PhotoGrid({ urls, from, onLongPress }: { urls: string[];
 
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
         <View style={s.viewer}>
-          <ScrollView
+          <ScrollView showsVerticalScrollIndicator={false}
             ref={pager}
             horizontal
             pagingEnabled

@@ -136,7 +136,7 @@ export default function CustomerHome() {
   const tiles = showAll ? categories : categories.slice(0, MAX_TILES);
 
   return (
-    <ScrollView
+    <ScrollView showsVerticalScrollIndicator={false}
       style={s.root}
       contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 28 }}
       keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
@@ -284,7 +284,7 @@ export default function CustomerHome() {
               <Text style={s.emptyText}>No services within {NEAR_RADIUS} miles yet</Text>
             </View>
           ) : (
-            <FlatList
+            <FlatList showsVerticalScrollIndicator={false}
               horizontal
               data={nearby}
               keyExtractor={(l) => l.id}
@@ -353,7 +353,7 @@ export default function CustomerHome() {
             <Text style={s.emptyText}>No services listed yet</Text>
           </View>
         ) : (
-          <FlatList
+          <FlatList showsVerticalScrollIndicator={false}
             horizontal
             data={listings}
             keyExtractor={(l) => l.id}

@@ -68,7 +68,7 @@ export default function SignUp({ navigation, route }: NativeStackScreenProps<Aut
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
+      <ScrollView showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 20 }}
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       >

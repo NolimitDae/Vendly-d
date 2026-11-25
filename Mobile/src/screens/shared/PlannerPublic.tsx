@@ -65,7 +65,7 @@ export default function PlannerPublic() {
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 100 }}>
         <ScreenHeader title="Profile" onBack={() => navigation.goBack()} />
         <View style={s.body20}>
           <View style={s.top}>

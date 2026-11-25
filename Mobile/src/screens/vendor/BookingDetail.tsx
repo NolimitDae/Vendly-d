@@ -221,7 +221,7 @@ export default function VendorBookingDetail() {
       {viewingFile && <FileViewer url={viewingFile.url} name={viewingFile.name} onClose={() => setViewingFile(null)} />}
       {viewingPhotos && <PhotoViewer photos={viewingPhotos.photos} start={viewingPhotos.start} onClose={() => setViewingPhotos(null)} title="Proof" />}
       <CancelBookingSheet bookingId={cancelling ? booking.id : null} role="VENDOR" onClose={() => setCancelling(false)} onCancelled={() => load()} />
-      <ScrollView
+      <ScrollView showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"

@@ -285,7 +285,7 @@ export default function VendorContracts() {
 
   if (mode.kind === 'default') {
     return (
-      <ScrollView style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView showsVerticalScrollIndicator={false} style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <Text style={s.h1}>{mode.replaceId ? 'Edit contract (new version)' : 'Vendly default contract'}</Text>
         <Text style={s.label}>Category</Text>
         <View style={s.chips}>
@@ -323,7 +323,7 @@ export default function VendorContracts() {
                 <Text style={s.previewDoneText}>Done</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
               {previewMissing.length > 0 && (
                 <View style={s.previewMissing}>
                   <Ionicons name="alert-circle-outline" size={18} color="#fcd34d" />
@@ -342,7 +342,7 @@ export default function VendorContracts() {
 
   if (mode.kind === 'upload') {
     return (
-      <ScrollView style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView showsVerticalScrollIndicator={false} style={s.root} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <Text style={s.h1}>{mode.replaceId ? 'Replace uploaded contract' : 'Upload your own contract'}</Text>
         <Text style={s.muted}>
           PDF only, up to 10 MB, not password-protected. Vendly adds a booking addendum and a signature certificate to each booking.
@@ -370,7 +370,7 @@ export default function VendorContracts() {
   }
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={s.content}>
+    <ScrollView showsVerticalScrollIndicator={false} style={s.root} contentContainerStyle={s.content}>
       <Text style={s.muted}>Customers sign your contract when they request a booking. You countersign when you Accept &amp; Sign.</Text>
 
       {active.length === 0 && (

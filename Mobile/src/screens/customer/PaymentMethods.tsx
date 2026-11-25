@@ -84,7 +84,7 @@ export default function PaymentMethods({ navigation }: { navigation: NativeStack
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}>
         <ScreenHeader title="Payments & Payouts" onBack={() => navigation.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 16 }}>
           <Text style={s.h2}>Saved cards</Text>

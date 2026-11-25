@@ -67,7 +67,7 @@ export default function Reviews({ navigation, route }: NativeStackScreenProps<Cu
 
   return (
     <View style={s.root}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={reviews}
         keyExtractor={(r) => r.id}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }}

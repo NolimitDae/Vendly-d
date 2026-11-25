@@ -83,7 +83,7 @@ export default function FaqScreen() {
       );
     }
     return (
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={shown}
         keyExtractor={(f) => f.id}
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24, gap: 10, flexGrow: 1 }}

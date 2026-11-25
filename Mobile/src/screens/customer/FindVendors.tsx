@@ -37,7 +37,7 @@ export default function FindVendors({ navigation, route }: NativeStackScreenProp
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
+      <ScrollView showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 20, gap: 20 }}
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       >

@@ -87,7 +87,7 @@ export default function NotificationSettings({ navigation }: { navigation: Nativ
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 8 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 8 }}>
         <ScreenHeader title="Notifications" onBack={() => navigation.goBack()} />
         {pushAllowed === false && (
           <Pressable style={s.banner} onPress={() => Linking.openSettings()} accessibilityRole="button">

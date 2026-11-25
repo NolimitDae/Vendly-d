@@ -174,7 +174,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <ScreenHeader title="Booking Details" onBack={() => navigation.goBack()} />
 
         <View style={{ paddingHorizontal: 20, gap: 16 }}>
@@ -188,7 +188,7 @@ export default function BookingDetails({ navigation, route }: NativeStackScreenP
             <Text style={ui.label}>Service Start Time</Text>
             {hours && !closedDay && dayHours && <Text style={s.hint}>{hoursMessage(hours, dayKeyOf(date))}</Text>}
             {hours && closedDay && <Text style={s.hint}>{hoursMessage(hours, dayKeyOf(date))} Go back and pick another day.</Text>}
-            <FlatList
+            <FlatList showsVerticalScrollIndicator={false}
               key={hours ? 'hours' : 'any'}
               horizontal
               data={times}

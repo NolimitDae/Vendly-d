@@ -384,7 +384,7 @@ export default function ChatDetail() {
       {loading ? (
         <ActivityIndicator color={DARK.accent} style={{ flex: 1 }} />
       ) : (
-        <FlatList
+        <FlatList showsVerticalScrollIndicator={false}
           data={messages}
           keyExtractor={(m) => m.id}
           inverted
@@ -478,7 +478,7 @@ export default function ChatDetail() {
           ) : null}
           {photos.length > 0 && (
             <View style={s.previewBar}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.previewStrip} accessibilityLabel="Photos to send">
+              <ScrollView showsVerticalScrollIndicator={false} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.previewStrip} accessibilityLabel="Photos to send">
                 {photos.map((p, i) => (
                   <View key={p.uri} style={s.preview}>
                     <Image source={{ uri: p.uri }} style={s.previewImg} accessibilityLabel={`Photo ${i + 1} to send`} />

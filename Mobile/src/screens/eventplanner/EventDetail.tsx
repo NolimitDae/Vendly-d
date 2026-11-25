@@ -155,7 +155,7 @@ export default function EventDetail() {
         accessibilityLabel="Event sections"
       />
 
-      <ScrollView
+      <ScrollView showsVerticalScrollIndicator={false}
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}

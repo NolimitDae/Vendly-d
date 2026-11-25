@@ -79,7 +79,7 @@ export default function ReportSheet({
             <Text style={s.h2}>{title ?? (messageId ? 'Report message' : `Report ${name}`)}</Text>
             <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close"><Ionicons name="close" size={24} color="#fff" /></Pressable>
           </View>
-          <ScrollView contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
             <Text style={s.muted}>Vendly&apos;s team reviews reports. {name} won&apos;t be told who reported them.</Text>
             <Text style={ui.label}>What&apos;s wrong?</Text>
             <View style={s.chips}>

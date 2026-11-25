@@ -34,7 +34,7 @@ export default function RateVendors({ navigation, route }: NativeStackScreenProp
   const total = data?.items.length ?? 0;
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, gap: 16 }} keyboardShouldPersistTaps="handled">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, gap: 16 }} keyboardShouldPersistTaps="handled">
         <ScreenHeader title="Rate your vendors" onBack={() => navigation.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 12 }}>
           {error ? (

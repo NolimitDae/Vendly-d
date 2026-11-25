@@ -57,7 +57,7 @@ export default function ResetPassword({ navigation, route }: NativeStackScreenPr
 
   return (
     <KeyboardAvoidingView style={[s.root, { paddingTop: insets.top + 8 }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <View style={{ paddingHorizontal: 20 }}>
           <BackButton onPress={() => navigation.goBack()} />
         </View>

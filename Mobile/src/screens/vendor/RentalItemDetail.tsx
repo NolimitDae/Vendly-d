@@ -69,7 +69,7 @@ export default function RentalItemDetail({ navigation, route }: NativeStackScree
   const onSelected = selected ? upcoming.filter((r) => r.start_date.slice(0, 10) <= selected && r.end_date.slice(0, 10) >= selected) : [];
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}>
+    <ScrollView showsVerticalScrollIndicator={false} style={s.root} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }}>
       <ScreenHeader
         title={item.title}
         onBack={() => navigation.goBack()}

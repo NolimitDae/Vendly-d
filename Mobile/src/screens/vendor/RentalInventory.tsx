@@ -59,7 +59,7 @@ export default function RentalInventory({ navigation }: NativeStackScreenProps<V
       {loading ? (
         <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
       ) : (
-        <FlatList
+        <FlatList showsVerticalScrollIndicator={false}
           data={items}
           keyExtractor={(i) => i.id}
           contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: insets.bottom + 24 }}

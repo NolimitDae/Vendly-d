@@ -134,7 +134,7 @@ export default function ChatList() {
 
   return (
     <View style={s.root}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={items}
         keyExtractor={(c) => c.id}
         contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 32 }}

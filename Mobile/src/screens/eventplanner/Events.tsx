@@ -41,7 +41,7 @@ export default function MyEvents() {
 
   return (
     <View style={s.root}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={events}
         keyExtractor={(e) => e.id}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 100, gap: 12 }}

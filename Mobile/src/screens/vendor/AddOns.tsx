@@ -176,7 +176,7 @@ export default function AddOns() {
         {freshIdeas.length > 0 && (
           <View style={{ gap: 8 }}>
             <Text style={s.label}>Start from an idea</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
+            <ScrollView showsVerticalScrollIndicator={false} horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
               {freshIdeas.map((i) => (
                 <Chip
                   key={i.name}
@@ -194,7 +194,7 @@ export default function AddOns() {
 
   return (
     <View style={s.root}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={list}
         keyExtractor={(a) => a.id}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 120) + 16, gap: 12 }}

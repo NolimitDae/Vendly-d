@@ -109,7 +109,7 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <ScreenHeader title={itemId ? 'Edit Rental Item' : 'Add Rental Item'} onBack={() => navigation.goBack()} />
         <View style={{ paddingHorizontal: 20, gap: 20 }}>
           <View style={{ gap: 10 }}>
@@ -118,7 +118,7 @@ export default function RentalItemForm({ navigation, route }: NativeStackScreenP
               <Text style={s.addImageText}>Add Photos</Text>
             </Pressable>
             {(existing.length > 0 || images.length > 0) && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+              <ScrollView showsVerticalScrollIndicator={false} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                 {existing.map((e) => <Thumb key={e.key} uri={e.url} onRemove={() => setExisting((p) => p.filter((x) => x.key !== e.key))} />)}
                 {images.map((img, i) => <Thumb key={`n${i}`} uri={img.uri} onRemove={() => setImages((p) => p.filter((_, idx) => idx !== i))} />)}
               </ScrollView>

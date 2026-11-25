@@ -81,10 +81,10 @@ export default function ListingDetail({ navigation, route }: NativeStackScreenPr
     <View style={s.root}>
       {/* room for the whole bottom bar (question bubble + Book button), so nothing hides behind it */}
       {viewing != null && <PhotoViewer photos={images} start={viewing} onClose={() => setViewing(null)} title={listing.title} />}
-      <ScrollView contentContainerStyle={{ paddingBottom: (footerHeight || insets.bottom + 170) + 16 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: (footerHeight || insets.bottom + 170) + 16 }}>
         <View style={s.hero}>
           {images.length > 0 ? (
-            <FlatList
+            <FlatList showsVerticalScrollIndicator={false}
               data={images}
               horizontal
               pagingEnabled

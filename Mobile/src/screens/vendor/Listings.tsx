@@ -82,7 +82,7 @@ export default function VendorListings() {
 
   return (
     <View style={s.root}>
-      <FlatList
+      <FlatList showsVerticalScrollIndicator={false}
         data={listings}
         keyExtractor={(l) => l.id}
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 100, gap: 20 }}

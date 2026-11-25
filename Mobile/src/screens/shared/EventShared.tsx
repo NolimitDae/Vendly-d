@@ -58,7 +58,7 @@ export default function EventShared() {
   const roleNote = ev.role === 'vendor' ? 'You’re booked for this event. Items marked for you are highlighted; tick them off on the day.' : 'Your planner shared this event with you. You can follow along; changes go through your planner.';
 
   return (
-    <ScrollView
+    <ScrollView showsVerticalScrollIndicator={false}
       style={s.root}
       contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32, gap: 16 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}

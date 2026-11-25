@@ -111,7 +111,7 @@ export default function RentalCheckout({ navigation, route }: NativeStackScreenP
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20, paddingHorizontal: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: (footerH || insets.bottom + 110) + 16, gap: 20, paddingHorizontal: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <View style={{ marginHorizontal: -20 }}>
           <ScreenHeader title="Rental Request" onBack={() => navigation.goBack()} />
         </View>

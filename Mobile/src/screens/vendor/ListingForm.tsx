@@ -338,7 +338,7 @@ export default function ListingForm() {
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24, gap: 20 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <ScreenHeader title={isEdit ? 'Edit Package' : 'Add A Package'} onBack={() => nav.goBack()} />
 
         <View style={{ paddingHorizontal: 20, gap: 20 }}>
@@ -349,7 +349,7 @@ export default function ListingForm() {
               <Text style={s.addImageText}>Add Service Image</Text>
             </Pressable>
             {(existing.length > 0 || images.length > 0) && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+              <ScrollView showsVerticalScrollIndicator={false} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                 {existing.map((uri, i) => (
                   <Thumb key={`e${i}`} uri={uri} onRemove={() => setExisting((p) => p.filter((_, idx) => idx !== i))} />
                 ))}

@@ -82,7 +82,7 @@ export default function Favorites() {
       <ScreenHeader title="Favorites" onBack={() => nav.goBack()} />
       {header}
       {tab === 'vendors' ? (
-        <FlatList
+        <FlatList showsVerticalScrollIndicator={false}
           {...listProps}
           data={vendors ?? []}
           keyExtractor={(v) => v.id}
@@ -116,7 +116,7 @@ export default function Favorites() {
           }}
         />
       ) : (
-        <FlatList
+        <FlatList showsVerticalScrollIndicator={false}
           {...listProps}
           data={services ?? []}
           keyExtractor={(l) => l.id}

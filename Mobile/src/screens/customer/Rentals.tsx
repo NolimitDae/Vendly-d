@@ -60,7 +60,7 @@ export default function Rentals({ navigation, route }: NativeStackScreenProps<Cu
       {loading ? (
         <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
       ) : (
-        <FlatList
+        <FlatList showsVerticalScrollIndicator={false}
           data={items}
           keyExtractor={(i) => i.id}
           numColumns={2}

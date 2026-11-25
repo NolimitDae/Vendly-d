@@ -59,7 +59,7 @@ export default function VendorProfile({ navigation, route }: NativeStackScreenPr
 
   return (
     <View style={s.root}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}>
         <View style={[s.cover, { paddingTop: insets.top + 12 }]}>
           {cover && <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.25)' }]} />

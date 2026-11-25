@@ -111,7 +111,7 @@ export default function ClientContractsCard({ eventId }: { eventId: string }) {
                 <Text style={s.viewTitle} numberOfLines={1}>{open.title}</Text>
                 <View style={{ width: 24 }} />
               </View>
-              <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20, paddingBottom: 48 }}>
                 {open.can_sign && (
                   <Text style={s.lead}>Your planner booked this vendor for your event and asked you to co-sign. Read it, then tap Review & co-sign.</Text>
                 )}

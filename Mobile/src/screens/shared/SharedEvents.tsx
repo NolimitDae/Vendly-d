@@ -28,7 +28,7 @@ export default function SharedEvents() {
       {!events ? (
         <ActivityIndicator color={DARK.accent} style={{ marginTop: 40 }} />
       ) : (
-        <FlatList
+        <FlatList showsVerticalScrollIndicator={false}
           data={events}
           keyExtractor={(e) => e.id}
           contentContainerStyle={{ padding: 20, gap: 12 }}

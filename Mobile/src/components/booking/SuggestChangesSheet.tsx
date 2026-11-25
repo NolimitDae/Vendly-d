@@ -181,7 +181,7 @@ export default function SuggestChangesSheet({ visible, bookingId, editor, custom
             <Text style={s.title}>Suggest changes</Text>
             <View style={{ width: 48 }} />
           </View>
-          <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
             <Text style={s.muted}>Change what you need. The package price stays the same; {customerName} sees what changed and approves or declines.</Text>
 
             <Text style={s.h2}>When</Text>

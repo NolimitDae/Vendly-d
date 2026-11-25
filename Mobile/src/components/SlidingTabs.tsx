@@ -253,7 +253,7 @@ export default function SlidingTabs<K extends string>({
   if (scroll) {
     return (
       <View style={[s.bar, s.barScroll, style]} onLayout={(e) => (viewWidth.current = e.nativeEvent.layout.width)}>
-        <ScrollView
+        <ScrollView showsVerticalScrollIndicator={false}
           ref={scroller}
           horizontal
           showsHorizontalScrollIndicator={false}
