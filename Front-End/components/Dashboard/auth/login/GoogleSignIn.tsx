@@ -80,7 +80,15 @@ export default function GoogleSignIn() {
           void send(r.credential);
         },
       });
-      window.google.accounts.id.renderButton(slot.current, { theme: "outline", size: "large", shape: "pill", text: "continue_with", width: slot.current.offsetWidth || 320 });
+      // Google's dark button on the site's dark theme, its light one otherwise
+      const dark = document.documentElement.classList.contains("dark");
+      window.google.accounts.id.renderButton(slot.current, {
+        theme: dark ? "filled_black" : "outline",
+        size: "large",
+        shape: "pill",
+        text: "continue_with",
+        width: Math.min(slot.current.offsetWidth || 320, 400),
+      });
     };
     if (window.google) return draw();
     const s = document.createElement("script");
@@ -95,7 +103,9 @@ export default function GoogleSignIn() {
 
   return (
     <div className="space-y-3">
-      <div ref={slot} className="flex justify-center min-h-[44px] w-full" data-testid="google-button" />
+      {/* colorScheme light: on the dark theme the browser would otherwise paint Google's button frame as a
+          white box; with the frame's own (light) scheme it stays see-through around the pill */}
+      <div ref={slot} className="flex justify-center min-h-[44px] w-full" style={{ colorScheme: "light" }} data-testid="google-button" />
       {busy && step === "idle" && <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto" />}
 
       {step === "role" && idToken && (
