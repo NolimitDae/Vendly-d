@@ -8,26 +8,28 @@ jest.mock("react-toastify", () => ({ toast: { success: jest.fn(), error: jest.fn
 jest.mock("@/lib/session", () => ({ saveSession: jest.fn() }));
 jest.mock("@/service/auth/auth.service", () => ({ AuthService: { social: jest.fn() } }));
 import { AuthService } from "@/service/auth/auth.service";
-import GoogleSignIn from "./GoogleSignIn";
+import SocialSignIn from "./SocialSignIn";
 
 /** Loads the component with a client ID set, and a fake Google script that signs in with "gtok". */
 function setup() {
   process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID = "web-id.apps.googleusercontent.com";
   let signIn: (r: { credential: string }) => void = () => undefined;
   window.google = { accounts: { id: { initialize: (o: any) => (signIn = o.callback), renderButton: jest.fn() } } };
-  render(<GoogleSignIn />);
+  render(<SocialSignIn />);
   return { signIn: (t = "gtok") => act(() => signIn({ credential: t })) };
 }
 
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  delete process.env.NEXT_PUBLIC_APPLE_SERVICES_ID;
+  delete (window as any).AppleID;
   delete (window as any).google;
   jest.clearAllMocks();
 });
 
-describe("GoogleSignIn", () => {
+describe("SocialSignIn (Google)", () => {
   it("shows nothing until the Google client ID is set", () => {
-    const { container } = render(<GoogleSignIn />);
+    const { container } = render(<SocialSignIn />);
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -65,5 +67,29 @@ describe("GoogleSignIn", () => {
     await user.type(await screen.findByLabelText("Authenticator code"), "123456");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(AuthService.social).toHaveBeenLastCalledWith({ provider: "google", id_token: "gtok", token: "123456" }));
+  });
+});
+
+describe("SocialSignIn (Apple)", () => {
+  it("signs in with Apple in a pop-up, passing the name and code Apple shares the first time", async () => {
+    process.env.NEXT_PUBLIC_APPLE_SERVICES_ID = "com.vendly.web";
+    const init = jest.fn();
+    window.AppleID = {
+      auth: { init, signIn: jest.fn().mockResolvedValue({ authorization: { id_token: "atok", code: "acode" }, user: { name: { firstName: "Ada", lastName: "Lovelace" } } }) },
+    };
+    (AuthService.social as jest.Mock).mockResolvedValue({ data: { success: true, type: "CLIENT", authorization: { access_token: "a" } } });
+    render(<SocialSignIn />);
+    expect(init).toHaveBeenCalledWith(expect.objectContaining({ clientId: "com.vendly.web", usePopup: true, scope: "name email" }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: /continue with apple/i }));
+    await waitFor(() => expect(AuthService.social).toHaveBeenCalledWith({ provider: "apple", id_token: "atok", name: "Ada Lovelace", authorization_code: "acode" }));
+    expect(push).toHaveBeenCalledWith("/marketplace");
+  });
+
+  it("does nothing when the pop-up is closed", async () => {
+    process.env.NEXT_PUBLIC_APPLE_SERVICES_ID = "com.vendly.web";
+    window.AppleID = { auth: { init: jest.fn(), signIn: jest.fn().mockRejectedValue({ error: "popup_closed_by_user" }) } };
+    render(<SocialSignIn />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: /continue with apple/i }));
+    expect(AuthService.social).not.toHaveBeenCalled();
   });
 });

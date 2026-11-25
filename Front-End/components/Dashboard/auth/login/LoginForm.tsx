@@ -8,7 +8,7 @@ import EmailIcon from "@/icons/EmailIcon";
 import LockIcon from "@/icons/LockIcon";
 import { Checkbox } from "@/components/ui/checkbox";
 import HorizontalLineIcon from "@/icons/HorizontalLineIcon";
-import GoogleSignIn, { googleClientId } from "./GoogleSignIn";
+import SocialSignIn, { socialSignInOffered } from "./SocialSignIn";
 import GenericButton from "../GenericButton";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -240,8 +240,8 @@ const LoginForm = () => {
       </p>
 
       {/* Social login */}
-      {/* Google sign-in, once its client ID is set (the Apple button returns when web Apple sign-in is set up) */}
-      {googleClientId() && (
+      {/* Google and Apple sign-in, each once its ID is set */}
+      {socialSignInOffered() && (
         <div className="space-y-4">
           <div className="flex justify-center items-center gap-2">
             <HorizontalLineIcon />
@@ -250,7 +250,7 @@ const LoginForm = () => {
             </p>
             <HorizontalLineIcon />
           </div>
-          <GoogleSignIn />
+          <SocialSignIn />
         </div>
       )}
     </form>
