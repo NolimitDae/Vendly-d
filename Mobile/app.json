@@ -19,7 +19,7 @@
         "CADisableMinimumFrameDurationOnPhone": true
       },
       "usesAppleSignIn": true,
-      "buildNumber": "3"
+      "buildNumber": "4"
     },
     "android": {
       "adaptiveIcon": {
