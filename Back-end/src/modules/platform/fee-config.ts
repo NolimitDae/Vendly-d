@@ -11,6 +11,8 @@ export interface FeeConfig {
   /** the most a booking's Vendly Protection fee can be; 0 or missing = no cap */
   maximum?: number;
   commission: number;
+  /** Vendly's cut of what a vendor keeps when a booking is cancelled (%); missing = DEFAULT_CANCELLATION_COMMISSION */
+  cancellationCommission?: number;
   categories: Map<string, number>;
   /** bookings whose total (price + fee) is at least this are "large"; 0 = none are; missing = the default */
   largeThreshold?: number;
@@ -18,6 +20,10 @@ export interface FeeConfig {
 
 /** Owner's defaults (Nov 2026): the fee is capped at $500, bookings of $5,000 or more are large. */
 export const DEFAULT_FEE_MAXIMUM = 500;
+/** Owner's default (Nov 2026): 10% of what a vendor keeps after a cancellation; adjustable in Admin > Settings. */
+export const DEFAULT_CANCELLATION_COMMISSION = 10;
+/** The commission rate (%) on what a vendor keeps after a cancellation. */
+export const cancellationCommission = () => currentFees().cancellationCommission ?? DEFAULT_CANCELLATION_COMMISSION;
 export const DEFAULT_LARGE_PAYMENT_THRESHOLD = 5000;
 
 export const envFees = (): FeeConfig => {

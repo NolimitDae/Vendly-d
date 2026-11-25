@@ -14,6 +14,7 @@
  *   moderate  100% at 30+ days, 50% at 14-29 days, none under 14 days
  *   strict    50% at 60+ days, none under 60 days
  */
+import { cancellationCommission } from 'src/modules/platform/fee-config';
 
 export type CancellationPolicy = 'flexible' | 'moderate' | 'strict';
 
@@ -211,6 +212,9 @@ export function cancellationMessage(
     if (deposit > 0) out.push(`You keep the ${usd(deposit)} deposit${beyond > 0 ? `, plus ${usd(beyond)}${policy ? ` under your ${policy}cancellation policy` : ''}` : ''}.`);
     else if (s.vendor_keeps > 0) out.push(`You keep ${usd(s.vendor_keeps)}${policy ? ` under your ${policy}cancellation policy` : ''}.`);
     else if (s.paid) out.push('You keep nothing from this booking.');
+    // Vendly's commission on what the vendor keeps (Admin > Settings)
+    const rate = cancellationCommission();
+    if (s.vendor_keeps > 0 && rate > 0) out.push(`Vendly's ${rate}% commission (${usd(cents((s.vendor_keeps * rate) / 100))}) comes off that.`);
     if (s.unpaid_cancelled > 0) out.push(`The ${usd(s.unpaid_cancelled)} still due won't be charged.`);
     if (s.holds_released > 0) out.push(`The ${usd(s.holds_released)} card hold ${done ? 'is' : 'will be'} released.`);
   }

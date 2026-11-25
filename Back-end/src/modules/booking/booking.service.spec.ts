@@ -124,6 +124,12 @@ const mockBooking = {
 };
 
 describe('BookingService', () => {
+  // the settlement tests below check what the vendor keeps before Vendly's cancellation commission;
+  // the commission has its own tests (no commission unless a test sets one)
+  const feeConfig = require('src/modules/platform/fee-config');
+  beforeEach(() => feeConfig.__setFeeCache({ ...feeConfig.currentFees(), cancellationCommission: 0 }));
+  afterEach(() => feeConfig.__setFeeCache(null));
+
   let service: BookingService;
 
   beforeEach(async () => {
@@ -340,6 +346,21 @@ describe('BookingService', () => {
       expect(StripePayment.refundPaymentIntent).toHaveBeenCalledWith('pi_paid', 'cancel-booking-1', 225);
       expect(result.data.refund).toMatchObject({ refundTotal: 225, refundFee: 0, vendorKeeps: 225, percent: 50 });
       expect(mockPayments.payOutCancellation).toHaveBeenCalledWith('booking-1', 225);
+    });
+
+    it('takes Vendly’s cancellation commission (Admin > Settings) off what the vendor keeps', async () => {
+      const feeConfig = require('src/modules/platform/fee-config');
+      feeConfig.__setFeeCache({ ...feeConfig.currentFees(), cancellationCommission: 10 });
+      mockPrisma.booking.findFirst.mockResolvedValue(paidBooking());
+      mockPrisma.booking.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.cancel('booking-1', 'customer-1', {});
+
+      // keeps $225 under the policy; 10% ($22.50) to Vendly, $202.50 paid out
+      expect(result.data.refund).toMatchObject({ vendorKeeps: 225 });
+      expect(mockPayments.payOutCancellation).toHaveBeenCalledWith('booking-1', 202.5);
+      expect(mockPrisma.paymentTransaction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ user_id: 'vendor-1', type: 'vendly_commission', amount: 22.5, order_id: 'booking-1' }) });
+      expect(mockPrisma.booking.update).toHaveBeenCalledWith({ where: { id: 'booking-1' }, data: { commission_amount: 22.5, released_gross: 225 } });
     });
 
     it('uses the policy from the signed contract', async () => {

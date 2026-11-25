@@ -22,6 +22,7 @@ import { CancelBookingDto, RejectBookingDto } from './dto/update-booking.dto';
 import { CancellationSummary, cancellationMessage, depositPlanVendorOwed, PaidInstallment, REFUND_TIMING, settleAgainstPaid, settleCancellation, Settlement } from './cancellation';
 import { CANCELLATION_PRESETS } from 'src/modules/contracts/contract-templates';
 import { currentFees } from 'src/modules/platform/platform-settings.service';
+import { cancellationCommission } from 'src/modules/platform/fee-config';
 import { PaymentsService } from 'src/modules/payments/payments.service';
 import { track } from 'src/common/analytics';
 import { requestExpiresAt } from './booking-requests';
@@ -855,16 +856,30 @@ export class BookingService {
     }
 
     const early = Number((booking as { early_released_amount?: unknown }).early_released_amount ?? 0);
-    const net = Math.round((settlement.vendorKeeps - early) * 100) / 100;
+    // Vendly's commission on what the vendor keeps (Admin > Settings, 10% by default), like the
+    // commission on a completed booking
+    const commission = settlement.vendorKeeps > 0 ? round2((settlement.vendorKeeps * cancellationCommission()) / 100) : 0;
+    const net = round2(settlement.vendorKeeps - early - commission);
+    const recordCommission = async () => {
+      if (commission <= 0) return;
+      await this.prisma.booking.update({ where: { id: booking.id }, data: { commission_amount: commission, released_gross: settlement.vendorKeeps } });
+      await this.prisma.paymentTransaction.create({
+        data: { user_id: booking.vendor_id, type: 'vendly_commission', provider: 'stripe', reference_number: booking.id, order_id: booking.id, status: 'succeeded', amount: commission, currency },
+      });
+    };
     // the vendor already has their share (a deposit paid out early): settled, nothing to move
     if (net === 0 && settlement.vendorKeeps > 0) {
-      await this.prisma.booking.updateMany({ where: { id: booking.id, payout_credited_at: null }, data: { payout_credited_at: new Date() } });
+      const claimed = await this.prisma.booking.updateMany({ where: { id: booking.id, payout_credited_at: null }, data: { payout_credited_at: new Date() } });
+      if (claimed.count === 1) await recordCommission();
     }
     if (net > 0) {
       // what the vendor keeps goes to their Stripe account, from the customer's payment (or their Vendly
       // balance if they have no payout account yet)
       const claimed = await this.prisma.booking.updateMany({ where: { id: booking.id, payout_credited_at: null }, data: { payout_credited_at: new Date() } });
-      if (claimed.count === 1) await this.payments.payOutCancellation(booking.id, net);
+      if (claimed.count === 1) {
+        await recordCommission();
+        await this.payments.payOutCancellation(booking.id, net);
+      }
     }
     if (net < 0) {
       await this.prisma.$transaction(async (tx) => {
@@ -873,7 +888,14 @@ export class BookingService {
           data: { payout_credited_at: new Date() },
         });
         if (claimed.count !== 1) return;
-        // a negative net is a deposit paid out early that the vendor now owes back; it comes off future payouts
+        if (commission > 0) {
+          await tx.booking.update({ where: { id: booking.id }, data: { commission_amount: commission, released_gross: settlement.vendorKeeps } });
+          await tx.paymentTransaction.create({
+            data: { user_id: booking.vendor_id, type: 'vendly_commission', provider: 'stripe', reference_number: booking.id, order_id: booking.id, status: 'succeeded', amount: commission, currency },
+          });
+        }
+        // a negative net is a deposit paid out early that the vendor now owes back (or more than they
+        // keep, once the commission is taken); it comes off future payouts
         await tx.user.update({ where: { id: booking.vendor_id }, data: { balance: { increment: net } } });
         await tx.paymentTransaction.create({
           data: {

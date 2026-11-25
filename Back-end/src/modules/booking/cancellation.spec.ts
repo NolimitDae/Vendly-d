@@ -3,6 +3,11 @@ import { cancellationMessage, customerRefundPercent, depositPlanVendorOwed, sett
 const event = new Date('2026-06-14T15:00:00Z');
 const before = (days: number, hours = 0) => new Date(event.getTime() - (days * 24 + hours) * 3600 * 1000);
 
+// what the vendor keeps is shown before Vendly's cancellation commission unless a test sets one
+const feeConfig = require('src/modules/platform/fee-config');
+beforeEach(() => feeConfig.__setFeeCache({ ...feeConfig.currentFees(), cancellationCommission: 0 }));
+afterEach(() => feeConfig.__setFeeCache(null));
+
 describe('customerRefundPercent', () => {
   it.each([
     // [policy, days before, extra hours, expected %]
@@ -71,6 +76,15 @@ describe('cancellationMessage', () => {
       "You'll get $225.00 back to your card. The $22.50 Vendly Protection fee isn't refunded. The vendor keeps $225.00 under their flexible cancellation policy. Refunds take 5–10 business days to show.",
     );
     expect(cancellationMessage({ ...base, card: 'Visa •••• 4242' }, 'CUSTOMER', true)).toMatch(/^\$225\.00 is being refunded to your card \(Visa •••• 4242\)\./);
+  });
+
+  it('tells the vendor Vendly’s cancellation commission comes off what they keep', () => {
+    feeConfig.__setFeeCache({ ...feeConfig.currentFees(), cancellationCommission: 10 });
+    expect(cancellationMessage(base, 'VENDOR', true)).toBe(
+      "The customer is getting $225.00 back. You keep $225.00 under your flexible cancellation policy. Vendly's 10% commission ($22.50) comes off that.",
+    );
+    // the customer's message doesn't change
+    expect(cancellationMessage(base, 'CUSTOMER', true)).not.toContain('commission');
   });
 
   it('tells the vendor what they keep', () => {

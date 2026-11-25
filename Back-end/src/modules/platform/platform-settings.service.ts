@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { __setFeeCache, currentFees, DEFAULT_FEE_MAXIMUM, DEFAULT_LARGE_PAYMENT_THRESHOLD, envFees, feeMaximum, largePaymentThreshold, type FeeConfig } from './fee-config';
+import { __setFeeCache, currentFees, DEFAULT_CANCELLATION_COMMISSION, DEFAULT_FEE_MAXIMUM, DEFAULT_LARGE_PAYMENT_THRESHOLD, envFees, feeMaximum, largePaymentThreshold, type FeeConfig } from './fee-config';
 import { LARGE_PAYMENT_DUE_HOURS, PAYMENT_DUE_HOURS } from 'src/modules/payments/payment-due';
 
 // the fee maths lives in fee-config.ts (contract text reads it too); these names stay importable from here
@@ -12,6 +12,7 @@ const SCHEMA: Record<string, { kind: 'percent' | 'money' | 'text'; label: string
   customer_service_fee_minimum: { kind: 'money', label: 'Minimum Vendly Protection fee ($)' },
   customer_service_fee_maximum: { kind: 'money', label: 'Maximum Vendly Protection fee ($, empty for no cap)' },
   vendor_commission_percent: { kind: 'percent', label: 'Vendor commission (%)' },
+  cancellation_commission_percent: { kind: 'percent', label: 'Commission on what vendors keep after a cancellation (%)' },
   large_payment_threshold: { kind: 'money', label: 'Large booking from ($, 0 turns it off)' },
   currency: { kind: 'text', label: 'Currency' },
   min_booking_amount: { kind: 'money', label: 'Minimum booking amount ($)' },
@@ -44,6 +45,7 @@ export class PlatformSettingsService implements OnModuleInit {
       // saved empty means no cap; never saved means the default cap
       maximum: map.has('customer_service_fee_maximum') ? Math.max(0, Number(map.get('customer_service_fee_maximum')) || 0) : DEFAULT_FEE_MAXIMUM,
       commission: num('vendor_commission_percent', 0),
+      cancellationCommission: num('cancellation_commission_percent', DEFAULT_CANCELLATION_COMMISSION),
       categories: new Map(cats.map((c) => [c.id, Number(c.fee_percent)])),
       largeThreshold: num('large_payment_threshold', DEFAULT_LARGE_PAYMENT_THRESHOLD),
     };
@@ -60,6 +62,7 @@ export class PlatformSettingsService implements OnModuleInit {
       customer_service_fee_minimum: String(fees.minimum),
       customer_service_fee_maximum: fees.maximum ? String(fees.maximum) : '',
       vendor_commission_percent: String(fees.commission),
+      cancellation_commission_percent: String(fees.cancellationCommission ?? DEFAULT_CANCELLATION_COMMISSION),
       large_payment_threshold: String(fees.largeThreshold ?? DEFAULT_LARGE_PAYMENT_THRESHOLD),
       currency: 'USD',
       min_booking_amount: '',
