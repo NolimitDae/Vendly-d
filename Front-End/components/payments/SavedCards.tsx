@@ -6,8 +6,9 @@ import { toast } from "react-toastify";
 import { BANK_CLEARING_TEXT, isBankAccount, PaymentsService, type SavedCard } from "@/service/payments/payments.service";
 
 export const cardBrand = (b?: string) => (b ? b.charAt(0).toUpperCase() + b.slice(1) : "Card");
-/** "Visa •••• 4242" or "Bank account •••• 6789" */
-export const methodLabel = (m: SavedCard) => (isBankAccount(m) ? `Bank account •••• ${m.last4}` : `${cardBrand(m.brand)} •••• ${m.last4}`);
+/** "Visa •••• 4242", "Apple Pay · Visa •••• 4242" or "Bank account •••• 6789" */
+export const methodLabel = (m: SavedCard) =>
+  isBankAccount(m) ? `Bank account •••• ${m.last4}` : `${m.wallet === "apple_pay" ? "Apple Pay · " : ""}${cardBrand(m.brand)} •••• ${m.last4}`;
 
 /** The authorization the customer gives when saving a bank account (ACH debits need it). */
 export const BANK_MANDATE_TEXT =
@@ -134,9 +135,61 @@ function AddCardForm({ onSaved, onCancel }: { onSaved: (id: string) => void; onC
   if (!mods || !secret) return <Loader2 className="w-5 h-5 animate-spin text-primary" />;
   const { Elements } = mods.react;
   return (
-    <Elements stripe={mods.stripe} options={{ clientSecret: secret, appearance: { theme: "night", variables: { colorPrimary: "#A84AB0" } } }}>
-      <CardFields react={mods.react} secret={secret} onSaved={onSaved} onCancel={onCancel} />
-    </Elements>
+    <div className="space-y-3">
+      {/* Apple Pay, where the browser has it (Safari with a card in Wallet); saved and charged like a card */}
+      <Elements stripe={mods.stripe} options={{ mode: "setup", currency: "usd", paymentMethodTypes: ["card"] }}>
+        <ApplePayOption react={mods.react} secret={secret} onSaved={onSaved} />
+      </Elements>
+      <Elements stripe={mods.stripe} options={{ clientSecret: secret, appearance: { theme: "night", variables: { colorPrimary: "#A84AB0" } } }}>
+        <CardFields react={mods.react} secret={secret} onSaved={onSaved} onCancel={onCancel} />
+      </Elements>
+    </div>
+  );
+}
+
+function ApplePayOption({ react, secret, onSaved }: { react: any; secret: string; onSaved: (id: string) => void }) {
+  const { ExpressCheckoutElement, useStripe, useElements } = react;
+  const stripe = useStripe();
+  const elements = useElements();
+  const [shown, setShown] = useState(false);
+
+  const confirm = async (event: { paymentFailed: (p?: { reason?: "fail" }) => void }) => {
+    if (!stripe || !elements) return;
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      event.paymentFailed({ reason: "fail" });
+      return toast.error(submitError.message ?? "Apple Pay was not saved");
+    }
+    const { setupIntent, error } = await stripe.confirmSetup({
+      elements,
+      clientSecret: secret,
+      confirmParams: { return_url: window.location.href },
+      redirect: "if_required",
+    });
+    if (error) {
+      event.paymentFailed({ reason: "fail" });
+      return toast.error(error.message ?? "Apple Pay was not saved");
+    }
+    const id = typeof setupIntent?.payment_method === "string" ? setupIntent.payment_method : setupIntent?.payment_method?.id;
+    if (!id) return toast.error("Apple Pay was not saved");
+    toast.success("Apple Pay saved");
+    onSaved(id);
+  };
+
+  return (
+    <div className={shown ? "space-y-3" : "hidden"}>
+      <ExpressCheckoutElement
+        options={{
+          paymentMethods: { applePay: "auto", googlePay: "never", link: "never", paypal: "never", amazonPay: "never", klarna: "never" },
+          buttonType: { applePay: "plain" },
+          buttonHeight: 44,
+        }}
+        // only shown when Apple Pay is offered on this browser
+        onReady={(e: { availablePaymentMethods?: { applePay?: boolean } }) => setShown(!!e.availablePaymentMethods?.applePay)}
+        onConfirm={confirm}
+      />
+      <p className="text-center text-xs text-gray-500 dark:text-gray-400">or add a card</p>
+    </div>
   );
 }
 

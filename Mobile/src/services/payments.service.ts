@@ -9,6 +9,8 @@ export interface SavedCard {
   exp_month?: number;
   exp_year?: number;
   bank_name?: string | null;
+  /** 'apple_pay' for a card saved through Apple Pay */
+  wallet?: string | null;
   is_default: boolean;
 }
 

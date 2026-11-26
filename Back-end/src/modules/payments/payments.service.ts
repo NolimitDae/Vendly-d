@@ -175,6 +175,8 @@ export class PaymentsService {
           last4: c.card?.last4,
           exp_month: c.card?.exp_month,
           exp_year: c.card?.exp_year,
+          // 'apple_pay' for a card saved through Apple Pay
+          wallet: c.card?.wallet?.type ?? null,
           is_default: c.id === defaultId,
         })),
         ...banks.map((b) => ({

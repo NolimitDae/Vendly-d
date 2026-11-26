@@ -13,8 +13,9 @@ import { usePaymentSettings } from '../../hooks/usePaymentSettings';
 import { apiMessage } from '../auth/SignIn';
 
 export const cardBrand = (b?: string) => (b ? b.charAt(0).toUpperCase() + b.slice(1) : 'Card');
-/** "Visa •••• 4242" or "Bank account •••• 6789" */
-export const methodLabel = (m: SavedCard) => (isBankAccount(m) ? `Bank account •••• ${m.last4}` : `${cardBrand(m.brand)} •••• ${m.last4}`);
+/** "Visa •••• 4242", "Apple Pay · Visa •••• 4242" or "Bank account •••• 6789" */
+export const methodLabel = (m: SavedCard) =>
+  isBankAccount(m) ? `Bank account •••• ${m.last4}` : `${m.wallet === 'apple_pay' ? 'Apple Pay · ' : ''}${cardBrand(m.brand)} •••• ${m.last4}`;
 
 export function CardRow({ card, selected, onPress, right }: { card: SavedCard; selected?: boolean; onPress?: () => void; right?: React.ReactNode }) {
   return (

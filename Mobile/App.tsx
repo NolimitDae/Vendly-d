@@ -37,6 +37,8 @@ try {
 } catch {}
 
 const STRIPE_PK = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
+/** Apple Pay merchant ID (also in app.json's Stripe plugin) */
+const APPLE_MERCHANT_ID = 'merchant.com.vendly.mobile';
 
 /**
  * On an iPad the app is a centred column (the phone layout at a comfortable width) instead of stretched
@@ -65,7 +67,7 @@ function App() {
 
   return (
     <SafeAreaProvider>
-      <StripeProvider publishableKey={STRIPE_PK}>
+      <StripeProvider publishableKey={STRIPE_PK} merchantIdentifier={APPLE_MERCHANT_ID}>
         <AuthProvider>
           {/* before the navigator, so a screen's own status bar (the launch screen's dark one) wins while it shows */}
           <StatusBar style="light" />
