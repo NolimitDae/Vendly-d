@@ -6,7 +6,7 @@ const { withEntitlementsPlist } = require('expo/config-plugins');
 
 module.exports = ({ config }) => {
   // shortcut: the ad-hoc profile was made before Sign in with Apple and Apple Pay were added, so test builds
-  // leave them out (and don't offer Apple Pay); remove once the profile is regenerated with those capabilities.
+  // leave them out (the app checks for Apple Pay with utils/nativeBuild.ts); remove once the profile is regenerated with those capabilities.
   const testBuild = ['development', 'preview'].includes(process.env.EAS_BUILD_PROFILE);
   if (testBuild) {
     config = withEntitlementsPlist({ ...config, ios: { ...config.ios, usesAppleSignIn: false } }, (c) => {
@@ -15,8 +15,6 @@ module.exports = ({ config }) => {
       return c;
     });
   }
-  // Apple Pay is offered where a card is added, in builds that carry the Apple Pay capability
-  config = { ...config, extra: { ...config.extra, applePay: !testBuild } };
   // the live booking map uses Google Maps on Android, which needs a key (iPhone uses Apple Maps, no key);
   // without one the Android app shows the map picture instead
   const androidMapsKey = process.env.GOOGLE_MAPS_ANDROID_KEY;

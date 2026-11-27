@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import Constants from 'expo-constants';
 import { Alert, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +8,7 @@ import { DARK, FONTS } from '../constants/colors';
 import { PaymentsService } from '../services/payments.service';
 import { apiMessage } from '../screens/auth/SignIn';
 import { useSlideUp } from './useSlideUp';
+import { iosBuildHasApplePay } from '../utils/nativeBuild';
 
 // Stripe's native module isn't available in Expo Go or on web; the sheet then explains instead of crashing.
 type SetupResult = Promise<{ setupIntent?: { paymentMethodId?: string | null; paymentMethod?: { id: string } | null }; error?: { code?: string; message: string } }>;
@@ -30,7 +30,7 @@ try {
 } catch {}
 
 /** Whether this build can offer Apple Pay at all (an iPhone build with the Apple Pay capability) */
-const applePayBuild = () => Platform.OS === 'ios' && !!Constants.expoConfig?.extra?.applePay && !!PlatformPayButton && !!confirmPlatformPaySetupIntent;
+const applePayBuild = () => iosBuildHasApplePay() && !!PlatformPayButton && !!confirmPlatformPaySetupIntent;
 
 /** Bottom sheet that saves a card to the customer's Stripe profile and hands back its id. */
 export default function AddCardSheet({ visible, onClose, onSaved }: { visible: boolean; onClose: () => void; onSaved: (paymentMethodId: string) => void }) {

@@ -8,11 +8,13 @@ import { OutlineButton } from './brand';
 import { useAuth } from '../context/AuthContext';
 import { GOOGLE_IDS, socialSignIn, type SocialPending } from '../services/socialAuth';
 import { apiMessage } from '../screens/auth/SignIn';
+import { iosBuildHasGoogleSignIn } from '../utils/nativeBuild';
 
 WebBrowser.maybeCompleteAuthSession();
 
 const googleConfigured = Platform.select({
-  ios: !!GOOGLE_IDS.iosClientId,
+  // the build must also carry Google's return link (an update can reach older builds)
+  ios: !!GOOGLE_IDS.iosClientId && iosBuildHasGoogleSignIn(),
   android: !!GOOGLE_IDS.androidClientId,
   default: !!GOOGLE_IDS.webClientId,
 });
