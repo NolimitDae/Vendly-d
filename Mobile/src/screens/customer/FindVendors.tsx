@@ -47,7 +47,7 @@ export default function FindVendors({ navigation, route }: NativeStackScreenProp
           <Ionicons name="search-outline" size={20} color={DARK.muted} />
           <TextInput
             style={s.searchInput}
-            placeholder="Search service & locations"
+            placeholder="Search services, vendors & places"
             placeholderTextColor={DARK.muted}
             value={q}
             onChangeText={setQ}

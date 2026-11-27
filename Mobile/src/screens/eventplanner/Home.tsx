@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { BookingService, type Booking } from '../../services/booking.service';
 import { EventsService, type Event, type EventStatus } from '../../services/events.service';
 import ReviewPrompt from '../../components/ReviewPrompt';
+import { useTabBarSpace } from '../../components/FloatingTabBar';
 
 export const EVENT_STATUS: Record<EventStatus, { label: string; color: string }> = {
   PLANNING: { label: 'Planning', color: '#fcd34d' },
@@ -45,6 +46,8 @@ export function EventCard({ event, onPress }: { event: Event; onPress: () => voi
 export default function EPHome() {
   const nav = useNavigation<NativeStackNavigationProp<any>>();
   const insets = useSafeAreaInsets();
+  // room for the floating menu bar below the last item
+  const tabSpace = useTabBarSpace();
   const { user } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -78,7 +81,7 @@ export default function EPHome() {
   return (
     <ScrollView showsVerticalScrollIndicator={false}
       style={s.root}
-      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 32, paddingHorizontal: 20, gap: 24 }}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: tabSpace, paddingHorizontal: 20, gap: 24 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
     >
       <View style={s.header}>

@@ -10,6 +10,7 @@ import { SocketService } from '../../services/socket.service';
 import { apiError } from '../../services/contracts.service';
 import { useAuth } from '../../context/AuthContext';
 import SlidingTabs from '../../components/SlidingTabs';
+import { useTabBarSpace } from '../../components/FloatingTabBar';
 
 // Vendors' inbox is split so booking clients aren't buried under first questions (sorted on the server)
 const TABS: { key: InboxTab; label: string }[] = [
@@ -24,6 +25,8 @@ const EMPTY: Record<InboxTab, [string, string]> = {
 export default function ChatList() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  // room for the floating menu bar below the last item
+  const tabSpace = useTabBarSpace();
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +140,7 @@ export default function ChatList() {
       <FlatList showsVerticalScrollIndicator={false}
         data={items}
         keyExtractor={(c) => c.id}
-        contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: tabSpace }}
         keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
         ListHeaderComponent={
           <View style={{ gap: 24, marginBottom: 12 }}>

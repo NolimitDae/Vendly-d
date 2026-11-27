@@ -37,7 +37,7 @@ const mockPrisma = {
   },
   listingAvailability: { findMany: jest.fn() },
   calendarBusyBlock: { findMany: jest.fn() },
-  user: { findFirst: jest.fn() },
+  user: { findFirst: jest.fn(), findMany: jest.fn() },
   review: {
     groupBy: jest.fn(),
     aggregate: jest.fn(),
@@ -461,6 +461,28 @@ describe('MarketplaceService', () => {
       const result = await service.getCategories();
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(1);
+    });
+  });
+
+  describe('searchVendors', () => {
+    it('finds live vendors by name, business name or handle, with their rating', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([
+        { id: 'v1', name: 'Sam', avatar: null, location: 'Smyrna, DE', is_test: false, vendorProfile: { business_name: 'XQshots', handle: 'xqshots', logo: null }, _count: { vendorListings: 3 } },
+      ]);
+      mockPrisma.review.groupBy.mockResolvedValue([{ vendor_id: 'v1', _avg: { rating: 4.8 }, _count: { _all: 5 } }]);
+      const res = await service.searchVendors('xq shots');
+      const where = mockPrisma.user.findMany.mock.calls[0][0].where;
+      expect(where.AND).toEqual(expect.arrayContaining([ACTIVE_VENDOR_WHERE, { vendorProfile: { isNot: null } }]));
+      // one condition per typed word
+      expect(where.AND.filter((c: any) => c.OR?.some((o: any) => o.name)).length).toBe(2);
+      expect(res.data).toEqual([
+        expect.objectContaining({ id: 'v1', business_name: 'XQshots', handle: 'xqshots', avg_rating: 4.8, review_count: 5, listing_count: 3 }),
+      ]);
+    });
+
+    it('returns nothing for an empty search, without reading the database', async () => {
+      expect((await service.searchVendors('  ')).data).toEqual([]);
+      expect(mockPrisma.user.findMany).not.toHaveBeenCalled();
     });
   });
 });

@@ -22,10 +22,12 @@ export function Skeleton({ width = '100%', height = 14, radius = 8, style }: { w
 export function ListingCardSkeleton({ width = 243 }: { width?: DimensionValue }) {
   return (
     <View style={[s.card, { width }]} accessibilityLabel="Loading">
-      <Skeleton height={121} radius={12} />
-      <Skeleton width="70%" height={16} style={{ marginTop: 10 }} />
-      <Skeleton width="45%" height={12} style={{ marginTop: 8 }} />
-      <Skeleton width="55%" height={12} style={{ marginTop: 6 }} />
+      <Skeleton height={150} radius={0} />
+      <View style={{ padding: 14, paddingTop: 10 }}>
+        <Skeleton width="70%" height={16} />
+        <Skeleton width="45%" height={12} style={{ marginTop: 8 }} />
+        <Skeleton width="55%" height={12} style={{ marginTop: 6 }} />
+      </View>
     </View>
   );
 }
@@ -65,7 +67,7 @@ export function DetailScreenSkeleton({ topInset = 0 }: { topInset?: number }) {
 }
 
 const s = StyleSheet.create({
-  card: { padding: 12, borderRadius: 16, backgroundColor: DARK.card },
+  card: { borderRadius: 22, backgroundColor: DARK.card, overflow: 'hidden' },
   detail: { flex: 1, backgroundColor: DARK.bg },
   row: { flexDirection: 'row', gap: 12, marginHorizontal: 20, padding: 12, borderRadius: 16, backgroundColor: DARK.card },
 });

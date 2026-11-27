@@ -326,6 +326,63 @@ export class MarketplaceService {
     return preset && key ? { key, label: preset.label, text: preset.text } : null;
   }
 
+  /**
+   * Vendors whose name, business name or shop handle has every typed word, for search. Only vendors
+   * who are taking bookings and have at least one live package; at most 10.
+   */
+  async searchVendors(q?: string) {
+    const words = searchWords(q ?? '');
+    if (!words.length) return { success: true, data: [] };
+    const has = (w: string) => ({ contains: w, mode: 'insensitive' as const });
+    const vendors = await this.prisma.user.findMany({
+      where: {
+        AND: [
+          ACTIVE_VENDOR_WHERE,
+          { vendorProfile: { isNot: null } },
+          { vendorListings: { some: { status: ListingStatus.ACTIVE, deleted_at: null } } },
+          ...words.map((w) => ({
+            OR: [{ name: has(w) }, { vendorProfile: { business_name: has(w) } }, { vendorProfile: { handle: has(w.toLowerCase()) } }],
+          })),
+        ],
+      },
+      take: 10,
+      select: {
+        id: true,
+        name: true,
+        avatar: true,
+        location: true,
+        is_test: true,
+        vendorProfile: { select: { business_name: true, handle: true, logo: true } },
+        _count: { select: { vendorListings: { where: { status: ListingStatus.ACTIVE, deleted_at: null } } } },
+      },
+    });
+    const ratings = vendors.length
+      ? await this.prisma.review.groupBy({
+          by: ['vendor_id'],
+          where: { vendor_id: { in: vendors.map((v) => v.id) }, deleted_at: null },
+          _avg: { rating: true },
+          _count: { _all: true },
+        })
+      : [];
+    const ratingOf = new Map(ratings.map((r) => [r.vendor_id, r]));
+    return {
+      success: true,
+      data: vendors.map((v) => ({
+        id: v.id,
+        name: v.name,
+        business_name: v.vendorProfile?.business_name ?? null,
+        handle: v.vendorProfile?.handle ?? null,
+        location: v.location,
+        is_test: v.is_test,
+        logo_url: shopImageUrl(v.vendorProfile?.logo),
+        avatar_url: v.avatar ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${v.avatar}`) : null,
+        avg_rating: ratingOf.get(v.id)?._avg.rating ?? null,
+        review_count: ratingOf.get(v.id)?._count._all ?? 0,
+        listing_count: v._count.vendorListings,
+      })),
+    };
+  }
+
   /** Looks a vendor up by id or by shop handle (vendlymarketplace.com/v/<handle>). */
   async getVendorProfile(idOrHandle: string) {
     const vendor = await this.prisma.user.findFirst({

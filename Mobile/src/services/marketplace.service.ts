@@ -117,10 +117,28 @@ export interface SearchParams {
 
 export const vendorName = (v?: Listing['vendor'] | null) => v?.vendorProfile?.business_name || v?.name || '';
 
+/** A vendor found by search (GET /marketplace/vendors?q=…) */
+export interface VendorHit {
+  id: string;
+  name: string | null;
+  business_name: string | null;
+  handle: string | null;
+  location: string | null;
+  is_test: boolean;
+  logo_url: string | null;
+  avatar_url: string | null;
+  avg_rating: number | null;
+  review_count: number;
+  listing_count: number;
+}
+
 export const MarketplaceService = {
   // The API has no /marketplace/search; listings takes the same filters.
   search: (params?: SearchParams) =>
     api.get<{ success: boolean; data: Listing[]; meta: any }>('/marketplace/listings', { params }),
+
+  /** vendors whose name, business name or shop handle matches what was typed */
+  searchVendors: (q: string) => api.get<{ success: boolean; data: VendorHit[] }>('/marketplace/vendors', { params: { q } }),
 
   getCategories: () => api.get<{ success: boolean; data: Category[] }>('/marketplace/categories'),
 

@@ -14,6 +14,7 @@ import CancelBookingSheet from '../../components/booking/CancelBookingSheet';
 import { customerTabOf, type CustomerTab } from '../../utils/bookingTabs';
 import { cancellationLine, dueByText, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
 import SlidingTabs from '../../components/SlidingTabs';
+import { useTabBarSpace } from '../../components/FloatingTabBar';
 
 // the order in the design; every booking is in exactly one
 const TABS: { key: CustomerTab; label: string }[] = [
@@ -41,6 +42,8 @@ export const bookingWhen = (b: Booking) => {
 export default function CustomerBookings() {
   const nav = useNavigation<NativeStackNavigationProp<CustomerBookingsStackParams>>();
   const insets = useSafeAreaInsets();
+  // room for the floating menu bar below the last item
+  const tabSpace = useTabBarSpace();
   const [tab, setTab] = useState<CustomerTab>('upcoming');
   const [all, setAll] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +88,7 @@ export default function CustomerBookings() {
       <FlatList showsVerticalScrollIndicator={false}
         data={items}
         keyExtractor={(b) => b.id}
-        contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 32, paddingHorizontal: 20, gap: 20 }}
+        contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: tabSpace, paddingHorizontal: 20, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
         ListHeaderComponent={
           <View style={{ gap: 24 }}>

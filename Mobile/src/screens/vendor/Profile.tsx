@@ -11,12 +11,15 @@ import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import type { VendorProfileStackParams } from '../../navigation/types';
 import { useSlideUp } from '../../components/useSlideUp';
+import { useTabBarSpace } from '../../components/FloatingTabBar';
 
 type Item = { icon: keyof typeof Ionicons.glyphMap; label: string; onPress?: () => void; note?: string };
 
 export default function VendorProfile() {
   const nav = useNavigation<NativeStackNavigationProp<VendorProfileStackParams>>();
   const insets = useSafeAreaInsets();
+  // room for the floating menu bar below the last item
+  const tabSpace = useTabBarSpace();
   const { user, logout } = useAuth();
   const [confirm, setConfirm] = useState(false);
   const slide = useSlideUp(confirm);
@@ -49,7 +52,7 @@ export default function VendorProfile() {
 
   return (
     <View style={s.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 40, paddingHorizontal: 20 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: tabSpace, paddingHorizontal: 20 }}>
         <Text style={s.title}>Settings</Text>
         <View style={s.hero}>
           <View style={s.avatar}>

@@ -12,6 +12,7 @@ import { BookingService, type Booking } from '../../services/booking.service';
 import { bookingWhen } from '../customer/Bookings';
 import { useFeature } from '../../hooks/useFeature';
 import { openInTab } from '../../navigation/crossTab';
+import { useTabBarSpace } from '../../components/FloatingTabBar';
 
 type Nav = NativeStackNavigationProp<any>;
 
@@ -38,6 +39,8 @@ function deviceZone() {
 export default function VendorDashboard() {
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
+  // room for the floating menu bar below the last item
+  const tabSpace = useTabBarSpace();
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [listings, setListings] = useState<{ id: string; status: string }[]>([]);
@@ -93,7 +96,7 @@ export default function VendorDashboard() {
   return (
     <ScrollView showsVerticalScrollIndicator={false}
       style={s.root}
-      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 32, paddingHorizontal: 20, gap: 24 }}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: tabSpace, paddingHorizontal: 20, gap: 24 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
     >
       <View style={s.header}>

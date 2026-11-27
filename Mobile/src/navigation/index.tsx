@@ -1,8 +1,8 @@
 import React from 'react';
 import { Animated, Easing, View, Text, StyleSheet } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, NavigationContainer, type Theme } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { COLORS, FONTS } from '../constants/colors';
+import { COLORS, DARK, FONTS } from '../constants/colors';
 import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 import { StatusBar } from 'expo-status-bar';
 import { LOGO_LENGTH, LOGO_PATH, useReduceMotion } from '../components/brand';
@@ -16,6 +16,15 @@ import GuestScreens from './GuestScreens';
 import CustomerTabs from './CustomerTabs';
 import VendorTabs from './VendorTabs';
 import EventPlannerTabs from './EventPlannerTabs';
+
+/**
+ * The app's dark colours for the navigators, so what shows behind a page while it slides in or
+ * lays out (and where the menu bar was) is the app's background, not the default near-white.
+ */
+const APP_THEME: Theme = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: DARK.bg, card: DARK.bg, primary: DARK.accent, border: 'transparent' },
+};
 
 export default function RootNavigator() {
   const { user, loading, guest } = useAuth();
@@ -33,7 +42,7 @@ export default function RootNavigator() {
   return (
     // Keyed on the role: switching roles starts the new role's tabs fresh, instead of carrying the
     // old screen history (e.g. the Switch role screen) into them.
-    <NavigationContainer ref={navigationRef} key={user ? `role-${user.type}` : guest ? 'guest' : 'signed-out'}>
+    <NavigationContainer ref={navigationRef} theme={APP_THEME} key={user ? `role-${user.type}` : guest ? 'guest' : 'signed-out'}>
       {!user ? (
         // browsing without an account (App Store 5.1.1), or the sign-in screens
         guest ? <GuestScreens /> : <AuthScreens />

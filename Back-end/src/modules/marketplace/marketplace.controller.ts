@@ -23,6 +23,12 @@ export class MarketplaceController {
     return this.service.getListing(id);
   }
 
+  /** Vendors matching what was typed (GET /marketplace/vendors?q=…), shown above services in search */
+  @Get('vendors')
+  searchVendors(@Query('q') q?: string) {
+    return this.service.searchVendors(q);
+  }
+
   @Get('vendors/:id')
   getVendorProfile(@Param('id') id: string) {
     return this.service.getVendorProfile(id);

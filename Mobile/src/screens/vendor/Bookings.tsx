@@ -12,6 +12,7 @@ import { bookingWhen } from '../customer/Bookings';
 import { disputeCategoryText } from '../../components/DisputeDetails';
 import { cancellationLine, PAYMENT_STATE_LABELS } from '../../utils/bookingStatus';
 import SlidingTabs from '../../components/SlidingTabs';
+import { useTabBarSpace } from '../../components/FloatingTabBar';
 
 type Tab = 'pending' | 'upcoming' | 'completed' | 'refunds' | 'complaints';
 const TABS: { key: Tab; label: string; statuses?: BookingStatus[]; filter?: 'refunds' | 'complaints' }[] = [
@@ -34,6 +35,8 @@ const EMPTY: Record<Tab, [string, string]> = {
 export default function VendorBookings() {
   const nav = useNavigation<NativeStackNavigationProp<VendorBookingsStackParams>>();
   const insets = useSafeAreaInsets();
+  // room for the floating menu bar below the last item
+  const tabSpace = useTabBarSpace();
   const [tab, setTab] = useState<Tab>('pending');
   const [all, setAll] = useState<Booking[]>([]);
   const [filtered, setFiltered] = useState<Partial<Record<'refunds' | 'complaints', Booking[]>>>({});
@@ -86,7 +89,7 @@ export default function VendorBookings() {
       <FlatList showsVerticalScrollIndicator={false}
         data={items}
         keyExtractor={(b) => b.id}
-        contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 32, paddingHorizontal: 20, gap: 20 }}
+        contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: tabSpace, paddingHorizontal: 20, gap: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />}
         ListHeaderComponent={
           <View style={{ gap: 24 }}>

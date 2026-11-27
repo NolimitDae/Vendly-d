@@ -7,9 +7,10 @@ import { GradientButton, ScreenHeader } from '../../components/brand';
 import SearchFilters, { activeFilters, type Filters } from '../../components/SearchFilters';
 import { ResultRowSkeleton } from '../../components/Skeleton';
 import TestBadge from '../../components/TestBadge';
+import PhotoFade from '../../components/PhotoFade';
 import { DARK, FONTS } from '../../constants/colors';
 import { useSaved } from '../../hooks/useSaved';
-import { MarketplaceService, vendorName, type Category, type Listing } from '../../services/marketplace.service';
+import { MarketplaceService, vendorName, type Category, type Listing, type VendorHit } from '../../services/marketplace.service';
 import type { CustomerHomeStackParams } from '../../navigation/types';
 import { useSlideUp } from '../../components/useSlideUp';
 import SlidingTabs from '../../components/SlidingTabs';
@@ -59,6 +60,19 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
     load();
   }, [load]);
 
+  // vendors whose name matches what was typed, shown above the services
+  const [vendors, setVendors] = useState<VendorHit[]>([]);
+  useEffect(() => {
+    if (!query) return setVendors([]);
+    let live = true;
+    MarketplaceService.searchVendors(query)
+      .then((r) => live && setVendors(r.data?.data ?? []))
+      .catch(() => live && setVendors([]));
+    return () => {
+      live = false;
+    };
+  }, [query]);
+
   return (
     <View style={s.root}>
       <FlatList showsVerticalScrollIndicator={false}
@@ -73,7 +87,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
               <Ionicons name="search-outline" size={20} color={DARK.muted} />
               <TextInput
                 style={s.searchInput}
-                placeholder="Search service & locations"
+                placeholder="Search services, vendors & places"
                 placeholderTextColor={DARK.muted}
                 value={q}
                 onChangeText={setQ}
@@ -95,6 +109,20 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
                 accessibilityLabel="Kind of service"
               />
             )}
+            {vendors.length > 0 && (
+              <View style={{ gap: 12 }}>
+                <Text style={s.sectionTitle}>Vendors</Text>
+                <FlatList
+                  horizontal
+                  data={vendors}
+                  keyExtractor={(v) => v.id}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 12, paddingHorizontal: 20 }}
+                  renderItem={({ item }) => <VendorCard vendor={item} onPress={() => navigation.navigate('VendorProfile', { vendorId: item.id })} />}
+                />
+                {(loading || listings.length > 0) && <Text style={s.sectionTitle}>Services</Text>}
+              </View>
+            )}
           </View>
         }
         ListEmptyComponent={
@@ -107,7 +135,7 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
           ) : (
             <View style={s.empty}>
               <Ionicons name="search-outline" size={40} color={DARK.muted} />
-              <Text style={s.emptyText}>{nFilters ? 'Nothing matches these filters' : 'No services match yet'}</Text>
+              <Text style={s.emptyText}>{nFilters ? 'Nothing matches these filters' : vendors.length ? 'No services match, but the vendors above do' : 'No services match yet'}</Text>
               {nFilters > 0 && (
                 <Pressable onPress={() => setFilters({ sort: filters.sort })} accessibilityRole="button"><Text style={s.clear}>Clear filters</Text></Pressable>
               )}
@@ -141,6 +169,26 @@ export default function SearchResults({ navigation, route }: NativeStackScreenPr
   );
 }
 
+function VendorCard({ vendor, onPress }: { vendor: VendorHit; onPress: () => void }) {
+  const name = vendor.business_name || vendor.name || 'Vendor';
+  const photo = vendor.logo_url || vendor.avatar_url;
+  return (
+    <Pressable style={s.vendor} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${name}, vendor`}>
+      <View style={s.vendorPhoto}>
+        {photo ? <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} /> : <Text style={s.vendorInitial}>{name.charAt(0).toUpperCase()}</Text>}
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.vendorName} numberOfLines={1}>{name}</Text>
+        <Text style={s.vendorMeta} numberOfLines={1}>
+          {vendor.avg_rating != null ? `★ ${Number(vendor.avg_rating).toFixed(1)} · ` : ''}
+          {vendor.listing_count} {vendor.listing_count === 1 ? 'service' : 'services'}
+        </Text>
+        {!!vendor.location && <Text style={s.vendorMeta} numberOfLines={1}>{vendor.location}</Text>}
+      </View>
+    </Pressable>
+  );
+}
+
 export function ResultCard({ item, saved, onSave, onPress }: { item: Listing; saved: boolean; onSave: () => void; onPress: () => void }) {
   return (
     <Pressable style={s.card} onPress={onPress} accessibilityRole="button" accessibilityLabel={item.title}>
@@ -150,6 +198,7 @@ export function ResultCard({ item, saved, onSave, onPress }: { item: Listing; sa
         ) : (
           <Ionicons name="image-outline" size={40} color={DARK.muted} />
         )}
+        <PhotoFade />
         <View style={s.price}>
           <Text style={s.priceText}>
             ${Number(item.price).toLocaleString()}
@@ -167,6 +216,7 @@ export function ResultCard({ item, saved, onSave, onPress }: { item: Listing; sa
         </Pressable>
         {item.is_test && <TestBadge style={s.testBadge} />}
       </View>
+      <View style={s.body}>
       <Text style={s.title} numberOfLines={1}>{item.title}</Text>
       <View style={s.row}>
         <View style={s.meta}>
@@ -192,12 +242,19 @@ export function ResultCard({ item, saved, onSave, onPress }: { item: Listing; sa
           </View>
         )}
       </View>
+      </View>
     </Pressable>
   );
 }
 
 const s = StyleSheet.create({
   testBadge: { position: 'absolute', bottom: 10, left: 10 },
+  sectionTitle: { color: '#fff', fontSize: 18, fontFamily: FONTS.semibold, marginHorizontal: 20 },
+  vendor: { width: 250, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 22, backgroundColor: DARK.card },
+  vendorPhoto: { width: 52, height: 52, borderRadius: 26, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  vendorInitial: { color: '#fff', fontSize: 20, fontFamily: FONTS.semibold },
+  vendorName: { color: '#fff', fontSize: 15, fontFamily: FONTS.semibold },
+  vendorMeta: { color: DARK.muted, fontSize: 12, fontFamily: FONTS.regular },
   filterDot: { position: 'absolute', top: -6, right: -8, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: DARK.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   filterDotText: { color: DARK.bg, fontSize: 10, fontFamily: FONTS.bold },
   clear: { color: DARK.accent, fontSize: 14, fontFamily: FONTS.semibold },
@@ -221,12 +278,14 @@ const s = StyleSheet.create({
   searchInput: { flex: 1, color: '#fff', fontSize: 16, fontFamily: FONTS.regular, paddingVertical: 0 },
   empty: { alignItems: 'center', paddingVertical: 48, gap: 10 },
   emptyText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium },
-  card: { marginHorizontal: 20, padding: 12, borderRadius: 16, backgroundColor: DARK.card, gap: 8 },
-  photo: { height: 190, borderRadius: 12, overflow: 'hidden', backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
-  price: { position: 'absolute', top: 8, left: 8, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
+  // photo edge to edge at the top, fading into the card; no frame around it
+  card: { marginHorizontal: 20, borderRadius: 22, backgroundColor: DARK.card, overflow: 'hidden' },
+  photo: { height: 210, backgroundColor: DARK.field, alignItems: 'center', justifyContent: 'center' },
+  body: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
+  price: { position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
   priceText: { color: '#111', fontSize: 12, fontFamily: FONTS.semibold },
   heart: { position: 'absolute', top: 8, right: 8, width: 30, height: 30, borderRadius: 15, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#fff', fontSize: 18, lineHeight: 24, fontFamily: FONTS.semibold, marginTop: 4 },
+  title: { color: '#fff', fontSize: 18, lineHeight: 24, fontFamily: FONTS.semibold },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { color: '#fff', fontSize: 14, fontFamily: FONTS.regular, flexShrink: 1 },

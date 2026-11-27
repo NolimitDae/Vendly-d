@@ -11,6 +11,7 @@ import { DARK, FONTS } from '../../constants/colors';
 import { useAuth } from '../../context/AuthContext';
 import { EventPlannerService, type EventPlannerProfile } from '../../services/eventplanner.service';
 import { useSlideUp } from '../../components/useSlideUp';
+import { useTabBarSpace } from '../../components/FloatingTabBar';
 
 type Item = { icon: keyof typeof Ionicons.glyphMap; label: string; onPress?: () => void; note?: string; noteColor?: string };
 
@@ -23,6 +24,8 @@ const STATUS: Record<string, { label: string; color: string }> = {
 export default function EPProfile() {
   const nav = useNavigation<NativeStackNavigationProp<any>>();
   const insets = useSafeAreaInsets();
+  // room for the floating menu bar below the last item
+  const tabSpace = useTabBarSpace();
   const { user, logout } = useAuth();
   const [profile, setProfile] = useState<EventPlannerProfile | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -55,7 +58,7 @@ export default function EPProfile() {
 
   return (
     <View style={s.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: 40, paddingHorizontal: 20 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: tabSpace, paddingHorizontal: 20 }}>
         <Text style={s.title}>Settings</Text>
         <View style={s.hero}>
           <View style={s.avatar}>

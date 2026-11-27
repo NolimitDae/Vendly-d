@@ -25,6 +25,8 @@ import { api } from '../../services/api';
 import { SocketService } from '../../services/socket.service';
 import ReviewPrompt from '../../components/ReviewPrompt';
 import TestBadge from '../../components/TestBadge';
+import PhotoFade from '../../components/PhotoFade';
+import { useTabBarSpace } from '../../components/FloatingTabBar';
 
 type Nav = NativeStackNavigationProp<any>;
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -72,6 +74,8 @@ const NEAR_RADIUS = 25;
 export default function CustomerHome() {
   const nav = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
+  // room for the floating menu bar below the last item
+  const tabSpace = useTabBarSpace();
   const { user, guest, leaveGuest } = useAuth();
   const [listings, setListings] = useState<Listing[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -138,7 +142,7 @@ export default function CustomerHome() {
   return (
     <ScrollView showsVerticalScrollIndicator={false}
       style={s.root}
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 28 }}
+      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: tabSpace }}
       keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive"
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={DARK.accent} />
@@ -378,6 +382,7 @@ function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) 
         ) : (
           <Ionicons name="image-outline" size={32} color={DARK.muted} />
         )}
+        <PhotoFade />
         <View style={s.price}>
           <Text style={s.priceText}>
             ${Number(item.price).toLocaleString()}
@@ -386,6 +391,7 @@ function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) 
         </View>
         {item.is_test && <TestBadge style={s.testBadge} />}
       </View>
+      <View style={s.cardBody}>
       <View style={s.cardTitleRow}>
         <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
         {item.avg_rating != null && (
@@ -410,6 +416,7 @@ function ServiceCard({ item, onPress }: { item: Listing; onPress: () => void }) 
           </Text>
         </View>
       )}
+      </View>
     </PressableScale>
   );
 }
@@ -488,21 +495,20 @@ const s = StyleSheet.create({
   othersText: { color: DARK.muted, fontSize: 18, fontFamily: FONTS.medium },
   empty: { alignItems: 'center', paddingVertical: 32, gap: 10, backgroundColor: DARK.card, borderRadius: 16 },
   emptyText: { color: DARK.muted, fontSize: 14, fontFamily: FONTS.medium },
-  card: { width: 243, padding: 12, borderRadius: 16, backgroundColor: DARK.card, gap: 4 },
+  // photo edge to edge at the top, fading into the card; no frame around it
+  card: { width: 243, borderRadius: 22, backgroundColor: DARK.card, overflow: 'hidden' },
   cardImage: {
-    height: 121,
-    borderRadius: 12,
-    overflow: 'hidden',
+    height: 150,
     backgroundColor: DARK.field,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
   },
-  price: { position: 'absolute', top: 8, left: 8, backgroundColor: '#F6F8FA', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 },
-  testBadge: { position: 'absolute', bottom: 8, left: 8 },
+  cardBody: { paddingHorizontal: 14, paddingTop: 2, paddingBottom: 14, gap: 4 },
+  price: { position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 5 },
+  testBadge: { position: 'absolute', bottom: 8, left: 10 },
   priceText: { color: '#030303', fontSize: 11, fontFamily: FONTS.semibold },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardTitle: { flex: 1, color: '#fff', fontSize: 14, lineHeight: 22, fontFamily: FONTS.semibold },
+  cardTitle: { flex: 1, color: '#fff', fontSize: 16, lineHeight: 22, fontFamily: FONTS.semibold },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   ratingText: { color: '#fff', fontSize: 12, fontFamily: FONTS.medium },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
